@@ -10,7 +10,9 @@ Move the pi token-economics stack out of the NixOS flake
 switched on and configured on its own; dependencies between components are
 enforced by module assertions, not by convention. While moving, the model
 router is reworked for the model situation of October 2026: Claude Haiku 5.5
-exists, the free OpenRouter Qwen tier is gone, and Qwen runs only locally.
+exists, the free OpenRouter Qwen tier is gone, and Qwen runs only locally for
+now. The free-cloud slot stays in the code, empty by default, so a good free
+model can be added again by configuration.
 
 What the owner said:
 
@@ -18,18 +20,20 @@ What the owner said:
 - Name: *pi-economics*; options `programs.piEconomics.<component>`.
 - Each component: enable/disable plus configuration; dependencies covered by
   option checks.
-- Router: Qwen local only; Haiku/Sonnet/Opus from the Anthropic subscription
-  only; models configurable; when local Qwen is busy, wait up to
-  `queueMaxSec`, then Haiku.
+- Router: Qwen local only for now; Haiku/Sonnet/Opus from the Anthropic
+  subscription only; models configurable; when local Qwen is busy, wait up to
+  `queueMaxSec`, then Haiku. The free-cloud slot's code stays: a good free
+  model may be added again; while the slot is empty it is not taken into
+  account.
 - A Haiku tier; `scout` and the Qwen fallback use it; bench arms decide the rest.
 - Named tiers with configurable `{model, effort}`, no free-form ladder.
-- The host repo stays untouched until the job currently running there has
-  finished. Until then, only tests inside the new flake. Integration testing
+- The host repo stays untouched until the job currently running there (the
+  pluto deployment) has finished. Until then, only tests inside the new flake. Integration testing
   on the real system happens afterwards, and activation is an owner step.
-- One overall spec, one TDD plan per milestone.
+- One overall spec, reviewed at least once; one TDD plan per milestone.
+- Public repository when finished; bench keeps one paid OpenRouter judge.
 
-Assumptions (correct me): the flake may become public later, so defaults carry
-no personal identifiers; history of the moved code is not imported.
+Assumption (correct me): the git history of the moved code is not imported.
 
 ### Success criteria
 
@@ -40,7 +44,11 @@ no personal identifiers; history of the moved code is not imported.
    `programs.piEconomics.*`, carries no in-tree copy of it, and its own checks
    and the owner's `nixos-rebuild test` pass.
 3. Existing logs under `~/.pi/agent` stay readable by the reports.
-4. No OpenRouter code or default remains in the stack.
+4. No OpenRouter model is a default. The free-cloud slot is optional; while it
+   is empty, the router never routes to it, never counts it in the slot caps,
+   and never waits for it.
+5. The repository is fit for publication: no personal identifiers in sources
+   or defaults, enforced by a leak check (§7).
 
 ### Non-goals
 
@@ -64,7 +72,9 @@ no personal identifiers; history of the moved code is not imported.
 | `retry` | `features/ai/pi-retry.nix` + print-mode patch | patched third-party extension |
 | `analysisSkill` | `features/ai/skills/pi-token-economics-analysis/` | agent skill (exported path) |
 
-`pi-retry-free-cap.patch` is dropped (no OpenRouter). `pi-settings-migrate`
+`pi-retry-free-cap.patch` stays with `retry`: it keeps the daily free-tier
+cap from being retried, which matters again as soon as the free-cloud slot is
+filled. `pi-settings-migrate`
 is split (§5.4).
 
 ## 3. Flake layout
@@ -192,13 +202,22 @@ programs.piEconomics.taskRouter.tiers = {
 
 ### 6.2 Qwen chain
 
-Local Qwen only. The health probe of `localHealthUrl` (neutral default
-`http://127.0.0.1:11545`; the host sets `earth`) and one slot remain.
+The chain keeps both slots: a free-cloud slot and the local slot. The
+local slot keeps the health probe of `localHealthUrl` (neutral default
+`http://127.0.0.1:11545`; the host sets `earth`) and one running task.
 
-- **Chain:** if local is free, use it. Otherwise wait up to `queueMaxSec`, then
-  use `qwen.fallback` (default `H`) at that tier's effort.
-- **Removed:** `qwenCloud`, `cloud.ts`, `cloudDailyCap`, `freeCapHit`, the
-  cloud slots, the free-cap failover, and `cloud-count.json`.
+- **Free-cloud slot:** `tiers.qwen.cloudModel`, type `nullOr str`, default
+  `null`. While it is `null`, `pickQwen` treats the slot as absent: no route to
+  it, no slot caps for it, no waiting for it, and no daily count. When it is
+  set, today's behaviour returns unchanged: the free cloud first, then local,
+  then cloud, with caps of 1 local + 2 cloud (3 cloud without local),
+  `cloudDailyCap`, the counter in `cloud.ts`, and `freeCapHit` with its
+  failover. None of that code is removed.
+- **Fallback:** when no slot frees up within `queueMaxSec`, the task goes to
+  `tiers.qwen.fallback` (default `H`), at that tier's effort. Today it goes to
+  Sonnet at `high`.
+- **Tests:** the chain table gets cases for an empty slot (local free / busy /
+  down, then the fallback) next to the existing cases for a filled slot.
 
 ### 6.3 Haiku placement
 
@@ -214,12 +233,11 @@ Local Qwen only. The health probe of `localHealthUrl` (neutral default
 
 ### 6.4 Logs
 
-- **Route names:** `local | H | T1 | T2` (was `local | cloud | T1 | T2`).
-  Tier names add `H`.
+- **Route names:** `local | cloud | H | T1 | T2`; `H` is new, `cloud` only
+  appears while the free-cloud slot is filled. Tier names add `H`.
 - **Versioning:** the outcome schema version is bumped in `contract.ts` and
   `LOGS.md`.
-- **Reports:** `pi-analyse` and `meter-report` read both versions. `cloud`
-  stays a known legacy route.
+- **Reports:** `pi-analyse` and `meter-report` read both versions.
 - **Tier ranks:** `TIER_RANK` gains `H`. The Qwen-share criterion counts only
   `qwen`.
 
@@ -240,8 +258,13 @@ Local Qwen only. The health probe of `localHealthUrl` (neutral default
   `childExtensions`), with `lib.hasInfix`/line splits, never `builtins.match`.
 - **Log contract:** the log-contract check moves here, re-pointed at
   `packages/`.
+- **Leak check:** a check scans the flake's source for personal identifiers
+  (host names, user names, home paths, e-mail addresses, private repository
+  URLs), on the model of the host's `checks/terminal-kit-leaks.nix`. Personal
+  values (`earth`, the owner's models, `~/.local/state/pi`) are set by the
+  host, never as defaults here.
 
-**Layer B — in the host repo (wiring, §8, after the freeze):**
+**Layer B — in the host repo (wiring, §8, after the pluto deployment):**
 
 - **Development override:**
   `--override-input pi-economics path:/home/pallon/projects/nix/pi-economics`.
@@ -260,21 +283,22 @@ in this flake), written right before it starts. Each plan ends with an
 | # | Content | Layer |
 |---|---|---|
 | M0 | Flake skeleton, `common.nix` (registry, piSettings), type-check setup, check harness | A |
-| M1 | `bench`: module (`dataDir` → `PI_BENCH_DATA`, work dir); arms `haiku` (H, medium) and `haikuHigh` added, OpenRouter `qwen` arm removed; extension paths from the modules instead of hard-coded names | A |
+| M1 | `bench`: module (`dataDir` → `PI_BENCH_DATA`, work dir); arms `haiku` (H, medium) and `haikuHigh` added; the arm for the retired free OpenRouter Qwen removed; the paid OpenRouter `gpt` judge kept (§10); extension paths from the modules instead of hard-coded names | A |
 | M2 | `actorSubagents` with its 3 patches; `childExtensions` rendering | A |
 | M3 | `taskRouter` + §6 | A |
 | M4 | `tokenMeter` (reports, `LOGS.md`, log contract, §6.4 readers), `analysisSkill` | A |
 | M5 | `cacheLifecycle`, `experiments` | A |
-| M6 | `infiniteContext` (+ reminders options), `retry` (print-mode patch only), `piSettings` edits | A |
+| M6 | `infiniteContext` (+ reminders options), `retry` (print-mode and free-cap patches), `piSettings` edits | A |
 | W | Wiring in the host repo, one component at a time | B |
 
 ### Wiring (W)
 
-- **When:** W starts only when the owner says the host repo is free.
-- **Desktop freeze:** the host's `AGENTS.md` freezes the desktops'
-  derivations until pluto's S1e milestone, and wiring changes andromeda's
-  derivation. W therefore also needs that freeze lifted, or the owner's
-  explicit go-ahead.
+- **When:** the busy job in the host repo is the pluto deployment
+  (`docs/plans/2026-09-29-pluto-server-plan.md`). The host's `AGENTS.md`
+  freezes the desktops' derivations while pluto is ported; only the pluto
+  plan's S1e milestone records a new baseline. Wiring changes andromeda's
+  derivation, so W starts only after S1e (or on the owner's explicit
+  go-ahead), and only when the owner says the host repo is free.
 - **Per component:** add the input (with `follows`), enable
   `programs.piEconomics.<c>`, move the settings from `homes/pallon`, delete
   the in-tree copy and its checks, and update the host's docs (`AGENTS.md`
@@ -302,11 +326,10 @@ in this flake), written right before it starts. Each plan ends with an
 - **Tokenizer:** the newer tokenizer counts about 30% more tokens. Fold
   thresholds for Haiku are set in tokens (§5.2).
 
-## 10. Open questions
+## 10. Decisions on former open questions
 
-1. pi-bench's `gpt` judge runs on OpenRouter. Without OpenRouter, the judges
-   are Claude only, which risks self-preference when judging Claude arms.
-   Options: keep a paid OpenRouter judge as the only exception; use a local
-   Qwen judge; or Claude judges, with the bias accepted and noted.
-2. Will the flake be public (`github:GRBurst/pi-economics`)? If so, it gets a
-   leak check like `checks/terminal-kit-leaks.nix`.
+1. **Bench judge:** pi-bench keeps one paid, non-Claude judge on OpenRouter
+   (`gpt`). It is the only OpenRouter use outside the optional free-cloud
+   slot, and it counters self-preference when Claude judges Claude arms.
+2. **Publication:** the flake becomes public (`github:GRBurst/pi-economics`)
+   when finished. Hence the leak check (§7) and the neutral defaults.
