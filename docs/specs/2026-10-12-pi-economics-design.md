@@ -1,8 +1,10 @@
 # pi-economics — design
 
-Date: 2026-10-12 · Status: draft r2, after review 1 · Owner: pallon
+Date: 2026-10-12 · Status: draft r3, after reviews 1 and 2 · Owner: pallon
 
-Revision 2 addresses review 1: 2 blockers, 9 majors, and the minor findings.
+Revision 2 addresses review 1 (2 blockers, 9 majors, the minor findings).
+Revision 3 addresses review 2 (4 majors, minors, nits) and records the owner's
+decisions on the H row, the H pin and the wiring gate.
 Source snapshot: host dotfiles commit `cee41b5` (2026-10-10), the last commit
 that touched the moved paths. Everything below about "today" refers to that
 snapshot.
@@ -164,9 +166,21 @@ Hard dependencies:
 | `taskRouter` | `actorSubagents.enable`, and `actorSubagents.package.passthru.spawnPolicyApi >= 1` | `shell.ts:120` swallows a missing `registerSpawnPolicy`; without the patched build the router does nothing |
 | `analysisSkill` | `tokenMeter.enable` | the skill drives `pi-analyse` and reads `LOGS.md` |
 
-The patched `actorSubagents` package sets `passthru.spawnPolicyApi = 1`.
+The patched `actorSubagents` package sets `passthru.spawnPolicyApi = 1`
+through `overrideAttrs`, because nixpkgs' `applyPatches` refuses a `passthru`
+argument. The assertion reads `package.passthru.spawnPolicyApi or 0`.
 Assertion message: `pi-economics: <c> requires <d> (<reason>)`. Every
 assertion has a negative case in `checks/`.
+
+Standalone notes:
+
+- `analysisSkill` only exports a path; the consumer links it into a skills
+  directory. The skill's text names `<agentDir>/LOGS.md`, substituted at build
+  time instead of the hard-coded `~/.pi/agent/LOGS.md`.
+- A standalone `cacheLifecycle` without an existing pi `settings.json` keeps
+  pi's default `cacheWarming` until the file exists, because the piSettings
+  activation does nothing on an absent file (§5.4). The module's description
+  says so.
 
 Soft dependencies (documented, plus warnings for the ones marked *w*):
 
@@ -193,8 +207,11 @@ enabled extension component adds itself. The host adds its own extensions
 
 - **Links:** `<agentDir>/extensions/<name>` → `path`. Home Manager's
   file-conflict check rejects two definitions of one link.
-- **Children:** `childExtensions`, the `path` of every entry with
-  `forChildren = true`, sorted. It goes into `actor-subagents/settings.json`
+- **Children:** `childExtensions`, the **link path**
+  `<home>/<agentDir>/extensions/<name>` of every entry with
+  `forChildren = true`, sorted by name. These are link paths, not store paths,
+  as today (`pi-extensions.nix:236-238`). The host check that takes names from
+  the last path component (`eval-assertions.nix:9327`) keeps working. It goes into `actor-subagents/settings.json`
   together with `actorSubagents.settings`. That file has one writer: the
   registry renders the file only when `actorSubagents` is enabled.
 - **Existence:** an assertion `builtins.pathExists checkPath` per entry,
@@ -213,11 +230,16 @@ The `piContextReminders` options (`prices`, `cacheTtlMinutes`, `foldHint`,
 
 Haiku 5.5 has a 1M-token window, per Anthropic's model page (2026-10). The
 "haiku (200k window)" comment in `homes/pallon/default.nix:29-31` predates it
-and refers to Haiku 4.5. At W the host adds:
+and refers to Haiku 4.5. At W the host adds, next to the Opus and Sonnet
+entries:
 
-- an override for `anthropic/claude-haiku-5-5`: fold thresholds in tokens; on
-  the subscription the 100k price step does not matter;
-- its prices: $0.10 in / $0.50 out per MTok for prompts up to 100k.
+- `overrides."anthropic/claude-haiku-5-5" = { startTokens = 100000;
+  everyTokens = 50000; }`. Earlier than Opus and Sonnet (400k / 100k): a
+  small model degrades sooner on long contexts, and 100k is where Haiku's API
+  price steps up 5×.
+- `prices."anthropic/claude-haiku-5-5" = { w = 0.125; r = 0.01; }`. These are
+  the cache write (5 min) and cache read prices per MTok for prompts up to
+  100k; only the ratio w/r is used (`pi-extensions.nix:269-295`).
 
 ### 5.3 Cross-extension contracts
 
@@ -238,20 +260,42 @@ patch casts inline (`cache.patch:102`) and is excluded from the comparison.
 
 pi's `settings.json` is mutable. `programs.piEconomics.piSettings` provides:
 
-- **`file`:** default `<agentDir>/settings.json`. The host sets
-  `~/.local/state/pi/settings.json`.
-- **`after`:** a list of activation entries to run after. The host names its
-  seed and reclaim steps.
-- **`ops`:** a list of operations:
-  - `{ op = "set"; path; value; }`
-  - `{ op = "ensureContains"; path; value; }` appends `value` to the list at
-    `path` if no equal element exists.
-  - `{ op = "removeWhere"; path; equals; }` removes the elements equal to
-    `equals`.
+- **`file`:** a string, either absolute or relative to home. Default
+  `<agentDir>/settings.json`. The host sets `.local/state/pi/settings.json`.
+- **`after`:** a list of activation entry names to run after, in addition to
+  `writeBoundary`. The host names its seed and reclaim steps.
+- **`ops`:** a list of operations, each `{ op; path; value; order ? 1000; }`.
+  `path` is a list of object keys, e.g. `["piRetry" "subagents" "match"
+  "systemPromptRegex"]`, never a dotted string.
 
-  They are rendered to one jq program and applied in order. The activation is
-  idempotent, rewrites only on change, and does nothing when the file is
-  absent (as today). A new install gets its first file from the host's seed.
+| `op` | Effect | Missing parents | Wrong shape on the path |
+|---|---|---|---|
+| `set` | sets the leaf to `value`, only if it differs | created as objects | op skipped |
+| `ensureContains` | appends `value` to the list at `path` if no equal element exists | created (objects, then `[]`) | op skipped |
+| `removeWhere` | removes the list elements equal to `value` | op skipped | op skipped |
+
+"Wrong shape" means a non-object on the way, or a non-list leaf for the list
+ops.
+
+Rendering and execution:
+
+- **One jq program.** Each op is a separate jq function with its own shape
+  guard. A shape error therefore skips only that op, as today's "odd-shapes"
+  fixture requires (`pi-settings-migrate.nix:71-77`), and never aborts the
+  program. If jq fails anyway, for example on invalid JSON, the file is left
+  untouched and the activation does not fail (as today).
+- **Order:** by `order`, then by component name, then by position in the
+  module's list. That makes the order across modules deterministic.
+- **No whole-object `set`:** there is no `set` of a whole object. Components
+  set leaves, so runtime keys written by pi or by the user survive.
+  `retry.settings` is turned into one `set` per leaf under `piRetry`, with
+  `order = 500`, so that it runs before the `ensureContains` of the child regex
+  (`order = 1000`).
+- **Activation:** one entry, named `piSettingsMigrate` (the name the host's
+  checks read, `eval-assertions.nix:9368,9503`). It runs
+  `entryAfter (["writeBoundary"] ++ after)`. It is idempotent, rewrites only on
+  change, and does nothing when the file is absent (as today). A new install
+  gets its first file from the host's seed.
 
 Component contributions:
 
@@ -291,15 +335,21 @@ programs.piEconomics.taskRouter.localHealthUrl = "http://127.0.0.1:11545";
 
 Option rules:
 
-- `effort` is an enum `off … xhigh`; `max` is excluded, because `plan.ts:41`
+- `effort` is an enum `off … xhigh`; `max` is excluded, because `plan.ts:40`
   rejects it.
 - `fallback` is one of `H`, `T1`, `T2`.
+- Every typed option is `nullOr`, default `null`, meaning "keep the default in
+  `core/settings.ts`". `core/settings.ts` stays the one owner of defaults (host
+  `AGENTS.md`), and the Nix example above only documents them. The module
+  renders the non-null typed options, then merges `settings` over them:
+  `settings` wins on a conflict, so the escape hatch always works. A check
+  asserts that the example values equal `core/settings.ts`'s defaults.
 
 The host sets `tiers.qwen.localModel = "llama/qwen3.8"` and
 `localHealthUrl = "http://earth:11545"`. Today `settings.ts:19` defaults the
 URL to `earth`, so without this setting andromeda would probe localhost.
 
-**Settings parser.** `merge()` (`settings.ts:48-49`) drops a value whose
+**Settings parser.** `merge()` (`settings.ts:65-66`) drops a value whose
 `typeof` differs from the default's. A `null` default would therefore silently
 drop a configured string. The parser gets explicit nullable fields. The old
 keys `models.*` and `contextWindow.*` are no longer read; when they are
@@ -314,7 +364,7 @@ reviews included:
 |---|---|---|---|
 | qwen | qwen | qwen, rev T1 | T1, rev T2 |
 | qwen-draft | qwen, rev T1 | qwen, rev T1 | T1, rev T2 |
-| **H** (new) | H | H, rev T1 | T1, rev T2 |
+| **H** (new) | H | H raise, rev T1 | T2 raise |
 | T1 | T1 | T1 raise | T2 raise |
 | T2 | T2 | T2 raise | T2 raise, rev T2 raise |
 
@@ -322,23 +372,54 @@ How the table reads:
 
 - No other cell raises, so reviews use their tier's own effort (T1 `high`,
   T2 `high`), and T2 `critical` reviews at T2 raised (xhigh), as today.
-- A profile pinned to T1 whose worker is not T1 gives T1 raise plus rev T2
-  (`plan.ts:26`).
-- A profile pinned to `qwen` stays qwen with no review.
-- `plan` stays T2.
+- **H row** (owner's decision): `critical` goes to Opus xhigh, as from the T1
+  row, so a critical scout stays where it is today.
+- **Read-only profiles never get a review leg** (owner's decision): a
+  profile with `tools = "read-only"` (`scout`, `review`) has no diff to
+  review, so the review leg is dropped after the table lookup. Today this
+  matters only in one cell: a read-only profile at base T2 and importance
+  critical loses its second T2 leg. `plan` (`read-only+files`) is not
+  affected.
+- **Pins:**
+  - A profile pinned to T1 whose worker is not T1 gives T1 raise plus rev T2
+    (`plan.ts:26`).
+  - A profile pinned to `qwen` stays qwen with no review.
+  - A profile pinned to H (owner's decision) stays on H at every importance,
+    at H's effort for `normal` and H raise for `high` and `critical`, with no
+    review.
+  - `plan` stays T2.
+
+What this means for `scout` (`minTier = H`, §6.3), compared with today:
+
+| Importance | Today | New |
+|---|---|---|
+| normal | Sonnet high | Haiku medium |
+| high | Sonnet xhigh | Haiku high, no review (read-only) |
+| critical | Opus xhigh | Opus xhigh |
+
+Importance is `high` whenever the main session runs at xhigh
+(`importance.ts:8`), so the `high` row is the common one.
 
 Other sites that hard-code effort `high` take the target tier's own effort
 instead: escalation (`attempts.ts:26`), the queue fallback (`policy.ts:56`), the
 failover target (`failover.ts:29`) and randomize (`randomize.ts:10`).
 
-**Tests.** A golden test runs today's `planFor` (copied into the test as the
-oracle) against the new one, for every base × importance × pin with the
-default tiers.
+**Tests.**
+
+- **Golden test:** today's `planFor` (copied into the test as the oracle) is
+  compared with the new one for every old base × importance × pin, with the
+  default tiers. The one cell changed by the read-only rule is listed in the
+  test as an expected difference.
+- **H cases:** H has no oracle, so it gets explicit cases: the H row, the H
+  pin, `scout` at every importance, and the read-only rule.
 
 **Explicit models.** `acceptExplicit`/`modelTier` (`plan.ts:32-38`) and
 `unrouted.tierOf` (`unrouted.ts:12-17`) map a model to a tier through
 `tiers.*.model`, plus `localModel`/`cloudModel` for qwen. An explicit Haiku
-model is tier H, which ranks above qwen and below T1.
+model is tier H, which ranks above qwen and below T1. Without an explicit
+effort, an explicit model runs at **its own tier's** effort, not at the
+planned worker's (today `plan.ts:45` returns `e ?? w.effort`, so an explicit
+Haiku on a qwen plan would run at xhigh).
 
 ### 6.2 The Qwen chain
 
@@ -350,18 +431,31 @@ There are two slots. Each is present only when its model is set.
   unchanged: caps of 1 local + 2 cloud (3 cloud without local),
   `cloudDailyCap`, the counter in `cloud.ts`, and `freeCapHit` with its
   failover. While `null`, the slot does not exist: no route, cap, count or
-  wait. `pickQwen` gets an explicit `cloudEnabled` input, so that
-  `chain.ts:15` (`cloudRunning === 0 → cloud`) no longer fires.
+  wait.
 
-`pickQwen`'s result depends on the local state and the free-cloud slot:
+`pickQwen` gets two explicit inputs, `localEnabled` and `cloudEnabled`, so
+that `chain.ts:15` (`cloudRunning === 0 → cloud`) no longer fires for an
+absent slot. The free cloud is **open** when it is enabled, not blocked by
+`freeCapHit`, and below `cloudDailyCap`.
 
-| Local state | Free cloud filled | Free cloud empty |
+| Local state | Free cloud open | Free cloud empty, blocked or capped |
 |---|---|---|
 | free (up, not busy, no own task) | as today | local |
-| busy with own task | as today | wait |
-| busy with another client (probe says busy, no own task) | as today | wait |
-| down (probe fails) | as today without local | fallback at once |
-| no `localModel` | cloud-only chain | fallback at once |
+| busy with own task | as today (cloud if a cloud slot is free, else wait) | wait |
+| busy with another client (probe says busy, no own task) | as today (cloud if a cloud slot is free, else wait) | wait |
+| down (probe fails) | cloud if a cloud slot is free, else wait | fallback at once |
+| no `localModel` | cloud if a cloud slot is free, else wait | fallback at once |
+
+The right-hand column changes today's behaviour: a blocked or capped cloud
+with a busy local currently falls through to Sonnet at once
+(`chain.ts:11-13`). It now waits, like an empty slot.
+
+**Slot reservation.** The local slot is now the hot path. Today
+`children.set` runs only after `await resolveLeg` (`policy.ts:87-89`), so two
+concurrent spawns can both pick local. `resolveLeg` reserves the slot
+synchronously when it picks a route, before any further `await`. The
+reservation is released if the spawn is rejected afterwards. A test spawns
+two children concurrently and expects one local child and one waiting child.
 
 The policy then handles the outcome:
 
@@ -383,7 +477,10 @@ unavailable and falls through at once; the table above waits instead.
 **Other sites:**
 
 - `guards.ts:16` takes the context window from the child's tier.
-- The `Route` type becomes `local | cloud | H | T1 | T2` (`policy.ts:21,32`).
+- The `Route` type becomes `local | cloud | H | T1 | T2` (`policy.ts:21`).
+- `ROUTE_OF` (`policy.ts:35`) and the `m[leg.tier]` model lookup
+  (`policy.ts:40`) read `tiers`.
+- `failover.ts:10` reads `tiers` instead of `models`.
 
 **Tests.** A state-table test covers every row of the table, plus failover
 for each route.
@@ -397,6 +494,11 @@ for each route.
   - `T1 → T2`. At T2, one retry is allowed, and a third attempt is rejected
     (unchanged).
   - The escalated worker runs at the target tier's own effort.
+  - Escalation starts from the higher of the planned tier and the tier the
+    child actually ran on. Today it starts from the planned tier
+    (`attempts.ts:20`), so a qwen task that ran on a T2 fallback would be
+    retried on T1. The router records the tier a child ran on, the same value
+    it logs as `ranTier` (§6.4).
 - **Randomize:** `randomize.to` (default T1) is the comparison tier for the
   randomized share of qwen-routed spawns. Setting it to H compares Qwen with
   Haiku on the same task mix.
@@ -416,7 +518,8 @@ for each route.
   control group count only runs whose tier is qwen.
 - **Versioning:** the change is additive, so `v` stays as it is. That follows
   `LOGS.md:39-41`.
-- **Tier ranks:** `TIER_RANK` gains H. `LOGS.md` documents both fields.
+- **Tier ranks:** `TIER_RANK` gains H. `LOGS.md` documents both fields, and
+  `token-meter/core/contract.ts:33` lists them as `optional` for `spawn`.
 
 ## 7. Bench (milestone M1)
 
@@ -424,11 +527,30 @@ Bench options:
 
 - **`dataDir`:** default `<agentDir>/bench`, exported as `PI_BENCH_DATA`.
 - **`workDir`:** default `$XDG_RUNTIME_DIR/pi/tmp/bench`.
-- **`extensions`:** an attrset of name → path, the extensions a bench arm loads.
-  It is data, not derived from the registry: today's `CHILD_EXTENSIONS`
-  (`orch.ts:18-20`) deliberately excludes cache-lifecycle, and the arms need
-  the host's claude-auth and web-search. The host sets it at W. After M6 its
-  default covers the flake's own packages.
+- **`extensions`:** an attrset of name → path, the extensions a bench arm
+  loads.
+  - It is data, not derived from the registry: today's `CHILD_EXTENSIONS`
+    (`orch.ts:18-20`) deliberately excludes cache-lifecycle, and the arms need
+    the host's claude-auth and web-search.
+  - It reaches the bench as a `linkFarm` (one link per name) exported as
+    `PI_BENCH_EXT_DIR`. Today the bench looks extensions up by name in a
+    directory (`config.ts:41`, `orch.ts:69`), so only the directory changes.
+  - The host sets it at W. After M6 its default covers the flake's own
+    packages.
+- **`router`:** the task-router settings an orch arm starts from. It is an
+  attrset in the same shape as `task-router/settings.json`, default
+  `config.programs.piEconomics.taskRouter`'s rendered settings when that
+  component is enabled, else `{}`.
+  - Reason: today the orch arms write a `task-router/settings.json` with only
+    `routing`, `delegation` and `t0Limits` (`orch.ts:63-68`), and everything
+    else comes from the TypeScript defaults. Those used to contain
+    `llama/qwen3.8` and the earth URL. From M5 the defaults have no local
+    model, so without this option every orch qwen leg would go straight to the
+    fallback, and the bench could not measure Qwen.
+  - The arm's own keys are merged over `router`.
+  - In M1, before the router moves, the host passes the values directly.
+  - A test asserts that an orch arm's settings carry `tiers.qwen.localModel`
+    and `localHealthUrl` from `router`.
 - **`agentsBaseline`:** the AGENTS.md variant a bench arm uses. Today it is the
   personal notes path read at `config.ts:46`.
 
@@ -451,10 +573,17 @@ Arms:
   upstreams, their own suites, as in today's `checks/pi-*`; pi-retry uses
   vitest.
 - **Type check:** `tsc --noEmit --strict --allowImportingTsExtensions` per
-  package. `typescript` and `@types/node` come from the shared lock (§3). pi
-  enters only through four `index.ts` files, which cast to local interfaces, so
-  a small declaration stub for its few imports (`getAgentDir`, `ExtensionAPI`)
-  is enough. The interface comparison of §5.3 runs here.
+  package. `typescript`, `@types/node` and pi's own types
+  (`@earendil-works/pi-coding-agent` 1.0.0, already a dev dependency in the
+  pi-retry lock) come from the shared lock (§3). No declaration stub is
+  needed.
+  - No package has ever gone through `tsc`, so `--strict` may force code
+    edits. Each milestone's scope includes making its own packages pass.
+  - **Interface comparisons (§5.3)** run here. Each can start only in the
+    milestone where its provider lands:
+    - bench probe (M1) and the router (M5) against `__subagentsApi_v1`, from
+      M2;
+    - token-meter (M3) against `__piExperimentsApi_v1`, from M4.
 - **Module evaluation:** `homeManagerConfiguration` cases for:
   - each component alone, every component together, and the host-like
     combination;
@@ -484,9 +613,19 @@ Arms:
 ### 8.3 Publication
 
 - **In-flake leak check:** generic patterns only, because a literal term list
-  in a public repository would itself be the leak. It looks for e-mail
-  addresses, `/home/<name>/`, `git+ssh://` and private-network host
-  literals in sources, defaults, fixtures and docs.
+  in a public repository would itself be the leak. Matched with `grep -E` over
+  every tracked file, except `docs/specs/` and `docs/plans/` until P:
+  - e-mail addresses: `[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}`;
+  - home paths `/home/<name>/`, where `<name>` is longer than one character,
+    so neutral fixtures like `/home/u/` (`task-router/test/cwd.test.ts:15`)
+    pass;
+  - `git+ssh://` URLs;
+  - RFC 1918 addresses (`10.`, `172.16-31.`, `192.168.`). Loopback
+    (`127.0.0.1`, the `localHealthUrl` default) is not private-network and is
+    allowed.
+- **The excluded directories:** this spec and the plans name the owner's hosts
+  and home (e.g. §8.2). At P, the leak check's exclusion is removed: they are
+  scrubbed or moved out of the repository first.
   - Test fixtures use neutral names. Today they use real ones, for example
     `task-router/test/settings.test.ts:26` and `policy.test.ts:82`; those are
     rewritten when moved.
@@ -524,14 +663,17 @@ Every milestone builds and tests on its own:
 
 ### 9.1 Wiring (W)
 
-**Gate.** The pluto plan
-(`docs/plans/2026-09-29-pluto-server-plan.md:217,263`) compares the desktops'
-derivations with the recorded baseline at every deploy through S3a. Wiring
-changes andromeda's derivation. W therefore starts when the owner says the
-host repo is free, which requires one of:
+**Gate** (owner's decision): W waits until the pluto plan
+(`docs/plans/2026-09-29-pluto-server-plan.md`) is finished, and starts when
+the owner says the host repo is free. Reasons:
 
-- the pluto plan's last deploy that checks the baseline is done, or
-- the owner re-records the baseline.
+- the plan compares the desktops' derivations with the recorded baseline at
+  every milestone (`:217`);
+- only S1e may record a new baseline (host `AGENTS.md`);
+- wiring changes andromeda's derivation.
+
+Re-recording the baseline earlier is not an option, because it would
+contradict the host's `AGENTS.md`.
 
 **W0, all at once:** `actorSubagents` and the host's whole extension selection
 move onto the registry. Today `pi-extensions.nix:384` writes
@@ -546,8 +688,28 @@ switch before this step. After W0:
 component, move its settings from `homes/pallon`, and delete the in-tree copy
 and its checks.
 
+The order follows the hard assertions (§4.1):
+
+1. `bench`.
+2. `tokenMeter`, then `analysisSkill`.
+3. `cacheLifecycle` and `experiments`.
+4. `taskRouter`, whose `actorSubagents` arrived in W0.
+5. `infiniteContext`.
+6. `retry`, together with the retirement of the host's `piSettingsMigrate`
+   script (`ai/default.nix:1110-1114`). From this step on, the flake's
+   `piSettingsMigrate` activation entry (§5.4) replaces it, carrying the
+   host's own ops. Until then the host script stays, and the flake's
+   `piSettings` is not enabled in the host, so there is never more than one
+   entry with that name.
+
 Host sites that change during W:
 
+- **`flake.nix`:**
+  - inputs `:99-131`: the pi sources become `follows` targets of the new
+    `pi-economics` input;
+  - `packages.pi-bench` (`:216`);
+  - the `pi-*` checks (`:245-301`) are removed, step by step with their
+    components.
 - **`ai/default.nix`:**
   - `:982` and `:1114` read `programs.pi.cacheLifecycle.enable` (the settings
     seed and the migrate `idle` flag). They are replaced by the piSettings ops.
