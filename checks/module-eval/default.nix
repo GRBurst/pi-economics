@@ -13,6 +13,7 @@
     ./cases/common.nix
     ./cases/bench.nix
     ./cases/actor-subagents.nix
+    ./cases/together.nix
   ];
   cases =
     lib.foldl' (
