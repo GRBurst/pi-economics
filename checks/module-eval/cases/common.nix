@@ -55,4 +55,24 @@ in {
   in
     lib.concatMap (v: holds "agentDir rejects ${builtins.toJSON v}" (!t.check v)) ["/abs" "x/" ""]
     ++ lib.concatMap (v: holds "agentDir accepts ${v}" (t.check v)) [".pi/agent" "a" "custom/agent"];
+
+  # (M0.8) Links follow agentDir and point at path, whatever their home.file
+  # key (the key itself: registry-double-link-key).
+  registry-links = lib.concatMap (dir: let
+    c = hm.eval {
+      programs.piEconomics = {
+        agentDir = dir;
+        extensions = {
+          ext-a = extA;
+          ext-b = extB;
+        };
+      };
+    };
+    under = lib.filterAttrs (_: f: lib.hasPrefix "${dir}/extensions/" f.target) c.home.file;
+  in
+    eq "links under ${dir}"
+    (lib.mapAttrs' (_: f: lib.nameValuePair f.target (toString f.source)) under)
+    (lib.mapAttrs' (n: e: lib.nameValuePair "${dir}/extensions/${n}" (toString e.path)) (pe c).extensions)
+    ++ eq "failed assertions (${dir})" (failed "" c) [])
+  [".pi/agent" "custom/agent"];
 }
