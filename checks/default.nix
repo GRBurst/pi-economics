@@ -53,4 +53,18 @@ in {
     name = "actor-subagents";
     src = actorSubagentsTs;
   };
+  # The bench probe's copy of __subagentsApi_v1 (spec §5.3, §8.1).
+  iface-subagents-bench-probe = iface.compare {
+    name = "subagents-bench-probe";
+    provider = {
+      src = actorSubagentsTs;
+      file = "extensions/actor-subagents/api.ts";
+      type = "SubagentsApiV1";
+    };
+    consumer = {
+      src = ../packages/bench;
+      file = "probe/index.ts";
+      type = "SubagentsApi";
+    };
+  };
 }

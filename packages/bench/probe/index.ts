@@ -6,6 +6,8 @@ import { writeFileSync } from "node:fs";
 
 type Info = { name: string; state: string };
 type ProbeApi = { on(event: string, handler: () => void): void };
+/** What the probe reads of actor-subagents' globalThis.__subagentsApi_v1; the type check compares it with the provider's SubagentsApiV1 (spec §5.3). */
+export type SubagentsApi = { list(): Info[] };
 
 export const countRunning = (agents: Info[]): number =>
 	agents.filter((a) => a.name !== "main" && a.state === "running").length;
@@ -15,7 +17,7 @@ export default function (pi: ProbeApi) {
 	if (!file) return;
 	let settled = true;
 	const write = () => {
-		const api = (globalThis as { __subagentsApi_v1?: { list(): Info[] } }).__subagentsApi_v1;
+		const api = (globalThis as { __subagentsApi_v1?: SubagentsApi }).__subagentsApi_v1;
 		let running = 0;
 		try {
 			running = api ? countRunning(api.list()) : 0;
