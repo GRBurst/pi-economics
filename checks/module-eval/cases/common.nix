@@ -47,4 +47,12 @@ in {
     ++ eq "activation names" (lib.attrNames c.home.activation) (lib.attrNames b.home.activation)
     ++ eq "failed assertions" (failed "" c) []
     ++ eq "warnings" c.warnings b.warnings;
+
+  # (M0.7)
+  agentDir-default = eq "agentDir" (pe (hm.eval {})).agentDir ".pi/agent";
+  agentDir-type = let
+    t = (hm.options {}).programs.piEconomics.agentDir.type;
+  in
+    lib.concatMap (v: holds "agentDir rejects ${builtins.toJSON v}" (!t.check v)) ["/abs" "x/" ""]
+    ++ lib.concatMap (v: holds "agentDir accepts ${v}" (t.check v)) [".pi/agent" "a" "custom/agent"];
 }
