@@ -279,8 +279,8 @@ Every task starts at status `[ ]`. Order: as numbered. Never more than one red c
 
 ### Task M0.0 — Read, and check drift
 
-- [ ] **Step 1:** Read the list under "Files to read first".
-- [ ] **Step 2 (drift, §9):**
+- [x] **Step 1:** Read the list under "Files to read first".
+- [x] **Step 2 (drift, §9):**
 
 ```sh
 cd ~/projects/nixos/new && git dot diff --stat f6a3c81 -- \
@@ -295,9 +295,9 @@ Expected: no file lines, `rc=0` (as on 2026-10-17 at host `6563f33`). A listed f
 
 **Files:** create `.gitignore`, `flake.nix`, `flake.lock`, `modules/default.nix`, `checks/default.nix`.
 
-- [ ] **Step 1 (RED):** `ne description --raw; echo "rc=$?"` → an error that the source has no `flake.nix`, `rc=1`.
-- [ ] **Step 2:** write `.gitignore` (S1), `flake.nix` (S2), `modules/default.nix` with `{imports = [];}` (S3, first form), `checks/default.nix` (S4, first form). `git add .gitignore flake.nix modules checks`.
-- [ ] **Step 3 (lock):**
+- [x] **Step 1 (RED):** `ne description --raw; echo "rc=$?"` → an error that the source has no `flake.nix`, `rc=1`.
+- [x] **Step 2:** write `.gitignore` (S1), `flake.nix` (S2), `modules/default.nix` with `{imports = [];}` (S3, first form), `checks/default.nix` (S4, first form). `git add .gitignore flake.nix modules checks`.
+- [x] **Step 3 (lock):**
 
 ```sh
 (ulimit -v $cap && timeout -s KILL 600 nix flake lock "$F" \
@@ -308,7 +308,7 @@ git add flake.lock
 
 The two revisions are the host's root `nixpkgs` (node `nixpkgs_4`) and `home-manager` at `f6a3c81` and at host HEAD on 2026-10-17. If the host's lock has moved since, take its current revisions (Step 4 prints them) and record that in the Execution Record.
 
-- [ ] **Step 4 (GREEN):**
+- [x] **Step 4 (GREEN):**
 
 ```sh
 for i in nixpkgs home-manager; do
@@ -323,40 +323,40 @@ ne checks.x86_64-linux --apply builtins.attrNames --json
 
 Expected: `nixpkgs: as the host`, `home-manager: as the host`, `{"home-manager":"home-manager","nixpkgs":"nixpkgs"}`, the description, `["default"]`, `[]`.
 
-- [ ] **Step 5 (CLEAN):** `fmt flake.nix modules/default.nix checks/default.nix` → no change. Commit.
+- [x] **Step 5 (CLEAN):** `fmt flake.nix modules/default.nix checks/default.nix` → no change. Commit.
 
 ### Task M0.2 — Leak scanner and self-test
 
 **Files:** create `checks/leak/default.nix`; modify `checks/default.nix`.
 
-- [ ] **Step 1:** write `checks/leak/default.nix` from S5, but with the scanner's `text` replaced by `exit 0` (a stub). Add to `checks/default.nix` (S4): `leakLib = import ./leak {inherit lib pkgs;};` in `let`, and `leak-selftest = leakLib.selftest;`. `git add checks/leak`.
-- [ ] **Step 2 (RED):** `nb leak-selftest` → fails with `FAIL hit 'someone@example.org': exit 0, want 1`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** the scanner's `text` as in S5. `nb leak-selftest` → passes; the log shows eight `ok hit …` lines, `near misses: pass`, `empty tree: exit 2`.
-- [ ] **Step 4:** nothing to run: the files M0 copies from the host (`package.json`, `package-lock.json`, the legacy script, the host's fixture cases) are scanned by `leak` as soon as they are tracked (M0.4, M0.14, M0.15). The planner ran the six patterns over them on 2026-10-17: no hit.
-- [ ] **Step 5 (planted):** in the scanner, replace the home pattern by `'/home/[^/]+/'`; `nb leak-selftest` → `FAIL near misses rejected`. Revert.
-  - [ ] red seen
-- [ ] **Step 6 (CLEAN):** `fmt checks/leak/default.nix checks/default.nix`; `nb leak-selftest` green. Commit.
+- [x] **Step 1:** write `checks/leak/default.nix` from S5, but with the scanner's `text` replaced by `exit 0` (a stub). Add to `checks/default.nix` (S4): `leakLib = import ./leak {inherit lib pkgs;};` in `let`, and `leak-selftest = leakLib.selftest;`. `git add checks/leak`.
+- [x] **Step 2 (RED):** `nb leak-selftest` → fails with `FAIL hit 'someone@example.org': exit 0, want 1`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** the scanner's `text` as in S5. `nb leak-selftest` → passes; the log shows eight `ok hit …` lines, `near misses: pass`, `empty tree: exit 2`.
+- [x] **Step 4:** nothing to run: the files M0 copies from the host (`package.json`, `package-lock.json`, the legacy script, the host's fixture cases) are scanned by `leak` as soon as they are tracked (M0.4, M0.14, M0.15). The planner ran the six patterns over them on 2026-10-17: no hit.
+- [x] **Step 5 (planted):** in the scanner, replace the home pattern by `'/home/[^/]+/'`; `nb leak-selftest` → `FAIL near misses rejected`. Revert.
+  - [x] red seen
+- [x] **Step 6 (CLEAN):** `fmt checks/leak/default.nix checks/default.nix`; `nb leak-selftest` green. Commit.
 
 ### Task M0.3 — Leak check over the repository
 
 **Files:** modify `checks/default.nix` (S4: `leakSrc` and `leak = leakLib.check leakSrc;`).
 
-- [ ] **Step 1:** add `leakSrc` and the check `leak` as in S4. `nb leak` → passes (the repository has no hit; `docs/specs/` and `docs/plans/` are excluded).
-- [ ] **Step 2:** `nb leak 2>&1 | grep -c 'found'` → `0`.
-- [ ] **Step 3 (planted):** `printf 'contact %s@%s\n' someone example.org >planted.txt && git add planted.txt && nb leak` → fails; the log shows `…/planted.txt:1:contact someone@example.org` and `pi-economics-leak-scan: e-mail address found (lines above)`. Then `git rm -q --cached planted.txt && rm planted.txt`.
-  - [ ] red seen
-- [ ] **Step 4 (exclusion):** `printf 'contact %s@%s\n' someone example.org >docs/plans/planted.txt && git add docs/plans/planted.txt && nb leak` → passes. Then `git rm -q --cached docs/plans/planted.txt && rm docs/plans/planted.txt`.
-- [ ] **Step 5 (CLEAN):** `fmt checks/default.nix`; `git status --short` shows only `checks/default.nix`. Commit.
+- [x] **Step 1:** add `leakSrc` and the check `leak` as in S4. `nb leak` → passes (the repository has no hit; `docs/specs/` and `docs/plans/` are excluded).
+- [x] **Step 2:** `nb leak 2>&1 | grep -c 'found'` → `0`.
+- [x] **Step 3 (planted):** `printf 'contact %s@%s\n' someone example.org >planted.txt && git add planted.txt && nb leak` → fails; the log shows `…/planted.txt:1:contact someone@example.org` and `pi-economics-leak-scan: e-mail address found (lines above)`. Then `git rm -q --cached planted.txt && rm planted.txt`.
+  - [x] red seen
+- [x] **Step 4 (exclusion):** `printf 'contact %s@%s\n' someone example.org >docs/plans/planted.txt && git add docs/plans/planted.txt && nb leak` → passes. Then `git rm -q --cached docs/plans/planted.txt && rm docs/plans/planted.txt`.
+- [x] **Step 5 (CLEAN):** `fmt checks/default.nix`; `git status --short` shows only `checks/default.nix`. Commit.
 
 ### Task M0.4 — Shared npm lock
 
 **Files:** create `checks/npm/default.nix` (S6), `checks/npm/package.json`, `checks/npm/package-lock.json`; modify `checks/default.nix`.
 
-- [ ] **Step 1:** write `checks/npm/default.nix` (S6); in `checks/default.nix` add `npm = import ./npm {inherit lib pkgs;};` and `npm-deps = npm.check;`. `git add checks/npm/default.nix`.
-- [ ] **Step 2 (RED):** `nb npm-deps` → an evaluation error naming the missing `checks/npm/package.json`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):**
+- [x] **Step 1:** write `checks/npm/default.nix` (S6); in `checks/default.nix` add `npm = import ./npm {inherit lib pkgs;};` and `npm-deps = npm.check;`. `git add checks/npm/default.nix`.
+- [x] **Step 2 (RED):** `nb npm-deps` → an evaluation error naming the missing `checks/npm/package.json`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):**
 
 ```sh
 host checks/pi-retry/package.json >checks/npm/package.json
@@ -368,108 +368,108 @@ nb npm-deps
 
 Expected: `identical`; the build prints `ok typescript 6.0.3`, `ok @types/node 25.9.1`, `ok @earendil-works/pi-coding-agent 1.0.0`. `pi-retry-test-deps-0` is normally substituted from the local store (D12); a fetch is also fine.
 
-- [ ] **Step 4:** `nb leak` → passes (the lock files are scanned now).
-- [ ] **Step 5 (planted):** in S6, `declared = (lib.importJSON ./package.json).devDependencies // {typescript = "0.0.0";};` → `nb npm-deps` fails with `FAIL typescript: installed 6.0.3, package.json declares 0.0.0`. Revert.
-  - [ ] red seen
-- [ ] **Step 6 (CLEAN):** `fmt checks/npm/default.nix checks/default.nix`. Commit.
+- [x] **Step 4:** `nb leak` → passes (the lock files are scanned now).
+- [x] **Step 5 (planted):** in S6, `declared = (lib.importJSON ./package.json).devDependencies // {typescript = "0.0.0";};` → `nb npm-deps` fails with `FAIL typescript: installed 6.0.3, package.json declares 0.0.0`. Revert.
+  - [x] red seen
+- [x] **Step 6 (CLEAN):** `fmt checks/npm/default.nix checks/default.nix`. Commit.
 
 ### Task M0.5 — Type-check harness
 
 **Files:** create `checks/typecheck/default.nix` (S7), the fixtures (S8); modify `checks/default.nix`.
 
-- [ ] **Step 1:** write the fixtures (S8) and `checks/typecheck/default.nix` (S7) with the runner's `text` replaced by `exit 0`. In `checks/default.nix`: `typecheck = import ./typecheck {inherit lib pkgs; inherit (npm) nodeModules;};` and `typecheck-harness = typecheck.selftest;`. `git add checks/typecheck`.
-- [ ] **Step 2 (RED):** `nb typecheck-harness` → `FAIL bad-strict: accepted`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** the runner's `text` as in S7. `nb typecheck-harness` → passes; log: `ok version Version 6.0.3`, `ok ok`, `ok bad-strict rejected with error TS7006`, `ok bad-pi rejected with error TS2322`, `ok no-ts rejected with no .ts files`.
-- [ ] **Step 4:** `nb leak` → passes.
-- [ ] **Step 5 (planted):** TypeScript 6.0 is strict by default, so removing `--strict` changes nothing (measured); plant `--strict false` on the runner's `tsc` line instead → `FAIL bad-strict: accepted`; restore. Remove `--skipLibCheck` → `FAIL ok: rejected`; restore.
-  - [ ] red seen (`--strict`)
-  - [ ] red seen (`--skipLibCheck`)
-- [ ] **Step 6 (CLEAN):** `fmt checks/typecheck/default.nix checks/default.nix`. Commit.
+- [x] **Step 1:** write the fixtures (S8) and `checks/typecheck/default.nix` (S7) with the runner's `text` replaced by `exit 0`. In `checks/default.nix`: `typecheck = import ./typecheck {inherit lib pkgs; inherit (npm) nodeModules;};` and `typecheck-harness = typecheck.selftest;`. `git add checks/typecheck`.
+- [x] **Step 2 (RED):** `nb typecheck-harness` → `FAIL bad-strict: accepted`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** the runner's `text` as in S7. `nb typecheck-harness` → passes; log: `ok version Version 6.0.3`, `ok ok`, `ok bad-strict rejected with error TS7006`, `ok bad-pi rejected with error TS2322`, `ok no-ts rejected with no .ts files`.
+- [x] **Step 4:** `nb leak` → passes.
+- [x] **Step 5 (planted):** TypeScript 6.0 is strict by default, so removing `--strict` changes nothing (measured); plant `--strict false` on the runner's `tsc` line instead → `FAIL bad-strict: accepted`; restore. Remove `--skipLibCheck` → `FAIL ok: rejected`; restore.
+  - [x] red seen (`--strict`)
+  - [x] red seen (`--skipLibCheck`)
+- [x] **Step 6 (CLEAN):** `fmt checks/typecheck/default.nix checks/default.nix`. Commit.
 
 ### Task M0.6 — Module-evaluation harness
 
 **Files:** create `checks/lib/hm-eval.nix` (S9), `checks/module-eval/default.nix` (S10), `checks/module-eval/expect.nix` (S11), `checks/module-eval/cases/common.nix` (S12, only `exports` and `inert`); modify `checks/default.nix` (`hm`, `module-eval`).
 
-- [ ] **Step 1:** write the four files; in `cases/common.nix` write `exports` with the planted expectation `["default" "planted"]`. `git add checks/lib checks/module-eval`.
-- [ ] **Step 2 (RED, planted):** `nb module-eval` → `FAIL exports: homeModules: expected [ "default" "planted" ], got [ "default" ]` and `module-eval: 1 failure(s) in 2 cases`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** expectation `["default"]`. `nb module-eval` → `module-eval: 2 cases passed`.
-- [ ] **Step 4:** `nb leak` → passes.
-- [ ] **Step 5 (planted):** (a) `caseFiles = [];` → evaluation error `module-eval: no cases`; revert. (b) in `modules/default.nix` add `home.file.planted.text = "x";` → `FAIL inert: home.file names: expected …, got …`; revert.
-  - [ ] red seen (no cases)
-  - [ ] red seen (`inert`)
-- [ ] **Step 6 (CLEAN):** `fmt checks/lib/hm-eval.nix checks/module-eval/*.nix checks/module-eval/cases/common.nix checks/default.nix`. Commit.
+- [x] **Step 1:** write the four files; in `cases/common.nix` write `exports` with the planted expectation `["default" "planted"]`. `git add checks/lib checks/module-eval`.
+- [x] **Step 2 (RED, planted):** `nb module-eval` → `FAIL exports: homeModules: expected [ "default" "planted" ], got [ "default" ]` and `module-eval: 1 failure(s) in 2 cases`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** expectation `["default"]`. `nb module-eval` → `module-eval: 2 cases passed`.
+- [x] **Step 4:** `nb leak` → passes.
+- [x] **Step 5 (planted):** (a) `caseFiles = [];` → evaluation error `module-eval: no cases`; revert. (b) in `modules/default.nix` add `home.file.planted.text = "x";` → `FAIL inert: home.file names: expected …, got …`; revert.
+  - [x] red seen (no cases)
+  - [x] red seen (`inert`)
+- [x] **Step 6 (CLEAN):** `fmt checks/lib/hm-eval.nix checks/module-eval/*.nix checks/module-eval/cases/common.nix checks/default.nix`. Commit.
 
 ### Task M0.7 — `agentDir`
 
 **Files:** create `modules/common.nix` (S13: the header, `cfg`, and the option `agentDir` only; `config = {};`); modify `modules/default.nix` (S3), `checks/module-eval/cases/common.nix` (`agentDir-default`, `agentDir-type` of S12).
 
-- [ ] **Step 1:** add `agentDir-default` and `agentDir-type`. `git add -u`.
-- [ ] **Step 2 (RED):** `nb module-eval` → an evaluation error naming `piEconomics` (`attribute 'piEconomics' missing` or `The option `programs.piEconomics' does not exist`).
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** write `modules/common.nix` with `agentDir`; `modules/default.nix` imports `./common.nix`. `git add modules/common.nix`. `nb module-eval` → `4 cases passed`.
-- [ ] **Step 4 (CLEAN):** `fmt modules/*.nix checks/module-eval/cases/common.nix`. Commit.
+- [x] **Step 1:** add `agentDir-default` and `agentDir-type`. `git add -u`.
+- [x] **Step 2 (RED):** `nb module-eval` → an evaluation error naming `piEconomics` (`attribute 'piEconomics' missing` or `The option `programs.piEconomics' does not exist`).
+  - [x] red seen
+- [x] **Step 3 (GREEN):** write `modules/common.nix` with `agentDir`; `modules/default.nix` imports `./common.nix`. `git add modules/common.nix`. `nb module-eval` → `4 cases passed`.
+- [x] **Step 4 (CLEAN):** `fmt modules/*.nix checks/module-eval/cases/common.nix`. Commit.
 
 ### Task M0.8 — Registry options and links
 
 **Files:** modify `modules/common.nix` (S13 blocks marked M0.8: `extensionModule`, option `extensions`, `home.file`), `checks/module-eval/cases/common.nix` (`registry-links`); create `checks/module-eval/fixtures/ext-a/index.ts`, `ext-b/index.ts` (each one line: `export default function (): void {}`).
 
-- [ ] **Step 1:** add the fixtures and `registry-links`. `git add checks/module-eval/fixtures`.
-- [ ] **Step 2 (RED):** `nb module-eval` → `The option `programs.piEconomics.extensions' does not exist`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** add the M0.8 blocks. `nb module-eval` → `5 cases passed`.
-- [ ] **Step 4 (CLEAN):** `fmt modules/common.nix checks/module-eval/cases/common.nix`. Commit.
+- [x] **Step 1:** add the fixtures and `registry-links`. `git add checks/module-eval/fixtures`.
+- [x] **Step 2 (RED):** `nb module-eval` → `The option `programs.piEconomics.extensions' does not exist`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** add the M0.8 blocks. `nb module-eval` → `5 cases passed`.
+- [x] **Step 4 (CLEAN):** `fmt modules/common.nix checks/module-eval/cases/common.nix`. Commit.
 
 ### Task M0.9 — Registry existence assertion
 
 **Files:** modify `modules/common.nix` (block M0.9: `assertions`), `checks/module-eval/cases/common.nix` (`registry-missing`).
 
-- [ ] **Step 1:** add `registry-missing`.
-- [ ] **Step 2 (RED):** `nb module-eval` → `FAIL registry-missing: failed assertions: expected [ "pi-economics: extension 'gone' not found at …; the upstream-x input may have renamed or removed it." "pi-economics: extension 'gone-local' not found at ….'" ], got [ ]`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** add the `assertions` block. `nb module-eval` → `6 cases passed`.
-- [ ] **Step 4 (CLEAN):** format. Commit.
+- [x] **Step 1:** add `registry-missing`.
+- [x] **Step 2 (RED):** `nb module-eval` → `FAIL registry-missing: failed assertions: expected [ "pi-economics: extension 'gone' not found at …; the upstream-x input may have renamed or removed it." "pi-economics: extension 'gone-local' not found at ….'" ], got [ ]`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** add the `assertions` block. `nb module-eval` → `6 cases passed`.
+- [x] **Step 4 (CLEAN):** format. Commit.
 
 ### Task M0.10 — Double links are rejected (characterisation)
 
 **Files:** modify `checks/module-eval/cases/common.nix` (`registry-double-link-key`, `registry-double-link-target`).
 
-- [ ] **Step 1:** add both cases. `nb module-eval` → `8 cases passed` (Home Manager does the rejecting, §5.1).
-- [ ] **Step 2:** why the key matters: the in-tree modules of the host link under the same key `.pi/agent/extensions/<name>` until W2–W4 (§9.1), so a second link is an option conflict, not a silent second file.
-- [ ] **Step 3 (planted):** in `modules/common.nix`, change the link to `lib.nameValuePair "pi-economics-extension-${name}" {source = e.path; target = "${cfg.agentDir}/extensions/${name}";}` → `FAIL registry-double-link-key: a second home.file definition of the link: expected evaluation to fail, it succeeded` and `FAIL registry-double-link-key: the registry links under the key .pi/agent/extensions/ext-a: does not hold`, while `registry-links` stays green (it compares targets, not keys). Revert. (Planner's run: both lines seen.)
-  - [ ] red seen
-- [ ] **Step 4 (CLEAN):** format. Commit.
+- [x] **Step 1:** add both cases. `nb module-eval` → `8 cases passed` (Home Manager does the rejecting, §5.1).
+- [x] **Step 2:** why the key matters: the in-tree modules of the host link under the same key `.pi/agent/extensions/<name>` until W2–W4 (§9.1), so a second link is an option conflict, not a silent second file.
+- [x] **Step 3 (planted):** in `modules/common.nix`, change the link to `lib.nameValuePair "pi-economics-extension-${name}" {source = e.path; target = "${cfg.agentDir}/extensions/${name}";}` → `FAIL registry-double-link-key: a second home.file definition of the link: expected evaluation to fail, it succeeded` and `FAIL registry-double-link-key: the registry links under the key .pi/agent/extensions/ext-a: does not hold`, while `registry-links` stays green (it compares targets, not keys). Revert. (Planner's run: both lines seen.)
+  - [x] red seen
+- [x] **Step 4 (CLEAN):** format. Commit.
 
 ### Task M0.11 — `piSettings.{enable, file, after}`
 
 **Files:** modify `modules/common.nix` (option block M0.11), `checks/module-eval/cases/common.nix` (`pisettings-defaults` without its `ops`/`order` lines, which M0.12 adds).
 
-- [ ] **Step 1:** add the case.
-- [ ] **Step 2 (RED):** `nb module-eval` → evaluation error naming `piSettings`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** add the three options. `nb module-eval` → `9 cases passed`.
-- [ ] **Step 4 (CLEAN):** format. Commit.
+- [x] **Step 1:** add the case.
+- [x] **Step 2 (RED):** `nb module-eval` → evaluation error naming `piSettings`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** add the three options. `nb module-eval` → `9 cases passed`.
+- [x] **Step 4 (CLEAN):** format. Commit.
 
 ### Task M0.12 — Contributor-keyed ops, `sortedOps`
 
 **Files:** modify `modules/common.nix` (blocks M0.12: `opModule`, `sortedOps`, options `ops` and `sortedOps`, `config.programs.piEconomics.piSettings.sortedOps`), `checks/module-eval/cases/common.nix` (`pisettings-order`, `pisettings-path-empty`, the `ops`/`order` lines of `pisettings-defaults`).
 
-- [ ] **Step 1:** add the cases.
-- [ ] **Step 2 (RED):** `nb module-eval` → evaluation error naming `piSettings.ops` (or `sortedOps`).
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** add the blocks. `nb module-eval` → `11 cases passed`.
-- [ ] **Step 4 (CLEAN):** format. Commit.
+- [x] **Step 1:** add the cases.
+- [x] **Step 2 (RED):** `nb module-eval` → evaluation error naming `piSettings.ops` (or `sortedOps`).
+  - [x] red seen
+- [x] **Step 3 (GREEN):** add the blocks. `nb module-eval` → `11 cases passed`.
+- [x] **Step 4 (CLEAN):** format. Commit.
 
 ### Task M0.13 — The jq program, today's ops
 
 **Files:** create `checks/pi-settings-migrate/today-ops.nix` (S14); modify `modules/common.nix` (blocks M0.13: `access` … `program`, option `program`, its `config` line), `checks/module-eval/cases/common.nix` (`pisettings-program`).
 
-- [ ] **Step 1:** write `today-ops.nix`; add the case. `git add checks/pi-settings-migrate`.
-- [ ] **Step 2 (RED):** `nb module-eval` → evaluation error naming `program`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** add the blocks. `nb module-eval` → `12 cases passed`.
-- [ ] **Step 4 (optional):** look at the program once:
+- [x] **Step 1:** write `today-ops.nix`; add the case. `git add checks/pi-settings-migrate`.
+- [x] **Step 2 (RED):** `nb module-eval` → evaluation error naming `program`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** add the blocks. `nb module-eval` → `12 cases passed`.
+- [x] **Step 4 (optional):** look at the program once:
 
 ```sh
 (ulimit -v $cap && exec nix eval --raw --impure "${o[@]}" --expr '
@@ -487,13 +487,13 @@ Expected: `identical`; the build prints `ok typescript 6.0.3`, `ok @types/node 2
 
 Expected (planner's prototype): five `def opN:` lines (the host's removal, the two pi-retry removals, the child rule, `cacheWarming`), then `op1 | op2 | op3 | op4 | op5`.
 
-- [ ] **Step 5 (CLEAN):** format. Commit.
+- [x] **Step 5 (CLEAN):** format. Commit.
 
 ### Task M0.14 — The script, ported fixtures (part 1)
 
 **Files:** create `checks/pi-settings-migrate/default.nix` (S15, without the part 2 and part 3 lines), `checks/pi-settings-migrate/ported-cases.sh`; modify `modules/common.nix` (blocks M0.14: `script`, option `package`, its `config` line), `checks/default.nix` (`pi-settings-migrate`).
 
-- [ ] **Step 1:** generate the ported cases from the host's check, lines 19–122, with two edits: the comment at host lines 98–101 (the retired `idle` flag) is replaced, and the three `$m <file> idle` calls become `$mi <file>`:
+- [x] **Step 1:** generate the ported cases from the host's check, lines 19–122, with two edits: the comment at host lines 98–101 (the retired `idle` flag) is replaced, and the three `$m <file> idle` calls become `$mi <file>`:
 
 ```sh
 src=$(host checks/pi-settings-migrate/default.nix)
@@ -512,17 +512,17 @@ grep -c ' idle$' checks/pi-settings-migrate/ported-cases.sh     # 0
 
 The host's lines contain no `''` and no `${` (checked while planning), so sourcing them from bash runs exactly what the host's Nix string ran.
 
-- [ ] **Step 2:** write `default.nix` (S15) with only `m`, `mi` and part 1; add `pi-settings-migrate = import ./pi-settings-migrate {inherit lib pkgs hm;};` to `checks/default.nix`. `git add checks/pi-settings-migrate`.
-- [ ] **Step 3 (RED):** `nb pi-settings-migrate` → evaluation error naming `package`.
-  - [ ] red seen
-- [ ] **Step 4 (GREEN):** add the `script` block and the option. `nb pi-settings-migrate` → passes; the log shows every `case …` line of the host's check. `nb module-eval` and `nb leak` → pass.
-- [ ] **Step 5 (CLEAN):** format. Commit.
+- [x] **Step 2:** write `default.nix` (S15) with only `m`, `mi` and part 1; add `pi-settings-migrate = import ./pi-settings-migrate {inherit lib pkgs hm;};` to `checks/default.nix`. `git add checks/pi-settings-migrate`.
+- [x] **Step 3 (RED):** `nb pi-settings-migrate` → evaluation error naming `package`.
+  - [x] red seen
+- [x] **Step 4 (GREEN):** add the `script` block and the option. `nb pi-settings-migrate` → passes; the log shows every `case …` line of the host's check. `nb module-eval` and `nb leak` → pass.
+- [x] **Step 5 (CLEAN):** format. Commit.
 
 ### Task M0.15 — Bytes equal the legacy script's (part 2)
 
 **Files:** create `checks/pi-settings-migrate/legacy.nix`, `differential.sh` (S16), `corpus/*.json`; modify `checks/pi-settings-migrate/default.nix` (part 2 lines of S15).
 
-- [ ] **Step 1 (oracle):**
+- [x] **Step 1 (oracle):**
 
 ```sh
 {
@@ -533,7 +533,7 @@ The host's lines contain no `''` and no `${` (checked while planning), so sourci
 } >checks/pi-settings-migrate/legacy.nix
 ```
 
-- [ ] **Step 2 (corpus):** 29 files, exact bytes:
+- [x] **Step 2 (corpus):** 29 files, exact bytes:
 
 ```sh
 c=checks/pi-settings-migrate/corpus
@@ -574,44 +574,44 @@ w 29-two-documents '{} {}'
 ls "$c"/*.json | wc -l   # 29
 ```
 
-- [ ] **Step 3:** write `differential.sh` (S16); add the part 2 lines of S15 (`old`, `corpus`, `corpusCount`, the `part2` subshell). `git add checks/pi-settings-migrate`. `nb pi-settings-migrate` → passes; log `part 2: 58 comparisons, all equal` (the planner's prototype: 29 × 2 equal).
-- [ ] **Step 4 (planted):** in `today-ops.nix`, `order = 1000;` for `cacheLifecycle` → `FAIL corpus 01-stale-claude-auth.json (idle): bytes differ from the legacy script's` followed by the diff (`cacheWarming` before `piRetry`). Revert. This is §5.4's reason for 1500.
-  - [ ] red seen
-- [ ] **Step 5:** `nb leak` → passes (`legacy.nix`, corpus scanned).
-- [ ] **Step 6 (CLEAN):** `fmt checks/pi-settings-migrate/default.nix` (not `legacy.nix`: it stays verbatim; Alejandra leaves it unchanged anyway — check with `fmt --check checks/pi-settings-migrate/legacy.nix`). Commit.
+- [x] **Step 3:** write `differential.sh` (S16); add the part 2 lines of S15 (`old`, `corpus`, `corpusCount`, the `part2` subshell). `git add checks/pi-settings-migrate`. `nb pi-settings-migrate` → passes; log `part 2: 58 comparisons, all equal` (the planner's prototype: 29 × 2 equal).
+- [x] **Step 4 (planted):** in `today-ops.nix`, `order = 1000;` for `cacheLifecycle` → `FAIL corpus 01-stale-claude-auth.json (idle): bytes differ from the legacy script's` followed by the diff (`cacheWarming` before `piRetry`). Revert. This is §5.4's reason for 1500.
+  - [x] red seen
+- [x] **Step 5:** `nb leak` → passes (`legacy.nix`, corpus scanned).
+- [x] **Step 6 (CLEAN):** `fmt checks/pi-settings-migrate/default.nix` (not `legacy.nix`: it stays verbatim; Alejandra leaves it unchanged anyway — check with `fmt --check checks/pi-settings-migrate/legacy.nix`). Commit.
 
 ### Task M0.16 — The op table (part 3)
 
 **Files:** create `checks/pi-settings-migrate/op-table.sh` (S17); modify `default.nix` (part 3 lines of S15).
 
-- [ ] **Step 1:** write `op-table.sh`; add `set_`, `ens`, `rem`, `mix` and the `part3` subshell. `git add`. `nb pi-settings-migrate` → passes; log ends with `part 3: op table passed` (the planner ran the same table against the prototype: 37 rows ok).
-- [ ] **Step 2:** the rows map to §5.4's table and the `null`/`false` bullets (Scenario coverage).
-- [ ] **Step 3 (planted):**
+- [x] **Step 1:** write `op-table.sh`; add `set_`, `ens`, `rem`, `mix` and the `part3` subshell. `git add`. `nb pi-settings-migrate` → passes; log ends with `part 3: op table passed` (the planner ran the same table against the prototype: 37 rows ok).
+- [x] **Step 2:** the rows map to §5.4's table and the `null`/`false` bullets (Scenario coverage).
+- [x] **Step 3 (planted):**
   - in `guarded`, a strict prefix guard for `removeWhere`: replace `map objectGuard (prefixes op.path)` by `map (if op.op == "removeWhere" then (p: "(${access p} | type) == \"object\"") else objectGuard) (prefixes op.path)` → `FAIL mix remove false aborts: expected the file untouched, got …`. Revert.
   - in `guarded`, `if guards == [] || op.op == "set"` (an unguarded `set`) → `FAIL mix wrong shapes skip only their op: …`. Revert.
-  - [ ] red seen (removeWhere)
-  - [ ] red seen (set)
-- [ ] **Step 4 (CLEAN):** format. Commit.
+  - [x] red seen (removeWhere)
+  - [x] red seen (set)
+- [x] **Step 4 (CLEAN):** format. Commit.
 
 ### Task M0.17 — The activation entry
 
 **Files:** modify `modules/common.nix` (blocks M0.17: `absFile`, `home.activation`), `checks/module-eval/cases/common.nix` (`pisettings-activation`, `pisettings-disabled`, `pisettings-no-ops`, `pisettings-file`).
 
-- [ ] **Step 1:** add the four cases.
-- [ ] **Step 2 (RED):** `nb module-eval` → `FAIL pisettings-activation: entry piSettingsMigrate exists: does not hold` and `FAIL pisettings-file: data for file = .local/state/pi/settings.json: expected "run …", got null` (`pisettings-disabled` and `pisettings-no-ops` pass already: no entry exists yet).
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** add the blocks. `nb module-eval` → `16 cases passed`. `nb pi-settings-migrate` → passes.
-- [ ] **Step 4 (planted):** drop `cfg.piSettings.enable &&` from the condition → `FAIL pisettings-disabled: …`. Revert.
-  - [ ] red seen
-- [ ] **Step 5 (CLEAN):** format. Commit.
+- [x] **Step 1:** add the four cases.
+- [x] **Step 2 (RED):** `nb module-eval` → `FAIL pisettings-activation: entry piSettingsMigrate exists: does not hold` and `FAIL pisettings-file: data for file = .local/state/pi/settings.json: expected "run …", got null` (`pisettings-disabled` and `pisettings-no-ops` pass already: no entry exists yet).
+  - [x] red seen
+- [x] **Step 3 (GREEN):** add the blocks. `nb module-eval` → `16 cases passed`. `nb pi-settings-migrate` → passes.
+- [x] **Step 4 (planted):** drop `cfg.piSettings.enable &&` from the condition → `FAIL pisettings-disabled: …`. Revert.
+  - [x] red seen
+- [x] **Step 5 (CLEAN):** format. Commit.
 
 ### Task M0.18 — Docs and agent rules
 
 **Files:** create `docs/pi-economics.md` (S18), `AGENTS.md` (S19).
 
-- [ ] **Step 1:** write both. `git add docs/pi-economics.md AGENTS.md`.
-- [ ] **Step 2:** `nb leak` → passes (both files are scanned; neither names a home, address or e-mail).
-- [ ] **Step 3:** every option name in `docs/pi-economics.md` exists:
+- [x] **Step 1:** write both. `git add docs/pi-economics.md AGENTS.md`.
+- [x] **Step 2:** `nb leak` → passes (both files are scanned; neither names a home, address or e-mail).
+- [x] **Step 3:** every option name in `docs/pi-economics.md` exists:
 
 ```sh
 for p in agentDir extensions piSettings enable file after 'ops.<contributor>'; do
@@ -620,11 +620,11 @@ done
 ```
 
 Expected: no `MISSING` line.
-- [ ] **Step 4:** commit.
+- [x] **Step 4:** commit.
 
 ### Task M0.19 — Gate and Execution Record
 
-- [ ] **Step 1 (the gate, every check under the cap):**
+- [x] **Step 1 (the gate, every check under the cap):**
 
 ```sh
 names=$(ne checks.x86_64-linux --json --apply builtins.attrNames) && names=$(jq -er '.[]' <<<"$names") || echo "LISTING FAILED"
@@ -639,9 +639,9 @@ fmt --check $(git ls-files '*.nix')
 
 Expected: the listing `leak leak-selftest module-eval npm-deps pi-settings-migrate typecheck-harness`; no `FAILED`; a formatter `.drv`; `["default"]`; Alejandra reports nothing to change. Record each check's peak and time.
 
-- [ ] **Step 2:** drift again (M0.0 Step 2): still empty, or ported.
-- [ ] **Step 3:** fill `# Execution Record` below: date, commits per task, the boxes ticked, the gate's peaks and times, every deviation from this plan, answers to the open questions received meanwhile.
-- [ ] **Step 4:** commit.
+- [x] **Step 2:** drift again (M0.0 Step 2): still empty, or ported.
+- [x] **Step 3:** fill `# Execution Record` below: date, commits per task, the boxes ticked, the gate's peaks and times, every deviation from this plan, answers to the open questions received meanwhile.
+- [x] **Step 4:** commit.
 
 ---
 
@@ -2050,3 +2050,45 @@ Commits are unsigned: `git -c commit.gpgsign=false commit`.
 - **Q6 (D9).** The entry's command line becomes `run <exe> <file>` without double quotes; the host's two assertions on it change at W6. Fine?
 
 # Execution Record
+
+Executed 2026-10-17 (agent impl-m0), on the plan at `31f369e` and the spec at `2e10470`. Owner amendments applied: Q3 keeps the `fdietze/pi-claude-auth` coordinates (D14 stands); Q5: M0 does not move the host's `docs/pi-token-economics.md` (D19 only adds `AGENTS.md` and `docs/pi-economics.md`); Q1, Q2, Q4, Q6 accepted as the plan states them. Every step ticked; commands as in "Environment", one capped `nix build` per check, `--option eval-cache false`. The host lock had not moved (M0.1 Step 4: both nodes equal the host's); no drift at M0.0 or M0.19 (`git dot diff --stat f6a3c81 -- …` empty, rc=0).
+
+| Task | Commit | Red seen | Deviation |
+|---|---|---|---|
+| M0.0 | — | — | none; drift check empty |
+| M0.1 | `efe1436` | `Path 'flake.nix' does not exist in Git repository`, rc=1 | `ne description --raw` is not an attribute Nix evaluates; the description was read with `nix flake metadata --json \| jq -r .description` (printed as expected). `homeModules` `["default"]`, `checks` `[]`, lock nodes equal the host's |
+| M0.2 | `d44d2af` | `FAIL hit 'someone@example.org': exit 0, want 1`; planted `'/home/[^/]+/'` → `FAIL near misses rejected` | none; green log: eight `ok hit`, `near misses: pass`, `empty tree: exit 2` |
+| M0.3 | `5e69d72` | planted e-mail → `…/planted.txt:1:contact someone@example.org`, `e-mail address found (lines above)`; same under `docs/plans/` passes | none |
+| M0.4 | `34f0cb9` | `lib.fileset.unions: Element 0 (…/checks/npm/package.json) is a path that does not exist` (the plan's wording differs, same cause); planted `typescript = "0.0.0"` → `FAIL typescript: installed 6.0.3, package.json declares 0.0.0` | none; lock files `identical` to the host's; `ok typescript 6.0.3`, `@types/node 25.9.1`, `pi 1.0.0` |
+| M0.5 | `fe1a91e` | `FAIL bad-strict: accepted` (stub); planted `--strict false` → `FAIL bad-strict: accepted`; without `--skipLibCheck` → `FAIL ok: rejected` | none; a `/tmp` backup copy failed (the sandbox's `/tmp` is private), the planted lines were reverted with `sed` and the harness rebuilt green before the commit |
+| M0.6 | `c30a10b` | planted `["default" "planted"]` → `FAIL exports: homeModules: expected [ "default" "planted" ], got [ "default" ]`, `module-eval: 1 failure(s) in 2 cases`; `caseFiles = []` → `module-eval: no cases`; planted `home.file.planted` → `FAIL inert: home.file names: …` | none |
+| M0.7 | `be1afe9` | `error: attribute 'piEconomics' missing` | none; 4 cases |
+| M0.8 | `f54ba1c` | `The option `programs.piEconomics.extensions' does not exist` | none; 5 cases |
+| M0.9 | `402cf89` | `FAIL registry-missing: failed assertions: expected [ … ], got [ ]` | none; 6 cases |
+| M0.10 | `59cb4df` | characterisation, green first (8 cases); planted link key `pi-economics-extension-<name>` → the two `FAIL registry-double-link-key` lines of the plan, `registry-links` stayed green | none |
+| M0.11 | `312fded` | `error: attribute 'piSettings' missing` | none; 9 cases |
+| M0.12 | `8f1d941` | `error: attribute 'ops' missing` | none; 11 cases |
+| M0.13 | `64a7b1a` | `error: attribute 'program' missing` | none; 12 cases. Optional Step 4 run: needs `NIXPKGS_CONFIG=<file containing {}>` for `--impure` in the sandbox (`~/.config/nixpkgs/config.nix` is denied); output: five `def opN:` lines and `op1 \| … \| op5` as predicted |
+| M0.14 | `e8c8f52` | `error: attribute 'package' missing` | none; all host cases ran (three through `$mi`) |
+| M0.15 | `1e1b05d` | characterisation: `part 2: 58 comparisons, all equal`; planted `order = 1000` → `FAIL corpus 01-stale-claude-auth.json (idle): bytes differ from the legacy script's` and the diff | none; `alejandra --check` clean on `legacy.nix` |
+| M0.16 | `940a713` | characterisation: 37 `ok` rows, `part 3: op table passed`; planted strict `removeWhere` guard → `FAIL mix remove false aborts: expected the file untouched, got {`; planted unguarded `set` → `FAIL mix wrong shapes skip only their op: expected {"packages":[],…}, got {"packages":["s"],…}` | none |
+| M0.17 | `5479f36` | `FAIL pisettings-activation: entry piSettingsMigrate exists: does not hold` and two `FAIL pisettings-file: data for file = …: expected "run …", got null`; planted (no `enable &&`) → `FAIL pisettings-disabled: no entry while enable = false, with ops from cacheLifecycle host retry: does not hold` | none; 16 cases |
+| M0.18 | `6166f04` | — (docs) | none; `leak` green; no `MISSING` option name |
+| M0.19 | this record's commit | — | see below |
+
+## Gate (M0.19), 2026-10-17
+
+Each check's output deleted from the store, then built once under `ulimit -v 20971520` and `timeout -s KILL 900` (`/usr/bin/time` is absent; GNU `time` from the system profile; the peak is the largest resident set of the `nix build` process tree seen by `time`):
+
+| Check | Peak | Time |
+|---|---|---|
+| `leak` | 239200 KiB | 1.55 s |
+| `leak-selftest` | 239028 KiB | 1.75 s |
+| `module-eval` (16 cases) | 734856 KiB | 6.36 s |
+| `npm-deps` | 156480 KiB | 1.43 s |
+| `pi-settings-migrate` (58 + 37 rows) | 560816 KiB | 7.34 s |
+| `typecheck-harness` | 244228 KiB | 7.21 s |
+
+No `FAILED`. `formatter.x86_64-linux.drvPath` evaluates; `homeModules` is `["default"]`; `alejandra --check` over every tracked `.nix` file is clean. Listing: `leak leak-selftest module-eval npm-deps pi-settings-migrate typecheck-harness`.
+
+Deviations from the plan, all small: the M0.1 description read; `nix build` prints no log for an output already in the store, so green logs were shown by deleting the output first (a helper, not committed); the `NIXPKGS_CONFIG` note of M0.13. Open questions: Q1, Q2, Q4, Q6 accepted, Q3 and Q5 as amended above; none new.
