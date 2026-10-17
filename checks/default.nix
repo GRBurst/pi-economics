@@ -5,4 +5,8 @@
   pkgs,
   lib,
   home-manager,
-}: {}
+}: let
+  leakLib = import ./leak {inherit lib pkgs;};
+in {
+  leak-selftest = leakLib.selftest;
+}
