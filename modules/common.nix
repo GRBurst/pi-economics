@@ -131,6 +131,36 @@
       then ".\n"
       else lib.concatMapStringsSep " | " (i: "op${toString i}") (lib.range 1 n) + "\n"
     );
+
+  # (M0.14) The host's script, with the program in a file and without the
+  # positional `idle` flag (now ops.cacheLifecycle). Missing file: no-op.
+  # jq failure (invalid JSON, false on the way): untouched, exit 0. Equal as
+  # JSON: untouched, so the owners' bytes and formatting survive.
+  script = pkgs.writeShellApplication {
+    name = "pi-settings-migrate";
+    runtimeInputs = [pkgs.jq pkgs.coreutils];
+    text = ''
+      f=''${1:?usage: pi-settings-migrate <settings.json>}
+      [ -e "$f" ] || exit 0
+
+      tmp=$(mktemp "$f.XXXXXX")
+      trap 'rm -f "$tmp"' EXIT
+
+      if ! jq -f ${pkgs.writeText "pi-settings-migrate.jq" program} "$f" >"$tmp" 2>/dev/null; then
+        exit 0
+      fi
+
+      # Equal as JSON: keep the owners' bytes.
+      if jq -e -n --slurpfile a "$f" --slurpfile b "$tmp" '$a == $b' >/dev/null; then
+        exit 0
+      fi
+
+      chmod --reference="$f" "$tmp"
+      mv -f "$tmp" "$f"
+      trap - EXIT
+      echo "pi-settings-migrate: migrated $f" >&2
+    '';
+  };
 in {
   options.programs.piEconomics = {
     # (M0.7)
@@ -202,6 +232,14 @@ in {
         internal = true;
         description = "The rendered jq program (read by the checks).";
       };
+
+      # (M0.14)
+      package = lib.mkOption {
+        type = lib.types.package;
+        readOnly = true;
+        internal = true;
+        description = "`pi-settings-migrate <file>`, the script the activation entry runs.";
+      };
     };
   };
 
@@ -209,6 +247,7 @@ in {
     # (M0.12)
     programs.piEconomics.piSettings = {
       inherit sortedOps program;
+      package = script;
     };
 
     # (M0.8)

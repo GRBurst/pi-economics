@@ -27,4 +27,5 @@ in {
   npm-deps = npm.check;
   typecheck-harness = typecheck.selftest;
   module-eval = import ./module-eval {inherit lib pkgs hm self;};
+  pi-settings-migrate = import ./pi-settings-migrate {inherit lib pkgs hm;};
 }
