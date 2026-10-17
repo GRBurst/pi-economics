@@ -1,7 +1,7 @@
 # pi-economics — design
 
-Date: 2026-10-12 · Status: draft r5 (2026-10-17), after reviews 1–4 and the
-owner's decisions of 2026-10-17 · Owner: pallon
+Date: 2026-10-12 · Status: draft r5 (2026-10-17, amended for host `2d304eb`),
+after reviews 1–4 and the owner's decisions of 2026-10-17 · Owner: pallon
 
 Revision 2 addresses review 1 (2 blockers, 9 majors, the minor findings).
 Revision 3 addresses review 2 (4 majors, minors, nits) and records the owner's
@@ -28,8 +28,10 @@ Revision 4 follows the owner's decisions of 2026-10-17
 Revision 5 addresses review 4 (`~/.pi/agent/notes/2026-10-17-review-move-r4.md`,
 accept-with-minors):
 
-- The owner's amendment of the host's desktop-baseline rule is a
-  precondition of R and of W. Its wording is pending (§9).
+- The host's desktop rule, as the owner changed it (host commit `2d304eb`,
+  `AGENTS.md:62`), does not block R or W: both are the owner's desktop
+  changes. W must leave pluto's system as it is; each W step checks that
+  (§8.2, §9).
 - Layer B can run: a locked local input, the agents' gate without overrides,
   a scoped term scan, and the switch to the published input as an owner step
   after P (§8.2, §9.1).
@@ -108,8 +110,11 @@ What the owner decided:
   (2026-10-17). The host's flake files (`flake.nix`, `flake.lock`) stay
   untouched until W. Until W, only tests inside this flake. Integration tests
   on the real system come afterwards, and activation is an owner step.
-- Pending: the owner amends the host's desktop-baseline rule. The amendment
-  is a precondition of R and of W (§9).
+- The host's desktop rule (host `AGENTS.md:62`, changed by the owner in host
+  commit `2d304eb`): a change made for pluto must not change the desktops'
+  derivations; the owner's own desktop changes are free. R and W are desktop
+  changes. pi-economics is Home Manager only, and pluto has no Home Manager,
+  so W must leave pluto's system unchanged (§8.2).
 - One overall spec, reviewed at least once. One TDD plan per milestone.
 - The repository becomes public when finished. The bench keeps one paid
   OpenRouter judge.
@@ -435,9 +440,8 @@ fixtures rewritten as op cases.
 
 M5 copies the task-router from *R*. **R** is the host commit that lands the
 redesign (§1), as the redesign plan's `# Execution Record` names it. The
-redesign itself needs the owner's baseline amendment first (§9). The move
-changes no routing decision, no default and no log field. The host's redesign
-spec owns all three.
+move changes no routing decision, no default and no log field. The host's
+redesign spec owns all three.
 
 M5 relies on five properties of R. Its plan checks each against R first, with
 the evidence named below. If one does not hold, M5 stops and reports to the
@@ -672,6 +676,27 @@ Arms:
   memory.
 - **Host checks:** the host's renamed eval assertions and a thin check for its
   own registry entries.
+- **pluto unchanged:** pi-economics is Home Manager only, and pluto has no
+  Home Manager, so no W step may change pluto's system (§9). Each W step,
+  and W8, evaluates pluto's toplevel on the base tree and on the patched
+  tree, as the host's desktop rule does for the desktops (never against a
+  recorded value):
+  `nix eval --raw path:<tree>#nixosConfigurations.pluto.config.system.build.toplevel.drvPath --option eval-cache false`.
+  - Where a step leaves the host's `flake.nix` and `flake.lock` as they are
+    (W7), the two drvPaths are equal.
+  - Where it edits one of them, the drvPath changes anyway, and only because
+    of that edit: pluto's toplevel holds a filtered copy of the host flake,
+    its snapshot (`<top>/flake`, host
+    `modules/nixos/services/deploy-target.nix:98-102,335`), and the copy keeps
+    `flake.nix` and `flake.lock` (host `hosts/pluto/deploy-target.nix:18-26`).
+    W0–W6 and W8 edit them (the input, its lock, the moved packages and
+    checks). For these steps the check is: `nix-diff` of the two toplevel
+    derivations names the snapshot as the only differing input, and
+    `diff -r` of the two snapshots (`config.system.build.flakeSnapshot`)
+    lists only `flake.nix` and `flake.lock`.
+  - The check fails a step that reaches pluto's evaluation in any other way.
+    Whether the snapshot's new lock entry still evaluates on pluto is the
+    reachability check above.
 - **Home files:** each W step compares pallon's built home files before and
   after the step, following the links into the packages (`diff -r`), and its
   plan lists every difference. W5 shows `infinite-context/settings.json`
@@ -741,17 +766,17 @@ Each milestone gets its own TDD plan, written right before it starts, at
 `# Execution Record`. W's plan is the exception: W edits the host, so its plan
 and Execution Record live in the host's `docs/plans/` (host `AGENTS.md`).
 
-**Precondition (owner).** The host's desktop-baseline rule (host
-`AGENTS.md:62`; pluto plan `docs/plans/2026-09-29-pluto-server-plan.md:217`)
-says that the desktops' derivations must not change while pluto is ported,
-and that only the pluto plan's S1e records a new baseline. The redesign (R)
-and every W step change andromeda's derivation, and probably earth's. Before R
-lands and before W0, the owner therefore amends that rule:
+**Host rules.** The host's desktop rule (host `AGENTS.md:62`, changed by the
+owner in host commit `2d304eb`, 2026-10-17) has no fixed baseline any more.
+A change made for pluto must not change the desktops' derivations, compared
+base tree against patched tree. The owner's own desktop changes are free and
+move the desktops' drvPaths on purpose.
 
-> *Amendment wording: pending; the owner supplies it (2026-10-17).*
-
-Until the amendment is in the host's `AGENTS.md` and in the pluto plan,
-neither R nor any W step lands.
+- The redesign (R) and every W step are such desktop changes. The rule does
+  not block them.
+- The converse holds for this work: pi-economics is Home Manager only, and
+  pluto has no Home Manager. No W step may change pluto's system. Each W step
+  checks that, base tree against patched tree (§8.2).
 
 **Source commits.** Each plan names the host commit it copies from:
 
@@ -791,20 +816,20 @@ Every milestone builds and tests on its own:
 
 ### 9.1 Wiring (W)
 
-**Gate** (owner's decision, 2026-10-17): W starts when the owner says so, and
-after the baseline amendment (§9). r3's gate, the end of the pluto plan, is
-superseded: pluto's critical part is done, and the host is no longer frozen.
+**Gate** (owner's decision, 2026-10-17): W starts when the owner says so.
+r3's gate, the end of the pluto plan, is superseded: pluto's critical part is
+done, and the host is no longer frozen.
 
 - Each step starts after the step before it and after the milestone that
   brings its component: W0 after M2, W1 after M1, W2 after M3, W3 after M4,
   W4 after M5 (the redesigned router), W5 and W6 after M6, W7 after W5.
 - W0 is the first step that touches the host's flake files (`flake.nix`,
   `flake.lock`). Until then they stay as they are.
-- Each step passes Layer B (§8.2): the gate, the home-file comparison and the
-  term scan. Then the owner activates it with `nixos-rebuild test`, and it is
-  committed.
-- The host's other rules (its `AGENTS.md`) apply to W as to any host change.
-  Apart from the amendment above, this spec relaxes none of them.
+- Each step passes Layer B (§8.2): the gate, the pluto comparison, the
+  home-file comparison and the term scan. Then the owner activates it with
+  `nixos-rebuild test`, and it is committed.
+- The host's rules (its `AGENTS.md`) apply to W as to any host change. Under
+  the desktop rule, W is the owner's desktop change (§9).
 
 **W0, all at once:** `actorSubagents` and the host's whole extension selection
 move onto the registry. Today `pi-extensions.nix:389-390` writes
@@ -915,9 +940,9 @@ Host sites that change during W:
 
 ## 11. Risks
 
-- **Baseline amendment:** R and W wait for the owner's amendment of the
-  host's desktop-baseline rule (§9), and M5 waits for R.
-  M0–M4 and M6 do not.
+- **pluto:** W edits the host flake that pluto is built from. A W step that
+  reached pluto's evaluation would change a server that is reached only over
+  SSH. The pluto comparison (§8.2) fails such a step before its commit.
 - **Input reachability:** the local input of W (§8.2) may not be reachable
   everywhere the host flake is evaluated, e.g. by pluto's nightly update.
   W0 checks it before its commit, and the owner picks another URL if it
