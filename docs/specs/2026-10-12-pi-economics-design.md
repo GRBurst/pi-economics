@@ -1,13 +1,42 @@
 # pi-economics — design
 
-Date: 2026-10-12 · Status: draft r3, after reviews 1 and 2 · Owner: pallon
+Date: 2026-10-12 · Status: draft r4 (2026-10-17), after reviews 1–3 and the
+owner's decisions of 2026-10-17 · Owner: pallon
 
 Revision 2 addresses review 1 (2 blockers, 9 majors, the minor findings).
 Revision 3 addresses review 2 (4 majors, minors, nits) and records the owner's
 decisions on the H row, the H pin and the wiring gate.
-Source snapshot: host dotfiles commit `cee41b5` (2026-10-10), the last commit
-that touched the moved paths. Everything below about "today" refers to that
-snapshot.
+Revision 4 follows the owner's decisions of 2026-10-17
+(`~/.pi/agent/notes/2026-10-17-router-redesign-decisions.md`):
+
+- The move is a pure, behaviour-preserving move. r3's Haiku tier `H`, its row
+  and pin, the scout, fallback, escalation and Qwen-chain changes, the new log
+  fields and the Haiku bench arms are gone (r3 §6, §7).
+- The router is redesigned first, in the host, under its own spec. M5 moves
+  the redesigned router (§1, §6, §9).
+- The host is no longer frozen. Its flake files stay untouched until W
+  (§1, §9.1).
+- Review 3's remaining findings: the bench's router projection (§7), a
+  `piSettings` switch and contributor-keyed ops (§5.4), the W3 re-pointing
+  (§9.1), `lib.recursiveUpdate` for merges (§4), more interface comparisons
+  (§8.1), RFC 1918 as full quads and a duplicate bullet (§8.3). Its facts on
+  today's slot race and logs are handed to the redesign (§6.4). Its findings
+  on the H row and pin are moot.
+- The snapshot is cited by its id after the host's history rewrite, and the
+  host's full check follows the host's current rules (§8.2).
+
+Source snapshot: host dotfiles commit `f6a3c81` (2026-10-10), the last commit
+that touched the moved paths. Before the owner's history rewrite of
+2026-10-17 its id was `cee41b5` (host
+`docs/plans/2026-10-17-commit-id-rewrite.md`). Everything below about "today"
+refers to that snapshot. The task-router alone moves from a later host
+commit, *R* (§6.1, §9).
+
+Line numbers refer to `f6a3c81` for the host files unchanged since: all of
+`modules/home-manager/features/ai/` and `pkgs/pi-bench/`, which are the same
+at host commit `ed0d2df` (2026-10-17). For `flake.nix`,
+`checks/eval-assertions.nix` and `homes/pallon/default.nix`, which changed
+since, they refer to `ed0d2df`. Each plan re-locates its sites by content.
 
 ## 1. Intent
 
@@ -17,12 +46,26 @@ Move the pi token-economics stack out of the NixOS flake
 switched on and configured on its own. A dependency that would otherwise make
 a component fail silently is enforced by a module assertion.
 
-While moving, the model router is reworked for October 2026:
+The move is pure: no component changes what it does. Only the packaging
+changes: one option namespace, a shared extension registry (§5.1), `piSettings`
+ops in place of the host's migrate script (§5.4), and the bench's paths and
+router base as options (§7). For today's configuration each of them gives
+today's result, and the checks of §8 show it.
 
-- Claude Haiku 5.5 exists.
-- The free OpenRouter Qwen is gone. Qwen runs locally for now.
-- The free-cloud slot stays in the code and is empty by default, so a good
-  free model can be configured again later.
+The router does change, but not in this spec. Claude Haiku 5.5 exists, and
+the free OpenRouter Qwen is gone; Qwen runs locally for now. The owner's order
+of work (2026-10-17):
+
+1. This spec, as a pure move.
+2. The router redesign (abilities and levels per model, Haiku as one of the
+   models), in place in the host repo under
+   `modules/home-manager/features/ai/extensions/task-router/`. It has its own
+   spec, `~/projects/nixos/new/docs/specs/2026-10-17-task-router-abilities-design.md`,
+   and its own TDD plan. Its tests run as the host check `pi-task-router`.
+3. M5 moves the redesigned router: the task-router's source snapshot is
+   re-pinned to the host commit that lands the redesign (*R*, §9).
+
+M0–M4 and M6 do not wait for the redesign.
 
 What the owner decided:
 
@@ -31,17 +74,20 @@ What the owner decided:
   `programs.piEconomics.<component>`.
 - Each component has enable/disable plus configuration. Dependencies are
   covered by option checks.
-- Router: local Qwen; Haiku, Sonnet and Opus only from the Anthropic
-  subscription; models are configurable.
-  - When local Qwen is busy, wait up to `queueMaxSec`, then use Haiku.
-  - The free-cloud slot's code stays. While the slot is empty it is not taken
+- The move preserves behaviour (2026-10-17). The router moves as the host has
+  it at R:
+  - models are configurable, as today (the router's `models` setting);
+  - the free-cloud slot's code stays. While the slot is empty, it is not taken
     into account.
-- A Haiku tier `H`. `scout` and the Qwen fallback use it; bench results decide
-  the rest.
-- Named tiers with configurable `{model, effort}`, no free-form ladder.
-- The host repo stays untouched until the pluto deployment running there is
-  finished. Until then, only tests inside this flake. Integration tests on the
-  real system come afterwards, and activation is an owner step.
+- The router redesign belongs to the host spec (2026-10-17). It supersedes
+  r3's Haiku tier `H`, its row and pin, the Haiku placement and the named-tier
+  configuration.
+- The Haiku context-reminder values (§5.2) stay as host wiring values. They
+  are not routing.
+- The host repo is no longer frozen: pluto's critical part is done
+  (2026-10-17). The host's flake files (`flake.nix`, `flake.lock`) stay
+  untouched until W. Until W, only tests inside this flake. Integration tests
+  on the real system come afterwards, and activation is an owner step.
 - One overall spec, reviewed at least once. One TDD plan per milestone.
 - The repository becomes public when finished. The bench keeps one paid
   OpenRouter judge.
@@ -54,14 +100,18 @@ and it is mixed with unrelated dotfiles.
 1. `nix flake check` on this flake passes. That covers every component's
    tests, the type check, the module evaluation cases, the negative case of
    every assertion, and the leak check.
-2. After wiring (§9), the host enables each component through
+2. Behaviour is preserved. Each package's own tests pass as copied, changed
+   only for neutral fixture names (§8.3), and the router's golden test against
+   R passes (§6.3).
+3. After wiring (§9.1), the host enables each component through
    `programs.piEconomics.*` and keeps no in-tree copy of it. The host's checks
    and the owner's `nixos-rebuild test` pass.
-3. The reports still read the existing logs under `~/.pi/agent`.
-4. The router uses OpenRouter only through the optional free-cloud slot, and
-   that slot is empty by default. The only other OpenRouter use is the bench
-   judge (§10).
-5. The repository is fit for publication (§8.3).
+4. The reports still read the existing logs under `~/.pi/agent`.
+5. The move adds no OpenRouter use. The router reaches OpenRouter only through
+   the optional free-cloud slot (§6.1). The bench reaches it through its paid
+   judge `gpt` (§10) and through its `qwen` arm, as long as that arm exists
+   (§7).
+6. The repository is fit for publication (§8.3).
 
 ### Non-goals
 
@@ -70,18 +120,23 @@ and it is mixed with unrelated dotfiles.
 - `pi-question`, `pi-session-name`, `web-search`, `prompt-log` and
   `static-working-indicator` stay in the host. They join the shared registry
   (§5.1) as host entries.
-- No new experiments beyond the router's tier comparison.
+- No behaviour change in any component (§1). In particular no routing change:
+  abilities, levels, Haiku's place, the selection order, escalation and any new
+  log field belong to the host's redesign.
+- No new experiments.
+- Retiring the bench's `qwen` arm, which names the retired free OpenRouter
+  Qwen, is a change of its own, outside the move (§7).
 
 ## 2. Components
 
-| Option `programs.piEconomics.…` | Source today (host repo, `ai/` = `modules/home-manager/features/ai`) |
+| Option `programs.piEconomics.…` | Source (host repo, `ai/` = `modules/home-manager/features/ai`) |
 |---|---|
 | `bench` | `pkgs/pi-bench/` |
 | `actorSubagents` | `ai/pi-actor-subagents.nix` + child-prompt, spawn-policy and first-turn patches |
 | `tokenMeter` | `ai/extensions/token-meter/` (+ `meter-report`, `pi-analyse`, `LOGS.md`) |
 | `cacheLifecycle` | `ai/extensions/cache-lifecycle/` |
 | `experiments` | `ai/extensions/experiments/` |
-| `taskRouter` | `ai/extensions/task-router/` |
+| `taskRouter` | `ai/extensions/task-router/`, from R (§6.1) |
 | `infiniteContext` | `ai/pi-infinite-context.nix` + reminders and cache patches; `piContextReminders` options and render from `ai/pi-extensions.nix` |
 | `retry` | `ai/pi-retry.nix` + print-mode and free-cap patches; `checks/pi-retry` with its `package.json`/lock |
 | `analysisSkill` | `ai/skills/pi-token-economics-analysis/` |
@@ -104,7 +159,7 @@ modules/common.nix        agentDir, extension registry (§5.1), piSettings (§5.
 modules/<c>.nix           one HM module per component
 packages/<c>/             TypeScript packages
 patches/<upstream>/*.patch
-checks/                   module-eval cases, assertion negatives, log contract, leak check, type check
+checks/                   module-eval cases, assertion negatives, log contract, leak check, type check, router golden test
 skills/pi-token-economics-analysis/
 docs/                     specs/, plans/ (one plan per milestone), pi-economics.md
 ```
@@ -137,20 +192,26 @@ Every component has `enable` and `package`. What a component writes:
 | Component | Files written (under agentDir unless noted) | `settings` → |
 |---|---|---|
 | `bench` | none; `home.packages` + session variables | — (typed options §7) |
-| `actorSubagents` | `extensions/actor-subagents` link via the registry; `actor-subagents/settings.json` = `settings // { childExtensions }` (one writer, §5.1) | `actor-subagents/settings.json` |
+| `actorSubagents` | `extensions/actor-subagents` link via the registry; `actor-subagents/settings.json` = `lib.recursiveUpdate settings { childExtensions = …; }` (one writer, §5.1) | `actor-subagents/settings.json` |
 | `tokenMeter` | `token-meter/settings.json` if non-empty; `LOGS.md`; `home.packages` = report, analyse | `token-meter/settings.json` |
-| `cacheLifecycle` | `cache-lifecycle/settings.json` if non-empty; piSettings op `cacheWarming = "idle"` | `cache-lifecycle/settings.json` |
+| `cacheLifecycle` | `cache-lifecycle/settings.json` if non-empty; piSettings op `cacheWarming = "idle"` (§5.4) | `cache-lifecycle/settings.json` |
 | `experiments` | `experiments/settings.json` if non-empty | `experiments/settings.json` |
-| `taskRouter` | `task-router/settings.json` = typed options (§6) merged with `settings`, always written | `task-router/settings.json` |
+| `taskRouter` | `task-router/settings.json` = `settings`, written when non-empty, as today (§6.2) | `task-router/settings.json` |
 | `infiniteContext` | `infinite-context/settings.json` from the reminder options, always written (as today) | merged into it |
 | `retry` | piSettings ops (§5.4); no file of its own | piSettings `piRetry` keys |
 | `analysisSkill` | none; exports `path` for the host's skill wiring | — |
+
+With every `settings` at its default `{}`, each file equals today's.
 
 Rules:
 
 - Directory names are kebab-case; option names are camelCase.
 - Settings files are literal text (`builtins.toJSON`), so checks can read them
   with `fromJSON` without import-from-derivation.
+- **Merges:** where two attrsets render into one file, they merge with
+  `lib.recursiveUpdate`, with the user's `settings` on the right. A nested key
+  in `settings` then replaces only its own leaf, and the siblings from the
+  other side survive; `//` would drop them. Lists are replaced whole.
 
 ### 4.1 Dependencies
 
@@ -177,10 +238,10 @@ Standalone notes:
 - `analysisSkill` only exports a path; the consumer links it into a skills
   directory. The skill's text names `<agentDir>/LOGS.md`, substituted at build
   time instead of the hard-coded `~/.pi/agent/LOGS.md`.
-- A standalone `cacheLifecycle` without an existing pi `settings.json` keeps
-  pi's default `cacheWarming` until the file exists, because the piSettings
-  activation does nothing on an absent file (§5.4). The module's description
-  says so.
+- A standalone `cacheLifecycle` keeps pi's default `cacheWarming` while there
+  is no pi `settings.json`, because the piSettings activation does nothing on
+  an absent file, and while `piSettings.enable` is `false` (§5.4). The module's
+  description says so.
 
 Soft dependencies (documented, plus warnings for the ones marked *w*):
 
@@ -211,9 +272,10 @@ enabled extension component adds itself. The host adds its own extensions
   `<home>/<agentDir>/extensions/<name>` of every entry with
   `forChildren = true`, sorted by name. These are link paths, not store paths,
   as today (`pi-extensions.nix:236-238`). The host check that takes names from
-  the last path component (`eval-assertions.nix:9327`) keeps working. It goes into `actor-subagents/settings.json`
-  together with `actorSubagents.settings`. That file has one writer: the
-  registry renders the file only when `actorSubagents` is enabled.
+  the last path component (`eval-assertions.nix:9354`) keeps working. It goes
+  into `actor-subagents/settings.json` together with `actorSubagents.settings`.
+  That file has one writer: the registry renders the file only when
+  `actorSubagents` is enabled.
 - **Existence:** an assertion `builtins.pathExists checkPath` per entry,
   carried over from `pi-extensions.nix:71-79,366`. For a patched source,
   `checkPath` names the unpatched input file, which avoids
@@ -228,10 +290,10 @@ assertion.
 The `piContextReminders` options (`prices`, `cacheTtlMinutes`, `foldHint`,
 `default`, `overrides`) move to `programs.piEconomics.infiniteContext.reminders`.
 
-Haiku 5.5 has a 1M-token window, per Anthropic's model page (2026-10). The
-"haiku (200k window)" comment in `homes/pallon/default.nix:29-31` predates it
-and refers to Haiku 4.5. At W the host adds, next to the Opus and Sonnet
-entries:
+The values below are host wiring, not routing (owner, 2026-10-17). Haiku 5.5
+has a 1M-token window, per Anthropic's model page (2026-10). The "haiku (200k
+window)" comment in `homes/pallon/default.nix:29-31` predates it and refers to
+Haiku 4.5. At W the host adds, next to the Opus and Sonnet entries:
 
 - `overrides."anthropic/claude-haiku-5-5" = { startTokens = 100000;
   everyTokens = 50000; }`. Earlier than Opus and Sonnet (400k / 100k): a
@@ -260,13 +322,20 @@ patch casts inline (`cache.patch:102`) and is excluded from the comparison.
 
 pi's `settings.json` is mutable. `programs.piEconomics.piSettings` provides:
 
+- **`enable`:** default `true`. While `false`, no activation entry is
+  rendered, whatever ops the components contribute. The host sets it to
+  `false` from W0, when it first imports the module, until W6. Until then its
+  own `piSettingsMigrate` script runs, and two entries of that name would
+  conflict (§9.1).
 - **`file`:** a string, either absolute or relative to home. Default
   `<agentDir>/settings.json`. The host sets `.local/state/pi/settings.json`.
 - **`after`:** a list of activation entry names to run after, in addition to
   `writeBoundary`. The host names its seed and reclaim steps.
-- **`ops`:** a list of operations, each `{ op; path; value; order ? 1000; }`.
-  `path` is a list of object keys, e.g. `["piRetry" "subagents" "match"
-  "systemPromptRegex"]`, never a dotted string.
+- **`ops`:** `attrsOf (listOf op)`, keyed by contributor. Each component
+  writes `ops.<component>`, and the host writes under a key of its own, e.g.
+  `ops.host`. An op is `{ op; path; value; order ? 1000; }`. `path` is a list
+  of object keys, e.g. `["piRetry" "subagents" "match" "systemPromptRegex"]`,
+  never a dotted string.
 
 | `op` | Effect | Missing parents | Wrong shape on the path |
 |---|---|---|---|
@@ -284,242 +353,106 @@ Rendering and execution:
   fixture requires (`pi-settings-migrate.nix:71-77`), and never aborts the
   program. If jq fails anyway, for example on invalid JSON, the file is left
   untouched and the activation does not fail (as today).
-- **Order:** by `order`, then by component name, then by position in the
-  module's list. That makes the order across modules deterministic.
+- **Order:** the ops of all contributors are sorted by `(order, key, index)`:
+  by `order`, then by contributor key, then by position in that contributor's
+  list. Keying by contributor is what makes this order deterministic across
+  modules. A plain `listOf` merged across modules carries no contributor
+  name; its merge order follows the import order.
 - **No whole-object `set`:** there is no `set` of a whole object. Components
   set leaves, so runtime keys written by pi or by the user survive.
   `retry.settings` is turned into one `set` per leaf under `piRetry`, with
   `order = 500`, so that it runs before the `ensureContains` of the child regex
   (`order = 1000`).
 - **Activation:** one entry, named `piSettingsMigrate` (the name the host's
-  checks read, `eval-assertions.nix:9368,9503`). It runs
+  checks read, `eval-assertions.nix:9395,9530`). It is rendered when `enable`
+  is `true` and at least one op exists. It runs
   `entryAfter (["writeBoundary"] ++ after)`. It is idempotent, rewrites only on
   change, and does nothing when the file is absent (as today). A new install
   gets its first file from the host's seed.
 
 Component contributions:
 
-- **`retry`:**
+- **`ops.retry`:**
   - removes the stale package entries of earlier pi-retry spellings
     (`pi-settings-migrate.nix:36-40`);
   - when `actorSubagents` is enabled, `ensureContains` on
     `piRetry.subagents.match.systemPromptRegex`.
-- **`cacheLifecycle`:** `set cacheWarming "idle"`. This replaces the
+- **`ops.cacheLifecycle`:** `set cacheWarming "idle"`. This replaces the
   positional `idle` argument.
 
-The host adds its own ops through the same option, for example the stale
-`git:github.com/fdietze/pi-claude-auth@main` entry. The script and its fixture
-check (`checks/pi-settings-migrate`) are ported in M0, with the fixtures
-rewritten as op cases.
+The host adds its own ops under its own key, for example the removal of the
+stale `git:github.com/fdietze/pi-claude-auth@main` entry. The script and its
+fixture check (`checks/pi-settings-migrate`) are ported in M0, with the
+fixtures rewritten as op cases.
 
 ## 6. Router (milestone M5)
 
-### 6.1 Tiers
+### 6.1 What moves
 
-The tier set is closed: `Tier = "qwen" | "H" | "T1" | "T2"`, ranked in that
-order, so `tierRank` uses `[qwen, H, T1, T2]`. Bases are the tiers plus
-`qwen-draft`, which ranks as qwen. Every table is a `Record` over the full
-type, so `tsc` rejects a missing tier.
+M5 copies the task-router from *R*, the host commit that lands the redesign
+(§1). The move changes no routing decision, no default and no log field. The
+host's redesign spec owns all three.
 
-Configuration (typed HM options, merged into the settings JSON):
+M5 relies on four properties of R. Its plan checks each against R first. If
+one does not hold, M5 stops and reports to the owner; the move does not add
+it.
 
-```nix
-programs.piEconomics.taskRouter.tiers = {
-  qwen = { localModel = null; cloudModel = null; effort = "xhigh"; contextWindow = 262144; fallback = "H"; };
-  H    = { model = "anthropic/claude-haiku-5-5";  effort = "medium"; contextWindow = 1000000; };
-  T1   = { model = "anthropic/claude-sonnet-5-5"; effort = "high";   contextWindow = 1000000; };
-  T2   = { model = "anthropic/claude-opus-5-5";   effort = "high";   contextWindow = 1000000; };
-};
-programs.piEconomics.taskRouter.localHealthUrl = "http://127.0.0.1:11545";
-```
+- Models are configurable through the router's settings file, with their
+  defaults in `core/settings.ts` (today `models`, `settings.ts:13-18`).
+- The free-cloud slot's code is there, and an empty slot is not taken into
+  account: no route, cap, count or wait. Today the slot is not optional:
+  `pickQwen` picks the free cloud first whenever no cloud child runs
+  (`chain.ts:15`), and the default names the retired free model
+  (`settings.ts:15`).
+- The router registers through `registerSpawnPolicy` of `__subagentsApi_v1`
+  (§4.1) and reads `__piExperimentsApi_v1` (§5.3).
+- Its outcome events follow `LOGS.md`, so that the moved reports and the log
+  contract (§8.1) read them.
 
-Option rules:
+### 6.2 Module
 
-- `effort` is an enum `off … xhigh`; `max` is excluded, because `plan.ts:40`
-  rejects it.
-- `fallback` is one of `H`, `T1`, `T2`.
-- Every typed option is `nullOr`, default `null`, meaning "keep the default in
-  `core/settings.ts`". `core/settings.ts` stays the one owner of defaults (host
-  `AGENTS.md`), and the Nix example above only documents them. The module
-  renders the non-null typed options, then merges `settings` over them:
-  `settings` wins on a conflict, so the escape hatch always works. A check
-  asserts that the example values equal `core/settings.ts`'s defaults.
+`taskRouter.settings` is free-form JSON. It is written to
+`task-router/settings.json` when non-empty, as today (`hm-module.nix:59-60`).
+There are no typed options: the redesign owns the settings schema, and
+`core/settings.ts` stays the one owner of defaults (host `AGENTS.md`).
 
-The host sets `tiers.qwen.localModel = "llama/qwen3.8"` and
-`localHealthUrl = "http://earth:11545"`. Today `settings.ts:19` defaults the
-URL to `earth`, so without this setting andromeda would probe localhost.
+### 6.3 Tests
 
-**Settings parser.** `merge()` (`settings.ts:65-66`) drops a value whose
-`typeof` differs from the default's. A `null` default would therefore silently
-drop a configured string. The parser gets explicit nullable fields. The old
-keys `models.*` and `contextWindow.*` are no longer read; when they are
-present, a startup warning names them.
+- **The router's own suite,** as copied from R, changed only for neutral
+  fixture names (§8.3).
+- **Golden test:** R's routing decisions, recorded once as a golden file.
+  - A generator in `checks/` runs R's code from a host checkout at R over
+    every input of the routing table and writes the decisions, together with
+    R's commit id. The generator runs once, by hand, in M5; the check only
+    reads its output.
+  - The check runs the moved package over the same inputs and compares. Any
+    difference fails it.
+  - The input space is fixed in M5's plan from R's types. For today's code it
+    would be base × importance × kind × profile pin, explicit model × effort,
+    and every chain state of `pickQwen`.
+  - Two settings: R's defaults, and a fixture that sets every model key and
+    leaves the free-cloud slot empty.
+  - An edit that `tsc --strict` forces (§8.1) is covered by this test.
+- The redesign's own characterization test, a replay of the host's October
+  outcome log, stays in the host. That log is private data.
 
-**Efforts come from data.** A leg is `{ tier, raise }`, with
-`effort = raise ? min(next(tier.effort), xhigh) : tier.effort`. With the
-default efforts this reproduces today's table exactly (`plan.ts:6-14,24-26`),
-reviews included:
+### 6.4 Handed over to the redesign
 
-| Base \ importance | normal | high | critical |
-|---|---|---|---|
-| qwen | qwen | qwen, rev T1 | T1, rev T2 |
-| qwen-draft | qwen, rev T1 | qwen, rev T1 | T1, rev T2 |
-| **H** (new) | H | H raise, rev T1 | T2 raise |
-| T1 | T1 | T1 raise | T2 raise |
-| T2 | T2 | T2 raise | T2 raise, rev T2 raise |
+Review 3 recorded two facts about today's router. The move keeps both as they
+are (§1). They are listed here for the host spec.
 
-How the table reads:
-
-- No other cell raises, so reviews use their tier's own effort (T1 `high`,
-  T2 `high`), and T2 `critical` reviews at T2 raised (xhigh), as today.
-- **H row** (owner's decision): `critical` goes to Opus xhigh, as from the T1
-  row, so a critical scout stays where it is today.
-- **Read-only profiles never get a review leg** (owner's decision): a
-  profile with `tools = "read-only"` (`scout`, `review`) has no diff to
-  review, so the review leg is dropped after the table lookup. Today this
-  matters only in one cell: a read-only profile at base T2 and importance
-  critical loses its second T2 leg. `plan` (`read-only+files`) is not
-  affected.
-- **Pins:**
-  - A profile pinned to T1 whose worker is not T1 gives T1 raise plus rev T2
-    (`plan.ts:26`).
-  - A profile pinned to `qwen` stays qwen with no review.
-  - A profile pinned to H (owner's decision) stays on H at every importance,
-    at H's effort for `normal` and H raise for `high` and `critical`, with no
-    review.
-  - `plan` stays T2.
-
-What this means for `scout` (`minTier = H`, §6.3), compared with today:
-
-| Importance | Today | New |
-|---|---|---|
-| normal | Sonnet high | Haiku medium |
-| high | Sonnet xhigh | Haiku high, no review (read-only) |
-| critical | Opus xhigh | Opus xhigh |
-
-Importance is `high` whenever the main session runs at xhigh
-(`importance.ts:8`), so the `high` row is the common one.
-
-Other sites that hard-code effort `high` take the target tier's own effort
-instead: escalation (`attempts.ts:26`), the queue fallback (`policy.ts:56`), the
-failover target (`failover.ts:29`) and randomize (`randomize.ts:10`).
-
-**Tests.**
-
-- **Golden test:** today's `planFor` (copied into the test as the oracle) is
-  compared with the new one for every old base × importance × pin, with the
-  default tiers. The one cell changed by the read-only rule is listed in the
-  test as an expected difference.
-- **H cases:** H has no oracle, so it gets explicit cases: the H row, the H
-  pin, `scout` at every importance, and the read-only rule.
-
-**Explicit models.** `acceptExplicit`/`modelTier` (`plan.ts:32-38`) and
-`unrouted.tierOf` (`unrouted.ts:12-17`) map a model to a tier through
-`tiers.*.model`, plus `localModel`/`cloudModel` for qwen. An explicit Haiku
-model is tier H, which ranks above qwen and below T1. Without an explicit
-effort, an explicit model runs at **its own tier's** effort, not at the
-planned worker's (today `plan.ts:45` returns `e ?? w.effort`, so an explicit
-Haiku on a qwen plan would run at xhigh).
-
-### 6.2 The Qwen chain
-
-There are two slots. Each is present only when its model is set.
-
-- **Local slot** (`localModel`): one running task, guarded by the health probe
-  of `localHealthUrl`.
-- **Free-cloud slot** (`cloudModel`): when set, today's behaviour returns
-  unchanged: caps of 1 local + 2 cloud (3 cloud without local),
-  `cloudDailyCap`, the counter in `cloud.ts`, and `freeCapHit` with its
-  failover. While `null`, the slot does not exist: no route, cap, count or
-  wait.
-
-`pickQwen` gets two explicit inputs, `localEnabled` and `cloudEnabled`, so
-that `chain.ts:15` (`cloudRunning === 0 → cloud`) no longer fires for an
-absent slot. The free cloud is **open** when it is enabled, not blocked by
-`freeCapHit`, and below `cloudDailyCap`.
-
-| Local state | Free cloud open | Free cloud empty, blocked or capped |
-|---|---|---|
-| free (up, not busy, no own task) | as today | local |
-| busy with own task | as today (cloud if a cloud slot is free, else wait) | wait |
-| busy with another client (probe says busy, no own task) | as today (cloud if a cloud slot is free, else wait) | wait |
-| down (probe fails) | cloud if a cloud slot is free, else wait | fallback at once |
-| no `localModel` | cloud if a cloud slot is free, else wait | fallback at once |
-
-The right-hand column changes today's behaviour: a blocked or capped cloud
-with a busy local currently falls through to Sonnet at once
-(`chain.ts:11-13`). It now waits, like an empty slot.
-
-**Slot reservation.** The local slot is now the hot path. Today
-`children.set` runs only after `await resolveLeg` (`policy.ts:87-89`), so two
-concurrent spawns can both pick local. `resolveLeg` reserves the slot
-synchronously when it picks a route, before any further `await`. The
-reservation is released if the spawn is rejected afterwards. A test spawns
-two children concurrently and expects one local child and one waiting child.
-
-The policy then handles the outcome:
-
-- **Wait:** poll every 2 s until `queueMaxSec`, then go to the fallback.
-- **Fallback:** `tiers.qwen.fallback` (default H) at that tier's effort. Today
-  the fallback is Sonnet `high`.
-
-This changes `policy.ts:49`. Today it treats "busy with another client" as
-unavailable and falls through at once; the table above waits instead.
-
-**Failover** (`failover.ts`):
-
-- Only `local` and `cloud` children are rerouted, as today.
-- H, T1 and T2 children are not: same provider, and pi-retry handles
-  transient errors.
-- An ordinary local failure goes to the free cloud if that slot is open,
-  otherwise to `tiers.qwen.fallback`. Today it goes to T1.
-
-**Other sites:**
-
-- `guards.ts:16` takes the context window from the child's tier.
-- The `Route` type becomes `local | cloud | H | T1 | T2` (`policy.ts:21`).
-- `ROUTE_OF` (`policy.ts:35`) and the `m[leg.tier]` model lookup
-  (`policy.ts:40`) read `tiers`.
-- `failover.ts:10` reads `tiers` instead of `models`.
-
-**Tests.** A state-table test covers every row of the table, plus failover
-for each route.
-
-### 6.3 Haiku placement and escalation
-
-- `scout` gets `minTier = H`; today it is T1.
-- **Escalation** after a failed attempt (`attempts.ts`):
-  - `qwen → T1` and `H → T1`. A failed Qwen task skips H, which by the owner's
-    measurement sits at Qwen's level.
-  - `T1 → T2`. At T2, one retry is allowed, and a third attempt is rejected
-    (unchanged).
-  - The escalated worker runs at the target tier's own effort.
-  - Escalation starts from the higher of the planned tier and the tier the
-    child actually ran on. Today it starts from the planned tier
-    (`attempts.ts:20`), so a qwen task that ran on a T2 fallback would be
-    retried on T1. The router records the tier a child ran on, the same value
-    it logs as `ranTier` (§6.4).
-- **Randomize:** `randomize.to` (default T1) is the comparison tier for the
-  randomized share of qwen-routed spawns. Setting it to H compares Qwen with
-  Haiku on the same task mix.
-- Whether H also takes `qwen-draft` or reviews is decided by bench results and
-  changed in settings. No code change is needed.
-
-### 6.4 Logs
-
-- **New fields:** the `spawn` outcome event gains two optional fields:
-  - `route`: the route the child actually started on (`local | cloud | H | T1 | T2`);
-  - `ranTier`: its tier.
-
-  `workerTier` keeps meaning the planned tier. A queue fallback or a randomized
-  pick is visible today only as a `reasons` string. These fields make it data.
-- **Readers:** the reports (`analyse.ts:289,323,362`) prefer `ranTier` and fall
-  back to `workerTier` for old events. The Qwen share and the randomized
-  control group count only runs whose tier is qwen.
-- **Versioning:** the change is additive, so `v` stays as it is. That follows
-  `LOGS.md:39-41`.
-- **Tier ranks:** `TIER_RANK` gains H. `LOGS.md` documents both fields, and
-  `token-meter/core/contract.ts:33` lists them as `optional` for `spawn`.
+- **Slot race:** two concurrent spawns can both pick the local slot, because
+  `d.children.set` runs only after `await resolveLeg` (`policy.ts:87-92`).
+  Review 3's fix: `resolveLeg` writes the child's `children` entry when it
+  picks a route, before any further `await`. `PENDING_MS` (`policy.ts:34,45`)
+  already counts an entry that the API does not list yet as holding its slot.
+  The failover's `resolveLeg` calls (`failover.ts:28,41`) need the same.
+- **Logs:** a randomized pick is already data, because the `spawn` event
+  carries `assigned` and `routeBase` (`outcome.ts:46`). `workerTier` is the
+  worker after randomization and escalation. A queue fallback is visible only
+  in `reasons` (`policy.ts:56,88`). A field for the tier a child actually ran
+  on gives a per-protocol view; the randomized comparison reads `assigned`
+  (intention to treat).
 
 ## 7. Bench (milestone M1)
 
@@ -537,32 +470,44 @@ Bench options:
     directory (`config.ts:41`, `orch.ts:69`), so only the directory changes.
   - The host sets it at W. After M6 its default covers the flake's own
     packages.
-- **`router`:** the task-router settings an orch arm starts from. It is an
-  attrset in the same shape as `task-router/settings.json`, default
-  `config.programs.piEconomics.taskRouter`'s rendered settings when that
-  component is enabled, else `{}`.
-  - Reason: today the orch arms write a `task-router/settings.json` with only
-    `routing`, `delegation` and `t0Limits` (`orch.ts:63-68`), and everything
-    else comes from the TypeScript defaults. Those used to contain
-    `llama/qwen3.8` and the earth URL. From M5 the defaults have no local
-    model, so without this option every orch qwen leg would go straight to the
-    fallback, and the bench could not measure Qwen.
-  - The arm's own keys are merged over `router`.
-  - In M1, before the router moves, the host passes the values directly.
-  - A test asserts that an orch arm's settings carry `tiers.qwen.localModel`
-    and `localHealthUrl` from `router`.
+- **`router`:** the base of the `task-router/settings.json` that an orch arm
+  writes.
+  - Today an arm writes only `routing`, `delegation` and `t0Limits`
+    (`orch.ts:64-68`). Everything else, the models and the health URL
+    included, comes from the router's TypeScript defaults, and an arm never
+    randomizes or spot-checks.
+  - Default in M1: `{}`. An arm's file is then today's, byte for byte.
+  - Default from M5, when `taskRouter` is enabled (else still `{}`): a
+    projection of `taskRouter.settings` onto the keys that say which models
+    exist and where to reach them. Today these are `models`, `localHealthUrl`, `queueMaxSec`
+    and `cloudDailyCap`; M5's plan fixes the list from R's schema.
+    `randomize.enabled` and `spotCheck.enabled` are forced to `false`. Without
+    the projection, the host's randomization and spot checks would reach every
+    arm (review 3).
+  - Reason: the arms must run on the models the host configures. Once the
+    host sets them in `taskRouter.settings` (W4, §9.1), or P makes the
+    defaults neutral (§8.3), the defaults alone no longer name them.
+  - The arm's own keys are merged over `router` deeply, as
+    `lib.recursiveUpdate` does.
+  - It reaches the bench as a JSON file exported as `PI_BENCH_ROUTER`. Unset,
+    the bench behaves as today.
+  - Tests: with `router = {}`, an arm's file equals today's. With a
+    `taskRouter.settings` that enables `randomize` and `spotCheck`, an arm's
+    file carries the projected keys and both switches off.
 - **`agentsBaseline`:** the AGENTS.md variant a bench arm uses. Today it is the
   personal notes path read at `config.ts:46`.
 
 Arms:
 
-- `haiku` (H, `medium`) and `haikuHigh` (H, `high`) are added.
-- The arm for the retired free OpenRouter Qwen is removed. The defaults of
-  `judge` and `judge-all` (`cli.ts:99,105`) move to `qwenl` and `sonnet`.
+- Arms and judge defaults stay as in the source. Extra arms are data:
+  `<dataDir>/arms.json` overlays the defaults (`config.ts:30-33`), so a new
+  measurement needs no code change.
+- The `qwen` arm still names the retired free OpenRouter Qwen, and `judge` and
+  `judge-all` default to it (`cli.ts:99,105`). Retiring it is a change of its
+  own, outside the move (§1).
 - The paid OpenRouter judge `gpt` stays (§10).
-- The bench records subscription usage per solved task and refusals as its own
-  outcome, alongside the pass rate. Reason: Haiku's verbose output and early
-  reports of over-refusal.
+- The host's in-tree bench stays until W1. Bench changes made there
+  meanwhile, for example for the redesign's measurements, are drift (§9).
 
 ## 8. Testing
 
@@ -579,21 +524,35 @@ Arms:
   needed.
   - No package has ever gone through `tsc`, so `--strict` may force code
     edits. Each milestone's scope includes making its own packages pass.
-  - **Interface comparisons (§5.3)** run here. Each can start only in the
-    milestone where its provider lands:
-    - bench probe (M1) and the router (M5) against `__subagentsApi_v1`, from
-      M2;
-    - token-meter (M3) against `__piExperimentsApi_v1`, from M4.
+  - Such an edit must not change behaviour. The package's own tests and, for
+    the router, the golden test (§6.3) show that it does not.
+- **Interface comparisons (§5.3)** run here. Each one checks that the
+  provider's type is assignable to the consumer's copy. It starts in the later
+  of the two milestones that bring the provider and the consumer:
+  - against `__subagentsApi_v1` (provider: M2): the bench probe (M1) from M2;
+    cache-lifecycle and experiments in M4; the router in M5;
+  - against `__piExperimentsApi_v1` (provider: M4): token-meter (M3) from M4;
+    cache-lifecycle in M4; the router in M5.
+
+  Some consumers type the key inline, in the cast itself: token-meter
+  (`shell.ts:25`), cache-lifecycle (`shell.ts:39`) and the router
+  (`shell.ts:61,63`). Each such inline type becomes a named type alias, a
+  type-only edit, so that the comparison can name it. The infinite-context
+  patch stays excluded: it is upstream code under a patch.
 - **Module evaluation:** `homeManagerConfiguration` cases for:
   - each component alone, every component together, and the host-like
     combination;
   - one negative case per assertion;
-  - one case per warning.
+  - one case per warning;
+  - `piSettings`: `enable = false` with ops from two components (no entry);
+    two contributors with the same `order` (sorted by key);
+  - the bench's `router` default with and without `taskRouter` (§7).
 
   The cases assert the rendered files (settings, links, `childExtensions`,
   the piSettings program) with `lib.hasInfix` or line splits, never
   `builtins.match`.
 - **piSettings:** the ported fixtures (M0).
+- **Router golden test:** §6.3 (M5).
 - **Log contract:** the check moves here, re-pointed at `packages/`. It needs
   all four extension packages, so it lands in M5 (§9).
 - **Leak check:** see §8.3.
@@ -601,9 +560,12 @@ Arms:
 ### 8.2 Layer B, in the host (during W only)
 
 - `--override-input pi-economics path:/home/pallon/projects/nix/pi-economics`.
-- The host's renamed eval assertions, a thin check for its own registry
-  entries, and the full gate
-  `nix flake check --keep-going --option eval-cache false`.
+- The host's renamed eval assertions and a thin check for its own registry
+  entries.
+- The host's full check, as the host's `AGENTS.md` prescribes it: one
+  `nix-check-runner` run (for agents, the runner gate), plus the evaluation of
+  every `nixosConfigurations.<host>` toplevel. Never `nix flake check`: the
+  host forbids it, because it ran the machine out of memory.
 - A host-side term scan of `inputs.pi-economics`, modelled on
   `checks/terminal-kit-leaks.nix`, which derives its terms from the host's own
   configurations.
@@ -620,17 +582,23 @@ Arms:
     so neutral fixtures like `/home/u/` (`task-router/test/cwd.test.ts:15`)
     pass;
   - `git+ssh://` URLs;
-  - RFC 1918 addresses (`10.`, `172.16-31.`, `192.168.`). Loopback
-    (`127.0.0.1`, the `localHealthUrl` default) is not private-network and is
-    allowed.
+  - RFC 1918 addresses, as full dotted quads, so that a version string such as
+    `10.2` does not match: `\b10(\.[0-9]{1,3}){3}\b`,
+    `\b172\.(1[6-9]|2[0-9]|3[01])(\.[0-9]{1,3}){2}\b` and
+    `\b192\.168(\.[0-9]{1,3}){2}\b`. Loopback (`127.0.0.1`) is not a private
+    network and is allowed.
 - **The excluded directories:** this spec and the plans name the owner's hosts
-  and home (e.g. §8.2). At P, the leak check's exclusion is removed: they are
-  scrubbed or moved out of the repository first.
+  and home (e.g. §8.2). At P they are scrubbed or moved out of the
+  repository, and then the leak check's exclusion is removed.
+- **Fixtures and defaults:**
   - Test fixtures use neutral names. Today they use real ones, for example
     `task-router/test/settings.test.ts:26` and `policy.test.ts:82`; those are
     rewritten when moved.
-- **Real names:** this spec and the plans name the owner's hosts. Before
-  publication they are scrubbed or moved out of the repository.
+  - Defaults that name the owner's hosts (today the router's
+    `localHealthUrl = "http://earth:11545"`, `settings.ts:19`) become neutral
+    at P, not during the move. From W4 on the host sets these values itself
+    (§9.1), so P does not change the host. P updates the golden file (§6.3)
+    for that change, as a listed difference.
 - **History:** published as a squashed history.
 - **Licensing:** the upstream licenses of `pi-actor-subagents`,
   `pi-infinite-context` and `pi-retry` are checked. The flake's license must
@@ -640,16 +608,29 @@ Arms:
 
 Each milestone gets its own TDD plan, written right before it starts, at
 `docs/plans/YYYY-MM-DD-<topic>-plan.md`. Each plan ends with an
-`# Execution Record`. Code is copied from host commit `cee41b5`.
+`# Execution Record`.
+
+**Source commits.** Each plan names the host commit it copies from:
+
+- M0–M4 and M6: `f6a3c81`, or a later host commit if the moved paths changed
+  meanwhile (drift, below);
+- M5: R, for the task-router.
+
+**Drift.** The host is no longer frozen (§1), so moved paths can change there,
+and the redesign will change some. At the start of each milestone, before W0
+and before each W step, the paths moved so far are diffed against the host's
+current commit. The changes are ported into the flake first, each with its
+test. M5 in particular ports what R changed in paths that earlier milestones
+moved, for example token-meter's reports, `LOGS.md` or the bench.
 
 | # | Content |
 |---|---|
-| M0 | Flake skeleton, `common.nix` (agentDir, registry, piSettings with ported fixtures), shared npm lock, type-check harness, module-eval harness, leak check |
-| M1 | `bench` (§7) |
+| M0 | Flake skeleton, `common.nix` (agentDir, registry, piSettings with `enable`, contributor-keyed ops and the ported fixtures), shared npm lock, type-check harness, module-eval harness, leak check |
+| M1 | `bench` (§7), with `router` defaulting to `{}` |
 | M2 | `actorSubagents` (3 patches, `spawnPolicyApi` passthru), `childExtensions` rendering |
-| M3 | `tokenMeter` (reports, `LOGS.md`, readers for `route`/`ranTier`, `TIER_RANK` with H), `analysisSkill` |
+| M3 | `tokenMeter` (reports, `LOGS.md`), `analysisSkill` |
 | M4 | `cacheLifecycle`, `experiments` |
-| M5 | `taskRouter` with §6; log-contract check (all four packages present) |
+| M5 | `taskRouter` from R (§6) with its golden test; drift from R; the bench's `router` default from `taskRouter` (§7); log-contract check (all four packages present) |
 | M6 | `infiniteContext` (reminder options), `retry` (print-mode and free-cap patches, piSettings ops); bench `extensions` default from the packages |
 | W | Wiring in the host (§9.1) |
 | P | Publication (§8.3) |
@@ -657,98 +638,109 @@ Each milestone gets its own TDD plan, written right before it starts, at
 Every milestone builds and tests on its own:
 
 - The bench takes its extensions as data, so it does not wait for M2–M6.
-- The readers of the new log fields (M3) land before their writer (M5) and
-  tolerate the fields' absence.
+- M5 waits for R. M6 does not depend on M5 and may land first; the bench's
+  `extensions` default then gains the task-router in M5.
 - The log contract lands only once all four packages are present (M5).
 
 ### 9.1 Wiring (W)
 
-**Gate** (owner's decision): W waits until the pluto plan
-(`docs/plans/2026-09-29-pluto-server-plan.md`) is finished, and starts when
-the owner says the host repo is free. Reasons:
-
-- the plan compares the desktops' derivations with the recorded baseline at
-  every milestone (`:217`);
-- only S1e may record a new baseline (host `AGENTS.md`);
-- wiring changes andromeda's derivation.
-
-Re-recording the baseline earlier is not an option, because it would
-contradict the host's `AGENTS.md`.
+**Gate** (owner's decision, 2026-10-17): W starts when the owner says so, and
+not before M5, because it wires the redesigned router. r3's gate, the end of
+the pluto plan, is superseded: pluto's critical part is done, and the host is
+no longer frozen. W is the first step that touches the host's flake files
+(`flake.nix`, `flake.lock`); until then they stay as they are. The host's own
+rules (its `AGENTS.md`) apply to W as to any host change; this spec relaxes
+none of them.
 
 **W0, all at once:** `actorSubagents` and the host's whole extension selection
-move onto the registry. Today `pi-extensions.nix:384` writes
+move onto the registry. Today `pi-extensions.nix:389-390` writes
 `actor-subagents/settings.json` unconditionally, so no single component can
 switch before this step. After W0:
 
 - the host's fixed extensions are registry entries;
 - the in-tree packages are still the in-tree ones, registered through the
-  registry.
+  registry;
+- the host sets `programs.piEconomics.piSettings.enable = false` (§5.4).
 
 **W1–Wn, one component per step:** replace the in-tree package with the flake's
 component, move its settings from `homes/pallon`, and delete the in-tree copy
-and its checks.
+and its checks. In the step that deletes an in-tree module, every host reader
+of its `programs.pi.<c>` options moves to `programs.piEconomics.<c>`.
 
 The order follows the hard assertions (§4.1):
 
 1. `bench`.
 2. `tokenMeter`, then `analysisSkill`.
-3. `cacheLifecycle` and `experiments`.
+3. `cacheLifecycle` and `experiments`. The host's `programs.pi.cacheLifecycle`
+   goes away here, but some of its readers must stay until W6. In this step
+   they are re-pointed to `programs.piEconomics.cacheLifecycle.enable`
+   (review 3): `ai/default.nix:982` (the seed's `cacheWarming`) and `:1114`
+   (the migrate `idle` flag), and `checks/eval-assertions.nix:9359` (the child
+   set), `:9387` (the seed) and `:9397` (the migrate flag).
 4. `taskRouter`, whose `actorSubagents` arrived in W0.
 5. `infiniteContext`.
 6. `retry`, together with the retirement of the host's `piSettingsMigrate`
-   script (`ai/default.nix:1110-1114`). From this step on, the flake's
+   script (`ai/default.nix:1111-1114`). From this step on, the flake's
    `piSettingsMigrate` activation entry (§5.4) replaces it, carrying the
-   host's own ops. Until then the host script stays, and the flake's
-   `piSettings` is not enabled in the host, so there is never more than one
-   entry with that name.
+   host's own ops; the host drops its `piSettings.enable = false`. Until then
+   the host script stays and the flake's entry is not rendered, so there is
+   never more than one entry with that name. The seed's `cacheWarming`
+   (`ai/default.nix:982`) can go too, because the op runs after the seed.
 
 Host sites that change during W:
 
 - **`flake.nix`:**
-  - inputs `:99-131`: the pi sources become `follows` targets of the new
-    `pi-economics` input;
-  - `packages.pi-bench` (`:216`);
-  - the `pi-*` checks (`:245-301`) are removed, step by step with their
-    components.
+  - the inputs `pi-infinite-context`, `pi-actor-subagents` and `pi-retry`
+    (`:105-139`) become `follows` targets of the new `pi-economics` input;
+  - `packages.pi-bench` (`:222`);
+  - the `pi-*` checks of the moved components (`:269-324`) are removed, step
+    by step with their components.
 - **`ai/default.nix`:**
   - `:982` and `:1114` read `programs.pi.cacheLifecycle.enable` (the settings
-    seed and the migrate `idle` flag). They are replaced by the piSettings ops.
+    seed and the migrate `idle` flag). W3 re-points them; W6 replaces them by
+    the piSettings op.
   - `localSkillNames` (`:39`) loses the skill. The host wires
     `analysisSkill.path` instead.
 - **`checks/eval-assertions.nix`:**
-  - `:9330-9511`: the child set, the settings-seed and migrate assertions, the
+  - `:9347-9538`: the child set, the settings-seed and migrate assertions, the
     activation DAG order and the command line.
-  - `:1175` and `:8932-8977`: the local-skill list and its "15 local" count.
+  - `:1175`: the local-skill list, and the comments that count 15 local skills
+    (`:1183`, `:9009`).
 - **`checks/pi-token-economics-checks.nix`:** the required-checks list.
 - **`checks/pi-extensions.nix`:** split; the host part stays.
 - **`homes/pallon`:**
-  - `tiers.qwen.localModel` and `localHealthUrl` (§6.1);
-  - the randomize and spotCheck settings;
+  - `taskRouter.settings`: today's randomize and spotCheck
+    (`homes/pallon/default.nix:197-209`), plus the model and health-URL values
+    the host relies on, set explicitly so that P (§8.3) does not change the
+    host;
   - the Haiku reminder override and prices (§5.2);
   - the bench `extensions` and `agentsBaseline`.
 - **Docs:** the `AGENTS.md` routing bullet; `docs/pi-token-economics.md`
   becomes a pointer; `docs/README.md`.
 
-**Drift.** Before W0, the in-tree paths are diffed against `cee41b5`. Changes
-made meanwhile are ported into the flake first.
+**Drift:** before W0 and before each W step, as in §9.
 
 ## 10. Decisions on former open questions
 
 1. **Bench judge:** pi-bench keeps one paid, non-Claude judge on OpenRouter
-   (`gpt`). It counters self-preference when Claude judges Claude arms. It is
-   the only OpenRouter use outside the optional free-cloud slot.
+   (`gpt`). It counters self-preference when Claude judges Claude arms. Apart
+   from the optional free-cloud slot and the `qwen` arm (§7), it is the only
+   OpenRouter use.
 2. **Publication:** the flake becomes public (`github:GRBurst/pi-economics`)
    when finished, under the conditions in §8.3.
 
 ## 11. Risks
 
-- **Haiku usage:** Haiku's output is verbose (Artificial Analysis: about 3×
-  GPT-6 Luna per task), and there were early over-refusal reports. The bench
-  measures both (§7).
+- **Redesign timing:** M5 and W wait for R. M0–M4 and M6 do not, so a late
+  redesign delays only the router and the wiring.
+- **Drift:** the host is no longer frozen, and the redesign changes moved
+  paths while the move runs. The drift diff at the start of every milestone
+  and W step (§9) ports those changes before they can be lost.
+- **Strict typing:** an edit forced by `tsc --strict` could change behaviour
+  unnoticed. The unchanged package tests and the router's golden test (§6.3)
+  guard against it.
 - **Upstream patches:** patches against upstream sources can stop applying on
   an input bump. The patched-package builds keep that a build failure, never a
   silent skip.
 - **Tokenizer:** the newer tokenizer counts about 30% more tokens. Fold
   thresholds for Haiku are set in tokens (§5.2).
-- **Waiting:** waiting on an externally busy local Qwen (§6.2) delays work by up
-  to `queueMaxSec`. That is intended, and `queueMaxSec` is the knob.
