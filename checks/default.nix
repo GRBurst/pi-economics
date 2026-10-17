@@ -28,4 +28,6 @@ in {
   typecheck-harness = typecheck.selftest;
   module-eval = import ./module-eval {inherit lib pkgs hm self;};
   pi-settings-migrate = import ./pi-settings-migrate {inherit lib pkgs hm;};
+  # The bench's own tests run when its code builds (spec §8.1, "Package tests").
+  bench = self.packages.${pkgs.stdenv.hostPlatform.system}.bench.code;
 }

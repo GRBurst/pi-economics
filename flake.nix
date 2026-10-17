@@ -26,6 +26,10 @@
     # common.nix, so every option a cross-component assertion reads exists.
     homeModules.default = ./modules;
 
+    # One package per component (spec §3); the module's `package` default
+    # builds the same derivation from the consumer's pkgs.
+    packages.${system}.bench = pkgs.callPackage ./packages/bench/package.nix {};
+
     formatter.${system} = pkgs.alejandra;
 
     checks.${system} = import ./checks {inherit self pkgs lib home-manager;};

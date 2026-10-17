@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# pi-bench shim (reads the cargo registry cache from $PI_BENCH_WORK/cargo): emulates `devenv shell [-- ] CMD...` for Rust repos (real devenv is blocked by nono).
+set -euo pipefail
+[[ ${1:-} == shell ]] || { echo "bench devenv shim: only 'devenv shell -- CMD' is supported" >&2; exit 2; }
+shift; [[ ${1:-} == -- ]] && shift
+root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+export DEVENV_ROOT=$root RUSTUP_HOME=$root/.rustup CARGO_HOME=$root/.devenv/cargo TMPDIR=$root/.devenv/tmp XDG_CACHE_HOME=$root/.devenv/cache
+mkdir -p "$CARGO_HOME" "$TMPDIR" "$XDG_CACHE_HOME" "$RUSTUP_HOME"
+[[ -n ${PI_BENCH_WORK:-} && -d $PI_BENCH_WORK/cargo/registry && ! -d $CARGO_HOME/registry ]] && cp -r "$PI_BENCH_WORK/cargo/registry" "$CARGO_HOME/" 2>/dev/null || true
+[[ $# -eq 0 ]] && set -- bash
+export PATH=$(dirname "$(readlink -f "$0")")/rust:$PATH
+exec nix shell nixpkgs#cargo nixpkgs#rustc nixpkgs#clippy nixpkgs#rustfmt nixpkgs#just nixpkgs#gcc nixpkgs#git nixpkgs#python3 -c "$@"

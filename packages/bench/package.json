@@ -1,0 +1,8 @@
+{
+  "name": "pi-bench",
+  "version": "0.1.0",
+  "description": "Bench harness for pi token economics: single-agent and orchestrator runs, blind judging, report.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": { "test": "node --test --experimental-strip-types test/*.test.ts" }
+}
