@@ -13,8 +13,13 @@
     fileset = lib.fileset.difference ../. (lib.fileset.unions [../docs/specs ../docs/plans]);
   };
   npm = import ./npm {inherit lib pkgs;};
+  typecheck = import ./typecheck {
+    inherit lib pkgs;
+    inherit (npm) nodeModules;
+  };
 in {
   leak = leakLib.check leakSrc;
   leak-selftest = leakLib.selftest;
   npm-deps = npm.check;
+  typecheck-harness = typecheck.selftest;
 }
