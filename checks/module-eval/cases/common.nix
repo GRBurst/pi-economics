@@ -75,4 +75,30 @@ in {
     (lib.mapAttrs' (n: e: lib.nameValuePair "${dir}/extensions/${n}" (toString e.path)) (pe c).extensions)
     ++ eq "failed assertions (${dir})" (failed "" c) [])
   [".pi/agent" "custom/agent"];
+
+  # (M0.9)
+  registry-missing = let
+    missingFile = fx + "/no-such-ext/index.ts";
+    missingDir = fx + "/no-such-ext";
+    c = hm.eval {
+      programs.piEconomics.extensions = {
+        ext-a = extA;
+        gone =
+          extA
+          // {
+            checkPath = missingFile;
+            input = "upstream-x";
+          };
+        gone-local = {
+          path = missingDir;
+          forChildren = false;
+          description = "d";
+        };
+      };
+    };
+  in
+    eq "failed assertions" (failed "pi-economics:" c) (lib.sort lib.lessThan [
+      "pi-economics: extension 'gone' not found at ${toString missingFile}; the upstream-x input may have renamed or removed it."
+      "pi-economics: extension 'gone-local' not found at ${toString missingDir}."
+    ]);
 }

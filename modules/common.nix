@@ -76,5 +76,20 @@ in {
     home.file = lib.mapAttrs' (name: e:
       lib.nameValuePair "${cfg.agentDir}/extensions/${name}" {source = e.path;})
     cfg.extensions;
+
+    # (M0.9) An upstream rename breaks evaluation instead of leaving a link
+    # that pi silently skips.
+    assertions =
+      lib.mapAttrsToList (name: e: {
+        assertion = builtins.pathExists e.checkPath;
+        message =
+          "pi-economics: extension '${name}' not found at ${toString e.checkPath}"
+          + (
+            if e.input == null
+            then "."
+            else "; the ${e.input} input may have renamed or removed it."
+          );
+      })
+      cfg.extensions;
   };
 }
