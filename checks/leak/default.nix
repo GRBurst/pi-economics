@@ -16,7 +16,7 @@
       status=0
       scan() {
         local rc=0
-        grep -rnE -- "$2" "$root" || rc=$?
+        grep -rnE --exclude-dir=.git -- "$2" "$root" || rc=$?
         case $rc in
           0)
             echo "pi-economics-leak-scan: $1 found (lines above)" >&2
@@ -75,6 +75,13 @@
       '192.169.1.1' 'user@localhost' 'git+https://host/repo' >near/f.txt
     $scan near || { echo "FAIL near misses rejected" >&2; exit 1; }
     echo "near misses: pass"
+
+    # A `path:` flake source copy includes .git/, whose logs hold addresses.
+    mkdir -p withgit/.git/logs
+    printf '%s\n' 'clean' >withgit/f.txt
+    printf '%s\n' "$(printf '0 1 A <%s@%s> 1 +0000' someone example.org)" >withgit/.git/logs/HEAD
+    $scan withgit || { echo "FAIL .git/ must be skipped" >&2; exit 1; }
+    echo ".git skipped: pass"
 
     mkdir empty
     st=0
