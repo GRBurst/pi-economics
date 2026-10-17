@@ -53,6 +53,25 @@ Edits of pi's mutable `settings.json`, run by one activation entry,
   does nothing on an absent file, never fails the activation, and rewrites
   the file only when its JSON changes.
 
+## Components
+
+### `bench` (`modules/bench.nix`)
+
+pi-bench (`packages/bench`, its own `README.md`): `pi-bench` and
+`bench-report` on `PATH`, configured through session variables. Every option
+at its empty default exports nothing, and the bench keeps its own default.
+
+| Option | Default | Exported as |
+|---|---|---|
+| `enable` | `false` | — |
+| `package` | the flake's `packages/bench` | `home.packages` |
+| `dataDir` | `<home>/<agentDir>/bench` | `PI_BENCH_DATA` |
+| (agent source) | `<home>/<agentDir>`, not an option | `PI_BENCH_AGENT_SRC` |
+| `workDir` | `null` (the bench: `$XDG_RUNTIME_DIR/pi/tmp/bench`) | `PI_BENCH_WORK` |
+| `extensions` | `{}` (the bench: `~/.pi/agent/extensions`) | `PI_BENCH_EXT_DIR`, a `linkFarm` of name → path |
+| `router` | `{}` (an arm's file: its own keys) | `PI_BENCH_ROUTER`, a JSON file; an orch arm merges its `routing`, `delegation`, `t0Limits` over it as `lib.recursiveUpdate` does |
+| `agentsBaseline` | `null` (the bench: `<agent source>/notes/…`) | `PI_BENCH_AGENTS_OFF` |
+
 ## Checks
 
 | Check | Covers |
@@ -61,6 +80,8 @@ Edits of pi's mutable `settings.json`, run by one activation entry,
 | `pi-settings-migrate` | the piSettings script: the ported cases, bytes equal to the former script, the op table |
 | `npm-deps` | the shared npm lock (`checks/npm`) installs the declared toolchain |
 | `typecheck-harness` | the `tsc` runner accepts and rejects what it must |
+| `bench` | the bench's own tests (`node --test`), run when its code builds |
+| `typecheck-bench` | `tsc --strict` over the bench |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths, `git+ssh` URLs or private addresses in tracked files |
 
 How to run them: `AGENTS.md`, "Commands".
