@@ -15,7 +15,9 @@
   cases =
     lib.foldl' (
       acc: file: let
-        new = import file {inherit lib hm self expect;};
+        f = import file;
+        # A case file takes the arguments it names.
+        new = f (builtins.intersectAttrs (lib.functionArgs f) {inherit lib pkgs hm self expect;});
         dup = lib.intersectLists (lib.attrNames acc) (lib.attrNames new);
       in
         if dup != []
