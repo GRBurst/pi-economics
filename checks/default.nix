@@ -13,6 +13,10 @@
     fileset = lib.fileset.difference ../. (lib.fileset.unions [../docs/specs ../docs/plans]);
   };
   npm = import ./npm {inherit lib pkgs;};
+  hm = import ./lib/hm-eval.nix {
+    inherit lib pkgs home-manager;
+    homeModule = self.homeModules.default;
+  };
   typecheck = import ./typecheck {
     inherit lib pkgs;
     inherit (npm) nodeModules;
@@ -22,4 +26,5 @@ in {
   leak-selftest = leakLib.selftest;
   npm-deps = npm.check;
   typecheck-harness = typecheck.selftest;
+  module-eval = import ./module-eval {inherit lib pkgs hm self;};
 }
