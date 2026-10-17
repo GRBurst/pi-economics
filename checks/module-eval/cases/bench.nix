@@ -1,12 +1,14 @@
 # Cases for modules/bench.nix (spec §7).
 {
   lib,
+  pkgs,
   hm,
   self,
   expect,
 }: let
   inherit (expect) eq holds failed;
   pe = cfg: cfg.programs.piEconomics;
+  fx = ../fixtures;
   benchVars = cfg: lib.filterAttrs (n: _: lib.hasPrefix "PI_BENCH_" n) cfg.home.sessionVariables;
   on = extra: hm.eval {programs.piEconomics.bench = {enable = true;} // extra;};
 in {
@@ -59,4 +61,14 @@ in {
     eq "PI_BENCH_DATA" v.PI_BENCH_DATA "/d"
     ++ eq "PI_BENCH_WORK" v.PI_BENCH_WORK "/w"
     ++ eq "PI_BENCH_AGENTS_OFF" v.PI_BENCH_AGENTS_OFF "/b.md";
+
+  # (M1.7) One link per name, in a directory of links.
+  bench-extensions = let
+    exts = {
+      ext-a = fx + "/ext-a";
+      ext-b = fx + "/ext-b";
+    };
+    v = (on {extensions = exts;}).home.sessionVariables;
+  in
+    eq "PI_BENCH_EXT_DIR" v.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" exts}";
 }

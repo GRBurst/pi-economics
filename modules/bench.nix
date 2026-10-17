@@ -38,6 +38,19 @@ in {
       '';
     };
 
+    extensions = lib.mkOption {
+      type = lib.types.attrsOf lib.types.path;
+      default = {};
+      example = lib.literalExpression ''{ claude-auth = "''${pi-claude-auth}"; }'';
+      description = ''
+        The extensions a bench arm loads, by the name the arm uses. Data, not
+        the registry: the arms load extensions the registry does not hold, and
+        leave out some it does. Exported as a directory of links
+        (`PI_BENCH_EXT_DIR`); `{}` exports nothing, and the bench looks the
+        names up in `~/.pi/agent/extensions`.
+      '';
+    };
+
     agentsBaseline = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -59,6 +72,9 @@ in {
         PI_BENCH_AGENT_SRC = agentSrc;
       }
       // lib.optionalAttrs (cfg.workDir != null) {PI_BENCH_WORK = cfg.workDir;}
+      // lib.optionalAttrs (cfg.extensions != {}) {
+        PI_BENCH_EXT_DIR = "${pkgs.linkFarm "pi-bench-extensions" cfg.extensions}";
+      }
       // lib.optionalAttrs (cfg.agentsBaseline != null) {PI_BENCH_AGENTS_OFF = cfg.agentsBaseline;};
   };
 }
