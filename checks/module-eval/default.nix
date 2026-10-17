@@ -11,6 +11,7 @@
   expect = import ./expect.nix {inherit lib;};
   caseFiles = [
     ./cases/common.nix
+    ./cases/bench.nix
   ];
   cases =
     lib.foldl' (
