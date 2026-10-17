@@ -88,6 +88,49 @@
       else a.index < b.index;
   in
     lib.sort before flat;
+
+  # (M0.13) The jq program: one function per op, each with its own shape
+  # guard, piped in sorted order (spec §5.4). The guards are the host's
+  # pi-settings-migrate.nix ones, generalised to any path:
+  #  - an object on the way: `(<p> // {}) | type == "object"`. A missing key
+  #    or null passes and is created; false passes and makes jq fail on the
+  #    next key, so the whole file stays untouched; anything else skips the op.
+  #  - the leaf: ensureContains `(<p> // []) | type == "array"` (missing, null
+  #    and false become [value]); removeWhere an array, else the op is skipped.
+  # jq's `and` short-circuits: no path after a failed guard is evaluated.
+  access = path: "." + lib.concatMapStrings (k: "[${builtins.toJSON k}]") path;
+  prefixes = path: map (n: lib.take n path) (lib.range 1 (lib.length path - 1));
+  objectGuard = p: "((${access p} // {}) | type) == \"object\"";
+  leafGuards = {
+    set = _: [];
+    ensureContains = p: ["((${access p} // []) | type) == \"array\""];
+    removeWhere = p: ["(${access p} | type) == \"array\""];
+  };
+  edit = op: let
+    a = access op.path;
+    v = builtins.toJSON op.value;
+    edits = {
+      set = "if ${a} == ${v} then . else ${a} = ${v} end";
+      ensureContains = "${a} |= ((. // []) | if any(.[]; . == ${v}) then . else . + [${v}] end)";
+      removeWhere = "${a} |= map(select(. == ${v} | not))";
+    };
+  in
+    edits.${op.op};
+  guarded = op: let
+    guards = map objectGuard (prefixes op.path) ++ leafGuards.${op.op} op.path;
+  in
+    if guards == []
+    then edit op
+    else "if ${lib.concatStringsSep " and " guards} then ${edit op} else . end";
+  program = let
+    n = lib.length sortedOps;
+  in
+    lib.concatImapStrings (i: op: "def op${toString i}: ${guarded op};\n") sortedOps
+    + (
+      if n == 0
+      then ".\n"
+      else lib.concatMapStringsSep " | " (i: "op${toString i}") (lib.range 1 n) + "\n"
+    );
 in {
   options.programs.piEconomics = {
     # (M0.7)
@@ -151,13 +194,21 @@ in {
         internal = true;
         description = "The ops in execution order, each with its contributor `key` and `index` (read by the checks).";
       };
+
+      # (M0.13)
+      program = lib.mkOption {
+        type = lib.types.str;
+        readOnly = true;
+        internal = true;
+        description = "The rendered jq program (read by the checks).";
+      };
     };
   };
 
   config = {
     # (M0.12)
     programs.piEconomics.piSettings = {
-      inherit sortedOps;
+      inherit sortedOps program;
     };
 
     # (M0.8)

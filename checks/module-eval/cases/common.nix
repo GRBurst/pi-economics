@@ -177,4 +177,23 @@ in {
   in
     throws "path = []" (pathOf [])
     ++ evaluates "path = [\"y\"]" (pathOf ["y"]);
+
+  # (M0.13) One function per op, in execution order, then the pipe.
+  pisettings-program = let
+    s = (pe (hm.eval {programs.piEconomics.piSettings.ops = today.withWarming;})).piSettings;
+    lines = lib.filter (l: l != "") (lib.splitString "\n" s.program);
+    n = lib.length s.sortedOps;
+  in
+    eq "program without ops" (pe (hm.eval {})).piSettings.program ".\n"
+    ++ eq "line count" (lib.length lines) (n + 1)
+    ++ eq "pipe" (lib.last lines) (lib.concatMapStringsSep " | " (i: "op${toString i}") (lib.range 1 n))
+    ++ lib.concatLists (lib.imap1 (i: op: let
+      line = lib.elemAt lines (i - 1);
+    in
+      holds "line ${toString i} defines op${toString i} with its path and value" (
+        lib.hasPrefix "def op${toString i}: " line
+        && lib.hasInfix (lib.concatMapStrings (k: "[${builtins.toJSON k}]") op.path) line
+        && lib.hasInfix (builtins.toJSON op.value) line
+      ))
+    s.sortedOps);
 }
