@@ -1,7 +1,7 @@
 # Shared by every component (spec §4, §5.1, §5.4):
 #  - agentDir: pi's agent directory, relative to home;
-#  - extensions: the extension registry, rendered as links and existence
-#    assertions (childExtensions follows in M2, with actorSubagents);
+#  - extensions: the extension registry, rendered as links, existence
+#    assertions and the children's list (childExtensions);
 #  - piSettings: leaf edits of pi's mutable settings.json, contributed per
 #    component under ops.<contributor> and run by one activation entry.
 {
@@ -37,7 +37,7 @@
       };
       forChildren = lib.mkOption {
         type = lib.types.bool;
-        description = "Whether actor-subagents children load the extension (`childExtensions`, rendered from M2 on).";
+        description = "Whether actor-subagents children load the extension (`childExtensions`).";
       };
       description = lib.mkOption {
         type = lib.types.str;
@@ -192,6 +192,18 @@ in {
       '';
     };
 
+    # (M2.5) The registry's children, rendered for actorSubagents.
+    childExtensions = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      readOnly = true;
+      internal = true;
+      description = ''
+        The link path `<home>/<agentDir>/extensions/<name>` of every registry
+        entry with `forChildren`, sorted by name: what actor-subagents loads
+        into each child (its settings file's `childExtensions`).
+      '';
+    };
+
     piSettings = {
       # (M0.11)
       enable = lib.mkOption {
@@ -255,6 +267,12 @@ in {
       inherit sortedOps program;
       package = script;
     };
+
+    # (M2.5) Link paths, not store paths: the extension resolves them in a child
+    # process, and a reader can take each name from the last path component.
+    programs.piEconomics.childExtensions =
+      map (n: "${config.home.homeDirectory}/${cfg.agentDir}/extensions/${n}")
+      (lib.filter (n: cfg.extensions.${n}.forChildren) (lib.attrNames cfg.extensions));
 
     # (M0.8)
     home.file = lib.mapAttrs' (name: e:

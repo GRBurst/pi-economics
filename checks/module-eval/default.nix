@@ -12,6 +12,7 @@
   caseFiles = [
     ./cases/common.nix
     ./cases/bench.nix
+    ./cases/actor-subagents.nix
   ];
   cases =
     lib.foldl' (
