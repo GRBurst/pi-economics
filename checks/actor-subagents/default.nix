@@ -49,7 +49,7 @@ pkgs.runCommand "pi-actor-subagents-tests" {nativeBuildInputs = [pkgs.nodejs];} 
   # The first-turn patch's test must be part of what ran, and index.ts must hand a child's
   # messages to the sender that delivers the first one through prompt(). A direct
   # sendCustomMessage({triggerTurn:true}) on an idle session skips before_agent_start and the
-  # system prompt / tool loadout (defect D3).
+  # system prompt / tool loadout.
   test -f first-turn.test.ts
   grep -q 'createAgentMessageSender(session)' index.ts
   grep -q 'sendAgentMessage,' index.ts
