@@ -32,7 +32,11 @@
   in {
     # The only module export (spec §3, "Exports"): every component and
     # common.nix, so every option a cross-component assertion reads exists.
-    homeModules.default = ./modules;
+    homeModules.default = {
+      imports = [./modules];
+      # The upstream source the patched component builds from (spec §3).
+      programs.piEconomics.actorSubagents.src = lib.mkDefault pi-actor-subagents;
+    };
 
     # One package per component (spec §3); the module's `package` default
     # builds the same derivation from the consumer's pkgs.

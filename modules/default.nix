@@ -3,5 +3,6 @@
   imports = [
     ./common.nix
     ./bench.nix
+    ./actor-subagents.nix
   ];
 }

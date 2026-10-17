@@ -60,4 +60,49 @@ in {
     (lib.all (p: lib.elem p (map (t: "${c.home.homeDirectory}/${t}") (targets c))) kids)
     ++ eq "names from the last path component (${dir})" (map (p: lib.last (lib.splitString "/" p)) kids) ["alpha" "zeta"])
   dirs;
+
+  # (M2.6) Off by default: no registry entry, no link.
+  actor-subagents-off = let
+    c = eval ".pi/agent" null;
+  in
+    holds "no registry entry" (!(pe c).extensions ? actor-subagents)
+    ++ holds "no link" (!lib.elem ".pi/agent/extensions/actor-subagents" (targets c));
+
+  # (M2.6) On: the registry entry and its link, following agentDir.
+  actor-subagents-defaults = lib.concatMap (dir: let
+    c = hm.eval {
+      programs.piEconomics = {
+        agentDir = dir;
+        actorSubagents.enable = true;
+      };
+    };
+    a = (pe c).actorSubagents;
+    e = (pe c).extensions.actor-subagents;
+  in
+    eq "registry entry (${dir})" {inherit (e) path checkPath input forChildren;} {
+      path = "${a.package}/extensions/actor-subagents";
+      checkPath = "${a.src}/extensions/actor-subagents/index.ts";
+      input = "pi-actor-subagents";
+      forChildren = false;
+    }
+    ++ holds "link target (${dir})" (lib.elem "${dir}/extensions/actor-subagents" (targets c))
+    ++ eq "failed assertions (${dir})" (failed "" c) []
+    ++ eq "warnings (${dir})" c.warnings bare.warnings)
+  dirs;
+
+  # (M2.6) The package is the flake's, and carries the spawn-policy API version
+  # that taskRouter's assertion reads (spec §4.1).
+  actor-subagents-package = let
+    a = (pe (eval ".pi/agent" {})).actorSubagents;
+  in
+    eq "drvPath" a.package.drvPath self.packages.x86_64-linux.actor-subagents.drvPath
+    ++ eq "spawnPolicyApi" (a.package.passthru.spawnPolicyApi or 0) 1;
+
+  # (M2.6) The existence assertion probes the unpatched source and names the input.
+  actor-subagents-missing = let
+    c = eval ".pi/agent" {src = fx + "/ext-a";};
+  in
+    eq "failed assertions" (failed "pi-economics:" c) [
+      "pi-economics: extension 'actor-subagents' not found at ${(pe c).extensions.actor-subagents.checkPath}; the pi-actor-subagents input may have renamed or removed it."
+    ];
 }
