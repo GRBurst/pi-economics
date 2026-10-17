@@ -1,13 +1,13 @@
 # pi-bench
 
-Bench harness for the pi token-economics work (plan S14). Code and fixtures live here;
+Bench harness for the pi token-economics work. Code and fixtures live here;
 **task data, runs, judgements and reports do not** — they are under `~/.pi/agent/bench`
 (`PI_BENCH_DATA`), checkouts and nix caches under `$XDG_RUNTIME_DIR/pi/tmp/bench`
 (`PI_BENCH_WORK`, tmpfs). No private repository paths or reference diffs belong in this repo.
 
 ```
-nix build .#pi-bench          # pi-bench, bench-report (tests run at build time)
-nix build .#checks.x86_64-linux.pi-bench
+nix build .#bench             # pi-bench, bench-report (tests run at build time)
+nix build .#checks.x86_64-linux.bench
 node --test --experimental-strip-types test/*.test.ts     # from this directory
 ```
 
@@ -29,7 +29,7 @@ Arms (`defaultArms()` in `src/config.ts`, extended by `<data>/arms.json`): `qwen
 orchestrator factor arms `orch-<signs>` (below). `claude-auth` is required for anthropic models. Per-run limit
 `BENCH_TIMEOUT` (default 5400 s). `PI_BENCH_PI` selects the pi binary, `PI_BENCH_EXT_DIR` the extension directory.
 
-## Orchestrator factor arms (spec §5.6.5, plan T10.5)
+## Orchestrator factor arms
 
 Factors `routing` (off|on), `delegation` (off|on: handoff line + nudge), `t0Widened` (off: t0Limits 3 files /
 100000 tokens, on: 10 / 150000) as the 2³⁻¹ half fraction (`src/design.ts`, x3 = −x1·x2, so the all-off baseline is
@@ -54,7 +54,9 @@ Every run of a factor arm gets its own **agent dir** `runs/<run>/agent/` (`PI_CO
 `infinite-context/settings.json` (copy), and symlinks `auth.json`, `models.json`, `models-store.json` to the live
 agent dir (no secrets are copied; claude-auth seeds the Claude login into the linked `auth.json` from
 `CLAUDE_CONFIG_DIR`). Meter (`agent/meter/`) and outcome (`agent/task-router/outcomes/`) logs of the run land there.
-Sources are overridable: `PI_BENCH_AGENT_SRC`, `PI_BENCH_AGENTS_ON`, `PI_BENCH_AGENTS_OFF`. Arms with `factors`
+Sources are overridable: `PI_BENCH_AGENT_SRC`, `PI_BENCH_AGENTS_ON`, `PI_BENCH_AGENTS_OFF`. `PI_BENCH_ROUTER` names a JSON
+file that is the base of `task-router/settings.json`: the arm's keys are merged over it as `lib.recursiveUpdate` does
+(unset: the arm's keys alone). Arms with `factors`
 (also from `arms.json`) get this treatment; other arms use the live agent dir as before. `bench-report --factors
 routing,delegation,t0Widened` reads the factor levels from the arm.
 

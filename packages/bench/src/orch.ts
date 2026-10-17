@@ -4,14 +4,14 @@ import { halfFraction } from "./design.ts";
 import type { Factor } from "./design.ts";
 import type { Arm, Paths } from "./types.ts";
 
-/** Spec §5.6.5: routing, delegation (handoff + nudge), t0Widened (pilot-derived limits). */
+/** The factors (README.md, "Orchestrator factor arms"): routing, delegation (handoff + nudge), t0Widened (pilot-derived limits). */
 export const FACTORS: Factor[] = [
 	{ name: "routing", values: ["off", "on"] },
 	{ name: "delegation", values: ["off", "on"] },
 	{ name: "t0Widened", values: ["off", "on"] },
 ];
 
-/** t0Limits per t0Widened level: "off" = the spec defaults, "on" = pilot-derived (T0.3). */
+/** t0Limits per t0Widened level: "off" = the limits before the pilot, "on" = pilot-derived. */
 export const T0_LIMITS = { off: { files: 3, tokens: 100000 }, on: { files: 10, tokens: 150000 } };
 
 /** Main session: everything the user's setup loads (cache-lifecycle/experiments are not part of the bench). The probe is added by the driver. */

@@ -1,4 +1,4 @@
-// T10.5 orchestrator factor arms: the 2^(3-1) half fraction over routing × delegation × t0Widened, and the
+// Orchestrator factor arms (README.md): the 2^(3-1) half fraction over routing × delegation × t0Widened, and the
 // per-run agent dir that carries each arm's settings, AGENTS.md and the logs of the run.
 import { test } from "node:test";
 import assert from "node:assert/strict";
