@@ -12,6 +12,40 @@
 }: let
   today = import ./today-ops.nix;
   exe = ops: lib.getExe (hm.eval {programs.piEconomics.piSettings.ops = ops;}).programs.piEconomics.piSettings.package;
+  nested = op: {
+    t = [
+      {
+        inherit op;
+        path = ["a" "b" "c"];
+        value = 1;
+      }
+    ];
+  };
+  mix = {
+    t = [
+      {
+        op = "removeWhere";
+        path = ["packages"];
+        value = "s";
+        order = 900;
+      }
+      {
+        op = "set";
+        path = ["s1" "x"];
+        value = 1;
+      }
+      {
+        op = "ensureContains";
+        path = ["e1" "x"];
+        value = 1;
+      }
+      {
+        op = "removeWhere";
+        path = ["r1" "x"];
+        value = 1;
+      }
+    ];
+  };
   corpusCount = lib.length (lib.filter (lib.hasSuffix ".json") (lib.attrNames (builtins.readDir ./corpus)));
 in
   assert lib.assertMsg (corpusCount > 0) "pi-settings-migrate: empty corpus";
@@ -22,9 +56,14 @@ in
       old=${lib.getExe (import ./legacy.nix {inherit pkgs lib;})}
       corpus=${./corpus}
       corpusCount=${toString corpusCount}
+      set_=${exe (nested "set")}
+      ens=${exe (nested "ensureContains")}
+      rem=${exe (nested "removeWhere")}
+      mix=${exe mix}
 
-      mkdir part1 part2
+      mkdir part1 part2 part3
       (cd part1 && source ${./ported-cases.sh})
       (cd part2 && source ${./differential.sh})
+      (cd part3 && source ${./op-table.sh})
       touch $out
     ''
