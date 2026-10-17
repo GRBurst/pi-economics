@@ -1101,3 +1101,50 @@ Each with the planner's proposed decision; the plan follows the proposal.
 - **Q9.** M2 needs M1 landed (M2.0 Step 2): its harness change (M1.4), `packages/bench` and the case count. Proposal: M2 starts after M1's Execution Record; if M1 deviates in `checks/default.nix`, `flake.nix` or the case harness, the implementer adapts S1/S3/S10 to M1's actual text.
 
 # Execution Record
+
+Executed 2026-10-18 (agent impl-m2), on the plan at `c57076e` and M1 as landed (`d44adbc`). Q2–Q9 accepted as proposed; Q1 decided differently (below). Every task done; commands as in "Environment" with the timeouts raised to 1800 s (machine load about 20); builds under `ulimit -v 20971520`, `--option eval-cache false`; the host read only through `git dot`. M2.0: M1's Execution Record read (no deviation touching this plan's files); listing, `22 cases passed` and `intersectAttrs` as expected; drift check empty (`rc=0`) at host HEAD `14b84d9`; host lock rev `707496e9…`.
+
+| Task | Commit | Red seen | Deviation |
+|---|---|---|---|
+| M2.0 | — | — | none |
+| M2.1 | `00dc0f1` | `attribute 'actor-subagents' missing`; planted (no first-turn patch) → `ℹ tests 290`, `ℹ fail 0`, `builder failed with exit code 1` | none; three patches and the check `cmp`-equal, drvPath `/nix/store/1wn44qbf…-pi-actor-subagents-patched.drv` on both sides, lock node = host's, other nodes unchanged, root inputs as expected; 297 tests |
+| M2.2 | `75ad822` | `error TS5112: tsconfig.json is present …`; planted (no `package.json`) → `spawn-wording.test.ts:9:65 - error TS1470` | none |
+| M2.3 | `9872d10` | `ok consumer-ok accepted`, `FAIL consumer-bad: accepted`; planted `any` → the same line | none |
+| M2.4 | `6705eb6` | `compare.ts:2:15 - error TS2614 … no exported member 'SubagentsApi'`; planted (a) and (b) → `error TS2322: Type 'SubagentsApiV1' is not assignable to type 'SubagentsApi'` ((b): `typecheck-bench` green) | none; `bench` `ℹ pass 76`; the diff of `packages/bench` is S5 |
+| M2.5 | `abb6abf` | `attribute 'childExtensions' missing`; planted store paths → three `FAIL child-extensions` lines | none; 23 cases |
+| M2.6 | `a262aa9` | `The option `programs.piEconomics.actorSubagents' does not exist`; plants (a) `mkIf true` → `FAIL actor-subagents-off` ×2, `FAIL inert: home.file names` (and `bench-defaults: home.file names`, which also reads the file set); (b) → `spawnPolicyApi: expected 1, got 0`; (c) → IFD build, `can't find file to patch` | none; 27 cases |
+| M2.7 | `86b11a9` | six `FAIL` lines, `6 failure(s) in 29 cases` | none; 29 cases |
+| M2.8 | `82b1814` | option missing; then (Q1 change) the negative case alone: `FAIL actor-subagents-settings-child-extensions: failed assertions: expected [ "pi-economics: …settings.childExtensions is set; the registry owns that key …" ], got [ ]` | Q1, see below; 32 cases |
+| M2.9 | `329392f` | green first; planted `home.file.planted` → `FAIL components-together: home.file targets` | 32 cases (31 + the Q1 negative case) |
+| M2.10 | `8d19a18` | — | none; `ℹ pass 297`; the diff is the one comment line |
+| M2.11 | `4be9ef8` | — | docs also state the Q1 rule; the `settings` row names `spawnPolicyApi` in prose (the `MISSING` loop needs the bare name in backticks) |
+| M2.12 | this record's commit | — | see below |
+
+## Deviations
+
+1. **Q1 (owner's decision, main).** No silent override. `modules/actor-subagents.nix` asserts `!(cfg.settings ? childExtensions)` with the message `pi-economics: programs.piEconomics.actorSubagents.settings.childExtensions is set; the registry owns that key (extensions.<name>.forChildren).`; the negative case `actor-subagents-settings-child-extensions` (with an `ok` control that sets `maxAgents`) was seen red before the assertion existed (M2.8). The merge stays `lib.recursiveUpdate cfg.settings {inherit (pe) childExtensions;}`. `actor-subagents-settings` no longer sets `childExtensions` (it would now fail the assertion) and also asserts no failed assertion. Consequence: M2.8 Step 4's plant (swapped operands) is not observable any more (with no `childExtensions` in `settings` both orders render the same text), so it was not run; the assertion's removal is what the negative case catches. Spec §4's merge rule gained an "Amendment (M2)" sentence saying so. `docs/pi-economics.md` and the option's description state it. One more case than planned: 32, not 31.
+2. `nbl`-style reds: M2.5's, M2.7's and M2.8's reds were read from the first failing line of the build log; messages as above.
+3. `/tmp` is private to the sandbox's commands; a backup in `/tmp` could not be read back, so planted edits were undone with `git checkout --` on staged files (the green state was staged before each plant).
+
+## Gate (M2.12), 2026-10-18
+
+Each check's output deleted before its build (both refs), one capped build each; GNU `time`; load average about 20. Listing, same under both refs: `actor-subagents bench iface-harness iface-subagents-bench-probe leak leak-selftest module-eval npm-deps pi-settings-migrate typecheck-actor-subagents typecheck-bench typecheck-harness`. No `FAILED`, no `LISTING FAILED`.
+
+| Check | `git+file://` peak · time | `path:` peak · time |
+|---|---|---|
+| `actor-subagents` (297 tests) | 138036 KiB · 5.60 s | 137692 KiB · 6.62 s |
+| `bench` (76) | 154768 KiB · 13.54 s | 154456 KiB · 12.59 s |
+| `iface-harness` | 244620 KiB · 13.92 s | 245400 KiB · 14.07 s |
+| `iface-subagents-bench-probe` | 245140 KiB · 31.51 s | 244852 KiB · 32.80 s |
+| `leak` | 239988 KiB · 6.25 s | 239904 KiB · 7.52 s |
+| `leak-selftest` | 239128 KiB · 8.08 s | 239504 KiB · 7.96 s |
+| `module-eval` (32 cases) | 1133080 KiB · 64.49 s | 1012904 KiB · 62.02 s |
+| `npm-deps` | 156644 KiB · 4.10 s | 156820 KiB · 3.73 s |
+| `pi-settings-migrate` | 560848 KiB · 31.72 s | 594128 KiB · 31.37 s |
+| `typecheck-actor-subagents` | 245176 KiB · 29.11 s | 244736 KiB · 31.47 s |
+| `typecheck-bench` | 245400 KiB · 11.02 s | 244708 KiB · 12.47 s |
+| `typecheck-harness` | 244828 KiB · 25.10 s | 245188 KiB · 31.92 s |
+
+`packages.x86_64-linux` is `["actor-subagents","bench"]`; `homeModules` is `["default"]`; `formatter.x86_64-linux.drvPath` evaluates; `alejandra --check` over every tracked `.nix` file is clean. The lock differs from M1's only by the new input node (`unchanged`). Drift again: `git dot diff --stat 14b84d9 HEAD` over the M2.0 paths empty, rc=0; host HEAD still `14b84d9`.
+
+Open questions: Q2–Q9 accepted; Q1 changed (deviation 1). Follow-ups, not done: `module-eval` peaks at 1.1 GiB with 32 cases; W0 runs the host's own readers of the link suffix and policy keys.
