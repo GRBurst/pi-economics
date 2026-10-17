@@ -11,12 +11,20 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # A patched upstream (spec §3), locked to the host's revision; the host
+    # makes it follow its own input.
+    pi-actor-subagents = {
+      url = "github:fdietze/pi-actor-subagents";
+      flake = false;
+    };
   };
 
   outputs = {
     self,
     nixpkgs,
     home-manager,
+    pi-actor-subagents,
   }: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
@@ -28,7 +36,10 @@
 
     # One package per component (spec §3); the module's `package` default
     # builds the same derivation from the consumer's pkgs.
-    packages.${system}.bench = pkgs.callPackage ./packages/bench/package.nix {};
+    packages.${system} = {
+      bench = pkgs.callPackage ./packages/bench/package.nix {};
+      actor-subagents = pkgs.callPackage ./packages/actor-subagents/package.nix {src = pi-actor-subagents;};
+    };
 
     formatter.${system} = pkgs.alejandra;
 

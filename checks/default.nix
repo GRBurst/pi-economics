@@ -21,6 +21,8 @@
     inherit lib pkgs;
     inherit (npm) nodeModules;
   };
+  # (M2.1)
+  actorSubagents = self.packages.${pkgs.stdenv.hostPlatform.system}.actor-subagents;
 in {
   leak = leakLib.check leakSrc;
   leak-selftest = leakLib.selftest;
@@ -34,4 +36,7 @@ in {
     name = "bench";
     src = ../packages/bench;
   };
+  # The upstream suite of the patched pi-actor-subagents (spec §8.1), with the
+  # host's check (checks/actor-subagents/default.nix, copied).
+  actor-subagents = pkgs.callPackage ./actor-subagents {src = actorSubagents;};
 }

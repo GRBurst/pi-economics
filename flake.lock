@@ -36,10 +36,27 @@
         "type": "github"
       }
     },
+    "pi-actor-subagents": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790263030,
+        "narHash": "sha256-p0V/icznMlEyttHiw6lhfbydoe324JbyRFoA2TP2/aw=",
+        "owner": "fdietze",
+        "repo": "pi-actor-subagents",
+        "rev": "707496e93d78aac3d2be609aee69c2b7ffff6c33",
+        "type": "github"
+      },
+      "original": {
+        "owner": "fdietze",
+        "repo": "pi-actor-subagents",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "home-manager": "home-manager",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "pi-actor-subagents": "pi-actor-subagents"
       }
     }
   },
