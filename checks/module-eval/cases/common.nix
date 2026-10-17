@@ -101,4 +101,27 @@ in {
       "pi-economics: extension 'gone' not found at ${toString missingFile}; the upstream-x input may have renamed or removed it."
       "pi-economics: extension 'gone-local' not found at ${toString missingDir}."
     ]);
+
+  # (M0.10) Home Manager rejects a second link (spec §5.1).
+  registry-double-link-key = let
+    key = ".pi/agent/extensions/ext-a";
+    c = hm.eval {
+      programs.piEconomics.extensions.ext-a = extA;
+      home.file.${key}.source = extB.path;
+    };
+    alone = hm.eval {programs.piEconomics.extensions.ext-a = extA;};
+  in
+    holds "the registry links under the key ${key}" (alone.home.file ? ${key})
+    ++ throws "a second home.file definition of the link" c.home.file.${key}.source;
+  registry-double-link-target = let
+    c = hm.eval {
+      programs.piEconomics.extensions.ext-a = extA;
+      home.file.other-ext-a = {
+        target = ".pi/agent/extensions/ext-a";
+        source = extB.path;
+      };
+    };
+  in
+    holds "Home Manager's conflicting-target assertion fires"
+    (lib.any (lib.hasPrefix "Conflicting managed target files: .pi/agent/extensions/ext-a") (failed "" c));
 }
