@@ -30,11 +30,14 @@
     mkdir $out
     cp -r ${actorSubagents}/extensions ${actorSubagents}/package.json $out/
   '';
+  # (M2.3)
+  iface = import ./iface {inherit lib pkgs typecheck;};
 in {
   leak = leakLib.check leakSrc;
   leak-selftest = leakLib.selftest;
   npm-deps = npm.check;
   typecheck-harness = typecheck.selftest;
+  iface-harness = iface.selftest;
   module-eval = import ./module-eval {inherit lib pkgs hm self;};
   pi-settings-migrate = import ./pi-settings-migrate {inherit lib pkgs hm;};
   # The bench's own tests run when its code builds (spec §8.1, "Package tests").
