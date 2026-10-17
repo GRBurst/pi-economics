@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { halfFraction } from "./design.ts";
 import type { Factor } from "./design.ts";
@@ -42,6 +42,27 @@ const piSettings = () => ({
 
 const on = (v: string | undefined) => v !== "off";
 
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** Nix's lib.recursiveUpdate: right wins; where both sides hold an object the merge recurses; lists and scalars are replaced whole. */
+export function recursiveUpdate(left: Record<string, unknown>, right: Record<string, unknown>): Record<string, unknown> {
+	const out: Record<string, unknown> = { ...left };
+	for (const [k, v] of Object.entries(right)) {
+		const l = out[k];
+		out[k] = isObject(l) && isObject(v) ? recursiveUpdate(l, v) : v;
+	}
+	return out;
+}
+
+/** The base of every orch arm's task-router settings (paths.router, PI_BENCH_ROUTER): {} when unset. */
+export function routerBase(file: string | undefined): Record<string, unknown> {
+	if (file === undefined) return {};
+	if (!existsSync(file)) throw new Error(`router base not found: ${file}`);
+	const base: unknown = JSON.parse(readFileSync(file, "utf8"));
+	if (!isObject(base)) throw new Error(`router base is not a JSON object: ${file}`);
+	return base;
+}
+
 /**
  * Writes the agent dir of one orchestrator run (PI_CODING_AGENT_DIR): pi settings, task-router and
  * actor-subagents settings from the arm's factors, AGENTS.md (routing on → the new file, off → the old
@@ -61,11 +82,11 @@ export function materializeAgentDir(o: { dir: string; arm: Arm; paths: Paths }):
 	};
 	mkdirSync(dir, { recursive: true });
 	put("settings.json", JSON.stringify(piSettings(), null, 2) + "\n");
-	put("task-router/settings.json", JSON.stringify({
+	put("task-router/settings.json", JSON.stringify(recursiveUpdate(routerBase(paths.router), {
 		routing,
 		delegation: { nudge: on(f.delegation) ? "on" : "off" },
 		t0Limits: T0_LIMITS[on(f.t0Widened) ? "on" : "off"],
-	}, null, 2) + "\n");
+	}), null, 2) + "\n");
 	put("actor-subagents/settings.json", JSON.stringify({ childExtensions: CHILD_EXTENSIONS.map((n) => `${paths.extDir}/${n}`) }, null, 2) + "\n");
 	copyFileSync(agents, join(dir, "AGENTS.md"));
 	const ic = join(paths.agentSrc, "infinite-context/settings.json");

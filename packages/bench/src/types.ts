@@ -32,6 +32,7 @@ export type Paths = {
 	agentSrc: string; // the live pi agent dir: credentials and models are linked from here into per-run agent dirs
 	agentsOn: string; // AGENTS.md of routing-on arms
 	agentsOff: string; // AGENTS.md of routing-off arms (the old manual rules)
+	router?: string; // JSON file (PI_BENCH_ROUTER): the base of an orch arm's task-router/settings.json; unset = {}
 };
 
 export type RunResult = {

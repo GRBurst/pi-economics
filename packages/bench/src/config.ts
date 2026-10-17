@@ -44,6 +44,7 @@ export function resolvePaths(env: Env, pkgRoot: string): Paths {
 		agentSrc,
 		agentsOn: env.PI_BENCH_AGENTS_ON ?? `${agentSrc}/AGENTS.md`,
 		agentsOff: env.PI_BENCH_AGENTS_OFF ?? `${agentSrc}/notes/2026-10-03-AGENTS.md.before`,
+		router: env.PI_BENCH_ROUTER,
 	};
 }
 
