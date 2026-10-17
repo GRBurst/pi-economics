@@ -23,6 +23,13 @@
   };
   # (M2.1)
   actorSubagents = self.packages.${pkgs.stdenv.hostPlatform.system}.actor-subagents;
+  # (M2.2) The patched source without upstream's tsconfig.json: tsc refuses
+  # files named on its command line next to one (TS5112), and the type check's
+  # flags are ours. package.json keeps the files ESM ("type": "module").
+  actorSubagentsTs = pkgs.runCommand "actor-subagents-ts" {} ''
+    mkdir $out
+    cp -r ${actorSubagents}/extensions ${actorSubagents}/package.json $out/
+  '';
 in {
   leak = leakLib.check leakSrc;
   leak-selftest = leakLib.selftest;
@@ -39,4 +46,8 @@ in {
   # The upstream suite of the patched pi-actor-subagents (spec §8.1), with the
   # host's check (checks/actor-subagents/default.nix, copied).
   actor-subagents = pkgs.callPackage ./actor-subagents {src = actorSubagents;};
+  typecheck-actor-subagents = typecheck.typecheck {
+    name = "actor-subagents";
+    src = actorSubagentsTs;
+  };
 }
