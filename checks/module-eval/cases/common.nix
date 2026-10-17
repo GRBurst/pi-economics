@@ -129,9 +129,52 @@ in {
   pisettings-defaults = let
     s = (pe (hm.eval {})).piSettings;
     moved = (pe (hm.eval {programs.piEconomics.agentDir = "custom/agent";})).piSettings;
+    one =
+      (pe (hm.eval {
+        programs.piEconomics.piSettings.ops.t = [
+          {
+            op = "set";
+            path = ["y"];
+            value = 1;
+          }
+        ];
+      })).piSettings;
   in
     eq "enable" s.enable true
     ++ eq "file" s.file ".pi/agent/settings.json"
     ++ eq "file follows agentDir" moved.file "custom/agent/settings.json"
-    ++ eq "after" s.after [];
+    ++ eq "after" s.after []
+    ++ eq "ops" s.ops {}
+    ++ eq "default order" (lib.head one.sortedOps).order 1000;
+
+  # (M0.12) (order, key, index); same order -> by contributor key (§8.1).
+  pisettings-order = let
+    s =
+      (pe (hm.eval {
+        programs.piEconomics.piSettings.ops = {
+          zeta = [(setX "z0" 1000) (setX "z1" 1000)];
+          alpha = [(setX "a0" 1000) (setX "a1" 2000)];
+          mid = [(setX "m0" 500)];
+        };
+      })).piSettings;
+  in
+    eq "execution order" (map (o: "${o.key}#${toString o.index}") s.sortedOps)
+    ["mid#0" "alpha#0" "zeta#0" "zeta#1" "alpha#1"];
+
+  # (M0.12) No whole-object set.
+  pisettings-path-empty = let
+    pathOf = path:
+      (lib.head
+        (pe (hm.eval {
+          programs.piEconomics.piSettings.ops.t = [
+            {
+              op = "set";
+              inherit path;
+              value = 1;
+            }
+          ];
+        })).piSettings.ops.t).path;
+  in
+    throws "path = []" (pathOf [])
+    ++ evaluates "path = [\"y\"]" (pathOf ["y"]);
 }

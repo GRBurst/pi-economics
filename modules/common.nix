@@ -45,6 +45,49 @@
       };
     };
   };
+
+  # (M0.12) One edit of pi's settings.json.
+  opModule = {
+    options = {
+      op = lib.mkOption {
+        type = lib.types.enum ["set" "ensureContains" "removeWhere"];
+        description = ''
+          `set`: the leaf becomes `value`. `ensureContains`: `value` is appended
+          to the list at `path` unless an equal element is there. `removeWhere`:
+          the list's elements equal to `value` are removed.
+        '';
+      };
+      path = lib.mkOption {
+        type = lib.types.nonEmptyListOf lib.types.str;
+        example = ["piRetry" "subagents" "match" "systemPromptRegex"];
+        description = "Object keys from the root to the leaf: a list, never a dotted string, and never empty (no whole-object set).";
+      };
+      value = lib.mkOption {
+        type = (pkgs.formats.json {}).type;
+        description = "The leaf (`set`) or the list element (`ensureContains`, `removeWhere`).";
+      };
+      order = lib.mkOption {
+        type = lib.types.int;
+        default = 1000;
+        description = "Ops run sorted by (order, contributor key, position in the contributor's list).";
+      };
+    };
+  };
+
+  # (M0.12) Every contributor's ops by (order, key, index): keying by
+  # contributor makes the order independent of the modules' import order.
+  sortedOps = let
+    flat = lib.concatLists (lib.mapAttrsToList
+      (key: ops: lib.imap0 (index: op: op // {inherit key index;}) ops)
+      cfg.piSettings.ops);
+    before = a: b:
+      if a.order != b.order
+      then a.order < b.order
+      else if a.key != b.key
+      then a.key < b.key
+      else a.index < b.index;
+  in
+    lib.sort before flat;
 in {
   options.programs.piEconomics = {
     # (M0.7)
@@ -88,10 +131,35 @@ in {
         default = [];
         description = "Activation entries `piSettingsMigrate` runs after, besides `writeBoundary`.";
       };
+
+      # (M0.12)
+      ops = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.listOf (lib.types.submodule opModule));
+        default = {};
+        description = ''
+          Leaf edits of pi's mutable settings.json, keyed by contributor (a
+          component's name, or a key of the host's own such as `host`). All
+          contributors' ops run in one jq program, sorted by (order,
+          contributor key, position in the list), each skipped on its own
+          when the file has another shape on the path; `false` on the way
+          leaves the whole file untouched. See docs/pi-economics.md.
+        '';
+      };
+      sortedOps = lib.mkOption {
+        type = lib.types.listOf lib.types.attrs;
+        readOnly = true;
+        internal = true;
+        description = "The ops in execution order, each with its contributor `key` and `index` (read by the checks).";
+      };
     };
   };
 
   config = {
+    # (M0.12)
+    programs.piEconomics.piSettings = {
+      inherit sortedOps;
+    };
+
     # (M0.8)
     home.file = lib.mapAttrs' (name: e:
       lib.nameValuePair "${cfg.agentDir}/extensions/${name}" {source = e.path;})
