@@ -172,7 +172,10 @@ and it is mixed with unrelated dotfiles.
 Documentation:
 
 - `docs/pi-token-economics.md` moves to this flake's `docs/`, scrubbed (§8.3).
-  The host keeps a pointer page, as `docs/terminal-kit.md` does.
+  The host keeps a pointer page, as `docs/terminal-kit.md` does. It moves in
+  the last of M0–M6 to land, once every component it describes is in the
+  flake, and before W, whose docs step turns the host's copy into the
+  pointer (M0 plan, Q5).
 - The 2026-10-02 spec and plan stay in the host as history. Code comments that
   cite them ("spec §5.2.5", "T5.21") are re-pointed to this spec or the moved
   doc.
@@ -756,7 +759,10 @@ Arms:
   repository, and then the leak check's exclusion is removed.
 - **Fixtures and defaults:**
   - A fixture that only feeds a test and names a real host or person is
-    rewritten with a neutral name when moved.
+    rewritten with a neutral name when moved. The coordinates of a public
+    upstream package (e.g. `fdietze/pi-claude-auth` in the piSettings
+    fixtures) are not a person's name in this sense: they stay, and so does
+    the byte check against the old script (M0 plan, Q3).
   - Two tests assert the default itself and stay unchanged during the move:
     `task-router/test/settings.test.ts:26` and `policy.test.ts:82` (the
     harness starts from `defaults()`, `harness.ts:35`). Rewritten alone, they
