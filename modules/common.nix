@@ -161,6 +161,12 @@
       echo "pi-settings-migrate: migrated $f" >&2
     '';
   };
+
+  # (M0.17)
+  absFile =
+    if lib.hasPrefix "/" cfg.piSettings.file
+    then cfg.piSettings.file
+    else "${config.home.homeDirectory}/${cfg.piSettings.file}";
 in {
   options.programs.piEconomics = {
     # (M0.7)
@@ -269,5 +275,12 @@ in {
           );
       })
       cfg.extensions;
+
+    # (M0.17) The name the host's checks read (spec §5.4, "Activation").
+    home.activation = lib.mkIf (cfg.piSettings.enable && sortedOps != []) {
+      piSettingsMigrate = lib.hm.dag.entryAfter (["writeBoundary"] ++ cfg.piSettings.after) ''
+        run ${lib.getExe script} ${lib.escapeShellArg absFile}
+      '';
+    };
   };
 }

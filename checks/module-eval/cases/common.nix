@@ -196,4 +196,56 @@ in {
         && lib.hasInfix (builtins.toJSON op.value) line
       ))
     s.sortedOps);
+
+  # (M0.17)
+  pisettings-activation = let
+    c = hm.eval {
+      programs.piEconomics.piSettings = {
+        ops = today.withWarming;
+        after = ["seed" "reclaim"];
+      };
+    };
+    e = activation c;
+  in
+    holds "entry piSettingsMigrate exists" (e != null)
+    ++ lib.optionals (e != null) (
+      eq "data" e.data (runLine c "${c.home.homeDirectory}/${(pe c).piSettings.file}")
+      ++ eq "after" e.after ["writeBoundary" "seed" "reclaim"]
+      ++ eq "before" e.before []
+    );
+  pisettings-disabled = let
+    c = hm.eval {
+      programs.piEconomics.piSettings = {
+        enable = false;
+        ops = today.withWarming;
+      };
+    };
+  in
+    holds "no entry while enable = false, with ops from ${toString (lib.attrNames today.withWarming)}" (activation c == null);
+  pisettings-no-ops =
+    holds "no entry without ops" (activation (hm.eval {}) == null)
+    ++ holds "no entry with only empty lists" (activation (hm.eval {programs.piEconomics.piSettings.ops.retry = [];}) == null);
+  pisettings-file =
+    lib.concatMap ({
+      file,
+      abs,
+    }: let
+      c = hm.eval {
+        programs.piEconomics.piSettings = {
+          inherit file;
+          ops = today.withoutWarming;
+        };
+      };
+    in
+      eq "data for file = ${file}" (dataOf c) (runLine c (abs c)))
+    [
+      {
+        file = ".local/state/pi/settings.json";
+        abs = c: "${c.home.homeDirectory}/.local/state/pi/settings.json";
+      }
+      {
+        file = "/var/lib/pi/settings.json";
+        abs = _: "/var/lib/pi/settings.json";
+      }
+    ];
 }
