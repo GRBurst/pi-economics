@@ -7,6 +7,12 @@
   home-manager,
 }: let
   leakLib = import ./leak {inherit lib pkgs;};
+  # Until P (spec §8.3): the spec and the plans name the owner's hosts and home.
+  leakSrc = lib.fileset.toSource {
+    root = ../.;
+    fileset = lib.fileset.difference ../. (lib.fileset.unions [../docs/specs ../docs/plans]);
+  };
 in {
+  leak = leakLib.check leakSrc;
   leak-selftest = leakLib.selftest;
 }
