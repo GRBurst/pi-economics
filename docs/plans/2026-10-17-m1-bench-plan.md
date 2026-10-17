@@ -202,8 +202,8 @@ Every task starts at `[ ]`. Order as numbered. Never more than one red check at 
 
 ### Task M1.0 — Read, and check drift
 
-- [ ] **Step 1:** read "Files to read first".
-- [ ] **Step 2 (drift, §9):**
+- [x] **Step 1:** read "Files to read first".
+- [x] **Step 2 (drift, §9):**
 
 ```sh
 (cd ~/projects/nixos/new && git dot diff --stat f6a3c81 -- pkgs/pi-bench \
@@ -218,10 +218,10 @@ Expected: no file line, `rc=0`. A listed file is drift: stop and report; it is p
 
 **Files:** `flake.nix`, `checks/default.nix` (S1); create `packages/bench/**`.
 
-- [ ] **Step 1:** add the `packages` line to `flake.nix` and the `bench` check to `checks/default.nix` as in S1 (not yet `typecheck-bench`).
-- [ ] **Step 2 (RED):** `nb bench` → evaluation error: `path '…/packages/bench/package.nix' does not exist`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):**
+- [x] **Step 1:** add the `packages` line to `flake.nix` and the `bench` check to `checks/default.nix` as in S1 (not yet `typecheck-bench`).
+- [x] **Step 2 (RED):** `nb bench` → evaluation error: `path '…/packages/bench/package.nix' does not exist`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):**
 
 ```sh
 mkdir -p packages
@@ -235,110 +235,110 @@ nbl bench
 ```
 
 Expected: `identical`; mode `100755` for both shims; the log ends with `ℹ tests 71`, `ℹ pass 71`, `ℹ fail 0`.
-- [ ] **Step 4:** `nb leak` → passes (the package is scanned); `ne packages.x86_64-linux --apply builtins.attrNames --json` → `["bench"]`.
-- [ ] **Step 5 (planted):** `sed -i 's/timeoutSec({}), 5400)/timeoutSec({}), 5401)/' packages/bench/test/run.test.ts; nb bench` → fails with `✖ timeout default is 5400 s, BENCH_TIMEOUT overrides`. `git checkout packages/bench/test/run.test.ts`.
-  - [ ] red seen
-- [ ] **Step 6 (CLEAN):** `fmt flake.nix checks/default.nix`; `git status --short` lists only the files above. Commit.
+- [x] **Step 4:** `nb leak` → passes (the package is scanned); `ne packages.x86_64-linux --apply builtins.attrNames --json` → `["bench"]`.
+- [x] **Step 5 (planted):** `sed -i 's/timeoutSec({}), 5400)/timeoutSec({}), 5401)/' packages/bench/test/run.test.ts; nb bench` → fails with `✖ timeout default is 5400 s, BENCH_TIMEOUT overrides`. `git checkout packages/bench/test/run.test.ts`.
+  - [x] red seen
+- [x] **Step 6 (CLEAN):** `fmt flake.nix checks/default.nix`; `git status --short` lists only the files above. Commit.
 
 ### Task M1.2 — `typecheck-bench`
 
 **Files:** `checks/default.nix` (S1, the `typecheck-bench` entry), `packages/bench/src/report.ts` (S2).
 
-- [ ] **Step 1:** add `typecheck-bench` to `checks/default.nix` (S1).
-- [ ] **Step 2 (RED):** `nb typecheck-bench` → fails, single error `src/report.ts:131:83 - error TS7053: Element implicitly has an 'any' type …`, `Found 1 error`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** the edit of S2. `nb typecheck-bench` → passes.
-- [ ] **Step 4 (behaviour kept, §8.1):** `nbl bench` → `ℹ pass 71`, `ℹ fail 0`; `git diff -U0 packages/bench/src/report.ts` shows exactly the lines of S2 (two changed, one added, all types).
-- [ ] **Step 5 (CLEAN):** `fmt checks/default.nix`. Commit.
+- [x] **Step 1:** add `typecheck-bench` to `checks/default.nix` (S1).
+- [x] **Step 2 (RED):** `nb typecheck-bench` → fails, single error `src/report.ts:131:83 - error TS7053: Element implicitly has an 'any' type …`, `Found 1 error`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** the edit of S2. `nb typecheck-bench` → passes.
+- [x] **Step 4 (behaviour kept, §8.1):** `nbl bench` → `ℹ pass 71`, `ℹ fail 0`; `git diff -U0 packages/bench/src/report.ts` shows exactly the lines of S2 (two changed, one added, all types).
+- [x] **Step 5 (CLEAN):** `fmt checks/default.nix`. Commit.
 
 ### Task M1.3 — Router base in the bench
 
 **Files:** create `packages/bench/test/router.test.ts` (S3); modify `packages/bench/src/{types,config,orch}.ts` (S4).
 
-- [ ] **Step 1:** write `test/router.test.ts` (S3). `git add packages/bench/test/router.test.ts`.
-- [ ] **Step 2 (RED):** `nb bench` → fails; the log names `test/router.test.ts` with `SyntaxError: The requested module '../src/orch.ts' does not provide an export named 'recursiveUpdate'`. (`typecheck-bench` is red too, TS2305, same cause.)
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** the three edits of S4. `nbl bench` → `ℹ tests 76`, `ℹ pass 76`; the five `router.test.ts` names appear with `✔`. `nb typecheck-bench` → passes.
-- [ ] **Step 4:** the copied suites are untouched: `git diff --stat packages/bench/test` lists nothing (the new file is staged as added, no copied file modified).
-- [ ] **Step 5 (planted):** (a) in `orch.ts` replace `JSON.stringify(recursiveUpdate(routerBase(paths.router), {` by `JSON.stringify(Object.assign(routerBase(paths.router), {` → `nb bench` fails with `✖ router base: merged under the arm's keys, deeply; …`; restore. (b) replace that writer's `}), null, 2) + "\n");` by `})) + "\n");` → `✖ router unset or {}: …`; restore. Restore with `git checkout` only if the file was committed; otherwise undo the `sed`/edit by hand and check `git diff` against S4.
-  - [ ] red seen (a)
-  - [ ] red seen (b)
-- [ ] **Step 6 (CLEAN):** `nb bench` and `nb typecheck-bench` green. Commit.
+- [x] **Step 1:** write `test/router.test.ts` (S3). `git add packages/bench/test/router.test.ts`.
+- [x] **Step 2 (RED):** `nb bench` → fails; the log names `test/router.test.ts` with `SyntaxError: The requested module '../src/orch.ts' does not provide an export named 'recursiveUpdate'`. (`typecheck-bench` is red too, TS2305, same cause.)
+  - [x] red seen
+- [x] **Step 3 (GREEN):** the three edits of S4. `nbl bench` → `ℹ tests 76`, `ℹ pass 76`; the five `router.test.ts` names appear with `✔`. `nb typecheck-bench` → passes.
+- [x] **Step 4:** the copied suites are untouched: `git diff --stat packages/bench/test` lists nothing (the new file is staged as added, no copied file modified).
+- [x] **Step 5 (planted):** (a) in `orch.ts` replace `JSON.stringify(recursiveUpdate(routerBase(paths.router), {` by `JSON.stringify(Object.assign(routerBase(paths.router), {` → `nb bench` fails with `✖ router base: merged under the arm's keys, deeply; …`; restore. (b) replace that writer's `}), null, 2) + "\n");` by `})) + "\n");` → `✖ router unset or {}: …`; restore. Restore with `git checkout` only if the file was committed; otherwise undo the `sed`/edit by hand and check `git diff` against S4.
+  - [x] red seen (a)
+  - [x] red seen (b)
+- [x] **Step 6 (CLEAN):** `nb bench` and `nb typecheck-bench` green. Commit.
 
 ### Task M1.4 — Case files take the arguments they name (refactor)
 
 **Files:** `checks/module-eval/default.nix` (S5, the `f`/`new` lines only).
 
-- [ ] **Step 1 (before):** `nbl module-eval` → `module-eval: 16 cases passed`.
-- [ ] **Step 2 (planted RED):** create `checks/module-eval/cases/bench.nix` as `{pkgs, ...}: {}` and add it to `caseFiles`; `git add` it; `nb module-eval` → evaluation error, the function called without required argument `pkgs`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** the `f`/`new` lines of S5. `nb module-eval` → passes (`16 cases passed`, the empty file adds none).
-- [ ] **Step 4 (after):** remove the placeholder file and its `caseFiles` line (`git rm -q --cached checks/module-eval/cases/bench.nix; rm …`); `nbl module-eval` → `module-eval: 16 cases passed`, as in Step 1.
-- [ ] **Step 5 (CLEAN):** `fmt checks/module-eval/default.nix`. Commit.
+- [x] **Step 1 (before):** `nbl module-eval` → `module-eval: 16 cases passed`.
+- [x] **Step 2 (planted RED):** create `checks/module-eval/cases/bench.nix` as `{pkgs, ...}: {}` and add it to `caseFiles`; `git add` it; `nb module-eval` → evaluation error, the function called without required argument `pkgs`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** the `f`/`new` lines of S5. `nb module-eval` → passes (`16 cases passed`, the empty file adds none).
+- [x] **Step 4 (after):** remove the placeholder file and its `caseFiles` line (`git rm -q --cached checks/module-eval/cases/bench.nix; rm …`); `nbl module-eval` → `module-eval: 16 cases passed`, as in Step 1.
+- [x] **Step 5 (CLEAN):** `fmt checks/module-eval/default.nix`. Commit.
 
 ### Task M1.5 — Module: `enable`, `package`, `dataDir`, agent source
 
 **Files:** create `modules/bench.nix` (S6 without the options and lines tagged M1.6–M1.8), `checks/module-eval/cases/bench.nix` (S7: `bench-off`, `bench-defaults`, `bench-today`); modify `modules/default.nix` (S8), `checks/module-eval/default.nix` (`./cases/bench.nix` in `caseFiles`).
 
-- [ ] **Step 1:** write the case file with the three cases; list it in `caseFiles`. `git add checks/module-eval/cases/bench.nix`.
-- [ ] **Step 2 (RED):** `nb module-eval` → evaluation error `The option `programs.piEconomics.bench' does not exist`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** `modules/bench.nix` with `enable`, `package`, `dataDir` and the config block whose `sessionVariables` has only `PI_BENCH_DATA` and `PI_BENCH_AGENT_SRC`; the import in `modules/default.nix`. `git add modules/bench.nix`. `nbl module-eval` → `module-eval: 19 cases passed`.
-- [ ] **Step 4:** `nb leak` passes.
-- [ ] **Step 5 (planted):** (a) `enable = lib.mkEnableOption "…" // {default = true;};` → `FAIL bench-off: PI_BENCH_ variables: expected { }, got { … }`; revert. (b) `dataDir` default `"${config.home.homeDirectory}/.pi/agent/bench"` → `FAIL bench-defaults: PI_BENCH_ variables (custom/agent): …`; revert.
-  - [ ] red seen (a)
-  - [ ] red seen (b)
-- [ ] **Step 6 (CLEAN):** `fmt modules/bench.nix modules/default.nix checks/module-eval/default.nix checks/module-eval/cases/bench.nix`. Commit.
+- [x] **Step 1:** write the case file with the three cases; list it in `caseFiles`. `git add checks/module-eval/cases/bench.nix`.
+- [x] **Step 2 (RED):** `nb module-eval` → evaluation error `The option `programs.piEconomics.bench' does not exist`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** `modules/bench.nix` with `enable`, `package`, `dataDir` and the config block whose `sessionVariables` has only `PI_BENCH_DATA` and `PI_BENCH_AGENT_SRC`; the import in `modules/default.nix`. `git add modules/bench.nix`. `nbl module-eval` → `module-eval: 19 cases passed`.
+- [x] **Step 4:** `nb leak` passes.
+- [x] **Step 5 (planted):** (a) `enable = lib.mkEnableOption "…" // {default = true;};` → `FAIL bench-off: PI_BENCH_ variables: expected { }, got { … }`; revert. (b) `dataDir` default `"${config.home.homeDirectory}/.pi/agent/bench"` → `FAIL bench-defaults: PI_BENCH_ variables (custom/agent): …`; revert.
+  - [x] red seen (a)
+  - [x] red seen (b)
+- [x] **Step 6 (CLEAN):** `fmt modules/bench.nix modules/default.nix checks/module-eval/default.nix checks/module-eval/cases/bench.nix`. Commit.
 
 ### Task M1.6 — `workDir`, `agentsBaseline`
 
 **Files:** `modules/bench.nix` (S6, tagged M1.6), `checks/module-eval/cases/bench.nix` (S7 `bench-paths`).
 
-- [ ] **Step 1:** add `bench-paths`.
-- [ ] **Step 2 (RED):** `nb module-eval` → `The option `programs.piEconomics.bench.workDir' does not exist`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** the two options and their two `optionalAttrs` lines. `nbl module-eval` → `20 cases passed` (`bench-defaults` stays green: `null` exports nothing).
-- [ ] **Step 4 (CLEAN):** `fmt` both files. Commit.
+- [x] **Step 1:** add `bench-paths`.
+- [x] **Step 2 (RED):** `nb module-eval` → `The option `programs.piEconomics.bench.workDir' does not exist`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** the two options and their two `optionalAttrs` lines. `nbl module-eval` → `20 cases passed` (`bench-defaults` stays green: `null` exports nothing).
+- [x] **Step 4 (CLEAN):** `fmt` both files. Commit.
 
 ### Task M1.7 — `extensions`
 
 **Files:** `modules/bench.nix` (S6, tagged M1.7), `checks/module-eval/cases/bench.nix` (S7 `bench-extensions`).
 
-- [ ] **Step 1:** add `bench-extensions`.
-- [ ] **Step 2 (RED):** `nb module-eval` → `The option `programs.piEconomics.bench.extensions' does not exist`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** the option and its `optionalAttrs (cfg.extensions != {})` line. `nbl module-eval` → `21 cases passed`.
-- [ ] **Step 4 (planted):** `lib.optionalAttrs true` for that line → `FAIL bench-defaults: PI_BENCH_ variables (.pi/agent): … PI_BENCH_EXT_DIR …`; revert.
-  - [ ] red seen
-- [ ] **Step 5 (CLEAN):** `fmt` both files. Commit.
+- [x] **Step 1:** add `bench-extensions`.
+- [x] **Step 2 (RED):** `nb module-eval` → `The option `programs.piEconomics.bench.extensions' does not exist`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** the option and its `optionalAttrs (cfg.extensions != {})` line. `nbl module-eval` → `21 cases passed`.
+- [x] **Step 4 (planted):** `lib.optionalAttrs true` for that line → `FAIL bench-defaults: PI_BENCH_ variables (.pi/agent): … PI_BENCH_EXT_DIR …`; revert.
+  - [x] red seen
+- [x] **Step 5 (CLEAN):** `fmt` both files. Commit.
 
 ### Task M1.8 — `router`
 
 **Files:** `modules/bench.nix` (S6, tagged M1.8), `checks/module-eval/cases/bench.nix` (S7 `bench-router`).
 
-- [ ] **Step 1:** add `bench-router`.
-- [ ] **Step 2 (RED):** `nb module-eval` → `The option `programs.piEconomics.bench.router' does not exist`.
-  - [ ] red seen
-- [ ] **Step 3 (GREEN):** the option and its `optionalAttrs (cfg.router != {})` line. `nbl module-eval` → `22 cases passed`.
-- [ ] **Step 4 (planted):** `lib.optionalAttrs true` for that line → `FAIL bench-defaults: PI_BENCH_ variables (.pi/agent): … PI_BENCH_ROUTER = "/nix/store/…-pi-bench-router.json"; }` (and the `custom/agent` line); revert.
-  - [ ] red seen
-- [ ] **Step 5 (CLEAN):** `fmt` both files; S6 and S7 now hold in full (`diff` the files with the snippets). Commit.
+- [x] **Step 1:** add `bench-router`.
+- [x] **Step 2 (RED):** `nb module-eval` → `The option `programs.piEconomics.bench.router' does not exist`.
+  - [x] red seen
+- [x] **Step 3 (GREEN):** the option and its `optionalAttrs (cfg.router != {})` line. `nbl module-eval` → `22 cases passed`.
+- [x] **Step 4 (planted):** `lib.optionalAttrs true` for that line → `FAIL bench-defaults: PI_BENCH_ variables (.pi/agent): … PI_BENCH_ROUTER = "/nix/store/…-pi-bench-router.json"; }` (and the `custom/agent` line); revert.
+  - [x] red seen
+- [x] **Step 5 (CLEAN):** `fmt` both files; S6 and S7 now hold in full (`diff` the files with the snippets). Commit.
 
 ### Task M1.9 — Re-point citations (§2)
 
 **Files:** `packages/bench/src/orch.ts`, `packages/bench/test/orch.test.ts`, `packages/bench/README.md` (S9). Comment and doc lines only; the test file's change is its first comment line (§2 requires it; no test changes).
 
-- [ ] **Step 1:** the edits of S9.
-- [ ] **Step 2:** `grep -rnE '§5\.6\.5|T10\.5|T0\.3|plan S14' packages/bench; echo "rc=$?"` → no line, `rc=1`.
-- [ ] **Step 3 (behaviour kept):** `git diff -U0 packages/bench/src packages/bench/test | grep '^[-+][^-+]'` shows only lines starting with `/**` or `//`; `nbl bench` → `ℹ pass 76`; `nb typecheck-bench`, `nb leak` pass.
-- [ ] **Step 4:** commit.
+- [x] **Step 1:** the edits of S9.
+- [x] **Step 2:** `grep -rnE '§5\.6\.5|T10\.5|T0\.3|plan S14' packages/bench; echo "rc=$?"` → no line, `rc=1`.
+- [x] **Step 3 (behaviour kept):** `git diff -U0 packages/bench/src packages/bench/test | grep '^[-+][^-+]'` shows only lines starting with `/**` or `//`; `nbl bench` → `ℹ pass 76`; `nb typecheck-bench`, `nb leak` pass.
+- [x] **Step 4:** commit.
 
 ### Task M1.10 — Docs
 
 **Files:** `docs/pi-economics.md` (S10).
 
-- [ ] **Step 1:** add the section and the two check rows of S10.
-- [ ] **Step 2:** every option is named:
+- [x] **Step 1:** add the section and the two check rows of S10.
+- [x] **Step 2:** every option is named:
 
 ```sh
 for p in enable package dataDir workDir extensions router agentsBaseline PI_BENCH_DATA PI_BENCH_AGENT_SRC PI_BENCH_WORK PI_BENCH_EXT_DIR PI_BENCH_ROUTER PI_BENCH_AGENTS_OFF; do
@@ -347,11 +347,11 @@ done
 ```
 
 Expected: no `MISSING`. `nb leak` passes.
-- [ ] **Step 3:** commit.
+- [x] **Step 3:** commit.
 
 ### Task M1.11 — Gate and Execution Record
 
-- [ ] **Step 1 (the gate, both refs):**
+- [x] **Step 1 (the gate, both refs):**
 
 ```sh
 for ref in "$F" "$Fp"; do
@@ -369,10 +369,10 @@ fmt --check $(git ls-files '*.nix')
 ```
 
 Expected, per ref: `bench leak leak-selftest module-eval npm-deps pi-settings-migrate typecheck-bench typecheck-harness`; no `FAILED`; `["bench"]`; `["default"]`; a `.drv`; Alejandra clean. For honest timings delete each output first (`nbl`'s way), at least for the `git+file:` pass.
-- [ ] **Step 2:** `git ls-files -s packages/bench/bin` still `100755`.
-- [ ] **Step 3:** drift again (M1.0 Step 2), and `git dot diff --stat <M1.0's host HEAD> HEAD -- pkgs/pi-bench`: empty, or ported first.
-- [ ] **Step 4:** fill `# Execution Record`: date, commit per task, boxes ticked, red messages seen, the gate's peaks and times, deviations, answers to the open questions.
-- [ ] **Step 5:** commit.
+- [x] **Step 2:** `git ls-files -s packages/bench/bin` still `100755`.
+- [x] **Step 3:** drift again (M1.0 Step 2), and `git dot diff --stat <M1.0's host HEAD> HEAD -- pkgs/pi-bench`: empty, or ported first.
+- [x] **Step 4:** fill `# Execution Record`: date, commit per task, boxes ticked, red messages seen, the gate's peaks and times, deviations, answers to the open questions.
+- [x] **Step 5:** commit.
 
 ---
 
@@ -871,3 +871,41 @@ Each with the planner's proposed decision; the plan follows the proposal.
 - **Q7 (D11).** The module-eval harness now passes case files only the arguments they name. Proposal: accept; M0's interface ("a milestone adds `./cases/<component>.nix`") is unchanged.
 
 # Execution Record
+
+Executed 2026-10-17 (agent impl-m1), on the plan at `31f2a7e` and the spec as then committed. Q1–Q7 accepted as the plan states them. Every box ticked; commands as in "Environment", one capped `nix build` per check (`ulimit -v 20971520`, `timeout -s KILL`), `--option eval-cache false`; the host only read through `git dot`. M1.0: `git dot diff --stat f6a3c81 -- <the listed paths>` empty, rc=0 (host HEAD `df23ba2` then; at M1.11 it was `14b84d9`, and `git dot diff --stat df23ba2 HEAD -- pkgs/pi-bench` is empty, rc=0).
+
+| Task | Commit | Red seen | Deviation |
+|---|---|---|---|
+| M1.0 | — | — | none; drift check empty |
+| M1.1 | `9a546b5` | `Path 'packages/bench/package.nix' does not exist in Git repository`; planted `5401` → `✖ timeout default is 5400 s, BENCH_TIMEOUT overrides` | none; `diff -r` with the host tree `identical`; modes `100755`; log `ℹ tests 71`, `ℹ pass 71`; `packages.x86_64-linux` = `["bench"]`; `leak` green |
+| M1.2 | `3bc9b9b` | `src/report.ts:131:83 - error TS7053`, `Found 1 error in src/report.ts:131` | none; the diff of `report.ts` is the S2 lines; `ℹ pass 71` after |
+| M1.3 | `5157834` | `SyntaxError: The requested module '../src/orch.ts' does not provide an export named 'recursiveUpdate'` (`typecheck-bench`: TS2305 and TS2339 on `router`); planted (a) `Object.assign` → `✖ router base: merged under the arm's keys, deeply; …`; planted (b) no `, null, 2` → `✖ router unset or {}: every arm's task-router/settings.json is today's, byte for byte` | none; `ℹ tests 76`, `ℹ pass 76`, the five `router.test.ts` names `✔`; no copied test file touched. A first attempt to insert the S4 helpers with `sed … r` inserted nothing (7 `ReferenceError: recursiveUpdate is not defined` failures, an intermediate state); redone with the edit tool, then green |
+| M1.4 | `2b474e8` | `function 'anonymous lambda' called without required argument 'pkgs'` | none; `16 cases passed` before and after (the placeholder file adds none); the output is the same derivation as before |
+| M1.5 | `20e1737` | `The option `programs.piEconomics.bench' does not exist`; planted (a) `enable` default `true` → `FAIL bench-off: PI_BENCH_ variables: expected { }, got { PI_BENCH_AGENT_SRC = …; PI_BENCH_DATA = …; }` (plus `home.packages`, 2 failures); planted (b) hard-coded `dataDir` → `FAIL bench-defaults: PI_BENCH_ variables (custom/agent): …` | the case file's header was written without `pkgs`/`fx` and gained them in M1.7, where they are first used (final file equals S7); 19 cases |
+| M1.6 | `c5d9747` | `The option `programs.piEconomics.bench.agentsBaseline' does not exist` (the plan expects `workDir`; the module system names the alphabetically first missing one, same cause) | none; 20 cases |
+| M1.7 | `96f8657` | `The option `programs.piEconomics.bench.extensions' does not exist`; planted `optionalAttrs true` → `FAIL bench-defaults: PI_BENCH_ variables (.pi/agent): … PI_BENCH_EXT_DIR = "/nix/store/…-pi-bench-extensions"` (both dirs, 2 failures) | none; 21 cases |
+| M1.8 | `6a0fd4b` | `The option `programs.piEconomics.bench.router' does not exist`; planted `optionalAttrs true` → `FAIL bench-defaults: PI_BENCH_ variables (.pi/agent): … PI_BENCH_ROUTER = "/nix/store/…-pi-bench-router.json"` (both dirs) | `modules/bench.nix` first lacked the `# (M1.x)` task tags that S6 carries; added so that `diff` with S6 and S7 is empty; 22 cases |
+| M1.9 | `a33f4a9` | — (comments and docs) | none; `grep` for the old citations empty, rc=1; the diff of `src/` and `test/` is three comment lines; `ℹ pass 76`; `typecheck-bench`, `leak` green |
+| M1.10 | `6ed5a4b` | — (docs) | none; no `MISSING`; `leak` green |
+| M1.11 | this record's commit | — | see below |
+
+All nine planted violations were seen failing with the plan's message (the `5401`, `Object.assign`, no-indentation, missing-`pkgs`, `enable`-default, `dataDir`, `extensions` and `router` plants, and the natural TS7053).
+
+## Gate (M1.11), 2026-10-17
+
+Each check's output deleted from the store before its build (both refs), then built once under `ulimit -v 20971520` and `timeout -s KILL 900`, `--option eval-cache false`; GNU `time` (`env time`) from the system profile; the machine's load average was about 20 (a host process), so the times are not the quiet-machine ones. The listing is the same under both refs: `bench leak leak-selftest module-eval npm-deps pi-settings-migrate typecheck-bench typecheck-harness`. No `FAILED`, no `LISTING FAILED`.
+
+| Check | `git+file://` peak · time | `path:` peak · time |
+|---|---|---|
+| `bench` (76 tests) | 154608 KiB · 11.97 s | 154224 KiB · 11.82 s |
+| `leak` | 239240 KiB · 5.11 s | 239852 KiB · 6.34 s |
+| `leak-selftest` | 239076 KiB · 6.05 s | 239280 KiB · 5.15 s |
+| `module-eval` (22 cases) | 822644 KiB · 34.43 s | 979232 KiB · 32.66 s |
+| `npm-deps` | 156824 KiB · 4.97 s | 156592 KiB · 3.26 s |
+| `pi-settings-migrate` | 561680 KiB · 27.75 s | 560440 KiB · 30.64 s |
+| `typecheck-bench` | 244980 KiB · 11.10 s | 245044 KiB · 11.45 s |
+| `typecheck-harness` | 245168 KiB · 23.83 s | 245276 KiB · 26.08 s |
+
+`packages.x86_64-linux` is `["bench"]`; `homeModules` is `["default"]`; `formatter.x86_64-linux.drvPath` evaluates; `alejandra --check` over every tracked `.nix` file is clean; `git ls-files -s packages/bench/bin` is `100755` for both shims.
+
+Deviations from the plan, all small: the three recorded in the table (the `sed r` redo, the `pkgs`/`fx` header lines arriving with M1.7, the `# (M1.x)` tags added in M1.8); the red message of M1.6 names `agentsBaseline`; `python3` is absent, so file edits used the edit tool and `sed`; a `module-eval` build timed out once at the tool's 300 s under the machine's load and was run again unchanged. Open questions Q1–Q7: accepted as proposed; none new. Follow-ups, not done (outside the plan): `AGENTS.md` does not mention `packages/` yet; W1 decides Q2 (the host's `packages.pi-bench` readers).
