@@ -188,7 +188,7 @@ function experiment(meter: any[], rows: any[], expSettings: any): DesignResult[]
     const known = DESIGNS[design];
     const factors = known ? known.map(([n]) => n) : [...new Set(arms.flatMap((a) => Object.keys(info.get(a)!.flags)))];
     const levels = (f: string): [string, string] => known?.find(([n]) => n === f)?.[1] ?? ([...new Set(arms.map((a) => info.get(a)!.flags[f]))].sort().concat(["", ""]).slice(0, 2) as [string, string]);
-    const data = units.filter((u) => arms.includes(u.arm)).map((u) => ({ ...info.get(u.arm)!.flags, y: u.cost / u.hours }));
+    const data: (Record<string, string | number> & { y: number })[] = units.filter((u) => arms.includes(u.arm)).map((u) => ({ ...info.get(u.arm)!.flags, y: u.cost / u.hours }));
     const effects = factors.map((f) => {
       const [low, high] = levels(f);
       const hi = data.filter((d) => d[f] === high).map((d) => d.y);
