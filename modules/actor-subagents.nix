@@ -8,7 +8,8 @@
   pkgs,
   ...
 }: let
-  cfg = config.programs.piEconomics.actorSubagents;
+  pe = config.programs.piEconomics;
+  cfg = pe.actorSubagents;
 in {
   options.programs.piEconomics.actorSubagents = {
     enable = lib.mkEnableOption "pi-actor-subagents, background agents spawned and supervised from a pi session";
@@ -47,5 +48,10 @@ in {
       forChildren = false;
       description = "Spawns and supervises background agents from the session, with a live status panel: spawn_subagent, send_message, set_agent_model, list_agents, kill_agent, agent_history, set_status, resume_agents, plus the /agents* commands. Swarms persist beside the main session.";
     };
+
+    # (M2.7; M2.8 adds the merge) One writer (spec §5.1). Literal text, so
+    # checks read it with fromJSON (spec §4).
+    home.file."${pe.agentDir}/actor-subagents/settings.json".text =
+      builtins.toJSON {inherit (pe) childExtensions;};
   };
 }

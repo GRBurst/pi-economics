@@ -105,4 +105,34 @@ in {
     eq "failed assertions" (failed "pi-economics:" c) [
       "pi-economics: extension 'actor-subagents' not found at ${(pe c).extensions.actor-subagents.checkPath}; the pi-actor-subagents input may have renamed or removed it."
     ];
+
+  # (M2.7) The settings file: written only while enabled, next to the link;
+  # with no child registered, an empty list.
+  actor-subagents-files =
+    lib.concatMap (dir: let
+      c = hm.eval {
+        programs.piEconomics = {
+          agentDir = dir;
+          actorSubagents.enable = true;
+        };
+      };
+    in
+      eq "home.file targets (${dir})" (lib.sort lib.lessThan (targets c))
+      (lib.sort lib.lessThan (targets bare ++ ["${dir}/extensions/actor-subagents" "${dir}/actor-subagents/settings.json"]))
+      ++ eq "settings file (${dir})" (settingsText dir c) ''{"childExtensions":[]}'')
+    dirs
+    ++ eq "settings file while off" (settingsText ".pi/agent" (eval ".pi/agent" null)) null;
+
+  # (M2.7) Today's file (host pi-extensions.nix:389-390): builtins.toJSON of
+  # { childExtensions = <the children's link paths>; } and no other key.
+  actor-subagents-today = let
+    c = eval ".pi/agent" {};
+    text = settingsText ".pi/agent" c;
+  in
+    eq "settings file" text (builtins.toJSON {childExtensions = (pe c).childExtensions;})
+    ++ eq "keys" (
+      if text == null
+      then null
+      else lib.attrNames (builtins.fromJSON text)
+    ) ["childExtensions"];
 }
