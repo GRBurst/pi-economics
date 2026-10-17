@@ -44,4 +44,9 @@ Commits are unsigned: `git -c commit.gpgsign=false commit`.
   URLs or private (RFC 1918) addresses. Fixtures use the user `u`.
 - `checks/pi-settings-migrate/legacy.nix` is the host's former script, kept
   verbatim as a test oracle. Do not edit it.
+- A consumer's copy of a cross-extension API type gets an `iface.compare`
+  check in `checks/default.nix` (spec §5.3); its sources hold no
+  `tsconfig.json`.
+- Patched upstreams: `patches/<input>/`, file names as the host had them;
+  the module reads the input through its internal `src` option.
 - `flake.lock` changes only when a task needs it.

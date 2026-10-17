@@ -23,8 +23,10 @@ sets this option.
 - An assertion requires `checkPath` to exist. For a patched source, point it
   at the unpatched input's entry file (probing a build output would be
   import-from-derivation); its message names `input`.
-- `forChildren` selects the extensions actor-subagents children load
-  (`childExtensions`, rendered with the `actorSubagents` component).
+- `forChildren` selects the extensions actor-subagents children load: their
+  link paths `<home>/<agentDir>/extensions/<name>`, sorted by name, are
+  `childExtensions` in `actor-subagents/settings.json` while `actorSubagents`
+  is enabled.
 
 ### `piSettings`
 
@@ -72,6 +74,30 @@ at its empty default exports nothing, and the bench keeps its own default.
 | `router` | `{}` (an arm's file: its own keys) | `PI_BENCH_ROUTER`, a JSON file; an orch arm merges its `routing`, `delegation`, `t0Limits` over it as `lib.recursiveUpdate` does |
 | `agentsBaseline` | `null` (the bench: `<agent source>/notes/…`) | `PI_BENCH_AGENTS_OFF` |
 
+### `actorSubagents` (`modules/actor-subagents.nix`)
+
+pi-actor-subagents (upstream input `pi-actor-subagents`) with three patches
+from `patches/pi-actor-subagents`: child prompt, spawn policy (the
+`globalThis.__subagentsApi_v1` other extensions drive) and first turn.
+
+| Option | Default | Effect |
+|---|---|---|
+| `enable` | `false` | registry entry `actor-subagents` (link `<agentDir>/extensions/actor-subagents`, not loaded into children) and the settings file |
+| `package` | the flake's `packages/actor-subagents` | the patched source; its `passthru` carries `spawnPolicyApi` = 1, the version of `__subagentsApi_v1` it provides |
+| `settings` | `{}` | merged into `<agentDir>/actor-subagents/settings.json` (`maxAgents`, `maxSpawnDepth`, `errorNoticeGraceMs`); `childExtensions` there is always the registry's, and setting it here is an assertion error |
+| `src` (internal) | set by `homeModules.default` from the input | the unpatched source the existence assertion probes |
+
+With `settings = {}` the file is `{"childExtensions":[…]}`, the children's
+link paths, as the host wrote it.
+
+## Patched upstreams
+
+A component built from an upstream repository takes it as a `flake = false`
+input. Its patches live in `patches/<input>/` under the host's file names, so
+the derivation is the host's; `homeModules.default` hands the input to the
+component as its internal option `src`, and the registry entry's `checkPath`
+points into `src`.
+
 ## Checks
 
 | Check | Covers |
@@ -82,6 +108,10 @@ at its empty default exports nothing, and the bench keeps its own default.
 | `typecheck-harness` | the `tsc` runner accepts and rejects what it must |
 | `bench` | the bench's own tests (`node --test`), run when its code builds |
 | `typecheck-bench` | `tsc --strict` over the bench |
+| `actor-subagents` | the patched pi-actor-subagents' own suite and the host's checks of each patch's wiring |
+| `typecheck-actor-subagents` | `tsc --strict` over the patched pi-actor-subagents |
+| `iface-harness` | the interface-comparison harness accepts a satisfied copy and rejects an unsatisfied one |
+| `iface-subagents-bench-probe` | the bench probe's copy of `__subagentsApi_v1` is satisfied by the provider's `SubagentsApiV1` |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths, `git+ssh` URLs or private addresses in tracked files |
 
 How to run them: `AGENTS.md`, "Commands".
