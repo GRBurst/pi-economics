@@ -1,0 +1,1 @@
+{"packages":["npm:pi-claude-auth","git:github.com/fdietze/pi-claude-auth@mainx"],"piRetry":{"subagents":{"match":{"systemPromptRegex":[{"pattern":"^You were spawned by \"","flags":"m"}]}}}}

@@ -1,0 +1,1 @@
+{"piRetry":{"subagents":{"match":{"systemPromptRegex":"x"}}},"packages":["git:github.com/fdietze/pi-claude-auth@main"]}

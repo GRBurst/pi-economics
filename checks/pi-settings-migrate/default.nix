@@ -12,13 +12,19 @@
 }: let
   today = import ./today-ops.nix;
   exe = ops: lib.getExe (hm.eval {programs.piEconomics.piSettings.ops = ops;}).programs.piEconomics.piSettings.package;
+  corpusCount = lib.length (lib.filter (lib.hasSuffix ".json") (lib.attrNames (builtins.readDir ./corpus)));
 in
-  pkgs.runCommand "pi-settings-migrate" {nativeBuildInputs = [pkgs.jq pkgs.coreutils pkgs.diffutils];} ''
-    set -euo pipefail
-    m=${exe today.withoutWarming}
-    mi=${exe today.withWarming}
+  assert lib.assertMsg (corpusCount > 0) "pi-settings-migrate: empty corpus";
+    pkgs.runCommand "pi-settings-migrate" {nativeBuildInputs = [pkgs.jq pkgs.coreutils pkgs.diffutils];} ''
+      set -euo pipefail
+      m=${exe today.withoutWarming}
+      mi=${exe today.withWarming}
+      old=${lib.getExe (import ./legacy.nix {inherit pkgs lib;})}
+      corpus=${./corpus}
+      corpusCount=${toString corpusCount}
 
-    mkdir part1
-    (cd part1 && source ${./ported-cases.sh})
-    touch $out
-  ''
+      mkdir part1 part2
+      (cd part1 && source ${./ported-cases.sh})
+      (cd part2 && source ${./differential.sh})
+      touch $out
+    ''
