@@ -2092,3 +2092,5 @@ Each check's output deleted from the store, then built once under `ulimit -v 209
 No `FAILED`. `formatter.x86_64-linux.drvPath` evaluates; `homeModules` is `["default"]`; `alejandra --check` over every tracked `.nix` file is clean. Listing: `leak leak-selftest module-eval npm-deps pi-settings-migrate typecheck-harness`.
 
 Deviations from the plan, all small: the M0.1 description read; `nix build` prints no log for an output already in the store, so green logs were shown by deleting the output first (a helper, not committed); the `NIXPKGS_CONFIG` note of M0.13. Open questions: Q1, Q2, Q4, Q6 accepted, Q3 and Q5 as amended above; none new.
+
+Deviation 5 (found by main after the record above): `leak` failed under a `path:` flake ref, whose source copy includes `.git/` (`.git/logs/HEAD` holds an e-mail address). Fixed test first: a `leak-selftest` fixture with `.git/logs/HEAD` holding an address, red (`FAIL .git/ must be skipped`), then the scanner's `grep --exclude-dir=.git`. All six checks built green under both `git+file://…` and `path:$PWD`.
