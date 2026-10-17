@@ -46,4 +46,17 @@ in {
   in
     eq "PI_BENCH_DATA" c.home.sessionVariables.PI_BENCH_DATA "/home/u/.pi/agent/bench"
     ++ eq "package" (pe c).bench.package.drvPath self.packages.x86_64-linux.bench.drvPath;
+
+  # (M1.6)
+  bench-paths = let
+    v =
+      (on {
+        dataDir = "/d";
+        workDir = "/w";
+        agentsBaseline = "/b.md";
+      }).home.sessionVariables;
+  in
+    eq "PI_BENCH_DATA" v.PI_BENCH_DATA "/d"
+    ++ eq "PI_BENCH_WORK" v.PI_BENCH_WORK "/w"
+    ++ eq "PI_BENCH_AGENTS_OFF" v.PI_BENCH_AGENTS_OFF "/b.md";
 }

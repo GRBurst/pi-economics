@@ -27,15 +27,38 @@ in {
       defaultText = lib.literalExpression ''"''${config.home.homeDirectory}/''${config.programs.piEconomics.agentDir}/bench"'';
       description = "Tasks, runs, judgements and reports (`PI_BENCH_DATA`).";
     };
+
+    workDir = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Checkouts and caches (`PI_BENCH_WORK`). `null` exports nothing: the
+        bench then uses `$XDG_RUNTIME_DIR/pi/tmp/bench`, or `/tmp/pi/tmp/bench`
+        without `XDG_RUNTIME_DIR`.
+      '';
+    };
+
+    agentsBaseline = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        The AGENTS.md of the arms without routing (`PI_BENCH_AGENTS_OFF`).
+        `null` exports nothing: the bench then uses its default under the agent
+        source.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
     home.packages = [cfg.package];
-    home.sessionVariables = {
-      PI_BENCH_DATA = cfg.dataDir;
-      # Credentials, model definitions, the infinite-context settings and the
-      # two AGENTS.md defaults come from here (spec §7, "Agent source").
-      PI_BENCH_AGENT_SRC = agentSrc;
-    };
+    home.sessionVariables =
+      {
+        PI_BENCH_DATA = cfg.dataDir;
+        # Credentials, model definitions, the infinite-context settings and the
+        # two AGENTS.md defaults come from here (spec §7, "Agent source").
+        PI_BENCH_AGENT_SRC = agentSrc;
+      }
+      // lib.optionalAttrs (cfg.workDir != null) {PI_BENCH_WORK = cfg.workDir;}
+      // lib.optionalAttrs (cfg.agentsBaseline != null) {PI_BENCH_AGENTS_OFF = cfg.agentsBaseline;};
   };
 }
