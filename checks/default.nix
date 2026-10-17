@@ -67,4 +67,6 @@ in {
       type = "SubagentsApi";
     };
   };
+  # The token-meter tests run when it builds (spec §8.1, "Package tests").
+  token-meter = self.packages.${pkgs.stdenv.hostPlatform.system}.token-meter;
 }

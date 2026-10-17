@@ -43,6 +43,7 @@
     packages.${system} = {
       bench = pkgs.callPackage ./packages/bench/package.nix {};
       actor-subagents = pkgs.callPackage ./packages/actor-subagents/package.nix {src = pi-actor-subagents;};
+      token-meter = pkgs.callPackage ./packages/token-meter/package.nix {};
     };
 
     formatter.${system} = pkgs.alejandra;
