@@ -1,6 +1,6 @@
 # pi-economics — design
 
-Date: 2026-10-12 · Status: draft r5 (2026-10-17, amended for host `2d304eb`),
+Date: 2026-10-12 · Status: draft r5 (2026-10-17, amended for host `2d304eb` and review 5 minors),
 after reviews 1–4 and the owner's decisions of 2026-10-17 · Owner: pallon
 
 Revision 2 addresses review 1 (2 blockers, 9 majors, the minor findings).
@@ -376,15 +376,17 @@ ops.
 `null` and `false` behave as in today's script, whose guards and updates use
 jq's `//` (`pi-settings-migrate.nix:66-82`):
 
-- `null`, on the way or at the leaf, counts as missing and is created.
+- `null`, on the way or at the leaf, counts as missing and is created, except
+  for `removeWhere`, which skips the op (nothing to remove).
 - `false` at the leaf of `ensureContains` counts as missing too: the leaf
   becomes a list with `value`.
 - `false` on the way passes the guard and makes jq fail, which leaves the
   whole file untouched, as today. It is the one shape that aborts the program
   rather than skipping the op.
 
-The ops reuse today's jq expressions, so these cases hold by construction. M0
-pins each of them with a fixture.
+The three ported ops reuse today's jq expressions. The generic `set` with
+arbitrary paths (`retry.settings`, order 500) is new, and so is its
+`false`-on-the-way abort. M0 pins every case, old and new, with a fixture.
 
 Rendering and execution:
 
@@ -583,8 +585,10 @@ Arms:
   keeps both.
 - **Step Q** retires them, after W and before P, under a TDD plan of its own:
   the arm goes, and the judge defaults move to `qwenl`. Existing `qwen` runs
-  stay judgeable with explicit arguments, and `report` uses arms only for
-  factors (`report.ts:66`). A published default that names a dead free model
+  stay judgeable with explicit arguments. `report` uses arms only for
+  factors (`report.ts:66`, `arms[r.arm]?.factors ?? {}`): old `qwen` runs
+  then report empty factors. Q keeps a factors-only stub for `qwen`, so that
+  old reports are unchanged. A published default that names a dead free model
   would only be noise. The host receives Q with W8 (§9.1).
 - The paid OpenRouter judge `gpt` stays (§10).
 - The host's in-tree bench stays until W1. Bench changes made there
@@ -653,15 +657,19 @@ Arms:
   - `flake.nix` keeps the later URL as a comment, as it does for `ai-usage`
     and `nix-terminal`.
 - **Reachability:** every machine that evaluates a host configuration with the
-  input must reach that path. Before its commit, W0's plan shows that:
-  - andromeda's and earth's configurations evaluate where they are built;
+  input must reach that path. The path exists on andromeda only. Owner
+  decision (2026-10-17): earth is not rebuilt from the host flake between W0
+  and W8; andromeda evaluates and gates both desktops. Before its commit,
+  W0's plan shows that:
+  - andromeda's and earth's configurations evaluate on andromeda;
   - pluto's nightly update (host
     `modules/nixos/services/guarded-upgrade/update.sh:7`,
     `nix flake update nixpkgs-stable`) still succeeds on a copy of pluto's
     sparse set, where the path does not exist.
 
   If one fails, W0 stops, and the owner chooses another URL, e.g. a private
-  repository. An agent running a W step needs a sandbox read grant on
+  repository. The locked revisions of W0–W7 must stay fetchable until W8:
+  P's squash (§8.3) keeps the pre-squash branch and its refs until then. An agent running a W step needs a sandbox read grant on
   `~/projects/nix/pi-economics`; without it, the owner runs the gate.
 - **After P:** step W8 (§9.1) switches the input to
   `github:GRBurst/pi-economics`, as an owner step. P itself changes no host
@@ -681,7 +689,7 @@ Arms:
   and W8, evaluates pluto's toplevel on the base tree and on the patched
   tree, as the host's desktop rule does for the desktops (never against a
   recorded value):
-  `nix eval --raw path:<tree>#nixosConfigurations.pluto.config.system.build.toplevel.drvPath --option eval-cache false`.
+  `(ulimit -v $((20*1024*1024)) && exec timeout -s KILL 900 nix eval --raw path:<tree>#nixosConfigurations.pluto.config.system.build.toplevel.drvPath --option eval-cache false)`.
   - Where a step leaves the host's `flake.nix` and `flake.lock` as they are
     (W7), the two drvPaths are equal.
   - Where it edits one of them, the drvPath changes anyway, and only because
@@ -690,10 +698,18 @@ Arms:
     `modules/nixos/services/deploy-target.nix:98-102,335`), and the copy keeps
     `flake.nix` and `flake.lock` (host `hosts/pluto/deploy-target.nix:18-26`).
     W0–W6 and W8 edit them (the input, its lock, the moved packages and
-    checks). For these steps the check is: `nix-diff` of the two toplevel
-    derivations names the snapshot as the only differing input, and
-    `diff -r` of the two snapshots (`config.system.build.flakeSnapshot`)
-    lists only `flake.nix` and `flake.lock`.
+    checks). The snapshot is a source path (`inputSrcs`) and a line of the
+    toplevel's `buildCommand`, not an input derivation. For these steps the
+    check is:
+    - `nix-diff` (not on PATH; built from nixpkgs as host
+      `scripts/pluto-port-diff.sh:70` does) of the two toplevel derivations:
+      `inputDrvs` equal, and the only differences are the snapshot's source
+      path and the `ln -s …/flake` line;
+    - `diff -r` of the two snapshots (`config.system.build.flakeSnapshot`)
+      lists only `flake.nix` and `flake.lock`;
+    - a `jq` comparison of the two locks' `.nodes` shows only `pi-economics`
+      nodes (and the root's input entry) added or changed, so a stray move of
+      an input pluto reads (`nixpkgs-stable`, `flake-parts`) is named.
   - The check fails a step that reaches pluto's evaluation in any other way.
     Whether the snapshot's new lock entry still evaluates on pluto is the
     reachability check above.
@@ -754,7 +770,9 @@ Arms:
     (§9.1), so taking P's commit (W8) does not change the host's behaviour.
     P updates the golden file (§6.3) and the two tests for that change, as
     listed differences.
-- **History:** published as a squashed history.
+- **History:** published as a squashed history. The pre-squash branch and
+  its refs stay until W8, because the host's lock names W0–W7's revisions
+  (§8.2).
 - **Licensing:** the upstream licenses of `pi-actor-subagents`,
   `pi-infinite-context` and `pi-retry` are checked. The flake's license must
   allow distributing patches against them.
