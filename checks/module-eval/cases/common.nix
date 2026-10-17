@@ -124,4 +124,14 @@ in {
   in
     holds "Home Manager's conflicting-target assertion fires"
     (lib.any (lib.hasPrefix "Conflicting managed target files: .pi/agent/extensions/ext-a") (failed "" c));
+
+  # (M0.11; the ops and order lines: M0.12)
+  pisettings-defaults = let
+    s = (pe (hm.eval {})).piSettings;
+    moved = (pe (hm.eval {programs.piEconomics.agentDir = "custom/agent";})).piSettings;
+  in
+    eq "enable" s.enable true
+    ++ eq "file" s.file ".pi/agent/settings.json"
+    ++ eq "file follows agentDir" moved.file "custom/agent/settings.json"
+    ++ eq "after" s.after [];
 }

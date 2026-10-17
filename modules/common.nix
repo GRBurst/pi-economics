@@ -69,6 +69,26 @@ in {
         themselves; a host adds its own extensions.
       '';
     };
+
+    piSettings = {
+      # (M0.11)
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Whether the activation entry `piSettingsMigrate` is rendered. While false, none is, whatever ops exist.";
+      };
+      file = lib.mkOption {
+        type = lib.types.str;
+        default = "${cfg.agentDir}/settings.json";
+        defaultText = lib.literalExpression ''"''${config.programs.piEconomics.agentDir}/settings.json"'';
+        description = "pi's settings.json: an absolute path, or one relative to home.";
+      };
+      after = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [];
+        description = "Activation entries `piSettingsMigrate` runs after, besides `writeBoundary`.";
+      };
+    };
   };
 
   config = {
