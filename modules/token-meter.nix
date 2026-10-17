@@ -36,5 +36,9 @@ in {
       forChildren = true;
       description = "Appends one JSONL line per provider request (tokens, cost, quota headers, retries) to <agentDir>/meter/YYYY-MM.jsonl; no prompt or response text.";
     };
+
+    # (M3.4)
+    home.packages = [cfg.package.report cfg.package.analyse];
+    home.file."${pe.agentDir}/LOGS.md".source = "${cfg.package}/LOGS.md";
   };
 }

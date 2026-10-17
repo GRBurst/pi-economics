@@ -55,4 +55,22 @@ in {
   in
     eq "drvPath" t.package.drvPath self.packages.x86_64-linux.token-meter.drvPath
     ++ eq "name" t.package.name "pi-token-meter-0.1.0";
+
+  # (M3.4) Files and commands: the link and LOGS.md under agentDir, the two
+  # reports on PATH, no settings file while settings = {}.
+  token-meter-files = lib.concatMap (dir: let
+    c = eval dir {};
+    t = (pe c).tokenMeter;
+    logs = fileAt "${dir}/LOGS.md" c;
+  in
+    eq "home.file targets (${dir})" (lib.sort lib.lessThan (targets c))
+    (lib.sort lib.lessThan (targets bare ++ ["${dir}/extensions/token-meter" "${dir}/LOGS.md"]))
+    ++ eq "LOGS.md source (${dir})" (
+      if logs == null
+      then null
+      else toString logs.source
+    ) "${t.package}/LOGS.md"
+    ++ eq "home.packages (${dir})" (lib.subtractLists (packages bare) (packages c)) (map toString [t.package.report t.package.analyse])
+    ++ eq "commands (${dir})" (map (p: p.meta.mainProgram) [t.package.report t.package.analyse]) ["meter-report" "pi-analyse"])
+  dirs;
 }
