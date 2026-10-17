@@ -242,6 +242,9 @@ Rules:
   `lib.recursiveUpdate`, with the user's `settings` on the right. A nested key
   in `settings` then replaces only its own leaf, and the siblings from the
   other side survive; `//` would drop them. Lists are replaced whole.
+  Amendment (M2): the registry owns `childExtensions` in
+  `actor-subagents/settings.json`; setting it in `actorSubagents.settings` is a
+  `pi-economics:` assertion error, not a merge.
 
 ### 4.1 Dependencies
 

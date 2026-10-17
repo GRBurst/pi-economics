@@ -135,4 +135,31 @@ in {
       then null
       else lib.attrNames (builtins.fromJSON text)
     ) ["childExtensions"];
+
+  # (M2.8) settings merge into the file; childExtensions is the registry's.
+  actor-subagents-settings = let
+    c = eval ".pi/agent" {
+      settings = {
+        maxAgents = 4;
+        errorNoticeGraceMs = 0;
+      };
+    };
+  in
+    eq "settings file" (builtins.fromJSON (settingsText ".pi/agent" c)) {
+      maxAgents = 4;
+      errorNoticeGraceMs = 0;
+      childExtensions = (pe c).childExtensions;
+    }
+    ++ eq "failed assertions" (failed "" c) [];
+
+  # (M2.8) The registry owns childExtensions: setting it in `settings` is an
+  # assertion error, not a silent override (spec §4). The control sets another key.
+  actor-subagents-settings-child-extensions = let
+    bad = eval ".pi/agent" {settings.childExtensions = ["/elsewhere"];};
+    ok = eval ".pi/agent" {settings.maxAgents = 4;};
+  in
+    eq "failed assertions" (failed "pi-economics:" bad) [
+      "pi-economics: programs.piEconomics.actorSubagents.settings.childExtensions is set; the registry owns that key (extensions.<name>.forChildren)."
+    ]
+    ++ eq "control: failed assertions" (failed "" ok) [];
 }

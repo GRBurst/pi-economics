@@ -34,9 +34,34 @@ in {
         it provides (1: the spawn-policy patch); taskRouter requires it.
       '';
     };
+
+    # (M2.8)
+    settings = lib.mkOption {
+      type = lib.types.attrsOf (pkgs.formats.json {}).type;
+      default = {};
+      example = {
+        maxAgents = 4;
+        errorNoticeGraceMs = 0;
+      };
+      description = ''
+        Merged into `<agentDir>/actor-subagents/settings.json`, which the
+        extension reads on every spawn (upstream keys: `maxAgents`,
+        `maxSpawnDepth`, `errorNoticeGraceMs`). `childExtensions` is rendered
+        from the registry (`extensions.<name>.forChildren`) and must not be set
+        here: doing so is an assertion error.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
+    # The registry owns childExtensions (spec §4): no silent override.
+    assertions = [
+      {
+        assertion = !(cfg.settings ? childExtensions);
+        message = "pi-economics: programs.piEconomics.actorSubagents.settings.childExtensions is set; the registry owns that key (extensions.<name>.forChildren).";
+      }
+    ];
+
     programs.piEconomics.extensions.actor-subagents = {
       path = "${cfg.package}/extensions/actor-subagents";
       checkPath = "${cfg.src}/extensions/actor-subagents/index.ts";
@@ -49,9 +74,10 @@ in {
       description = "Spawns and supervises background agents from the session, with a live status panel: spawn_subagent, send_message, set_agent_model, list_agents, kill_agent, agent_history, set_status, resume_agents, plus the /agents* commands. Swarms persist beside the main session.";
     };
 
-    # (M2.7; M2.8 adds the merge) One writer (spec §5.1). Literal text, so
-    # checks read it with fromJSON (spec §4).
+    # (M2.7, M2.8) One writer (spec §5.1). Literal text, so checks read it with
+    # fromJSON (spec §4). The registry's childExtensions on the right: the
+    # registry owns that key.
     home.file."${pe.agentDir}/actor-subagents/settings.json".text =
-      builtins.toJSON {inherit (pe) childExtensions;};
+      builtins.toJSON (lib.recursiveUpdate cfg.settings {inherit (pe) childExtensions;});
   };
 }
