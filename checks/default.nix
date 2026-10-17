@@ -30,4 +30,8 @@ in {
   pi-settings-migrate = import ./pi-settings-migrate {inherit lib pkgs hm;};
   # The bench's own tests run when its code builds (spec §8.1, "Package tests").
   bench = self.packages.${pkgs.stdenv.hostPlatform.system}.bench.code;
+  typecheck-bench = typecheck.typecheck {
+    name = "bench";
+    src = ../packages/bench;
+  };
 }

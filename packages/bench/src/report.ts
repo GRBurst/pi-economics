@@ -85,10 +85,11 @@ export function agreement(rows: Row[], a: string, b: string): Agreement {
 
 export const METRICS = ["pass", "score", "wallMin", "req", "r429", "peakCtxK", "costUsd"] as const;
 export type Metric = (typeof METRICS)[number];
-const CONTRAST: Metric[] = ["pass", "score", "wallMin", "costUsd"];
+type ContrastMetric = "pass" | "score" | "wallMin" | "costUsd";
+const CONTRAST: ContrastMetric[] = ["pass", "score", "wallMin", "costUsd"];
 
 export type LevelStats = { level: string; n: number; metrics: Record<Metric, CI> };
-export type Contrast = { level: string; vs: string } & Record<"pass" | "score" | "wallMin" | "costUsd", CI>;
+export type Contrast = { level: string; vs: string } & Record<ContrastMetric, CI>;
 export type FactorStats = { factor: string; levels: LevelStats[]; contrasts: Contrast[] };
 export type Report = { iters: number; n: number; factors: FactorStats[]; ols: Fit & { outcome: string; factors: string[] }; agreement: Agreement };
 
