@@ -71,4 +71,15 @@ in {
     v = (on {extensions = exts;}).home.sessionVariables;
   in
     eq "PI_BENCH_EXT_DIR" v.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" exts}";
+
+  # (M1.8) The router base as a JSON file, read back without building.
+  bench-router = let
+    router = {
+      models.worker = "m";
+      localHealthUrl = "http://h:1";
+      randomize.enabled = false;
+    };
+    v = (on {inherit router;}).home.sessionVariables;
+  in
+    eq "PI_BENCH_ROUTER" (lib.importJSON v.PI_BENCH_ROUTER) router;
 }

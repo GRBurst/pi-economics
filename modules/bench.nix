@@ -28,6 +28,7 @@ in {
       description = "Tasks, runs, judgements and reports (`PI_BENCH_DATA`).";
     };
 
+    # (M1.6)
     workDir = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -38,6 +39,7 @@ in {
       '';
     };
 
+    # (M1.7)
     extensions = lib.mkOption {
       type = lib.types.attrsOf lib.types.path;
       default = {};
@@ -51,6 +53,21 @@ in {
       '';
     };
 
+    # (M1.8)
+    router = lib.mkOption {
+      type = lib.types.attrsOf (pkgs.formats.json {}).type;
+      default = {};
+      description = ''
+        The base of the `task-router/settings.json` an orchestrator arm writes;
+        the arm's own keys (`routing`, `delegation`, `t0Limits`) are merged over
+        it as `lib.recursiveUpdate` does. Exported as a JSON file
+        (`PI_BENCH_ROUTER`, made with `builtins.toFile`, so no value may carry
+        a store path's context); `{}` exports nothing, and an arm's file is the
+        arm's keys alone.
+      '';
+    };
+
+    # (M1.6)
     agentsBaseline = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -74,6 +91,9 @@ in {
       // lib.optionalAttrs (cfg.workDir != null) {PI_BENCH_WORK = cfg.workDir;}
       // lib.optionalAttrs (cfg.extensions != {}) {
         PI_BENCH_EXT_DIR = "${pkgs.linkFarm "pi-bench-extensions" cfg.extensions}";
+      }
+      // lib.optionalAttrs (cfg.router != {}) {
+        PI_BENCH_ROUTER = builtins.toFile "pi-bench-router.json" (builtins.toJSON cfg.router);
       }
       // lib.optionalAttrs (cfg.agentsBaseline != null) {PI_BENCH_AGENTS_OFF = cfg.agentsBaseline;};
   };
