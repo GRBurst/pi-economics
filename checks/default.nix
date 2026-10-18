@@ -73,4 +73,5 @@ in {
     name = "token-meter";
     src = ../packages/token-meter;
   };
+  home-files = import ./home-files {inherit lib pkgs hm;};
 }
