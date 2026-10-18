@@ -51,5 +51,13 @@ in {
         then "${cfg.package}"
         else null;
     };
+
+    # (M3.8) A hard dependency (spec §4.1).
+    assertions = lib.mkIf cfg.enable [
+      {
+        assertion = pe.tokenMeter.enable;
+        message = "pi-economics: analysisSkill requires tokenMeter (the skill runs pi-analyse and reads LOGS.md, which tokenMeter installs)";
+      }
+    ];
   };
 }

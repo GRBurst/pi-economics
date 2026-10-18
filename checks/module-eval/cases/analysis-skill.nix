@@ -20,6 +20,7 @@
     };
   targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
   bare = hm.evalBare {};
+  message = "pi-economics: analysisSkill requires tokenMeter (the skill runs pi-analyse and reads LOGS.md, which tokenMeter installs)";
 in {
   # (M3.7) Off by default: no path, nothing rendered.
   analysis-skill-off = let
@@ -49,4 +50,9 @@ in {
 
   # (M3.7) With the default agentDir the text is the source, byte for byte.
   analysis-skill-today = eq "text" (pe (eval ".pi/agent" true)).analysisSkill.text source;
+
+  # (M3.8) The hard dependency (spec §4.1).
+  analysis-skill-requires-meter =
+    eq "without tokenMeter" (failed "pi-economics:" (eval ".pi/agent" false)) [message]
+    ++ eq "with tokenMeter" (failed "" (eval ".pi/agent" true)) [];
 }
