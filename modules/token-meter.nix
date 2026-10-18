@@ -24,6 +24,17 @@ in {
         commands put on PATH (`meter-report`, `pi-analyse`).
       '';
     };
+
+    settings = lib.mkOption {
+      type = lib.types.attrsOf (pkgs.formats.json {}).type;
+      default = {};
+      example = {dir = "meter";};
+      description = ''
+        Written to `<agentDir>/token-meter/settings.json` when non-empty.
+        Every key has a default in the package's core/settings.ts (`enabled`,
+        `dir`, `rawRatelimit`), so `{}` writes no file.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -40,5 +51,9 @@ in {
     # (M3.4)
     home.packages = [cfg.package.report cfg.package.analyse];
     home.file."${pe.agentDir}/LOGS.md".source = "${cfg.package}/LOGS.md";
+
+    # (M3.5) Literal text (spec §4): checks read it with builtins.fromJSON.
+    home.file."${pe.agentDir}/token-meter/settings.json" =
+      lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
   };
 }

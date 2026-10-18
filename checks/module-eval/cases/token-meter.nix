@@ -73,4 +73,20 @@ in {
     ++ eq "home.packages (${dir})" (lib.subtractLists (packages bare) (packages c)) (map toString [t.package.report t.package.analyse])
     ++ eq "commands (${dir})" (map (p: p.meta.mainProgram) [t.package.report t.package.analyse]) ["meter-report" "pi-analyse"])
   dirs;
+
+  # (M3.5) settings: written as given, under agentDir, only when non-empty.
+  token-meter-settings = lib.concatMap (dir: let
+    s = {
+      dir = "m";
+      rawRatelimit = false;
+    };
+    f = fileAt "${dir}/token-meter/settings.json" (eval dir {settings = s;});
+  in
+    eq "settings file (${dir})" (
+      if f == null
+      then null
+      else builtins.fromJSON f.text
+    )
+    s)
+  dirs;
 }
