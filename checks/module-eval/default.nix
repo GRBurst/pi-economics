@@ -14,6 +14,7 @@
     ./cases/bench.nix
     ./cases/actor-subagents.nix
     ./cases/token-meter.nix
+    ./cases/analysis-skill.nix
     ./cases/together.nix
   ];
   cases =
