@@ -89,4 +89,18 @@ in {
     )
     s)
   dirs;
+
+  # (M3.6) With actorSubagents, children load the meter: today's
+  # actor-subagents/settings.json (host pi-extensions.nix:389-390) names it.
+  token-meter-children = let
+    c = hm.eval {
+      programs.piEconomics = {
+        tokenMeter.enable = true;
+        actorSubagents.enable = true;
+      };
+    };
+  in
+    eq "childExtensions" (pe c).childExtensions ["/home/u/.pi/agent/extensions/token-meter"]
+    ++ eq "actor-subagents/settings.json" (fileAt ".pi/agent/actor-subagents/settings.json" c).text
+    ''{"childExtensions":["/home/u/.pi/agent/extensions/token-meter"]}'';
 }
