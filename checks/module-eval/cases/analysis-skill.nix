@@ -55,4 +55,17 @@ in {
   analysis-skill-requires-meter =
     eq "without tokenMeter" (failed "pi-economics:" (eval ".pi/agent" false)) [message]
     ++ eq "with tokenMeter" (failed "" (eval ".pi/agent" true)) [];
+
+  # (M3.9) The skill names what tokenMeter installs: the analysis command and
+  # <agentDir>/LOGS.md (host checks/pi-log-contract, part 2).
+  analysis-skill-contract = lib.concatMap (dir: let
+    c = eval dir true;
+    command = (pe c).tokenMeter.package.analyse.meta.mainProgram;
+    text = (pe c).analysisSkill.text;
+  in
+    holds "${command} on PATH (${dir})" (lib.elem command (map lib.getName c.home.packages))
+    ++ holds "the skill runs ${command} (${dir})" (lib.hasInfix "${command} " text)
+    ++ holds "${dir}/LOGS.md installed (${dir})" (c.home.file ? "${dir}/LOGS.md")
+    ++ holds "the skill reads ~/${dir}/LOGS.md (${dir})" (lib.hasInfix "~/${dir}/LOGS.md" text))
+  dirs;
 }
