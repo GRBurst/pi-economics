@@ -1,4 +1,4 @@
-// Candidates of a leg and its label (spec §4.1, §4.5 first item, mi5), with the context filter (T3.1). Pure. T3.2 adds `pickMember`.
+// Candidates of a leg and its label (spec §4.1, §4.5 first item, mi5), with the context filter (T3.1), and the runtime pick over them (T3.2). Pure.
 import { effortAt, meeting } from "./members.ts";
 import type { Named } from "./members.ts";
 import type { Ability, Leg, PlanLeg, RouterSettings } from "./types.ts";
@@ -23,4 +23,17 @@ export function labelLeg(s: RouterSettings, a: Ability, leg: Leg, need: number):
   const { cands, reason } = candidates(s, a, leg.level, need);
   const m = cands[0];
   return { leg: { ...leg, member: m.name, model: m.model, tier: m.tier, effort: effortAt(m, leg.step) }, ...(reason ? { reason } : {}) };
+}
+
+/** A candidate's runtime state (spec §4.5): `up` its endpoint answers, `free` up with a slot left. */
+export type MemberState = { name: string; cost: number; up: boolean; free: boolean };
+export type Pick = { pick: string } | { wait: true } | { none: string };
+/** The pick over `cands`, ordered by (cost, order, name) (spec §4.5): before the queue expires, a free member of the cheapest up pool,
+ *  else wait; after it, the first free up member. A down member is skipped at once; nothing up → none. */
+export function pickMember(cands: MemberState[], expired: boolean): Pick {
+  const up = cands.filter((m) => m.up);
+  if (up.length === 0) return { none: "no member up" };
+  const pool = up.filter((m) => m.cost === up[0].cost);
+  const f = pool.find((m) => m.free) ?? (expired ? up.find((m) => m.free) : undefined);
+  return f ? { pick: f.name } : expired ? { none: "no member free" } : { wait: true };
 }

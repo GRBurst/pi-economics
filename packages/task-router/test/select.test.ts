@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { candidates, labelLeg } from "../core/select.ts";
+import { candidates, labelLeg, pickMember } from "../core/select.ts";
+import type { MemberState } from "../core/select.ts";
 import { defaults, parseSettings } from "../core/settings.ts";
 
 const S = defaults();
@@ -101,4 +102,42 @@ test("candidates: contextFit 0 (or need 0) → no filter, no reason", () => {
   assert.deepEqual(candidates(ctx(1000000), "write", 0, 0).cands.map((m) => m.name), ["qwen-local", "haiku", "sonnet", "opus"]);
   const half = parseSettings({ contextFit: 0.5, models: { "qwen-cloud": { model: "" } } }).settings;
   assert.deepEqual(candidates(half, "write", 0, 200000).cands.map((m) => m.name), ["sonnet", "opus"]);
+});
+
+// P-cheapest, P-empty (HP T3.2): the runtime pick over the leg's candidates, in (cost, order, name) order.
+const ST = ["down", "busy", "free"] as const;
+const state = (name: string, cost: number, st: (typeof ST)[number]): MemberState => ({ name, cost, up: st !== "down", free: st === "free" });
+
+test("P-cheapest: before expiry a free member of the cheapest up pool or wait; after it the first free up member; nothing up → none (exhaustive, costs 0, 0, 3)", () => {
+  let n = 0;
+  for (const x of ST) for (const y of ST) for (const z of ST) for (const expired of [false, true]) {
+    const cands = [state("x", 0, x), state("y", 0, y), state("z", 3, z)];
+    const up = cands.filter((m) => m.up), pool = up.filter((m) => m.cost === Math.min(...up.map((u) => u.cost)));
+    const got = pickMember(cands, expired), id = `${x} ${y} ${z} expired=${expired}`;
+    if (up.length === 0) assert.deepEqual(got, { none: "no member up" }, id);
+    else if ("pick" in got) {
+      const m = cands.find((c) => c.name === got.pick)!;
+      assert.ok(m.free, `picked a busy member ${id}`);
+      if (!expired) assert.ok(pool.includes(m), `pick outside the cheapest up pool ${id}`);
+      assert.equal(m, (expired ? up : pool).find((c) => c.free), `not the first free ${id}`);
+    } else if ("wait" in got) assert.ok(!expired && !pool.some((m) => m.free), `waited with a free cheapest member ${id}`);
+    else assert.ok(expired && !up.some((m) => m.free) && got.none === "no member free", `none ${id}: ${got.none}`);
+    n++;
+  }
+  assert.equal(n, 54);
+});
+
+test("pickMember: a down member is skipped at once; a busy cheapest pool waits before expiry and falls through after it", () => {
+  assert.deepEqual(pickMember([state("x", 0, "down"), state("y", 1, "free")], false), { pick: "y" });
+  assert.deepEqual(pickMember([state("x", 0, "busy"), state("y", 1, "free")], false), { wait: true });
+  assert.deepEqual(pickMember([state("x", 0, "busy"), state("y", 1, "free")], true), { pick: "y" });
+  assert.deepEqual(pickMember([state("x", 0, "busy"), state("y", 0, "free")], false), { pick: "y" });
+  assert.deepEqual(pickMember([], false), { none: "no member up" });
+});
+
+test("P-empty: a blank member is no candidate, so no pick, even when it would be the cheapest and free", () => {
+  const s = parseSettings({ models: { "qwen-cloud": { model: "" } } }).settings;
+  const states = (ss: typeof S) => candidates(ss, "write", 0, 0).cands.map((m) => state(m.name, m.cost, "free"));
+  assert.deepEqual(pickMember(states(S), false), { pick: "qwen-cloud" });
+  assert.deepEqual(pickMember(states(s), false), { pick: "qwen-local" });
 });
