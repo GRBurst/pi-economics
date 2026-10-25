@@ -197,5 +197,7 @@ in {
       type = "ExperimentsApi";
     };
   };
+  # (M5.11) Every log writer through pi-analyse (spec §8.1).
+  log-contract = pkgs.callPackage ./log-contract {};
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
