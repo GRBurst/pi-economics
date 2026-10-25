@@ -55,5 +55,12 @@ in {
     # (M5.9) Literal text (spec §4): checks read it with builtins.fromJSON.
     home.file."${pe.agentDir}/task-router/settings.json" =
       lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
+    # (M5.10) A hard dependency (spec §4.1).
+    assertions = [
+      {
+        assertion = pe.actorSubagents.enable && (pe.actorSubagents.package.passthru.spawnPolicyApi or 0) >= 1;
+        message = "pi-economics: taskRouter requires actorSubagents with passthru.spawnPolicyApi >= 1 (the router registers through registerSpawnPolicy, and shell.ts swallows its absence: without the patched build the router does nothing)";
+      }
+    ];
   };
 }

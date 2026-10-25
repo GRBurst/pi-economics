@@ -59,4 +59,16 @@ in {
     eq "settings file (${dir})" (builtins.fromJSON f.text) s
     ++ eq "no file for {} (${dir})" (fileAt "${dir}/task-router/settings.json" (eval dir {} withActor)) null)
   dirs;
+
+  # (M5.10) The hard dependency (spec §4.1), both halves.
+  task-router-requires-actor-subagents =
+    eq "assertions" (failed "pi-economics: taskRouter" (eval ".pi/agent" {} {})) [message];
+  task-router-requires-spawn-policy-api =
+    eq "assertions" (failed "pi-economics: taskRouter" (eval ".pi/agent" {} {
+      actorSubagents = {
+        enable = true;
+        # A package without passthru.spawnPolicyApi (the router's own).
+        package = self.packages.x86_64-linux.task-router;
+      };
+    })) [message];
 }
