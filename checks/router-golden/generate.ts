@@ -1,6 +1,6 @@
-// The router's golden decisions (spec §6.3): R''s planSpawn over the golden grid (test/golden/grid.ts) and the Qwen chain's
-// 96 states through resolveLeg, under two settings: R''s defaults and EMPTY_SLOT (every member's model set, the free cloud
-// empty). Usage: node --experimental-strip-types generate.ts <task-router dir>  > decisions (stdout).
+// The router's golden decisions (spec §6.3): R''s planSpawn over the golden grid (test/golden/grid.ts) and the selection's
+// 96 states through resolveLeg (`select` lines, picks by member), under two settings: R''s defaults and EMPTY_SLOT (every
+// member's model set, the free cloud empty). Usage: node --experimental-strip-types generate.ts <task-router dir>  > decisions (stdout).
 // Run by hand once on a host checkout at R' (header added by the caller); checks/router-golden runs it on packages/task-router.
 import { join, resolve } from "node:path";
 
@@ -70,10 +70,12 @@ for (const [fx, raw] of FIXTURES) {
   out.push(`count ${fx} plan ${nPlan} explicit ${nExpl}`);
   section("plan", plan);
   section("explicit", expl);
-  // The Qwen chain: 4 local × 4 cloud running × 3 cloud states × {queue deadline not reached, reached} (test/chain-table.test.ts).
+  // The selection: 4 local × 4 cloud running × 3 cloud states × {before, after the queue deadline}. Picks name the member.
   const s = parseSettings(structuredClone(raw)).settings;
   const NOW = 1_000_000;
   class Wait extends Error {}
+  const memberOf = (model: string): string =>
+    Object.entries(s.models).find(([, m]: [string, any]) => m.model === model)?.[0] ?? `?${model}`;
   for (const local of ["up", "busy", "own", "down"]) for (const cr of [0, 1, 2, 3]) for (const cloud of ["open", "blocked", "capped"]) {
     const picks: string[] = [];
     for (const expired of [false, true]) {
@@ -89,10 +91,10 @@ for (const [fx, raw] of FIXTURES) {
         cloud: { today: () => (cloud === "capped" ? cap : 0), blockedUntil: () => (cloud === "blocked" ? NOW + 1 : undefined), block() {} },
         sleep: async (ms: number) => { if (!expired) throw new Wait(); now += ms + s.queueMaxSec * 1000; },
       };
-      try { const r = await resolveLeg(d, { tier: "qwen", effort: "xhigh" }); picks.push(`${r.route}:${r.model}:${r.effort}`); }
+      try { const r = await resolveLeg(d, { tier: "qwen", effort: "xhigh" }); picks.push(`${memberOf(r.model)}:${r.model}:${r.effort}`); }
       catch (e) { if (e instanceof Wait) picks.push("wait"); else throw e; }
     }
-    out.push(`chain ${fx} local=${local} cloudRunning=${cr} cloud=${cloud} ${picks.join(" ")}`);
+    out.push(`select ${fx} local=${local} cloudRunning=${cr} cloud=${cloud} ${picks.join(" ")}`);
   }
 }
 process.stdout.write(out.join("\n") + "\n");

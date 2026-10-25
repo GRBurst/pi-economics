@@ -254,13 +254,15 @@ holds `task-router` too. A definition of one name replaces that name only.
 
 **Golden test.** `checks/router-golden/golden.txt` records every decision of
 `planSpawn` over the router's own golden grid (`test/golden/grid.ts`: 146,880
-plan cases, 470,016 explicit-model cases) and of `resolveLeg` over the Qwen
-chain's 96 states, under the defaults and under a fixture with every member's
-model set and the free-cloud slot empty. `generate.ts <router dir>` prints it;
-the check `router-golden` runs it on `packages/task-router`, diffs against the
-file (comment lines aside) and asserts that with the free-cloud slot empty no
-chain decision takes the cloud route or waits (P2). After a deliberate change of
-a decision, a group of the redesign re-records the file by hand
+plan cases, 470,016 explicit-model cases) and of `resolveLeg` over the
+selection's 96 states (`select` lines, picks named by member), under the
+defaults and under a fixture with every member's model set and the free-cloud
+slot empty. `generate.ts <router dir>` prints it; the check `router-golden`
+runs it on `packages/task-router`, diffs against the file (comment lines aside)
+and asserts P2 as an invariance: with the free-cloud slot empty, no selection
+picks it and the cloud's state (its running count, open, capped or blocked)
+changes no decision; a wait for the local slot is allowed. After a deliberate
+change of a decision, a group of the redesign re-records the file by hand
 (`node --experimental-strip-types checks/router-golden/generate.ts packages/task-router`,
 header `# R' = <source>, <date>`) and puts the diff of old and new file in its
 record. The redesign's Groups 3–7 continue in this repository.
@@ -308,7 +310,7 @@ points into `src`.
 | `task-router` | the router's own tests (`node --test`, 357), run when it builds; includes the redesign's golden grid against its frozen oracle |
 | `typecheck-task-router` | `tsc --strict` over `index.ts`, `core/` and `test/` |
 | `iface-subagents-task-router`, `iface-experiments-task-router` | the router's copies of `__subagentsApi_v1` and `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`) are satisfied by the providers' types |
-| `router-golden` | every decision of the router on the golden grid and the Qwen chain, equal to the recorded ones; P2 over the empty-slot lines |
+| `router-golden` | every decision of the router on the golden grid and the selection, equal to the recorded ones; P2 (the invariance) over the empty-slot `select` lines |
 | `log-contract` | every log writer through `pi-analyse --check` and a full report |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths, `git+ssh` URLs or private addresses in tracked files |
 
