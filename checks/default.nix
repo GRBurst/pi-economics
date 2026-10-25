@@ -177,5 +177,15 @@ in {
     name = "task-router";
     src = ../packages/task-router;
   };
+  # (M5.6) The router's copy of __subagentsApi_v1 (spec §5.3, §8.1).
+  iface-subagents-task-router = iface.compare {
+    name = "subagents-task-router";
+    provider = subagentsProvider;
+    consumer = {
+      src = ../packages/task-router;
+      file = "core/api.ts";
+      type = "SubagentsApiV1";
+    };
+  };
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
