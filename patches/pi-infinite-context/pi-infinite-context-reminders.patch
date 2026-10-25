@@ -410,7 +410,7 @@ index 5440fc4..eb43033 100644
 +  assert.match(text, /start at 150k tokens and repeat every 20k/);
 +});
 +
-+// Golden values of the settings file the Home Manager module renders for the owner (homes/pallon):
++// Golden values of the settings file the Home Manager module renders for the owner:
 +// exact overrides for the two 1M-window anthropic models, nothing for the rest. They are what the
 +// per-model thresholds were first measured with: the schedule must not move with an upstream sync.
 +test("golden: the rendered owner settings", () => {

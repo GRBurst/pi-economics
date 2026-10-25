@@ -20,24 +20,24 @@
   fileAt = target: cfg: lib.findFirst (f: f.target == target) null (lib.attrValues cfg.home.file);
   settingsOf = dir: ic: (fileAt "${dir}/infinite-context/settings.json" (eval dir ic)).text;
   bare = hm.evalBare {};
-  # The host's values (homes/pallon/default.nix:32-54 at 4c714f0).
-  hostReminders = {
+  # Example values: exact overrides for two models, a price for each.
+  exampleReminders = {
     overrides = {
-      "anthropic/claude-opus-5-5" = {
-        startTokens = 400000;
-        everyTokens = 100000;
+      "example/model-a" = {
+        startTokens = 200000;
+        everyTokens = 50000;
       };
-      "anthropic/claude-sonnet-5-5" = {
-        startTokens = 400000;
-        everyTokens = 100000;
+      "example/model-b" = {
+        startTokens = 200000;
+        everyTokens = 50000;
       };
     };
     prices = {
-      "anthropic/claude-opus-5-5" = {
+      "example/model-a" = {
         w = 5;
         r = 0.2;
       };
-      "anthropic/claude-sonnet-5-5" = {
+      "example/model-b" = {
         w = 2.5;
         r = 0.2;
       };
@@ -85,10 +85,10 @@ in {
     ++ eq "settings text (${dir})" (settingsOf dir {}) ''{"reminders":{"default":{},"overrides":{}}}'')
   dirs;
 
-  # (M6.9) The reminder options render as the host's piContextReminders did:
+  # (M6.9) The reminder options render as the host's piContextReminders did (spec §5.2):
   # nulls are left out, prices, TTL and foldHint only when set.
   infinite-context-reminders = let
-    host = builtins.fromJSON (settingsOf ".pi/agent" {reminders = hostReminders;});
+    example = builtins.fromJSON (settingsOf ".pi/agent" {reminders = exampleReminders;});
     all = builtins.fromJSON (settingsOf ".pi/agent" {
       reminders = {
         default.startTokens = 150000;
@@ -98,12 +98,12 @@ in {
       };
     });
   in
-    eq "host's values" host {
+    eq "example values" example {
       reminders = {
         default = {};
-        inherit (hostReminders) overrides;
+        inherit (exampleReminders) overrides;
       };
-      inherit (hostReminders) prices;
+      inherit (exampleReminders) prices;
     }
     ++ eq "every option" all {
       reminders = {
@@ -118,11 +118,11 @@ in {
   # a nested key replaces its own leaf, the rendered siblings survive.
   infinite-context-settings = lib.concatMap (dir: let
     got = builtins.fromJSON (settingsOf dir {
-      reminders = hostReminders;
+      reminders = exampleReminders;
       settings = {
         nudgeAtPercent = 60;
         reminders.default.everyTokens = 5000;
-        reminders.overrides."anthropic/claude-opus-5-5".startTokens = 300000;
+        reminders.overrides."example/model-a".startTokens = 300000;
       };
     });
   in
@@ -131,15 +131,15 @@ in {
       reminders = {
         default.everyTokens = 5000;
         overrides =
-          hostReminders.overrides
+          exampleReminders.overrides
           // {
-            "anthropic/claude-opus-5-5" = {
+            "example/model-a" = {
               startTokens = 300000;
-              everyTokens = 100000;
+              everyTokens = 50000;
             };
           };
       };
-      inherit (hostReminders) prices;
+      inherit (exampleReminders) prices;
     })
   dirs;
 }
