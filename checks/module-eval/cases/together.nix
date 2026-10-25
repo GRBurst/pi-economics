@@ -7,7 +7,7 @@
   expect,
 }: let
   inherit (expect) eq failed;
-  components = ["bench" "actorSubagents"];
+  components = ["bench" "actorSubagents" "tokenMeter" "analysisSkill"];
   with' = cs: hm.eval {programs.piEconomics = lib.genAttrs cs (_: {enable = true;});};
   set = l: lib.sort lib.lessThan (lib.unique l);
   targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
