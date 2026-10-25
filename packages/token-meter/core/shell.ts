@@ -20,9 +20,12 @@ export type Deps = {
   arm?: (sessionId: string) => string | undefined;
 };
 
+/** What token-meter reads of the experiments package's globalThis.__piExperimentsApi_v1; the type check compares it with the provider's ExperimentsApiV1 (spec §5.3). */
+export type ExperimentsApi = { armFor?(s: string): { id?: string } | undefined };
+
 /** The experiments package is optional and never imported: its process-global API, or nothing. */
 const experimentArm = (sid: string): string | undefined =>
-  (globalThis as { __piExperimentsApi_v1?: { armFor?(s: string): { id?: string } | undefined } }).__piExperimentsApi_v1?.armFor?.(sid)?.id;
+  (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1?.armFor?.(sid)?.id;
 
 /** pi usage → meter usage (cost.total → costUsd). */
 function mapUsage(u: any): Usage | undefined {

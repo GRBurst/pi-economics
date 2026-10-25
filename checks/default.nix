@@ -38,6 +38,12 @@
     file = "extensions/actor-subagents/api.ts";
     type = "SubagentsApiV1";
   };
+  # (M4.7) The provider of the globalThis API __piExperimentsApi_v1 (spec §5.3).
+  experimentsProvider = {
+    src = ../packages/experiments;
+    file = "core/api.ts";
+    type = "ExperimentsApiV1";
+  };
 in {
   leak = leakLib.check leakSrc;
   leak-selftest = leakLib.selftest;
@@ -108,6 +114,16 @@ in {
       src = ../packages/experiments;
       file = "core/shell.ts";
       type = "SubagentsApi";
+    };
+  };
+  # (M4.7, M4.8) The copies of __piExperimentsApi_v1 in token-meter and cache-lifecycle.
+  iface-experiments-token-meter = iface.compare {
+    name = "experiments-token-meter";
+    provider = experimentsProvider;
+    consumer = {
+      src = ../packages/token-meter;
+      file = "core/shell.ts";
+      type = "ExperimentsApi";
     };
   };
   home-files = import ./home-files {inherit lib pkgs hm;};
