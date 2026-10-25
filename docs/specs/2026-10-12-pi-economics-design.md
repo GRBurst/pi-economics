@@ -480,6 +480,29 @@ owner; the move does not add it.
   which §6.2 assumes. Evidence: R's `nix/hm-module.nix`. If the redesign adds
   typed options, M5 stops and §6.2 is revised first.
 
+Amendment (2026-10-25, order): the owner's decision of 2026-10-25 puts the
+move first. Priority 1 is that everything lives in this flake and the host
+consumes it through `git+file:` (W); finishing the redesign comes second;
+publication (P) and the retirement of the `qwen` arm (Q) come third.
+
+- **R becomes R'.** R' is the host commit after the redesign's Group 2
+  (`f1b140e`, 2026-10-25) plus the fixes of its review, as the redesign
+  plan's `# Execution Record` names it. Wherever this section, §6.3 and §9
+  name R as the router's source, read R'.
+- **P1–P5 are checked against R'.** A property that does not hold at R' is
+  recorded in M5's Execution Record and handed to the redesign's remaining
+  groups; M5 does not stop for it. This replaces "M5 stops and reports" above
+  and P5's "M5 stops". P2's own test, where M5 writes one, still runs against
+  the code at R' first.
+- **The golden test (§6.3) records the decisions at R'.** The remaining groups
+  change decisions on purpose; each re-records the golden file, and its diff
+  is the evidence.
+- **The redesign's Groups 3–7 move to this flake after W.** The redesign's
+  spec (host `docs/specs/2026-10-17-task-router-abilities-design.md`) and plan
+  (host `docs/plans/2026-10-17-task-router-abilities-plan.md`) stay in the
+  host's docs as the record. Its oracle scripts live outside both
+  repositories, under `~/.cache/pi/review-router` and `~/.cache/pi/router-r2`.
+
 ### 6.2 Module
 
 `taskRouter.settings` is free-form JSON. It is written to
@@ -841,6 +864,19 @@ Every milestone builds and tests on its own:
 - Q comes after W, so that W wires a pure move, and before P, so that nothing
   published names the dead free model.
 
+Amendment (2026-10-25, order): the owner's order is W first, then the
+redesign's remaining groups, then Q and P (§6.1 amendment).
+
+- M5 copies the task-router from R' (§6.1 amendment), not from the end of the
+  redesign. It no longer waits for R. It starts after M6, which is being
+  implemented, and once R' is named.
+- The drift port of M5 runs against R'.
+- M6's movable task M6.D, the doc move of `docs/pi-token-economics.md`, goes
+  into M5 if M5 lands after M6 (M6 plan, D17). It stays the last task before
+  M5's close-out and before W0.
+- After W, the redesign's Groups 3–7 continue in this flake. Q and P follow
+  them.
+
 ### 9.1 Wiring (W)
 
 **Gate** (owner's decision, 2026-10-17): W starts when the owner says so.
@@ -850,6 +886,13 @@ done, and the host is no longer frozen.
 - Each step starts after the step before it and after the milestone that
   brings its component: W0 after M2, W1 after M1, W2 after M3, W3 after M4,
   W4 after M5 (the redesigned router), W5 and W6 after M6, W7 after W5.
+
+Amendment (2026-10-25, order):
+
+- **The gate is open.** The owner opened it on 2026-10-25.
+- **W4 wires the router as M5 moved it**, at R' (§6.1 amendment), not the
+  redesigned router. The redesign's Groups 3–7 then land in this flake. The
+  host receives each of them only when its `pi-economics` lock moves.
 - W0 is the first step that touches the host's flake files (`flake.nix`,
   `flake.lock`). Until then they stay as they are.
 - Each step passes Layer B (§8.2): the gate, the pluto comparison, the
