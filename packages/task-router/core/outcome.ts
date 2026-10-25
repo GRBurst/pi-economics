@@ -56,8 +56,13 @@ export const rerouteEvent = (i: { now: Date; taskId: string; from: string; to: s
 export const checkEvent = (i: { now: Date; taskId: string; exit: number; durationMs: number }) =>
   finish({ ...base("check", i.now, i.taskId), exit: i.exit, durationMs: i.durationMs });
 export const correctiveEvent = (i: { now: Date; taskId: string }) => finish(base("corrective", i.now, i.taskId));
-export const escalateEvent = (i: { now: Date; taskId: string; from: string; to: string; attemptOf?: string }) =>
-  finish({ ...base("escalate", i.now, i.taskId), from: i.from, to: i.to, attemptOf: i.attemptOf });
+/** The escalate line's router fields (spec §6.4): the models on both routes, the re-spawn's ability, the levels. */
+export type EscalateFields = { fromModel?: string; toModel?: string; ability?: string; fromLevel?: number; toLevel?: number };
+export const escalateEvent = (i: { now: Date; taskId: string; from: string; to: string; attemptOf?: string } & EscalateFields) =>
+  finish({
+    ...base("escalate", i.now, i.taskId), from: i.from, to: i.to, attemptOf: i.attemptOf,
+    fromModel: i.fromModel, toModel: i.toModel, ability: i.ability, fromLevel: i.fromLevel, toLevel: i.toLevel,
+  });
 export const verdictEvent = (i: { now: Date; taskId: string; verdict: Verdict; note?: string; reviewOf?: string }) =>
   finish({ ...base("verdict", i.now, i.taskId), verdict: i.verdict, note: i.note, reviewOf: i.reviewOf });
 export const spotcheckEvent = (i: { now: Date; taskId: string }) => finish({ ...base("spotcheck", i.now, i.taskId), requested: true });

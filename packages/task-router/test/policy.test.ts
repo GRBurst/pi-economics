@@ -469,3 +469,38 @@ test("T4.1 spawn line: an explicit effort logs workerEffort planned and startEff
   const o = spawnLine(h, "o1");
   assert.deepEqual([o.workerTier, o.workerEffort, o.workerMember, o.workerModel, o.startEffort], ["T1", "high", "opus", "anthropic/claude-opus-5-5", "high"]);
 });
+
+// T4.2 (HS §6.4, D9): the escalate line comes from the attempt state: `from` is the route the failed attempt ran on (its
+// `ranMember`, set at the pick and by a move), `to` the started member's; with the models, the ability and the levels.
+const ESC_KEYS = ["from", "to", "fromModel", "toModel", "ability", "fromLevel", "toLevel", "attemptOf"];
+const escalateLine = (h: ReturnType<typeof harness>, name: string): Record<string, unknown> => {
+  const l = h.lines().find((x) => x.event === "escalate" && x.taskId === name)!;
+  return Object.fromEntries(ESC_KEYS.filter((k) => k in l).map((k) => [k, l[k]]));
+};
+const emitSpawn = (h: ReturnType<typeof harness>, name: string) =>
+  h.a.emit({ type: "spawn", name, by: "main", parent: "main", childSessionId: `s-${name}`, ts: 1 });
+
+test("T4.2 escalate fields: a killed cloud child's re-spawn logs from cloud (not \"?\") to T1, with models, ability and levels", async () => {
+  const h = harness({ base: "today" });
+  assert.equal((accepted(await h.a.spawn({ name: "q1", task: card() })) as any).model, CLOUD);
+  emitSpawn(h, "q1");
+  h.a.emit({ type: "kill", name: "q1", ts: 2 });
+  accepted(await h.a.spawn({ name: "q1b", task: card({ attemptOf: "q1" }) }));
+  emitSpawn(h, "q1b");
+  assert.deepEqual(escalateLine(h, "q1b"), {
+    from: "cloud", to: "T1", fromModel: CLOUD, toModel: SONNET, ability: "write", fromLevel: 0, toLevel: 1, attemptOf: "q1",
+  });
+});
+
+test("T4.2 escalate fields: after a failover to Sonnet the re-spawn logs from T1 (the member it ran on)", async () => {
+  const h = harness({ base: "today", health: { health: 503, slots: 200 } }); // local down: the move goes to Sonnet
+  assert.equal((accepted(await h.a.spawn({ name: "q1", task: card() })) as any).model, CLOUD);
+  emitSpawn(h, "q1");
+  h.a.emit({ type: "error", name: "q1", reason: "retries exhausted", ts: 2 });
+  await settle();
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", SONNET]]);
+  accepted(await h.a.spawn({ name: "q1b", task: card({ attemptOf: "q1" }) }));
+  emitSpawn(h, "q1b");
+  const l = escalateLine(h, "q1b");
+  assert.deepEqual([l.from, l.fromModel, l.to, l.toModel, l.fromLevel, l.toLevel], ["T1", SONNET, "T1", SONNET, 0, 1]);
+});

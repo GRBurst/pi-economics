@@ -100,7 +100,12 @@ export function install(pi: PiLike, deps: Deps) {
     const c = children.get((e as { name?: string }).name ?? "");
     if (e.type === "spawn" && c) {
       log.spawn({ taskId: e.name, card: c.card, plan: c.plan, start: c.start, arm: armOf(c.parentSession), sessionId: e.childSessionId, parentSessionId: c.parentSession, unresolved: c.unresolved });
-      if (c.card.attemptOf) log.escalate(e.name, children.get(c.card.attemptOf)?.route ?? "?", c.route, c.card.attemptOf);
+      if (c.esc) { // from the attempt state (D9): the failed attempt's entry may be gone (killed), its ranMember is not
+        const ran = settings.models[c.esc.ranMember], to = settings.models[c.start.member];
+        log.escalate(e.name, ran?.route ?? "?", to?.route ?? "?", c.card.attemptOf, {
+          fromModel: ran?.model, toModel: c.start.model, ability: c.plan.ability, fromLevel: c.esc.fromLevel, toLevel: c.esc.toLevel,
+        });
+      }
     }
     if (e.type === "spawn" && !c && !settings.routing && e.name !== "main") { // nothing routed it, but the outcome log still knows the child
       const agents = api()?.list() ?? [];

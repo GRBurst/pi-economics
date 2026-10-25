@@ -36,6 +36,8 @@ export function createFailover(d: PolicyDeps & {
     }
     delete c.prev;
     d.log.reroute(name, prev.route, t.route, reason, prev.model, t.model);
+    const st = d.attempts.get(name);
+    if (st) st.ranMember = t.name; // the attempt now runs here (D9)
   };
   return (e: ApiEvent): void => {
     if (e.type !== "error") return;

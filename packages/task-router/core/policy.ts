@@ -1,6 +1,6 @@
 // The spawn policy (spec §5.2): task card → verified → routed plan → concrete model and effort.
 import type { Caller, SpawnPolicy, SubagentsApiV1 } from "./api.ts";
-import type { AttemptState } from "./attempts.ts";
+import type { AttemptState, Escalation } from "./attempts.ts";
 import { briefAppend } from "./brief.ts";
 import { parseCard } from "./card.ts";
 import { effortAt, lvl, named, sameLadder } from "./members.ts";
@@ -20,8 +20,11 @@ import type { FsPort } from "./verify.ts";
 import type { Card, Importance, Plan, Result, RouterSettings, Start, ThinkingLevel } from "./types.ts";
 
 /** What the router remembers about a child it spawned (keyed by child name = task id). */
-/** `cwd` is the task's (card `cwd`, else the caller's); `unresolved`: relative card files missing under it. */
-export type ChildBase = { parent: string; parentSession: string; card: Card; plan: Plan; cwd: string; importance: Importance; unresolved?: true };
+/** `cwd` is the task's (card `cwd`, else the caller's); `unresolved`: relative card files missing under it; `esc`: a re-spawn's
+ *  escalation (the member the failed attempt ran on, the levels), for its escalate line. */
+export type ChildBase = {
+  parent: string; parentSession: string; card: Card; plan: Plan; cwd: string; importance: Importance; unresolved?: true; esc?: Escalation;
+};
 /** `member`/`model`: the member it runs on (its slot, counter, window); `route`: that member's log label; `reservedUntil`: its
  *  slot is held until then, listed or not (mi11); `failover`: the leg's candidate names, the targets of a move (spec §4.8);
  *  `prev`: while a move's `retune` is in flight, where the child ran (restored if the retune throws); `start`: where it started
@@ -77,6 +80,8 @@ export async function resolveLeg(d: PolicyDeps, x: {
       const waitMs = now - t0;
       d.children.set(x.name, { ...x.entry, member: m.name, route: m.route, model: m.model, effort, at: now, reservedUntil: now + PENDING_MS,
         failover: x.failover, start: { member: m.name, model: m.model, effort, waitMs } });
+      const st = d.attempts.get(x.name);
+      if (st) st.ranMember = m.name; // where the attempt runs (D9): a re-spawn's escalate line starts here
       const why = `selection: ${m.name}${waitMs ? ` after ${Math.round(waitMs / 1000)} s` : ""}${m.name !== x.planned.name ? ` (planned ${x.planned.name})` : ""}`;
       return { ok: true, value: { member: m, effort, waitMs, why } };
     }
@@ -118,7 +123,10 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     const to = await resolveLeg(d, {
       name: args.name, cands: st.pinned ? [M] : leg, planned: leg[0], step: plan.worker.step,
       effort: st.pinned ? st.effort : args.thinkingLevel, pinned: st.pinned, failover,
-      entry: { parent: caller.name, parentSession: caller.sessionId, card, plan, cwd, importance, ...(v.unresolved ? { unresolved: true as const } : {}) },
+      entry: {
+        parent: caller.name, parentSession: caller.sessionId, card, plan, cwd, importance,
+        ...(v.unresolved ? { unresolved: true as const } : {}), ...(sp.value.esc ? { esc: sp.value.esc } : {}),
+      },
     });
     if (!to.ok) return reject(to.errors);
     plan.reasons.push(to.value.why);

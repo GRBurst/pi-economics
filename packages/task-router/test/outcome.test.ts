@@ -28,13 +28,15 @@ const routed = {
   base: "qwen-draft", importance: "normal", reasons: ["soft miss: small"],
 } as unknown as Plan;
 const start = { member: "sonnet", model: "anthropic/claude-sonnet-5-5", effort: "high" as const, waitMs: 12000 };
+/** T4.2: an escalate line's router fields. */
+const ESC = { fromModel: "openrouter/qwen/free", toModel: "anthropic/claude-sonnet-5-5", ability: "write", fromLevel: 0, toLevel: 1 };
 
 const sample = () => [
   spawnEvent({ now: NOW, taskId: "t1", card, plan, arm: "a1", sessionId: "s1", parentSessionId: "p1", attemptOf: "t0" }),
   rerouteEvent({ now: NOW, taskId: "t1", from: "qwen", to: "T1", reason: "429 free cap" }),
   checkEvent({ now: NOW, taskId: "t1", exit: 1, durationMs: 1234 }),
   correctiveEvent({ now: NOW, taskId: "t1" }),
-  escalateEvent({ now: NOW, taskId: "t1", from: "qwen", to: "T1", attemptOf: "t0" }),
+  escalateEvent({ now: NOW, taskId: "t1", from: "cloud", to: "T1", attemptOf: "t0", ...ESC }),
   verdictEvent({ now: NOW, taskId: "t1", verdict: "accepted", note: "ok", reviewOf: "t0" }),
   spotcheckEvent({ now: NOW, taskId: "t1" }),
   spawnEvent({ now: NOW, taskId: "t1", card, plan: routed, start }),
@@ -96,6 +98,13 @@ test("T4.1 spawn line: requirement, plan levels, the started member, model and e
   const noDraft = spawnEvent({ now: NOW, taskId: "t2", card, plan: { ...routed, draft: undefined, review: undefined } as unknown as Plan });
   for (const k of ["draft", "reviewLevel", "workerMember", "workerModel", "startEffort", "waitMs"]) assert.ok(!(k in noDraft), k);
   assert.deepEqual([noDraft.ability, noDraft.level, noDraft.workerLevel], ["write", 0, 0]);
+});
+
+test("T4.2 escalate line: models, ability and levels when given; without them only from/to/attemptOf", () => {
+  const e = sample()[4];
+  assert.deepEqual([e.from, e.to, e.fromModel, e.toModel, e.ability, e.fromLevel, e.toLevel], ["cloud", "T1", ...Object.values(ESC)]);
+  const bare = escalateEvent({ now: NOW, taskId: "t1", from: "?", to: "T1" });
+  for (const k of Object.keys(ESC)) assert.ok(!(k in bare), k);
 });
 
 test("T4.1 an unrouted spawn line has none of the new fields", () => {
