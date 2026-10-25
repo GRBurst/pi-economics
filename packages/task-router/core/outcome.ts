@@ -51,8 +51,9 @@ export const spawnEvent = (i: { now: Date; taskId: string; card: Card; plan: Log
     arm: i.arm, sessionId: i.sessionId, parentSessionId: i.parentSessionId, attemptOf: i.attemptOf ?? i.card.attemptOf,
     assigned: i.plan.assigned, routeBase: i.plan.routeBase, unresolved: i.unresolved || undefined, reviewOf: i.card.reviewOf,
   });
-export const rerouteEvent = (i: { now: Date; taskId: string; from: string; to: string; reason: string }) =>
-  finish({ ...base("reroute", i.now, i.taskId), from: i.from, to: i.to, reason: i.reason });
+/** A failover's line: the routes and, when known, the models on both (spec §6.4). */
+export const rerouteEvent = (i: { now: Date; taskId: string; from: string; to: string; reason: string; fromModel?: string; toModel?: string }) =>
+  finish({ ...base("reroute", i.now, i.taskId), from: i.from, to: i.to, reason: i.reason, fromModel: i.fromModel, toModel: i.toModel });
 export const checkEvent = (i: { now: Date; taskId: string; exit: number; durationMs: number }) =>
   finish({ ...base("check", i.now, i.taskId), exit: i.exit, durationMs: i.durationMs });
 export const correctiveEvent = (i: { now: Date; taskId: string }) => finish(base("corrective", i.now, i.taskId));

@@ -10,7 +10,9 @@ export function createOutcomeLog(d: OutcomeLogDeps) {
   const w = (e: OutcomeEvent) => d.append(e);
   return {
     spawn(i: Omit<Parameters<typeof spawnEvent>[0], "now">) { known.add(i.taskId); open.add(i.taskId); w(spawnEvent({ ...i, now: d.now() })); },
-    reroute(taskId: string, from: string, to: string, reason: string) { w(rerouteEvent({ now: d.now(), taskId, from, to, reason })); },
+    reroute(taskId: string, from: string, to: string, reason: string, fromModel?: string, toModel?: string) {
+      w(rerouteEvent({ now: d.now(), taskId, from, to, reason, fromModel, toModel }));
+    },
     check(taskId: string, exit: number, durationMs: number) { w(checkEvent({ now: d.now(), taskId, exit, durationMs })); },
     corrective(taskId: string) { w(correctiveEvent({ now: d.now(), taskId })); },
     escalate(taskId: string, from: string, to: string, attemptOf?: string, f: EscalateFields = {}) {

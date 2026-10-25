@@ -31,6 +31,7 @@ test("terminal error on a cloud Qwen child, local unavailable â†’ Sonnet (xhighâ
   assert.deepEqual(h.a.sent, [{ to: "q1", text: "continue", from: "router" }]);
   const [r] = reroutes(h);
   assert.deepEqual([r.taskId, r.from, r.to], ["q1", "cloud", "T1"]);
+  assert.deepEqual([r.fromModel, r.toModel], [CLOUD, SONNET]); // T4.3: the reroute line carries the models
   assert.match(r.reason, /retries exhausted/);
   // a re-spawn with attemptOf still escalates from qwen (the failover did not spend an attempt)
   const b = accepted(await h.a.spawn({ name: "q1b", task: card({ attemptOf: "q1" }) })) as any;

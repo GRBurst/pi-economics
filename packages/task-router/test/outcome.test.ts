@@ -33,7 +33,7 @@ const ESC = { fromModel: "openrouter/qwen/free", toModel: "anthropic/claude-sonn
 
 const sample = () => [
   spawnEvent({ now: NOW, taskId: "t1", card, plan, arm: "a1", sessionId: "s1", parentSessionId: "p1", attemptOf: "t0" }),
-  rerouteEvent({ now: NOW, taskId: "t1", from: "qwen", to: "T1", reason: "429 free cap" }),
+  rerouteEvent({ now: NOW, taskId: "t1", from: "cloud", to: "T1", reason: "429 free cap", fromModel: "openrouter/qwen/free", toModel: "anthropic/claude-sonnet-5-5" }),
   checkEvent({ now: NOW, taskId: "t1", exit: 1, durationMs: 1234 }),
   correctiveEvent({ now: NOW, taskId: "t1" }),
   escalateEvent({ now: NOW, taskId: "t1", from: "cloud", to: "T1", attemptOf: "t0", ...ESC }),
@@ -105,6 +105,13 @@ test("T4.2 escalate line: models, ability and levels when given; without them on
   assert.deepEqual([e.from, e.to, e.fromModel, e.toModel, e.ability, e.fromLevel, e.toLevel], ["cloud", "T1", ...Object.values(ESC)]);
   const bare = escalateEvent({ now: NOW, taskId: "t1", from: "?", to: "T1" });
   for (const k of Object.keys(ESC)) assert.ok(!(k in bare), k);
+});
+
+test("T4.3 reroute line: fromModel/toModel when given; without them only from/to/reason", () => {
+  const e = sample()[1];
+  assert.deepEqual([e.from, e.to, e.fromModel, e.toModel], ["cloud", "T1", "openrouter/qwen/free", "anthropic/claude-sonnet-5-5"]);
+  const bare = rerouteEvent({ now: NOW, taskId: "t1", from: "cloud", to: "T1", reason: "x" });
+  assert.ok(!("fromModel" in bare) && !("toModel" in bare));
 });
 
 test("T4.1 an unrouted spawn line has none of the new fields", () => {
