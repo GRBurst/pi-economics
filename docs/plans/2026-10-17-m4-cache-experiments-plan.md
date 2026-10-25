@@ -1340,3 +1340,46 @@ Each with the planner's proposed decision; the plan follows the proposal.
 - **Q8 (D9).** `cacheLifecycle` contributes its op even while `piSettings.enable = false` (only the entry is withheld, §5.4). Proposal: accept; the host's script reads `cacheLifecycle.enable` until W6.
 
 # Execution Record
+
+Executed 2026-10-25 (agent impl-m4), on the plan at `ed4a9eb` and M3 as landed (`c0d97a1`, `module-eval` 43 cases). Q1–Q8 accepted as proposed (Q6: §8.1's pairs). Every task done; builds under `ulimit -v 20971520`, `--option eval-cache false`, `timeout -s KILL`; the host read only through `git dot`. Commits are unsigned (no gpg in the sandbox) and made with pathspecs; plan-M6 commits by another agent sit between M4's in the history.
+
+**The shared pi 1.2.0 resync is pending** (group M6.0 of the M6 plan does it). M4's sources stay on host `f6a3c81`; `patches/pi-actor-subagents/` is still the `f6a3c81` copy, so the two `iface-subagents-*` checks compare against that provider, not `4c714f0`'s (its spawn-policy patch changed).
+
+## M4.0, drift
+
+Host HEAD at the start `f9776f4` (router redesign commits after `4c714f0`, only in `extensions/task-router`); at the end `f1b140e`. Drift `f6a3c81..4c714f0` over the M4 paths (`extensions/cache-lifecycle`, `extensions/experiments`, `pi-extensions.nix`, `default.nix`, `flake.nix`'s `pi-cache-lifecycle`/`pi-experiments` lines, `checks/pi-extensions.nix` lines 56–67, 80–86, 146–150, 228–272): none. The one comment-only drift is `checks/pi-extensions.nix:114-115` (the `infinite-context` PATCHED comment, M6's), outside M4's lines. Elsewhere only the actor-subagents patches and `checks/pi-actor-subagents`, `checks/pi-retry`, `flake.nix` (inputs) moved: the resync. So M4 copied from `f6a3c81`, as planned. At the end: `f9776f4..f1b140e` over the same paths: empty.
+
+## Commits
+
+| Task | Commit | Red seen | Deviation |
+|---|---|---|---|
+| M4.0 | — | — | none |
+| M4.1 | `d4171ef` | `Path 'packages/cache-lifecycle/package.nix' does not exist`; plant `maskOnCold: "off"` → `✖ known keys override defaults…`, `ℹ fail 1` | none; `tree identical`, S2's lines only, `outputs identical`, 78 tests |
+| M4.2 | `4a6fdb2` | TS2339 at `core/shell.ts:126:34` and TS2322 at `test/shell.test.ts:99:92`, `Found 2 errors in 2 files.` | none; 4 changed lines, `pass 78` |
+| M4.3 | `1307489` | `Path 'packages/experiments/package.nix' does not exist` | the copy was made first, the directory moved aside for the RED, then restored; plant `maxArms: 16` → `✖ known keys…`; 47 tests, outputs identical |
+| M4.4 | `8dce3b3` | green first; plant → `core/api.ts:70:14 - error TS2322` | none |
+| M4.5 | `7d46650` | green first; plant `version: 2;` → `compare.ts:5:14 - error TS2322` (typecheck stays green) | none |
+| M4.6 | `e3a0c93` | `compare.ts:2:15 - error TS2459`; plant `depth: number` → `compare.ts:5:14 - error TS2322` | none |
+| M4.7 | `151e6cc` | `compare.ts:2:15 - error TS2305`; plant `version: 2` → TS2322 | none; `token-meter` 154, `home-files`, typecheck green |
+| M4.8 | `818205f` | TS2305; plant → TS2322 | none |
+| M4.9 | `255f8ea` | `The option 'programs.piEconomics.cacheLifecycle' does not exist`; plant `forChildren = false` → `FAIL cache-lifecycle-defaults` ×2 | 47 cases |
+| M4.10 | `bc5b320` | `…cacheLifecycle.settings' does not exist`; plant `mkIf true` → `FAIL cache-lifecycle-files` ×2 | 48 |
+| M4.11 | `2039aa0` | the four `FAIL cache-lifecycle-pisettings` lines of the plan | plants (a) `order = 1000` and (b) the description in one build: three FAIL lines (ops, program, description); 49 |
+| M4.12 | `230a522` | `FAIL cache-lifecycle-warning: new warnings: expected [ … ], got [ ]`; inverted plant → `FAIL cache-lifecycle-defaults: warnings` ×2 + the warning case | 50 |
+| M4.13 | `0453fd0` | option missing; plant `forChildren = true` → `FAIL experiments-defaults` ×2 | 54 |
+| M4.14 | `c3e6420` | option missing; plant → `FAIL experiments-files` ×2 | 55 |
+| M4.15 | `8718cda` | `FAIL experiments-warning`; inverted plant → `FAIL experiments-defaults: warnings` ×2 + the case | 56 |
+| M4.16 | `4d5d454` | green first (57 cases); plant `forChildren = false` → `FAIL cache-experiments-host-like: childExtensions`, `…actor-subagents/settings.json`, and M4.9's two | none |
+| M4.17 | `776e9f5` | green first; plants (a) `${cfg.package}/core` → `FAIL .pi/agent: …-pi-experiments-0.1.0/core lacks package.json`; (b) `value = "streaming"` → `FAIL .pi/agent: settings.json after the op: …"cacheWarming": "streaming"` | none |
+| M4.18 | `dcf6611` | green first; plant `home.activation.planted` → `FAIL components-together: activation entries`, `1 failure(s) in 57 cases` | none |
+| M4.19 | `d9c66d1` | 42 lines before; 3 after (the two kept test names and S4's own `(spec §5.3)` comment) | applied with a perl script over comment lines only; it first stripped S4's two new `(spec §5.3)` citations, restored; 80 changed lines in 21 files, no `CODE CHANGED`; the suites `pass 78`/`pass 47` |
+| M4.20 | `cc089c8` | — | S12's `cacheWarming = "idle"` fails the plan's own `MISSING cacheWarming` grep (the backticked name is not alone): reworded to `` `cacheWarming` is `"idle"` ``; no `MISSING` |
+| M4.21 | this record's commit | — | see below |
+
+## Gate (M4.21), 2026-10-25
+
+`~/.cache/pi/m2gate.sh` (log `~/.cache/pi/m4gate.log`): per ref a listing, each check's output deleted before its build, one capped build each. Listing under both refs: the 23 checks of M4.21 Step 1, no `FAILED`; `packages` `["actor-subagents","bench","cache-lifecycle","experiments","token-meter"]`; `homeModules` `["default"]`; formatter `.drv` evaluates; `alejandra --check` over 35 files clean. `flake.lock` unchanged since `c0d97a1`. Peaks: `module-eval` (57 cases) 1.64 GiB / 34 s (`git+file://`), 1.87 GiB / 33 s (`path:`); `typecheck-*` and `iface-*` 0.25 GiB, 3–8 s; `home-files` 0.43 GiB, 3–5 s; `pi-settings-migrate` 0.56 GiB.
+
+Outputs that `home-files` references cannot be deleted by the gate's delete step, so `cache-lifecycle`, `experiments`, `token-meter` and `actor-subagents` were short no-op builds there; a separate `nix build --rebuild` of each ran the suites: `ℹ pass 78`, `ℹ pass 47`, `ℹ pass 154`, `ℹ pass 297`, all `ℹ fail 0`.
+
+Open questions: Q1–Q8 accepted. Follow-ups, not done: the pi 1.2.0 resync (M6.0); W3 re-points the host's readers (`cacheLifecycle.enable`).
