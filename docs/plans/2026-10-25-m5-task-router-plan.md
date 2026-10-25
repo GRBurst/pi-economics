@@ -24,6 +24,7 @@ Measured:
 - The generator: 754 lines, 101 KB, 20 s per run; `f1b140e` and the edited copy give byte-equal output. A plant in the write table changes 234 lines; one in `pickQwen` changes 1 line.
 - The P2 test: green on `f1b140e`, red on a planted `pickQwen` that ignores the cap.
 - The host's `contract.ts` with its 10 import paths re-pointed to `packages/`: `pi-log-contract: ok (meter 28, outcomes 6, assignments 2, guards 5)` against this repository's token-meter, cache-lifecycle, experiments and the copied router.
+- S5's and S8's `default.nix`, as written below: `router-golden` and `log-contract` green; the appended empty-slot line turns `router-golden` red with its P2 message; `leak` green with the router, the generator, the golden file and `contract.ts` added.
 
 ## Motivation
 
