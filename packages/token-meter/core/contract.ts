@@ -12,6 +12,7 @@ const numb = (v: unknown) => typeof v === "number" && Number.isFinite(v);
 const time = (v: unknown) => typeof v === "string" && !Number.isNaN(Date.parse(v));
 const oneOf = (...xs: unknown[]) => (v: unknown) => xs.includes(v);
 const obj = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v);
+const int0 = (v: unknown) => Number.isInteger(v) && (v as number) >= 0;
 
 type Rule = { field: string; why: string; when?: (l: any) => boolean; ok: (v: any, l: any) => boolean };
 const every = (fields: Record<string, (v: any) => boolean>, why: string, when?: (l: any) => boolean): Rule[] =>
@@ -36,6 +37,12 @@ const OUTCOMES: Rule[] = [
   ...optional({ requested: (v) => v === true }, "spotcheck: requested is true", (l) => l.event === "spotcheck"),
   ...every({ exit: numb }, "check", (l) => l.event === "check"),
   ...every({ from: str, to: str }, "escalate/reroute", (l) => l.event === "escalate" || l.event === "reroute"),
+  ...optional({
+    ability: str, level: int0, draft: (v) => v === true, workerLevel: int0, reviewLevel: int0,
+    workerMember: str, workerModel: str, startEffort: str, waitMs: (v) => numb(v) && v >= 0,
+  }, "spawn: requirement, levels, started member, model, effort, wait (router 2026-10-17)", (l) => l.event === "spawn"),
+  ...optional({ fromModel: str, toModel: str }, "reroute/escalate: the models on both routes (router 2026-10-17)", (l) => l.event === "escalate" || l.event === "reroute"),
+  ...optional({ ability: str, fromLevel: int0, toLevel: int0 }, "escalate: ability and levels (router 2026-10-17)", (l) => l.event === "escalate"),
 ];
 const ASSIGNMENTS: Rule[] = [
   versioned,

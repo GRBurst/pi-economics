@@ -77,3 +77,33 @@ test("optional outcome fields, when present, have their type: assigned router|ra
   w.outcomes.push({ v: 1, ts: iso(T0 + 80 * MIN), event: "spotcheck", taskId: "t2", requested: false });
   assert.deepEqual(fields(check(w)).sort(), ["outcomes.assigned", "outcomes.cwd", "outcomes.requested", "outcomes.reviewOf", "outcomes.routeBase", "outcomes.unresolved"]);
 });
+
+// T4.4 (MP4): the router's 2026-10-17 fields (spec §6.4) are optional, typed when present.
+const ROUTER_SPAWN = { ability: "write", level: 0, draft: true, workerLevel: 0, reviewLevel: 1, workerMember: "sonnet", workerModel: "anthropic/claude-sonnet-5-5", startEffort: "high", waitMs: 0 };
+const routerWorld = () => {
+  const w = world();
+  Object.assign(w.outcomes[0], ROUTER_SPAWN);
+  Object.assign(w.outcomes[3], { fromModel: "openrouter/qwen/free", toModel: "anthropic/claude-opus-5-5", ability: "write", fromLevel: 0, toLevel: 2 });
+  w.outcomes.push({ v: 1, ts: iso(T0 + 62 * MIN), event: "reroute", taskId: "t1", from: "cloud", to: "T1", reason: "500", fromModel: "openrouter/qwen/free", toModel: "anthropic/claude-sonnet-5-5" });
+  return w;
+};
+
+test("T4.4 the router's new spawn, reroute and escalate fields pass when valid and are never required", () => {
+  assert.deepEqual(check(routerWorld()), []);
+  const w = world();
+  w.outcomes.push({ v: 1, ts: iso(T0 + 62 * MIN), event: "reroute", taskId: "t1", from: "cloud", to: "T1", reason: "500" });
+  assert.deepEqual(check(w), []);
+});
+
+for (const [i, bad, field] of [
+  [0, { workerLevel: "1" }, "workerLevel"], [0, { waitMs: -1 }, "waitMs"], [0, { draft: false }, "draft"], [3, { fromLevel: 0.5 }, "fromLevel"],
+  [0, { level: -1 }, "level"], [0, { reviewLevel: 1.5 }, "reviewLevel"], [0, { workerMember: "" }, "workerMember"], [0, { workerModel: 3 }, "workerModel"],
+  [0, { startEffort: "" }, "startEffort"], [0, { ability: 1 }, "ability"], [3, { toLevel: "2" }, "toLevel"], [3, { ability: "" }, "ability"],
+  [3, { fromModel: "" }, "fromModel"], [8, { toModel: 5 }, "toModel"], [0, { waitMs: Number.NaN }, "waitMs"],
+] as const) {
+  test(`T4.4 an invalid ${field} on line ${i} (${JSON.stringify(bad)}) is one problem naming it`, () => {
+    const w = routerWorld();
+    Object.assign(w.outcomes[i], bad);
+    assert.deepEqual(fields(check(w)), [`outcomes.${field}`]);
+  });
+}
