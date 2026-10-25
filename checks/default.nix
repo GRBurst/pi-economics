@@ -79,5 +79,7 @@ in {
     name = "cache-lifecycle";
     src = ../packages/cache-lifecycle;
   };
+  # The experiments tests run when it builds.
+  experiments = self.packages.${pkgs.stdenv.hostPlatform.system}.experiments;
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
