@@ -1,5 +1,4 @@
-diff --git a/extensions/actor-subagents/agent-event.ts b/extensions/actor-subagents/agent-event.ts
-index bac7df2..dfa95ce 100644
+diff -ruN a/extensions/actor-subagents/agent-event.ts b/extensions/actor-subagents/agent-event.ts
 --- a/extensions/actor-subagents/agent-event.ts
 +++ b/extensions/actor-subagents/agent-event.ts
 @@ -1,6 +1,9 @@
@@ -13,11 +12,10 @@ index bac7df2..dfa95ce 100644
  	// `buffered` distinguishes a message parked in a paused inbox from one handed to the
  	// target session: the feed must not claim delivery for something that has not moved yet.
  	| { type: "route"; from: string; to: string; preview: string; buffered: boolean; ts: number }
-diff --git a/extensions/actor-subagents/agent-record.ts b/extensions/actor-subagents/agent-record.ts
-index d6c20df..5e02693 100644
+diff -ruN a/extensions/actor-subagents/agent-record.ts b/extensions/actor-subagents/agent-record.ts
 --- a/extensions/actor-subagents/agent-record.ts
 +++ b/extensions/actor-subagents/agent-record.ts
-@@ -77,6 +77,10 @@ export interface AgentRecord {
+@@ -96,6 +96,10 @@
  	systemPrompt?: string;
  	/** Absolute path of this agent's session JSONL on disk (undefined for 'main' + in-memory). */
  	sessionFile?: string;
@@ -28,24 +26,22 @@ index d6c20df..5e02693 100644
  	/**
  	 * Phase of the running turn (reasoning vs answer text vs tool run); undefined means no
  	 * turn is running. Single field for "is it working" AND "at what": a separate streaming
-diff --git a/extensions/actor-subagents/agent-system-prompt.ts b/extensions/actor-subagents/agent-system-prompt.ts
-index 11f5ea5..9237850 100644
+diff -ruN a/extensions/actor-subagents/agent-system-prompt.ts b/extensions/actor-subagents/agent-system-prompt.ts
 --- a/extensions/actor-subagents/agent-system-prompt.ts
 +++ b/extensions/actor-subagents/agent-system-prompt.ts
-@@ -16,7 +16,7 @@ export function agentSystemPrompt(
+@@ -16,7 +16,7 @@
      `You are agent "${name}" in a multi-agent system.`,
      `You were spawned by "${spawnedBy}".`,
      "You can talk to other agents with these tools:",
--    "- spawn_subagent({name, systemPrompt, model?, thinkingLevel?, message}): create a subagent inside this session (message = its first task); omit model/thinkingLevel to inherit yours.",
-+    "- spawn_subagent({name, systemPrompt, model?, thinkingLevel?, message}): create a subagent inside this session (message = its first task); omit model/thinkingLevel to let the spawn policy decide (inherit if none).",
+-    "- spawn_subagent({name, systemPrompt, model?, thinkingLevel?, message}): create a named background agent with its own model session (message = its first task); omit model/thinkingLevel to inherit yours.",
++    "- spawn_subagent({name, systemPrompt, model?, thinkingLevel?, message}): create a named background agent with its own model session (message = its first task); omit model/thinkingLevel to let the spawn policy decide (inherit if none).",
      '- send_message({to, content}): to is an array of agent names (multicast); fire-and-forget (e.g. ["main"]). It never waits for the reply, but it does report each receiver\'s state back to you.',
      "- list_subagents(): see who exists.",
-     "- pause_subagents({names?}) / resume_subagents({names?}) / kill_subagents({names}): control the agents in your subtree (those you spawned, and theirs); each acts on the named agents' whole subtrees. Omitted names in pause/resume mean your direct children.",
-diff --git a/extensions/actor-subagents/agent-tools.ts b/extensions/actor-subagents/agent-tools.ts
-index 6ca8169..bb99f6f 100644
+     "- pause_subagents({names?}) / resume_subagents({names?}) / kill_subagents({names}): control the agents in your subtree (those you spawned, and theirs); each acts on the named agents' whole subtrees. Omitted, empty or whitespace-only names in pause/resume mean your direct children.",
+diff -ruN a/extensions/actor-subagents/agent-tools.ts b/extensions/actor-subagents/agent-tools.ts
 --- a/extensions/actor-subagents/agent-tools.ts
 +++ b/extensions/actor-subagents/agent-tools.ts
-@@ -32,6 +32,7 @@ import {
+@@ -33,6 +33,7 @@
  import { CUSTOM_STATUS_MAX, formatHistory } from "./panel-logic.ts";
  import type { AgentModelSetter } from "./set-agent-model.ts";
  import type { Spawner } from "./spawner.ts";
@@ -53,14 +49,14 @@ index 6ca8169..bb99f6f 100644
  import { collapseBlock, toolPreviewParts } from "./tool-preview.ts";
  import { THINKING_LEVELS } from "./thinking-level.ts";
  
-@@ -145,17 +146,13 @@ export function makeAgentTools(
+@@ -140,17 +141,13 @@
            description: "System prompt defining the agent's behavior",
          }),
          model: Type.Optional(
 -          Type.String({
 -            description:
 -              "Omit to inherit your current model (the default — almost always correct). Set 'provider/id' " +
--              "ONLY when the user explicitly named a specific model; a wrong value returns the available list.",
+-              "ONLY when the user explicitly named a specific model; an unknown value reports available models when any are listed.",
 -          }),
 +          Type.String({ description: SPAWN_MODEL_HINT }),
          ),
@@ -76,7 +72,7 @@ index 6ca8169..bb99f6f 100644
          ),
          // Required, not optional: an agent that receives no message never gets a turn and
          // would sit idle forever. Requiring the task removes that dead-on-arrival state.
-@@ -172,11 +169,17 @@ export function makeAgentTools(
+@@ -167,11 +164,17 @@
              model: args.model,
              thinkingLevel: args.thinkingLevel,
              message: args.message,
@@ -95,10 +91,8 @@ index 6ca8169..bb99f6f 100644
        },
      }),
      defineTool({
-diff --git a/extensions/actor-subagents/api.test.ts b/extensions/actor-subagents/api.test.ts
-new file mode 100644
-index 0000000..3ba5044
---- /dev/null
+diff -ruN a/extensions/actor-subagents/api.test.ts b/extensions/actor-subagents/api.test.ts
+--- a/extensions/actor-subagents/api.test.ts
 +++ b/extensions/actor-subagents/api.test.ts
 @@ -0,0 +1,158 @@
 +import { test } from "node:test";
@@ -259,10 +253,8 @@ index 0000000..3ba5044
 +	assert.equal(byName.main?.lastRequestAt, undefined);
 +	assert.equal(byName.main?.costUsd, undefined);
 +});
-diff --git a/extensions/actor-subagents/api.ts b/extensions/actor-subagents/api.ts
-new file mode 100644
-index 0000000..d0ee13e
---- /dev/null
+diff -ruN a/extensions/actor-subagents/api.ts b/extensions/actor-subagents/api.ts
+--- a/extensions/actor-subagents/api.ts
 +++ b/extensions/actor-subagents/api.ts
 @@ -0,0 +1,166 @@
 +/**
@@ -372,7 +364,7 @@ index 0000000..d0ee13e
 +/** One agent as api.list() reports it; usage is read from the live transcript. */
 +export function agentInfo(rec: AgentRecord, status: AgentStatus, now: number): AgentInfo {
 +	const state = status.kind === "paused" ? "paused" : status.kind === "idle" ? "idle" : "running";
-+	const assistants = ((rec.view?.getMessages() ?? []) as AssistantLike[]).filter((m) => m.role === "assistant");
++	const assistants = ((rec.view?.getMessages?.() ?? []) as AssistantLike[]).filter((m) => m.role === "assistant");
 +	return {
 +		name: rec.name,
 +		parent: rec.spawnedBy,
@@ -431,11 +423,24 @@ index 0000000..d0ee13e
 +	g[API_KEY] = api;
 +	return api;
 +}
-diff --git a/extensions/actor-subagents/engine.ts b/extensions/actor-subagents/engine.ts
-index d28ac18..9f0f50a 100644
+diff -ruN a/extensions/actor-subagents/engine.ts b/extensions/actor-subagents/engine.ts
 --- a/extensions/actor-subagents/engine.ts
 +++ b/extensions/actor-subagents/engine.ts
-@@ -127,7 +127,7 @@ export class Engine {
+@@ -94,6 +94,13 @@
+ 		this.caps = caps;
+ 	}
+ 
++	/**
++	 * Local patch (error-notice-gate.ts): while set, a child's terminal error is not routed to its
++	 * parent from setStopReason; the host calls announceError later, once its gate decided the
++	 * error is not a transient one (a 429 that pi-retry retries). The `error` event is never delayed.
++	 */
++	deferErrorNotices = false;
++
+ 	private emit(e: AgentEvent): void {
+ 		this.events.push(e);
+ 		for (const l of this.listeners) l(e);
+@@ -137,7 +144,7 @@
  
  	addAgent(rec: AgentRecord): void {
  		this.agents.set(rec.name, rec);
@@ -444,7 +449,7 @@ index d28ac18..9f0f50a 100644
  	}
  
  	// --- Atomic reservation (prevents spawn/send, duplicate and cap races) ---
-@@ -178,6 +178,8 @@ export class Engine {
+@@ -188,6 +195,8 @@
  			reconfigure?: AgentRecord["reconfigure"];
  			systemPrompt?: string;
  			sessionFile?: string;
@@ -453,7 +458,7 @@ index d28ac18..9f0f50a 100644
  		},
  	): void {
  		const rec = this.agents.get(name);
-@@ -190,7 +192,10 @@ export class Engine {
+@@ -200,7 +209,10 @@
  		rec.reconfigure = opts.reconfigure;
  		rec.systemPrompt = opts.systemPrompt;
  		rec.sessionFile = opts.sessionFile;
@@ -463,16 +468,30 @@ index d28ac18..9f0f50a 100644
 +		this.emit({ type: "attach", name, by: rec.spawnedBy, childSessionId: rec.sessionId, ts: Date.now() });
  		const buffered = rec.buffer ?? [];
  		rec.buffer = undefined;
- 		// A pause can land while the session is being created. Handing the reservation's messages to
-diff --git a/extensions/actor-subagents/error-notice-gate.test.ts b/extensions/actor-subagents/error-notice-gate.test.ts
-new file mode 100644
-index 0000000..f457cb7
---- /dev/null
+ 		// A pause can land while the session is being created. The reservation's messages join the
+@@ -703,7 +715,13 @@
+ 		if (!entersError) return;
+ 		rec.errorReason = detail ?? "the turn failed after the SDK's retries";
+ 		this.emit({ type: "error", name, reason: rec.errorReason, ts: Date.now() });
+-		this.announce({ kind: "error", target: asTarget(rec), reason: rec.errorReason });
++		if (!this.deferErrorNotices) this.announceError(name, rec.errorReason);
++	}
++
++	/** Route the scheduler's error message to the live direct parent of `name` (lifecycle-notice.ts decides who). */
++	announceError(name: string, reason: string): void {
++		const rec = this.agents.get(name);
++		if (rec) this.announce({ kind: "error", target: asTarget(rec), reason });
+ 	}
+ 
+ 	/** Tell the parents what a lifecycle change did to their children (lifecycle-notice.ts decides). */
+diff -ruN a/extensions/actor-subagents/error-notice-gate.test.ts b/extensions/actor-subagents/error-notice-gate.test.ts
+--- a/extensions/actor-subagents/error-notice-gate.test.ts
 +++ b/extensions/actor-subagents/error-notice-gate.test.ts
-@@ -0,0 +1,144 @@
+@@ -0,0 +1,205 @@
 +import { test } from "node:test";
 +import assert from "node:assert/strict";
 +import type { AgentEvent } from "./agent-event.ts";
++import type { RoutedAgentMessage } from "./agent-message.ts";
 +import { Engine } from "./engine.ts";
 +import { createErrorNoticeGate } from "./error-notice-gate.ts";
 +
@@ -501,15 +520,28 @@ index 0000000..f457cb7
 +/** A parent 'main' with child 'q1', the gate wired to the engine the way index.ts wires it. */
 +function setup() {
 +	const engine = new Engine({ maxAgents: 8, maxSpawnDepth: 3 });
++	// What the parent actually receives: upstream routes a child's terminal error to it through
++	// Engine.route (a scheduler message), which the gate only delays.
++	const delivered: RoutedAgentMessage[] = [];
 +	const base = { model: "m", handle: { deliver: async () => {}, abort: async () => {} }, createdAt: 0, turns: 0, lastActivity: 0 };
-+	engine.addAgent({ ...base, name: "main", spawnedBy: "main", depth: 0 });
++	engine.addAgent({
++		...base,
++		name: "main",
++		spawnedBy: "main",
++		depth: 0,
++		handle: { deliver: async (m: RoutedAgentMessage) => void delivered.push(m), abort: async () => {} },
++	});
 +	engine.addAgent({ ...base, name: "q1", spawnedBy: "main", depth: 1 });
++	engine.deferErrorNotices = true;
 +	const clock = fakeClock();
 +	const notices: string[] = [];
 +	const events: AgentEvent[] = [];
 +	const gate = createErrorNoticeGate({
 +		graceMs: 7000,
-+		notify: (e) => notices.push(`${e.name}: ${e.reason}`),
++		notify: (e) => {
++			notices.push(`${e.name}: ${e.reason}`);
++			engine.announceError(e.name, e.reason);
++		},
 +		setTimer: clock.set,
 +		clearTimer: clock.clear,
 +	});
@@ -525,7 +557,7 @@ index 0000000..f457cb7
 +	};
 +	const assistant = (stopReason: string) =>
 +		gate.onSessionEvent("q1", { type: "message_end", message: { role: "assistant", stopReason } });
-+	return { engine, clock, notices, events, gate, failedRun, assistant };
++	return { engine, clock, notices, delivered, events, gate, failedRun, assistant };
 +}
 +
 +test("a transient error the child recovers from within the grace never reaches the parent", () => {
@@ -614,10 +646,55 @@ index 0000000..f457cb7
 +	clock.advance(7000);
 +	assert.deepEqual(notices, []);
 +});
-diff --git a/extensions/actor-subagents/error-notice-gate.ts b/extensions/actor-subagents/error-notice-gate.ts
-new file mode 100644
-index 0000000..3e8652d
---- /dev/null
++
++test("the parent gets upstream's routed scheduler error, only after the grace", () => {
++	const { clock, delivered, failedRun } = setup();
++	failedRun("boom");
++	// The engine would have routed it at once; the gate holds it back.
++	clock.advance(6999);
++	assert.equal(delivered.length, 0);
++	clock.advance(1);
++	assert.equal(delivered.length, 1);
++	const [part] = delivered[0].parts;
++	assert.equal(part.from, "scheduler");
++	assert.equal(part.actionable, true);
++	assert.match(part.content, /your subagent q1 entered the error state: boom/);
++});
++
++test("a recovered transient error routes nothing to the parent", () => {
++	const { clock, delivered, failedRun, assistant } = setup();
++	failedRun("429 rate limited");
++	assistant("toolUse");
++	clock.advance(60_000);
++	assert.equal(delivered.length, 0);
++});
++
++test("without the gate the engine routes the error at once, as upstream does", () => {
++	const engine = new Engine({ maxAgents: 8, maxSpawnDepth: 3 });
++	const delivered: RoutedAgentMessage[] = [];
++	const base = { model: "m", handle: { deliver: async () => {}, abort: async () => {} }, createdAt: 0, turns: 0, lastActivity: 0 };
++	engine.addAgent({
++		...base,
++		name: "main",
++		spawnedBy: "main",
++		depth: 0,
++		handle: { deliver: async (m: RoutedAgentMessage) => void delivered.push(m), abort: async () => {} },
++	});
++	engine.addAgent({ ...base, name: "q1", spawnedBy: "main", depth: 1 });
++	engine.reportError("q1", "boom");
++	assert.equal(delivered.length, 1);
++	assert.equal(engine.deferErrorNotices, false);
++});
++
++test("announcing the error of an agent that is gone reports nothing", async () => {
++	const { engine, delivered, failedRun } = setup();
++	failedRun();
++	await engine.kill("main", ["q1"]);
++	engine.announceError("q1", "late");
++	assert.equal(delivered.length, 0);
++});
+diff -ruN a/extensions/actor-subagents/error-notice-gate.ts b/extensions/actor-subagents/error-notice-gate.ts
+--- a/extensions/actor-subagents/error-notice-gate.ts
 +++ b/extensions/actor-subagents/error-notice-gate.ts
 @@ -0,0 +1,81 @@
 +/**
@@ -701,8 +778,18 @@ index 0000000..3e8652d
 +		},
 +	};
 +}
-diff --git a/extensions/actor-subagents/feed.ts b/extensions/actor-subagents/feed.ts
-index 1a3bd96..9dee6ba 100644
+diff -ruN a/extensions/actor-subagents/feed.test.ts b/extensions/actor-subagents/feed.test.ts
+--- a/extensions/actor-subagents/feed.test.ts
++++ b/extensions/actor-subagents/feed.test.ts
+@@ -250,5 +250,6 @@
+ test("formatSnapshot appends extension statuses with their keys at the end of the row", () => {
+ 	const view = { getContextUsage: () => undefined, getExtensionStatuses: () => ({ "bash-async": "⏳2", lsp: "3 errors" }) };
+ 	const agents = [rec({ name: "coder", view: view as unknown as AgentRecord["view"] })];
+-	assert.match(snapshot(agents, "main"), /\(by main\) {2}bash-async: ⏳2, lsp: 3 errors$/m);
++	// The usage column (idle=, cache=, ctx=, $) sits before the extensions, which stay last.
++	assert.match(snapshot(agents, "main"), /\(by main\)(?: {2}idle=\S+)? {2}bash-async: ⏳2, lsp: 3 errors$/m);
+ });
+diff -ruN a/extensions/actor-subagents/feed.ts b/extensions/actor-subagents/feed.ts
 --- a/extensions/actor-subagents/feed.ts
 +++ b/extensions/actor-subagents/feed.ts
 @@ -3,6 +3,7 @@
@@ -710,10 +797,10 @@ index 1a3bd96..9dee6ba 100644
   */
  import type { OrderedAgent } from "./agent-order.ts";
 +import { type AgentInfo, agentInfo } from "./api.ts";
- import { type AgentStatus, formatStatus } from "./agent-status.ts";
+ import { type AgentStatus, formatStatus, formatStatusDetail } from "./agent-status.ts";
  import type { AgentRecord } from "./agent-record.ts";
  import type { ControlResult, EngineResumeResult } from "./control-result.ts";
-@@ -19,6 +20,23 @@ function formatAge(ms: number): string {
+@@ -20,6 +21,23 @@
  	return `${Math.floor(m / 60)}h`;
  }
  
@@ -737,7 +824,7 @@ index 1a3bd96..9dee6ba 100644
  /** Relation of an agent to the viewer, for orientation in deep hierarchies. */
  function relTo(a: AgentRecord, viewer: string, viewerParent: string | undefined): string {
  	if (a.name === viewer) return "self";
-@@ -70,6 +88,7 @@ export function formatSnapshot(
+@@ -71,6 +89,7 @@
  		agents.map((a) => statusOf(a).length),
  		STATUS_CAP,
  	);
@@ -745,32 +832,32 @@ index 1a3bd96..9dee6ba 100644
  	const rows = ordered.map((o) => {
  		const a = o.agent;
  		const status = statusOf(a);
-@@ -86,7 +105,7 @@ export function formatSnapshot(
+@@ -89,7 +108,7 @@
  		return (
  			`  ${nameCell(o).padEnd(nameW)} ${rel.padEnd(6)} ${fit(status, statusW)} ` +
  			`turns:${turns.padEnd(3)} ctx:${ctx.padEnd(4)} last ${formatAge(now - a.lastActivity).padEnd(4)} ` +
--			`${model}  ${origin}`
-+			`${model}  ${origin}${usageOf(a)}`
+-			`${model}  ${origin}${extensions ? `  ${extensions}` : ""}`
++			`${model}  ${origin}${usageOf(a)}${extensions ? `  ${extensions}` : ""}`
  		);
  	});
  	return ["agents:", ...rows].join("\n");
-diff --git a/extensions/actor-subagents/index.ts b/extensions/actor-subagents/index.ts
-index 53cbfba..57e17b6 100644
+diff -ruN a/extensions/actor-subagents/index.ts b/extensions/actor-subagents/index.ts
 --- a/extensions/actor-subagents/index.ts
 +++ b/extensions/actor-subagents/index.ts
-@@ -27,9 +27,11 @@ import { renderAgentMessage } from "./agent-message-renderer.ts";
+@@ -27,10 +27,12 @@
  import { orderAgents } from "./agent-order.ts";
  import { childPromptOptions } from "./child-prompt.ts";
  import { makeAgentTools } from "./agent-tools.ts";
 +import { installApi } from "./api.ts";
  import type { AgentHandle } from "./agent-record.ts";
  import type { EngineResumeResult } from "./control-result.ts";
+ import { authorityOf } from "./authorize.ts";
  import { Engine } from "./engine.ts";
 +import { createErrorNoticeGate, type ErrorNoticeGate } from "./error-notice-gate.ts";
- import { errorNotification } from "./error-notification.ts";
  import {
    formatControlResult,
-@@ -58,7 +60,12 @@ import {
+   formatResumeResult,
+@@ -58,7 +60,12 @@
    unknownModelMessage,
  } from "./resolve-model.ts";
  import { createAgentModelSetter } from "./set-agent-model.ts";
@@ -784,15 +871,15 @@ index 53cbfba..57e17b6 100644
  import {
    createSpawner,
    type ResolvedModel,
-@@ -66,6 +73,7 @@ import {
+@@ -66,6 +73,7 @@
  } from "./spawner.ts";
- import { THINKING_LEVELS, type ThinkingLevel } from "./thinking-level.ts";
+ import type { ThinkingLevel } from "./thinking-level.ts";
  import { timestampToolResult } from "./tool-timestamp.ts";
 +import { childToolAllowlist, type ToolGuard, toolGuardExtensions } from "./tool-guard.ts";
  
  /**
   * Gives one session a sense of elapsed time by stamping the wall-clock start and finish times
-@@ -90,6 +98,7 @@ function registerToolTimestamps(pi: ExtensionAPI): void {
+@@ -90,6 +98,7 @@
    });
  }
  
@@ -800,7 +887,7 @@ index 53cbfba..57e17b6 100644
  /**
   * Read this extension's settings, next to pi's own agent config (getAgentDir() honors pi's
   * agent-dir override, so a test or alternate profile stays self-contained).
-@@ -97,13 +106,33 @@ function registerToolTimestamps(pi: ExtensionAPI): void {
+@@ -97,13 +106,33 @@
   * means per field (defaults for caps, nothing for childExtensions).
   */
  function readSettings(): Settings {
@@ -836,37 +923,44 @@ index 53cbfba..57e17b6 100644
  
  // Fired to each mid-turn-paused agent on resume to re-trigger its work. Fixed text
  // (not main-authored) so resume stays a single tool call from main's side.
-@@ -162,7 +191,9 @@ const RESUME_NUDGE = (now: Date) => {
- //      records. pause/resume/kill/retune take the acting agent first; pause/resume/kill take a
- //      names list and return per-target outcomes; pause aborts the stopped turns itself and
- //      resume is async, waiting for those aborts. A v25 instance would keep a swarm-wide pause this code can no longer lift.
--const ENGINE_KEY = "__subagentsEngine_v26";
-+// v27: attach() stores sessionId + policyMeta and emits an `attach` event (the api's spawn event
-+//      with childSessionId); addAgent's spawn event carries the record's sessionId.
-+const ENGINE_KEY = "__subagentsEngine_v27";
+@@ -170,7 +199,11 @@
+ //      append/busy). A v26 instance would treat a string flag as foreign and lack these methods.
+ // v28: terminal errors route actionable scheduler messages instead of silent notices; v27
+ //      would retain the old announce/route methods after /reload and never wake a parent.
+-const ENGINE_KEY = "__subagentsEngine_v28";
++// v28-policy1 (local spawn-policy patch): attach() stores sessionId + policyMeta and emits an
++//      `attach` event (the api's spawn event with childSessionId), addAgent's spawn event carries
++//      the record's sessionId, and the engine gains deferErrorNotices/announceError (the error
++//      notice gate). Upstream's v28 instance lacks them.
++const ENGINE_KEY = "__subagentsEngine_v28_policy1";
  
  function getEngine(): Engine {
    const g = globalThis as Record<string, unknown>;
-@@ -471,9 +502,17 @@ export default function subagents(pi: ExtensionAPI) {
-     });
+@@ -457,8 +490,22 @@
+     }
    };
  
-+  // A transient child error (e.g. a 429 that pi-retry retries) must not wake the parent, so the
-+  // notice is debounced (error-notice-gate.ts); the engine event itself is not delayed.
++  // A transient child error (e.g. a 429 that pi-retry retries) must not wake the parent. Upstream
++  // routes a child's terminal error to its parent from inside the engine; with deferErrorNotices
++  // the engine leaves that to this gate, which debounces it (error-notice-gate.ts) and then calls
++  // engine.announceError, the same routed scheduler message. The engine event is not delayed.
++  engine.deferErrorNotices = true;
 +  const errorGate = createErrorNoticeGate({
 +    graceMs: readErrorNoticeGraceMs(),
-+    notify: notifyParentOfError,
++    notify: ({ name, reason }) => engine.announceError(name, reason),
 +  });
 +  (globalThis as Record<string, unknown>)[ERROR_GATE_KEY] = errorGate;
 +
    // Update the status on every engine event.
-   const unsubscribeEngine = engine.subscribe((e) => {
--    if (e.type === "error") notifyParentOfError(e);
+-  const unsubscribeEngine = engine.subscribe(() => updateStatus());
++  const unsubscribeEngine = engine.subscribe((e) => {
 +    errorGate.onEngineEvent(e);
-     updateStatus();
-   });
-   // The roster widget hands pi fully composed lines truncated to the width they were built at,
-@@ -528,9 +567,11 @@ export default function subagents(pi: ExtensionAPI) {
++    updateStatus();
++  });
+   installProcessHooks(unsubscribeEngine);
+ 
+   // Policy lives in resolve-model.ts (pure); this only binds it to the live registry.
+@@ -482,9 +529,11 @@
        spawnedBy: string;
        model: unknown;
        thinkingLevel?: ThinkingLevel;
@@ -879,8 +973,8 @@ index 53cbfba..57e17b6 100644
      // Children get the human's settings as VALUES, through a manager whose writes go nowhere.
      // pi's session.setModel()/setThinkingLevel() persist the new default into settings.json, so
      // a file-backed child manager would let a retuned subagent silently change what the next
-@@ -557,6 +598,8 @@ export default function subagents(pi: ExtensionAPI) {
-       additionalExtensionPaths: readSettings().childExtensions,
+@@ -512,6 +561,8 @@
+       additionalExtensionPaths: settings.childExtensions,
        extensionFactories: [
          { name: "subagent-timestamps", factory: registerToolTimestamps },
 +        { name: "subagent-retry-signals", factory: forwardRetrySignals(spec.name) },
@@ -888,7 +982,7 @@ index 53cbfba..57e17b6 100644
        ],
        ...childPromptOptions(spec.name, spec.systemPrompt, spec.spawnedBy),
      });
-@@ -587,16 +630,20 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -543,16 +594,20 @@
      }
  
      // Leave the built-in tool allowlist unset so the agent inherits the full default
@@ -911,9 +1005,9 @@ index 53cbfba..57e17b6 100644
        resourceLoader: loader,
        sessionManager: sm,
        settingsManager: childSettings,
-@@ -636,7 +683,11 @@ export default function subagents(pi: ExtensionAPI) {
-       },
+@@ -612,7 +667,11 @@
        getContextUsage: () => session.getContextUsage(),
+       getExtensionStatuses: () => extensionStatuses,
      };
 -    return { session: managedSession, sessionFile: sm.getSessionFile() };
 +    return {
@@ -924,7 +1018,7 @@ index 53cbfba..57e17b6 100644
    };
  
    // Models offered for retuning and named in "unknown model" errors: the session's scoped
-@@ -653,6 +704,9 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -629,6 +688,9 @@
      createSession,
      onActivity: updateStatus,
      listAvailableModels: listModels,
@@ -934,7 +1028,7 @@ index 53cbfba..57e17b6 100644
    });
  
    // Retuning a running agent (the set_subagent_model tool and the panel's model/effort keys).
-@@ -673,6 +727,15 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -649,6 +711,15 @@
      persistRoster: () => persistRoster(),
    });
  
@@ -950,7 +1044,7 @@ index 53cbfba..57e17b6 100644
    // Overwrite roster.json with current background membership (called after spawn/kill).
    // Best-effort: persistence must never break the swarm.
    const persistRoster = (): void => {
-@@ -716,7 +779,7 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -692,7 +763,7 @@
        // Placed before the session is built, so its preamble names the adopting parent too.
        const placement = restoredPlacement(entry.spawnedBy, engine.get(entry.spawnedBy)?.depth);
        try {
@@ -959,7 +1053,7 @@ index 53cbfba..57e17b6 100644
            sessionSpecFromRoster({ ...entry, ...placement }, resolved.model),
            entry.sessionFile,
          );
-@@ -726,6 +789,7 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -702,6 +773,7 @@
            model: `${resolved.provider}/${resolved.id}`,
            systemPrompt: entry.systemPrompt,
            sessionFile: sessionFile ?? entry.sessionFile,
@@ -967,7 +1061,7 @@ index 53cbfba..57e17b6 100644
            session,
            pausedMidTurn:
              deriveStatus(session.messages as RawMessage[]) === "pausedMidTurn",
-@@ -821,13 +885,18 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -804,13 +876,18 @@
        (s) => `${s.model.provider}/${s.model.id}`,
      );
      // Locate this main session's subagents dir (persistence + restore are keyed by it).
@@ -986,7 +1080,7 @@ index 53cbfba..57e17b6 100644
      if (!engine.has("main")) {
        const mainHandle: AgentHandle = {
          // via the globalThis indirection so the singleton handle never uses a stale pi.
-@@ -842,6 +911,7 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -827,6 +904,7 @@
            ? `${foregroundModel.provider}/${foregroundModel.id}`
            : "(foreground)",
          thinkingLevel: foregroundThinkingLevel,
@@ -994,10 +1088,8 @@ index 53cbfba..57e17b6 100644
          handle: mainHandle,
          spawnedBy: "main",
          depth: 0,
-diff --git a/extensions/actor-subagents/settings-grace.test.ts b/extensions/actor-subagents/settings-grace.test.ts
-new file mode 100644
-index 0000000..e84c49d
---- /dev/null
+diff -ruN a/extensions/actor-subagents/settings-grace.test.ts b/extensions/actor-subagents/settings-grace.test.ts
+--- a/extensions/actor-subagents/settings-grace.test.ts
 +++ b/extensions/actor-subagents/settings-grace.test.ts
 @@ -0,0 +1,15 @@
 +import assert from "node:assert/strict";
@@ -1015,12 +1107,11 @@ index 0000000..e84c49d
 +	assert.equal(parseErrorNoticeGraceMs(JSON.stringify({ errorNoticeGraceMs: 12000 })), 12000);
 +	assert.equal(parseErrorNoticeGraceMs(JSON.stringify({ errorNoticeGraceMs: 0 })), 0);
 +});
-diff --git a/extensions/actor-subagents/settings.ts b/extensions/actor-subagents/settings.ts
-index b6650e0..af30b11 100644
+diff -ruN a/extensions/actor-subagents/settings.ts b/extensions/actor-subagents/settings.ts
 --- a/extensions/actor-subagents/settings.ts
 +++ b/extensions/actor-subagents/settings.ts
-@@ -59,3 +59,20 @@ export function parseSettings(json: string): Settings {
- 		childExtensions: childExtensions(value?.childExtensions),
+@@ -69,3 +69,20 @@
+ 		childExtensionStatusKeys: childExtensionStatusKeys(value?.childExtensionStatusKeys),
  	};
  }
 +
@@ -1040,10 +1131,187 @@ index b6650e0..af30b11 100644
 +	}
 +	return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : DEFAULT_ERROR_NOTICE_GRACE_MS;
 +}
-diff --git a/extensions/actor-subagents/spawn-policy.test.ts b/extensions/actor-subagents/spawn-policy.test.ts
-new file mode 100644
-index 0000000..f465ba9
---- /dev/null
+diff -ruN a/extensions/actor-subagents/spawner.ts b/extensions/actor-subagents/spawner.ts
+--- a/extensions/actor-subagents/spawner.ts
++++ b/extensions/actor-subagents/spawner.ts
+@@ -5,12 +5,14 @@
+  */
+ import type { ExtensionStatuses } from "./extension-status.ts";
+ import type { RoutedAgentMessage } from "./agent-message.ts";
++import type { Caller, SpawnPolicy } from "./api.ts";
+ import { formatStatusDetail, type StopReason } from "./agent-status.ts";
+ import type { AgentHandle, AgentRecord, AgentView } from "./agent-record.ts";
+ import type { Engine } from "./engine.ts";
+ import { formatReceiverStatus } from "./feed.ts";
+ import { unknownModelMessage } from "./resolve-model.ts";
+ import { formatModelThinking, type ThinkingLevel } from "./thinking-level.ts";
++import type { ToolGuard } from "./tool-guard.ts";
+ 
+ export type { ThinkingLevel } from "./thinking-level.ts";
+ 
+@@ -79,6 +81,8 @@
+ 	thinkingLevel?: ThinkingLevel;
+ 	/** Optional first message: delivered atomically to the new agent right after spawn. */
+ 	message?: string;
++	/** Opaque task card, passed through to the spawn policy only. */
++	task?: unknown;
+ }
+ 
+ export interface SpawnerDeps {
+@@ -99,9 +103,18 @@
+ 		spawnedBy: string;
+ 		model: unknown;
+ 		thinkingLevel?: ThinkingLevel;
+-	}) => Promise<{ session: SessionLike; sessionFile?: string }>;
++		/** Tool allowlist set by the spawn policy; undefined keeps the full default toolset. */
++		tools?: string[];
++		toolGuard?: ToolGuard;
++	}) => Promise<{ session: SessionLike; sessionFile?: string; sessionId?: string }>;
+ 	/** Called after every relevant activity (e.g. refresh the status footer). */
+ 	onActivity?: () => void;
++	/** The registered spawn policy (api.ts), read per spawn; none means inherit as upstream. */
++	spawnPolicy?: () => SpawnPolicy | undefined;
++	/** Working directory reported to the policy as `caller.cwd`. */
++	cwd?: () => string;
++	/** Every child session event, by child name (the error-notice gate watches for recovery). */
++	onSessionEvent?: (name: string, ev: { type: string; message?: unknown }) => void;
+ }
+ 
+ /** Metadata to re-register an agent from a rehydrated (disk-loaded) session on restart. */
+@@ -112,13 +125,15 @@
+ 	model: string; // "provider/id" display string
+ 	systemPrompt: string;
+ 	sessionFile: string;
++	sessionId?: string;
+ 	session: SessionLike;
+ 	/** Derived from the transcript tail: true => resume re-triggers it; false => idle. */
+ 	pausedMidTurn: boolean;
+ }
+ 
+ export interface Spawner {
+-	spawnAgent: (spec: SpawnSpec, spawnerName: string) => Promise<{ ok: boolean; msg: string }>;
++	/** `rejected` marks a refusal by the spawn policy (the tool reports it as an error). */
++	spawnAgent: (spec: SpawnSpec, spawnerName: string) => Promise<{ ok: boolean; msg: string; rejected?: true }>;
+ 	/** Re-register an agent from a restored session (used by restart resume). */
+ 	restoreAgent: (spec: RestoreSpec) => void;
+ }
+@@ -222,6 +237,7 @@
+ 				engine.setStopReason(name, stopReason, outcome?.errorMessage);
+ 				engine.flushNotices(name);
+ 			}
++			deps.onSessionEvent?.(name, ev);
+ 			onActivity?.();
+ 		});
+ 	};
+@@ -322,6 +338,7 @@
+ 			reconfigure,
+ 			systemPrompt: spec.systemPrompt,
+ 			sessionFile: spec.sessionFile,
++			sessionId: spec.sessionId,
+ 			spawnedBy: spec.spawnedBy,
+ 			depth: spec.depth,
+ 			createdAt: Date.now(),
+@@ -331,11 +348,11 @@
+ 		});
+ 	};
+ 
+-	const spawnAgent = async (spec: SpawnSpec, spawnerName: string): Promise<{ ok: boolean; msg: string }> => {
++	const spawnAgent: Spawner["spawnAgent"] = async (spec, spawnerName) => {
+ 		const spawner = engine.get(spawnerName);
+-		const inheritRef = spec.model ?? spawner?.model;
++		let inheritRef = spec.model ?? spawner?.model;
+ 		// The Map Is Not the Territory: inherit the observed effective level, not prior intent.
+-		const thinkingLevel = spec.thinkingLevel ?? spawner?.thinkingLevel;
++		let thinkingLevel = spec.thinkingLevel ?? spawner?.thinkingLevel;
+ 
+ 		// 1) Reserve the name synchronously (atomic: duplicate/cap/depth) — closes races.
+ 		const reserved = engine.reserve(spec.name, spawnerName);
+@@ -343,22 +360,62 @@
+ 		// Identity, not just the name, distinguishes this reservation from a later re-spawn.
+ 		const reservation = engine.get(spec.name);
+ 
++		// 1b) The spawn policy, if one is registered, decides model and effort (after the reservation,
++		// so a refused name or a full swarm never reaches it). A refusal frees the name.
++		let message = spec.message;
++		let tools: string[] | undefined;
++		let toolGuard: ToolGuard | undefined;
++		let policyMeta: unknown;
++		const policy = deps.spawnPolicy?.();
++		if (policy) {
++			const caller: Caller = {
++				name: spawnerName,
++				sessionId: spawner?.sessionId ?? "",
++				model: spawner?.model ?? "",
++				thinkingLevel: spawner?.thinkingLevel,
++				policyMeta: spawner?.policyMeta,
++				cwd: deps.cwd?.() ?? process.cwd(),
++			};
++			const { name, systemPrompt, model, task } = spec;
++			const args = { name, systemPrompt, message: spec.message ?? "", model, thinkingLevel: spec.thinkingLevel, task };
++			let decision: Awaited<ReturnType<SpawnPolicy>>;
++			try {
++				decision = await policy(args, caller);
++			} catch (e) {
++				decision = { reject: `spawn policy failed: ${e instanceof Error ? e.message : String(e)}` };
++			}
++			if ("reject" in decision) {
++				if (engine.get(spec.name) === reservation) engine.release(spec.name);
++				return { ok: false, rejected: true, msg: `error: ${decision.reject}` };
++			}
++			inheritRef = decision.model;
++			thinkingLevel = decision.thinkingLevel;
++			if (decision.briefAppend) message = message ? `${message}\n\n${decision.briefAppend}` : decision.briefAppend;
++			tools = decision.tools;
++			toolGuard = decision.toolGuard;
++			policyMeta = decision.meta;
++		}
++
+ 		const resolved = resolveModel(inheritRef);
+ 		if (!resolved) {
+-			engine.release(spec.name);
++			// The policy await above lets a kill or re-spawn of this name land first.
++			if (engine.get(spec.name) === reservation) engine.release(spec.name);
+ 			return { ok: false, msg: `error: ${unknownModelMessage(inheritRef, listAvailableModels?.() ?? [])}` };
+ 		}
+ 
+ 		// 2) Slow session creation (await). A concurrent send_message buffers meanwhile.
+ 		let session: SessionLike;
+ 		let sessionFile: string | undefined;
++		let sessionId: string | undefined;
+ 		try {
+-			({ session, sessionFile } = await createSession({
++			({ session, sessionFile, sessionId } = await createSession({
+ 				name: spec.name,
+ 				systemPrompt: spec.systemPrompt,
+ 				spawnedBy: spawnerName,
+ 				model: resolved.model,
+ 				thinkingLevel,
++				...(tools ? { tools } : {}),
++				...(toolGuard ? { toolGuard } : {}),
+ 			}));
+ 		} catch (e) {
+ 			if (engine.get(spec.name) === reservation) engine.release(spec.name);
+@@ -389,14 +446,16 @@
+ 			// Persisted to roster.json so a restart can rebuild this agent.
+ 			systemPrompt: spec.systemPrompt,
+ 			sessionFile,
++			sessionId,
++			policyMeta,
+ 		});
+ 
+ 		// 4) Deliver the optional first message atomically (no race; the agent is registered).
+ 		let sent = "";
+-		if (spec.message) {
++		if (message) {
+ 			// Captured before delivery so the wait can see a reaction that already happened.
+ 			const sinceEvent = engine.events.length;
+-			const outcome = await engine.route(spawnerName, spec.name, spec.message);
++			const outcome = await engine.route(spawnerName, spec.name, message);
+ 			if (outcome.outcome === "delivered") {
+ 				// Same bounded observation as send_message: the spawner learns whether the new agent
+ 				// actually started on its task, without waiting for it to finish.
+diff -ruN a/extensions/actor-subagents/spawn-policy.test.ts b/extensions/actor-subagents/spawn-policy.test.ts
+--- a/extensions/actor-subagents/spawn-policy.test.ts
 +++ b/extensions/actor-subagents/spawn-policy.test.ts
 @@ -0,0 +1,210 @@
 +import { test } from "node:test";
@@ -1087,7 +1355,7 @@ index 0000000..f465ba9
 +		getToolDefinition: () => undefined,
 +		messages: [],
 +		getContextUsage: () => undefined,
-+	};
++	} as Partial<SessionLike> as SessionLike & { delivered: RoutedAgentMessage[] };
 +}
 +
 +type CreateSpec = Parameters<Parameters<typeof createSpawner>[0]["createSession"]>[0];
@@ -1256,10 +1524,8 @@ index 0000000..f465ba9
 +	await plain.spawner.spawnAgent({ name: "w", systemPrompt: "p", message: "go" }, "main");
 +	assert.equal("toolGuard" in (plain.specs[0] ?? {}), false);
 +});
-diff --git a/extensions/actor-subagents/spawn-wording.test.ts b/extensions/actor-subagents/spawn-wording.test.ts
-new file mode 100644
-index 0000000..87f1840
---- /dev/null
+diff -ruN a/extensions/actor-subagents/spawn-wording.test.ts b/extensions/actor-subagents/spawn-wording.test.ts
+--- a/extensions/actor-subagents/spawn-wording.test.ts
 +++ b/extensions/actor-subagents/spawn-wording.test.ts
 @@ -0,0 +1,29 @@
 +import { test } from "node:test";
@@ -1291,10 +1557,8 @@ index 0000000..87f1840
 +	assert.ok(!/almost always correct/.test(toolsSource), "agent-tools.ts still urges inheritance");
 +	assert.match(SPAWN_TASK_HINT, /spawn policy/);
 +});
-diff --git a/extensions/actor-subagents/spawn-wording.ts b/extensions/actor-subagents/spawn-wording.ts
-new file mode 100644
-index 0000000..f23fd6f
---- /dev/null
+diff -ruN a/extensions/actor-subagents/spawn-wording.ts b/extensions/actor-subagents/spawn-wording.ts
+--- a/extensions/actor-subagents/spawn-wording.ts
 +++ b/extensions/actor-subagents/spawn-wording.ts
 @@ -0,0 +1,15 @@
 +/**
@@ -1307,195 +1571,13 @@ index 0000000..f23fd6f
 + */
 +export const SPAWN_MODEL_HINT =
 +	"Omit to let the spawn policy decide (inherit if none). Set 'provider/id' only when the user " +
-+	"explicitly named a specific model; a wrong value returns the available list.";
++	"explicitly named a specific model; an unknown value reports available models when any are listed.";
 +export const SPAWN_THINKING_HINT =
 +	"often described as <model>@<thinking level>. Omit to let the spawn policy decide (inherit if none).";
 +export const SPAWN_TASK_HINT =
 +	"Optional structured task card for the spawn policy (ignored when none is registered).";
-diff --git a/extensions/actor-subagents/spawner.ts b/extensions/actor-subagents/spawner.ts
-index 5d01b02..bf02d2f 100644
---- a/extensions/actor-subagents/spawner.ts
-+++ b/extensions/actor-subagents/spawner.ts
-@@ -4,12 +4,14 @@
-  * Design: ../../../DESIGN.md
-  */
- import type { RoutedAgentMessage } from "./agent-message.ts";
-+import type { Caller, SpawnPolicy } from "./api.ts";
- import type { StopReason } from "./agent-status.ts";
- import type { AgentHandle, AgentRecord, AgentView } from "./agent-record.ts";
- import type { Engine } from "./engine.ts";
- import { formatReceiverStatus } from "./feed.ts";
- import { unknownModelMessage } from "./resolve-model.ts";
- import { formatModelThinking, type ThinkingLevel } from "./thinking-level.ts";
-+import type { ToolGuard } from "./tool-guard.ts";
- 
- export type { ThinkingLevel } from "./thinking-level.ts";
- 
-@@ -73,6 +75,8 @@ export interface SpawnSpec {
- 	thinkingLevel?: ThinkingLevel;
- 	/** Optional first message: delivered atomically to the new agent right after spawn. */
- 	message?: string;
-+	/** Opaque task card, passed through to the spawn policy only. */
-+	task?: unknown;
- }
- 
- export interface SpawnerDeps {
-@@ -93,9 +97,18 @@ export interface SpawnerDeps {
- 		spawnedBy: string;
- 		model: unknown;
- 		thinkingLevel?: ThinkingLevel;
--	}) => Promise<{ session: SessionLike; sessionFile?: string }>;
-+		/** Tool allowlist set by the spawn policy; undefined keeps the full default toolset. */
-+		tools?: string[];
-+		toolGuard?: ToolGuard;
-+	}) => Promise<{ session: SessionLike; sessionFile?: string; sessionId?: string }>;
- 	/** Called after every relevant activity (e.g. refresh the status footer). */
- 	onActivity?: () => void;
-+	/** The registered spawn policy (api.ts), read per spawn; none means inherit as upstream. */
-+	spawnPolicy?: () => SpawnPolicy | undefined;
-+	/** Working directory reported to the policy as `caller.cwd`. */
-+	cwd?: () => string;
-+	/** Every child session event, by child name (the error-notice gate watches for recovery). */
-+	onSessionEvent?: (name: string, ev: { type: string; message?: unknown }) => void;
- }
- 
- /** Metadata to re-register an agent from a rehydrated (disk-loaded) session on restart. */
-@@ -106,13 +119,15 @@ export interface RestoreSpec {
- 	model: string; // "provider/id" display string
- 	systemPrompt: string;
- 	sessionFile: string;
-+	sessionId?: string;
- 	session: SessionLike;
- 	/** Derived from the transcript tail: true => resume re-triggers it; false => idle. */
- 	pausedMidTurn: boolean;
- }
- 
- export interface Spawner {
--	spawnAgent: (spec: SpawnSpec, spawnerName: string) => Promise<{ ok: boolean; msg: string }>;
-+	/** `rejected` marks a refusal by the spawn policy (the tool reports it as an error). */
-+	spawnAgent: (spec: SpawnSpec, spawnerName: string) => Promise<{ ok: boolean; msg: string; rejected?: true }>;
- 	/** Re-register an agent from a restored session (used by restart resume). */
- 	restoreAgent: (spec: RestoreSpec) => void;
- }
-@@ -214,6 +229,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
- 				const stopReason = run.abortRequested && outcome?.stopReason === "error" ? "aborted" : outcome?.stopReason;
- 				engine.setStopReason(name, stopReason, outcome?.errorMessage);
- 			}
-+			deps.onSessionEvent?.(name, ev);
- 			onActivity?.();
- 		});
- 	};
-@@ -299,6 +315,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
- 			reconfigure,
- 			systemPrompt: spec.systemPrompt,
- 			sessionFile: spec.sessionFile,
-+			sessionId: spec.sessionId,
- 			spawnedBy: spec.spawnedBy,
- 			depth: spec.depth,
- 			createdAt: Date.now(),
-@@ -308,11 +325,11 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
- 		});
- 	};
- 
--	const spawnAgent = async (spec: SpawnSpec, spawnerName: string): Promise<{ ok: boolean; msg: string }> => {
-+	const spawnAgent: Spawner["spawnAgent"] = async (spec, spawnerName) => {
- 		const spawner = engine.get(spawnerName);
--		const inheritRef = spec.model ?? spawner?.model;
-+		let inheritRef = spec.model ?? spawner?.model;
- 		// The Map Is Not the Territory: inherit the observed effective level, not prior intent.
--		const thinkingLevel = spec.thinkingLevel ?? spawner?.thinkingLevel;
-+		let thinkingLevel = spec.thinkingLevel ?? spawner?.thinkingLevel;
- 
- 		// 1) Reserve the name synchronously (atomic: duplicate/cap/depth) — closes races.
- 		const reserved = engine.reserve(spec.name, spawnerName);
-@@ -320,22 +337,62 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
- 		// Identity, not just the name, distinguishes this reservation from a later re-spawn.
- 		const reservation = engine.get(spec.name);
- 
-+		// 1b) The spawn policy, if one is registered, decides model and effort (after the reservation,
-+		// so a refused name or a full swarm never reaches it). A refusal frees the name.
-+		let message = spec.message;
-+		let tools: string[] | undefined;
-+		let toolGuard: ToolGuard | undefined;
-+		let policyMeta: unknown;
-+		const policy = deps.spawnPolicy?.();
-+		if (policy) {
-+			const caller: Caller = {
-+				name: spawnerName,
-+				sessionId: spawner?.sessionId ?? "",
-+				model: spawner?.model ?? "",
-+				thinkingLevel: spawner?.thinkingLevel,
-+				policyMeta: spawner?.policyMeta,
-+				cwd: deps.cwd?.() ?? process.cwd(),
-+			};
-+			const { name, systemPrompt, model, task } = spec;
-+			const args = { name, systemPrompt, message: spec.message ?? "", model, thinkingLevel: spec.thinkingLevel, task };
-+			let decision: Awaited<ReturnType<SpawnPolicy>>;
-+			try {
-+				decision = await policy(args, caller);
-+			} catch (e) {
-+				decision = { reject: `spawn policy failed: ${e instanceof Error ? e.message : String(e)}` };
-+			}
-+			if ("reject" in decision) {
-+				if (engine.get(spec.name) === reservation) engine.release(spec.name);
-+				return { ok: false, rejected: true, msg: `error: ${decision.reject}` };
-+			}
-+			inheritRef = decision.model;
-+			thinkingLevel = decision.thinkingLevel;
-+			if (decision.briefAppend) message = message ? `${message}\n\n${decision.briefAppend}` : decision.briefAppend;
-+			tools = decision.tools;
-+			toolGuard = decision.toolGuard;
-+			policyMeta = decision.meta;
-+		}
-+
- 		const resolved = resolveModel(inheritRef);
- 		if (!resolved) {
--			engine.release(spec.name);
-+			// The policy await above lets a kill or re-spawn of this name land first.
-+			if (engine.get(spec.name) === reservation) engine.release(spec.name);
- 			return { ok: false, msg: `error: ${unknownModelMessage(inheritRef, listAvailableModels?.() ?? [])}` };
- 		}
- 
- 		// 2) Slow session creation (await). A concurrent send_message buffers meanwhile.
- 		let session: SessionLike;
- 		let sessionFile: string | undefined;
-+		let sessionId: string | undefined;
- 		try {
--			({ session, sessionFile } = await createSession({
-+			({ session, sessionFile, sessionId } = await createSession({
- 				name: spec.name,
- 				systemPrompt: spec.systemPrompt,
- 				spawnedBy: spawnerName,
- 				model: resolved.model,
- 				thinkingLevel,
-+				...(tools ? { tools } : {}),
-+				...(toolGuard ? { toolGuard } : {}),
- 			}));
- 		} catch (e) {
- 			if (engine.get(spec.name) === reservation) engine.release(spec.name);
-@@ -366,14 +423,16 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
- 			// Persisted to roster.json so a restart can rebuild this agent.
- 			systemPrompt: spec.systemPrompt,
- 			sessionFile,
-+			sessionId,
-+			policyMeta,
- 		});
- 
- 		// 4) Deliver the optional first message atomically (no race; the agent is registered).
- 		let sent = "";
--		if (spec.message) {
-+		if (message) {
- 			// Captured before delivery so the wait can see a reaction that already happened.
- 			const sinceEvent = engine.events.length;
--			const outcome = await engine.route(spawnerName, spec.name, spec.message);
-+			const outcome = await engine.route(spawnerName, spec.name, message);
- 			if (outcome.outcome === "delivered") {
- 				// Same bounded observation as send_message: the spawner learns whether the new agent
- 				// actually started on its task, without waiting for it to finish.
-diff --git a/extensions/actor-subagents/tool-guard.test.ts b/extensions/actor-subagents/tool-guard.test.ts
-new file mode 100644
-index 0000000..a87c61b
---- /dev/null
+diff -ruN a/extensions/actor-subagents/tool-guard.test.ts b/extensions/actor-subagents/tool-guard.test.ts
+--- a/extensions/actor-subagents/tool-guard.test.ts
 +++ b/extensions/actor-subagents/tool-guard.test.ts
 @@ -0,0 +1,41 @@
 +import { test } from "node:test";
@@ -1539,10 +1621,8 @@ index 0000000..a87c61b
 +	assert.ok(tools?.includes("send_message"));
 +	assert.equal(childToolAllowlist(undefined, orchestration), undefined);
 +});
-diff --git a/extensions/actor-subagents/tool-guard.ts b/extensions/actor-subagents/tool-guard.ts
-new file mode 100644
-index 0000000..f9694e0
---- /dev/null
+diff -ruN a/extensions/actor-subagents/tool-guard.ts b/extensions/actor-subagents/tool-guard.ts
+--- a/extensions/actor-subagents/tool-guard.ts
 +++ b/extensions/actor-subagents/tool-guard.ts
 @@ -0,0 +1,24 @@
 +/** The spawn policy's per-child tool guard as an inline child extension (index.ts loads it). */
@@ -1569,10 +1649,8 @@ index 0000000..f9694e0
 +export function childToolAllowlist(policyTools: string[] | undefined, orchestration: { name: string }[]): string[] | undefined {
 +	return policyTools ? [...new Set([...policyTools, ...orchestration.map((t) => t.name)])] : undefined;
 +}
-diff --git a/extensions/actor-subagents/usage-line.test.ts b/extensions/actor-subagents/usage-line.test.ts
-new file mode 100644
-index 0000000..f880a81
---- /dev/null
+diff -ruN a/extensions/actor-subagents/usage-line.test.ts b/extensions/actor-subagents/usage-line.test.ts
+--- a/extensions/actor-subagents/usage-line.test.ts
 +++ b/extensions/actor-subagents/usage-line.test.ts
 @@ -0,0 +1,42 @@
 +import { test } from "node:test";

@@ -1,4 +1,4 @@
-# pi-actor-subagents with three local patches, applied in this order (spec §2):
+# pi-actor-subagents with two local patches, applied in this order (spec §2):
 #
 # - child-prompt: upstream builds every child with `systemPromptOverride`, and
 #   in pi a custom system prompt drops the default `tools` and `rules`
@@ -11,12 +11,6 @@
 #   tools, tool guard), an optional `task` parameter, neutral model wording,
 #   send/list, childSessionId on spawn events, and a grace period before a
 #   child's transient error (429 under pi-retry) wakes its parent.
-# - first-turn: a child's first task arrived through
-#   session.sendCustomMessage({triggerTurn: true}), which on an idle pi 1.0
-#   session starts the run without before_agent_start, the system prompt and
-#   the tool loadout. The first message of a session now goes through
-#   sendUserMessage (prompt()); later ones stay custom messages. Drop it once
-#   pi's sendCustomMessage prepares the loadout itself.
 #
 # The patch files keep the host's names, so the store paths, and with the
 # same nixpkgs the derivation, are the host's. A patch that no longer applies
@@ -31,7 +25,6 @@
   patches = [
     ../../patches/pi-actor-subagents/pi-actor-subagents-child-prompt.patch
     ../../patches/pi-actor-subagents/pi-actor-subagents-spawn-policy.patch
-    ../../patches/pi-actor-subagents/pi-actor-subagents-first-turn.patch
   ];
 }).overrideAttrs (old: {
   # The version of __subagentsApi_v1 this build provides; taskRouter asserts

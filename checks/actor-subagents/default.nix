@@ -4,9 +4,10 @@
 # breaks the extension fails the suite.
 #
 # pi loads the extension uncompiled with type stripping, so node's own test
-# runner is the whole toolchain. One upstream test file is left out:
-# agent-tools.test.ts imports @earendil-works/pi-coding-agent, a peer
-# dependency that only exists inside pi.
+# runner is the whole toolchain. Upstream test files that import pi's peer
+# dependencies (@earendil-works/pi-{ai,tui,coding-agent}, which only exist
+# inside pi) are left out: agent-tools, panel and the pi-*.test.ts contract
+# tests against the installed pi.
 {
   pkgs,
   src,
@@ -17,7 +18,7 @@ pkgs.runCommand "pi-actor-subagents-tests" {nativeBuildInputs = [pkgs.nodejs];} 
   cd work/extensions/actor-subagents
   export HOME=$TMPDIR/home
   mkdir -p "$HOME"
-  find . -name '*.test.ts' ! -name agent-tools.test.ts -print0 \
+  find . -name '*.test.ts' ! -name agent-tools.test.ts ! -name panel.test.ts ! -name 'pi-*.test.ts' -print0 \
     | xargs -0 node --test --experimental-strip-types
 
   # The patch's own test must be part of what ran, and index.ts must build the
@@ -31,7 +32,7 @@ pkgs.runCommand "pi-actor-subagents-tests" {nativeBuildInputs = [pkgs.nodejs];} 
   fi
 
   # The spawn-policy patch's tests must be part of what ran, and index.ts must publish the API,
-  # route spawns through its policy and send child-error notices through the grace gate.
+  # route spawns through its policy and hold a child's error notice back in the grace gate.
   for t in api spawn-policy spawn-wording error-notice-gate settings-grace usage-line tool-guard; do
     test -f "$t.test.ts"
   done
@@ -41,22 +42,15 @@ pkgs.runCommand "pi-actor-subagents-tests" {nativeBuildInputs = [pkgs.nodejs];} 
   grep -q 'errorGate.onEngineEvent(e)' index.ts
   grep -q 'toolGuardExtensions(spec.toolGuard)' index.ts
   grep -q 'childToolAllowlist(spec.tools, customTools)' index.ts
-  if grep -q 'notifyParentOfError(e)' index.ts; then
-    echo "index.ts still notifies the parent of every child error without the grace gate" >&2
+  # Upstream's engine routes a terminal child error to its parent itself (Engine.announce); the
+  # gate only works if the engine defers that to it and the gate hands the error back.
+  grep -q 'engine.deferErrorNotices = true' index.ts
+  grep -q 'engine.announceError(name, reason)' index.ts
+  grep -q 'if (!this.deferErrorNotices) this.announceError' engine.ts
+  if grep -q 'engine.subscribe(() => updateStatus())' index.ts; then
+    echo "index.ts feeds engine events to the roster without the error-notice gate" >&2
     exit 1
   fi
 
-  # The first-turn patch's test must be part of what ran, and index.ts must hand a child's
-  # messages to the sender that delivers the first one through prompt(). A direct
-  # sendCustomMessage({triggerTurn:true}) on an idle session skips before_agent_start and the
-  # system prompt / tool loadout.
-  test -f first-turn.test.ts
-  grep -q 'createAgentMessageSender(session)' index.ts
-  grep -q 'sendAgentMessage,' index.ts
-  grep -q 'target.sendUserMessage(' first-turn.ts
-  if grep -q 'session.sendCustomMessage(toCustomAgentMessage' index.ts; then
-    echo "index.ts delivers a child's first message with sendCustomMessage, which skips the loadout" >&2
-    exit 1
-  fi
   touch $out
 ''
