@@ -19,15 +19,17 @@ node --test --experimental-strip-types test/*.test.ts     # from this directory
 | `pi-bench sched ARM N TASK…` | each task once, `N` in parallel |
 | `pi-bench refs` | `refs/<id>.patch` (accepted solution) or `refs/<id>.md` (scouts) from `tasks.json` |
 | `pi-bench judge --all [--judges opus,gpt] [--parallel N] [--min-runs M]` | multi-arm: blind absolute rubric verdict of every run of each task with ≥ 2 runs (`judge/<task>/<run>/<judge>.json`, failing check caps at partial); idempotent |
-| `pi-bench judge TASK opus\|gpt [X Y]` | pairwise: blind A/B judge of `TASK.X.1` vs `TASK.Y.1` (default `qwen` vs `sonnet`), for 2-arm comparisons |
-| `pi-bench judge-all [--once] [X]` | pairwise: judge everything that is finished |
+| `pi-bench judge TASK opus\|gpt [X Y]` | pairwise: blind A/B judge of `TASK.X.1` vs `TASK.Y.1` (default `qwenl` vs `sonnet`), for 2-arm comparisons |
+| `pi-bench judge-all [--once] [X]` | pairwise: judge everything that is finished (X default `qwenl`, against `sonnet`) |
 | `pi-bench metrics` | per-run session metrics (requests, retried 429s, cost, peak context, folds, children) |
 | `bench-report [--factors arm,kind]` | per-factor bootstrap CI (10 000), OLS with two-way interactions, judge κ → `reports/*.md` |
 
-Arms (`defaultArms()` in `src/config.ts`, extended by `<data>/arms.json`): `qwen`, `qwenl`, `sonnet`
+Arms (`defaultArms()` in `src/config.ts`, extended by `<data>/arms.json`): `qwenl`, `sonnet`
 (print driver, `pi -p`), `orch` (RPC driver, Sonnet orchestrator with actor-subagents, smoke arm) and the four
 orchestrator factor arms `orch-<signs>` (below). `claude-auth` is required for anthropic models. Per-run limit
 `BENCH_TIMEOUT` (default 5400 s). `PI_BENCH_PI` selects the pi binary, `PI_BENCH_EXT_DIR` the extension directory.
+
+The `qwen` arm (the free OpenRouter Qwen, gone) was retired in step Q. Its old runs (`runs/*.qwen.*`) stay in reports unchanged, and `pi-bench judge TASK opus|gpt qwen sonnet` or `pi-bench judge-all qwen` still judges them; without `qwen` named, the pairwise commands leave them alone. `run` and `sched` reject it as an unknown arm unless `<data>/arms.json` defines it again. The bench's only OpenRouter use is the judge `gpt`.
 
 ## Orchestrator factor arms
 

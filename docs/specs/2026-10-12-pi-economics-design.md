@@ -629,6 +629,12 @@ Arms:
   then report empty factors. Q keeps a factors-only stub for `qwen`, so that
   old reports are unchanged. A published default that names a dead free model
   would only be noise. The host receives Q with W8 (§9.1).
+  Amendment (Q plan, 2026-10-25): no factors-only stub. The `qwen` arm never
+  had factors (`config.ts`, `printArm`), so `report`'s
+  `arms[r.arm]?.factors ?? {}` is `{}` with or without the arm, and old
+  reports are unchanged without a stub. A stub in `defaultArms()` would not be
+  an `Arm`, and would send `run … qwen` down the factor-arm path. Q's test
+  "report: an arm without factors adds nothing to a row …" pins it.
 - The paid OpenRouter judge `gpt` stays (§10).
 - The host's in-tree bench stays until W1. Bench changes made there
   meanwhile, for example for the redesign's measurements, are drift (§9).
