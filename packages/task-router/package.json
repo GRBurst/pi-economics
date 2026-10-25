@@ -1,0 +1,11 @@
+{
+  "name": "pi-task-router",
+  "version": "0.1.0",
+  "description": "Routes subagent spawns by task card: tier and effort by rule, Qwen chain, attempts, outcome log.",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "license": "MIT",
+  "pi": { "extensions": ["index.ts"] },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": ">=1.0.0" },
+  "scripts": { "test": "node --test --experimental-strip-types test/*.test.ts" }
+}

@@ -58,6 +58,7 @@
       token-meter = pkgs.callPackage ./packages/token-meter/package.nix {};
       cache-lifecycle = pkgs.callPackage ./packages/cache-lifecycle/package.nix {};
       experiments = pkgs.callPackage ./packages/experiments/package.nix {};
+      task-router = pkgs.callPackage ./packages/task-router/package.nix {};
       infinite-context = pkgs.callPackage ./packages/infinite-context/package.nix {src = pi-infinite-context;};
       retry = pkgs.callPackage ./packages/retry/package.nix {src = pi-retry;};
     };

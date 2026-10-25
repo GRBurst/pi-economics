@@ -1,0 +1,114 @@
+{
+  "models": {
+    "qwen-local": {
+      "model": "llama/qwen3.8",
+      "tier": "qwen",
+      "route": "local",
+      "abilities": { "write": 0, "read": 0 },
+      "efforts": ["xhigh"],
+      "contextWindow": 262144,
+      "cost": 0,
+      "order": 0,
+      "slots": 1,
+      "health": "http://earth:11545"
+    },
+    "qwen-cloud": {
+      "model": "openrouter/qwen/qwen3.8-27b:free",
+      "tier": "qwen",
+      "route": "cloud",
+      "abilities": { "write": 0, "read": 0 },
+      "efforts": ["xhigh"],
+      "contextWindow": 262144,
+      "cost": 0,
+      "order": -1,
+      "slots": 2,
+      "dailyCap": 950
+    },
+    "haiku": { "model": "" },
+    "sonnet": {
+      "model": "anthropic/claude-sonnet-5-5",
+      "tier": "T1",
+      "route": "T1",
+      "abilities": { "write": 1, "read": 2 },
+      "efforts": ["high", "xhigh"],
+      "contextWindow": 1000000,
+      "cost": 3,
+      "order": 0
+    },
+    "opus": {
+      "model": "anthropic/claude-opus-5-5",
+      "tier": "T2",
+      "route": "T2",
+      "abilities": { "write": 2, "read": 3 },
+      "efforts": ["high", "xhigh"],
+      "contextWindow": 1000000,
+      "cost": 5,
+      "order": 0
+    }
+  },
+  "importanceTable": {
+    "write": {
+      "0": {
+        "normal": { "worker": { "level": 0, "step": 0 } },
+        "high": { "worker": { "level": 0, "step": 0 }, "review": { "level": 1, "step": 0 } },
+        "critical": { "worker": { "level": 1, "step": 0 }, "review": { "level": 2, "step": 0 } }
+      },
+      "1": {
+        "normal": { "worker": { "level": 1, "step": 0 } },
+        "high": { "worker": { "level": 1, "step": 1 } },
+        "critical": { "worker": { "level": 2, "step": 1 } }
+      },
+      "2": {
+        "normal": { "worker": { "level": 2, "step": 0 } },
+        "high": { "worker": { "level": 2, "step": 1 } },
+        "critical": { "worker": { "level": 2, "step": 1 }, "review": { "level": 2, "step": 1 } }
+      }
+    },
+    "read": {
+      "0": {
+        "normal": { "worker": { "level": 0, "step": 0 } },
+        "high": { "worker": { "level": 0, "step": 0 }, "review": { "level": 2, "step": 0 } },
+        "critical": { "worker": { "level": 2, "step": 0 }, "review": { "level": 3, "step": 0 } }
+      },
+      "1": {
+        "normal": { "worker": { "level": 1, "step": 0 } },
+        "high": { "worker": { "level": 1, "step": 1 } },
+        "critical": { "worker": { "level": 2, "step": 0 }, "review": { "level": 3, "step": 0 } }
+      },
+      "2": {
+        "normal": { "worker": { "level": 2, "step": 0 } },
+        "high": { "worker": { "level": 2, "step": 1 } },
+        "critical": { "worker": { "level": 3, "step": 1 } }
+      },
+      "3": {
+        "normal": { "worker": { "level": 3, "step": 0 } },
+        "high": { "worker": { "level": 3, "step": 1 } },
+        "critical": { "worker": { "level": 3, "step": 1 }, "review": { "level": 3, "step": 1 } }
+      }
+    },
+    "review": {
+      "0": {
+        "normal": { "worker": { "level": 0, "step": 0 } },
+        "high": { "worker": { "level": 0, "step": 0 }, "review": { "level": 2, "step": 0 } },
+        "critical": { "worker": { "level": 2, "step": 0 }, "review": { "level": 3, "step": 0 } }
+      },
+      "1": {
+        "normal": { "worker": { "level": 1, "step": 0 } },
+        "high": { "worker": { "level": 1, "step": 1 } },
+        "critical": { "worker": { "level": 2, "step": 0 }, "review": { "level": 3, "step": 0 } }
+      },
+      "2": {
+        "normal": { "worker": { "level": 2, "step": 0 } },
+        "high": { "worker": { "level": 2, "step": 1 } },
+        "critical": { "worker": { "level": 3, "step": 1 } }
+      },
+      "3": {
+        "normal": { "worker": { "level": 3, "step": 0 } },
+        "high": { "worker": { "level": 3, "step": 1 } },
+        "critical": { "worker": { "level": 3, "step": 1 }, "review": { "level": 3, "step": 1 } }
+      }
+    }
+  },
+  "readOnlyReview": "review",
+  "contextFit": 0
+}
