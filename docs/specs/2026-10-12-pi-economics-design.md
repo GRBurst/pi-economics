@@ -169,6 +169,16 @@ and it is mixed with unrelated dotfiles.
 | `analysisSkill` | `ai/skills/pi-token-economics-analysis/` |
 | (shared) | `ai/pi-settings-migrate.nix` and `checks/pi-settings-migrate`, split per §5.4 |
 
+Amendment (M6, 2026-10-25): the host's `4c714f0` dropped three of the patches
+named above, because the upstreams or pi absorbed them: actorSubagents'
+`first-turn` (pi 1.2.0 runs `before_agent_start` for extension-triggered
+runs), infiniteContext's foreign-messages patch (upstream `e6ff6803` matches
+the projection as an ordered subsequence) and retry's `print-mode` (upstream
+0.11.0 retries print and json sessions inline). The flake carries the patches
+that remain: actorSubagents child-prompt and spawn-policy; infiniteContext
+reminders and cache; retry free-cap. The rows above and §9's M2 and M6 rows
+name the patches as first planned.
+
 Documentation:
 
 - `docs/pi-token-economics.md` moves to this flake's `docs/`, scrubbed (§8.3).
