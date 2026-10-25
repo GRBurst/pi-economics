@@ -180,3 +180,8 @@ test("render: the delegation section shows the profile × tier table, the random
   assert.match(empty, /no randomized spawns/);
   assert.match(empty, /no spot checks/);
 });
+
+test("T4.5 TIER_RANK: haiku sorts between qwen and T1 (qwen, haiku, T1, T2)", () => {
+  const d = analyse(logsOf([{ id: "a", tier: "T2" }, { id: "b", tier: "T1" }, { id: "c", tier: "haiku" }, { id: "d", tier: "qwen" }])).delegation;
+  assert.deepEqual(d.profileTiers.map((c) => c.tier), ["qwen", "haiku", "T1", "T2"]);
+});

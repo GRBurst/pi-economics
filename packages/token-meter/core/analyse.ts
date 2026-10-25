@@ -227,7 +227,7 @@ export type DelegationSection = { spawns: number; unresolved: number; reviewSpaw
   runaways: Runaway[]; limits: { requests: number; usd: number } };
 
 const MIN_CI_N = 5; // judged tasks needed for a bootstrap CI of a group
-const TIER_RANK: Record<string, number> = { qwen: 0, T1: 1, T2: 2 };
+const TIER_RANK: Record<string, number> = { qwen: 0, haiku: 1, T1: 2, T2: 3 };
 const byTier = (a: string, b: string): number => (TIER_RANK[a] ?? 9) - (TIER_RANK[b] ?? 9) || (a < b ? -1 : a > b ? 1 : 0);
 const JUDGED = ["accepted", "partial", "rejected"];
 
