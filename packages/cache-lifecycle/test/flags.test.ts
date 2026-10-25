@@ -1,4 +1,4 @@
-// T8.5 (R10): warmPolicy / mainCacheTtl / maskOnCold read through `__piExperimentsApi_v1.flag(name, own, sessionId)`.
+// warmPolicy / mainCacheTtl / maskOnCold read through `__piExperimentsApi_v1.flag(name, own, sessionId)`.
 // Absent API → the own setting.
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";

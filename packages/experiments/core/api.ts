@@ -1,4 +1,4 @@
-// The process-global experiments API (plan S11): other extensions reach it only through
+// The process-global experiments API: other extensions reach it only through
 // `globalThis.__piExperimentsApi_v1?.flag(name, ownSetting, sessionId)`.
 import type { Arm } from "./design.ts";
 

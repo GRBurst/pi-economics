@@ -1,4 +1,4 @@
-// Portability contract (spec §6, plan S4): the package can be copied into its
+// Portability contract: the package can be copied into its
 // own repository unchanged. Generic: the same file is used by every package.
 import { test } from "node:test";
 import assert from "node:assert/strict";

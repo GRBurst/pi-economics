@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 
 export type Settings = {
-  /** native: pi's own idle-warming rule; orchestrator-aware: keep a main with running children and a child awaiting a reply warm (§5.3). */
+  /** native: pi's own idle-warming rule; orchestrator-aware: keep a main with running children and a child awaiting a reply warm. */
   warmPolicy: "native" | "orchestrator-aware";
   /** Cache TTL requested for the main session (children always use the default 5m). */
   mainCacheTtl: "5m" | "1h";
@@ -11,7 +11,7 @@ export type Settings = {
   maskOnCold: "off" | "tools" | "tools+thinking";
   /** Newest tokens of the transcript that are never elided. */
   protectedTailTokens: number;
-  /** Keep message identity stable across projections so pi 1.0.0 cache warming survives custom messages (T7.0). */
+  /** Keep message identity stable across projections so pi 1.0.0 cache warming survives custom messages. */
   identityShim: boolean;
 };
 

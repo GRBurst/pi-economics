@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 import type { Factor } from "./design.ts";
 
 export type Settings = {
-  /** Arm selection mode; "off" always returns the baseline arm (spec §5.6.4). */
+  /** Arm selection mode; "off" always returns the baseline arm. */
   mode: "off" | "explore" | "exploit";
-  /** Two-level factors to design the arms from (spec §5.6.2). */
+  /** Two-level factors to design the arms from. */
   factors: Factor[];
   /** Arm cap: full 2^k when 2^k <= maxArms, else the 2^(k-1) half fraction (k = 6: the 2^(k-2) quarter fraction when that is what fits). */
   maxArms: number;
@@ -14,15 +14,15 @@ export type Settings = {
   minExplore: number;
   /** Arm id returned in "off" mode; the default is the all-low arm id of the default factors. */
   baseline: string;
-  /** Kill switch (spec §5.6.3), evaluated by `meter-report --arms --posterior`, which runs on demand only (no timer): an arm with ≥ minSessions sessions whose verdict acceptance is below the baseline's by more than threshold (a fraction) is disabled. */
+  /** Kill switch, evaluated by `meter-report --arms --posterior`, which runs on demand only (no timer): an arm with ≥ minSessions sessions whose verdict acceptance is below the baseline's by more than threshold (a fraction) is disabled. */
   guards: Guards;
-  /** Source of the case-insensitive RegExp that marks a user message right after an assistant turn as a correction (guard, spec §5.6.3). */
+  /** Source of the case-insensitive RegExp that marks a user message right after an assistant turn as a correction (guard). */
   correctionRegex: string;
 };
 /** Thresholds are "worse than the baseline's by more than": threshold = acceptance (fraction); the others are per-session (peeks after masking, corrections) or rating points. */
 export type Guards = { minSessions: number; threshold: number; peekThreshold: number; correctionThreshold: number; ratingThreshold: number };
 
-/** The six online factors of spec §5.6.2 (designs v2 and v3: 2^(6-2), 16 arms, the arm ids are the same in both; v1 had the first five); values[0] is today's behaviour, so the all-low arm is the baseline. */
+/** The six online factors (designs v2 and v3: 2^(6-2), 16 arms, the arm ids are the same in both; v1 had the first five); values[0] is today's behaviour, so the all-low arm is the baseline. */
 const ONLINE_FACTORS: Factor[] = [
   { name: "warmPolicy", values: ["native", "orchestrator-aware"] },
   { name: "mainCacheTtl", values: ["5m", "1h"] },

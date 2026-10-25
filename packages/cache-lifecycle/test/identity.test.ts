@@ -1,4 +1,4 @@
-// Identity shim (T7.0): pi 1.0.0's CacheWarmer stops a warm run when any message
+// Identity shim: pi 1.0.0's CacheWarmer stops a warm run when any message
 // object in agent.state.messages changed identity since the request. Custom
 // messages get a new object on every projection, so warming never fires again.
 import { test } from "node:test";

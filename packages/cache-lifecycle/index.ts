@@ -1,4 +1,4 @@
-// cache-lifecycle: prompt-cache aware elision and TTL (spec §5.3).
+// cache-lifecycle: prompt-cache aware elision and TTL.
 // Thin shell; all logic lives in ./core/shell.ts.
 import { join } from "node:path";
 import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";

@@ -1,4 +1,4 @@
-// P-design (plan): k factors, 2-level, half fraction with generator
+// P-design: k factors, 2-level, half fraction with generator
 // x_k = (−1)^k ∏_{j<k} x_j (sign chosen so the all-low baseline arm is in the design) → 2^(k-1) arms, every factor balanced, and for k = 5 all
 // pairs of distinct effects of order ≤ 2 in orthogonal columns (resolution V).
 import { test } from "node:test";
@@ -68,7 +68,7 @@ test("half fraction contains the all-low arm (today's setup = the baseline)", ()
   }
 });
 
-// v2 (T8.9): six factors in 16 arms = the 2^(6-2) fraction, generators E = ABC, F = BCD (defining relation
+// v2: six factors in 16 arms = the 2^(6-2) fraction, generators E = ABC, F = BCD (defining relation
 // I = ABCE = BCDF = ADEF: resolution IV). Signs as in the half fraction, so the all-low arm is a run.
 test("k=6, maxArms 16 → 2^(6-2): 16 distinct balanced arms, generators x5 = x1·x2·x3 and x6 = x2·x3·x4, all-low arm included", () => {
   const fs = factors(6);

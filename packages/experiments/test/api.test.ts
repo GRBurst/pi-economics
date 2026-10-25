@@ -1,4 +1,4 @@
-// The process-global API (plan S11): armFor / flag / inherit. P19: flag honours child inheritance.
+// The process-global API: armFor / flag / inherit; flag honours child inheritance.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createApi } from "../core/api.ts";
@@ -39,7 +39,7 @@ test("inherit cycles terminate", () => {
   assert.equal(api.armFor("a"), undefined);
 });
 
-// T13.7: a process restart drops the in-memory inheritance of a resumed child (its spawn
+// A process restart drops the in-memory inheritance of a resumed child (its spawn
 // event fired before the api knew its root), so the arm is re-derived from the session-file
 // parent (`resolveParent`, the same rule token-meter uses for parentSessionId) up to the root.
 test("resumed child without a spawn event: the session-path parent's arm, cached", () => {

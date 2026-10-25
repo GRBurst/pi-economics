@@ -1,4 +1,4 @@
-// T8.7 guards: user corrections (regex setting) and the /rate command, logged to <agentDir>/guards/events.jsonl
+// Guards: user corrections (regex setting) and the /rate command, logged to <agentDir>/guards/events.jsonl
 // (`{ts, sessionId, arm, event: "correction" | "rating", value?}`; never prompt text).
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";

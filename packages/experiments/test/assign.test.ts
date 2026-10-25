@@ -1,4 +1,4 @@
-// P-off, P-balance, P-floor (plan) for assign(). Seeded RNG throughout.
+// P-off, P-balance, P-floor for assign(). Seeded RNG throughout.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { design } from "../core/design.ts";

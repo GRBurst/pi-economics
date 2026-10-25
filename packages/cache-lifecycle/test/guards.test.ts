@@ -1,4 +1,4 @@
-// T8.7 guard: `context_peek` use after masking is logged as `peek-after-mask` to <agentDir>/guards/events.jsonl
+// Guards: `context_peek` use after masking is logged as `peek-after-mask` to <agentDir>/guards/events.jsonl
 // (the file format meter-report --arms reads; no prompt text, no tool arguments).
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";

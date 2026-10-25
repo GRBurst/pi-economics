@@ -1,4 +1,4 @@
-// Arm assignment per plan S11 (properties P-off, P-balance, P-floor).
+// Arm assignment (properties P-off, P-balance, P-floor).
 // Pure: all randomness comes in as `rng`, so tests seed it deterministically.
 import type { Arm } from "./design.ts";
 

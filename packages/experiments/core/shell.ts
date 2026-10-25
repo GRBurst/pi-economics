@@ -21,7 +21,7 @@ export type SubagentsApi = {
 };
 export type Deps = { agentDir: string; settings?: Settings; rng?: () => number; api?: () => SubagentsApi | undefined };
 /**
- * `design` is absent on v1 lines (five factors, 5-char arm ids); v2 = six factors, 2^(6-2); v3 (T8.10) = the same factors and arms as v2,
+ * `design` is absent on v1 lines (five factors, 5-char arm ids); v2 = six factors, 2^(6-2); v3 = the same factors and arms as v2,
  * but foldHint = cache-aware now adds a paragraph to the system prompt, so v2 and v3 sessions must never be pooled. New assignments are v3;
  * a resumed session finds its row and keeps the design (and arm) it was assigned under.
  */
@@ -84,7 +84,7 @@ export function install(pi: PiLike, deps: Deps): void {
   };
   connect();
 
-  // Guards (spec §5.6.3, T8.7): corrections and the end-of-session rating go to <agentDir>/guards/events.jsonl; only the fact, never text.
+  // Guards: corrections and the end-of-session rating go to <agentDir>/guards/events.jsonl; only the fact, never text.
   const logGuard = (sessionId: string, event: string, value?: number): void => {
     try {
       mkdirSync(join(deps.agentDir, "guards"), { recursive: true });

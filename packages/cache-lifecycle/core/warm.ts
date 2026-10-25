@@ -1,4 +1,4 @@
-// Idle prompt-cache warming policy (spec §5.3): pure decision table.
+// Idle prompt-cache warming policy: pure decision table.
 
 export type WarmInput = {
   role: "main" | "child";

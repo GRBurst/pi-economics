@@ -18,7 +18,7 @@ export type PiLike = {
 
 export type Deps = {
   settings: Settings;
-  /** pi's agent dir; when set, a `context_peek` call after masking is logged to <agentDir>/guards/events.jsonl (experiments guard, spec §5.6.3). */
+  /** pi's agent dir; when set, a `context_peek` call after masking is logged to <agentDir>/guards/events.jsonl (experiments guard). */
   agentDir?: string;
   now?: () => number;
   /** The actor-subagents API; default `globalThis.__subagentsApi_v1`. */
@@ -38,7 +38,7 @@ export function install(pi: PiLike, deps: Deps) {
   const now = deps.now ?? Date.now;
   const { settings } = deps;
   const api = deps.api ?? (() => (globalThis as { __subagentsApi_v1?: SubagentsApiV1 }).__subagentsApi_v1);
-  // The one seam for the factors the experiments package switches (spec §5.6): its arm's value, else the own setting.
+  // The one seam for the factors the experiments package switches: its arm's value, else the own setting.
   const experiments = () => (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1;
   const flag = (name: "warmPolicy" | "mainCacheTtl" | "maskOnCold", sid: string): string => {
     const own = settings[name];
@@ -46,7 +46,7 @@ export function install(pi: PiLike, deps: Deps) {
     // The factor's "on" level: the own masking level, or tools+thinking when that is off.
     return name === "maskOnCold" && v === "on" ? (own === "off" ? "tools+thinking" : own) : v;
   };
-  // D2: actor-subagents' list() carries a `main` record with the main session id
+  // actor-subagents' list() carries a `main` record with the main session id
   // (the name is unique -- the singleton is added before any child can spawn),
   // and it is not a child. Excluded here and in the warming decision below.
   const isChild = (sid: string) => api()?.list().some((a) => a.name !== "main" && a.sessionId === sid) ?? false;
@@ -68,7 +68,7 @@ export function install(pi: PiLike, deps: Deps) {
     if (e.status >= 200 && e.status < 300) lastRequest.set(ctx.sessionManager.getSessionId(), now());
   });
 
-  // Warming (§5.3). Idle time counts from the last real message; a warm ping has no message_end.
+  // Warming. Idle time counts from the last real message; a warm ping has no message_end.
   const lastMessage = new Map<string, number>();
   pi.on("message_end", (_e, ctx) => void lastMessage.set(ctx.sessionManager.getSessionId(), now()));
   // A child awaits a reply from its last outgoing message until something is routed to it.
@@ -91,7 +91,7 @@ export function install(pi: PiLike, deps: Deps) {
     if (!a || flag("warmPolicy", sid) === "native") return undefined;
     track(a);
     const agents = a.list();
-    const children = agents.filter((x) => x.name !== "main"); // D2
+    const children = agents.filter((x) => x.name !== "main"); // main is not a child (above)
     const self = children.find((x) => x.sessionId === sid);
     const action = decideWarm({
       role: self ? "child" : "main",

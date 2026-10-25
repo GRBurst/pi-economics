@@ -1,4 +1,4 @@
-// Session lifecycle (T8.4, R10): assignment on session_start, assignments.jsonl, spawn → inherit.
+// Session lifecycle: assignment on session_start, assignments.jsonl, spawn → inherit.
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -83,7 +83,7 @@ test("no factors → the baseline arm with no flags: every flag falls back to th
   assert.equal(h.api().flag("warmPolicy", "own", "s1"), "own");
 });
 
-// T13.7: the restart drops the in-memory inheritance of a RESUMED child (its spawn event
+// The restart drops the in-memory inheritance of a RESUMED child (its spawn event
 // fired before its session started), so its arm is re-derived from the session file layout
 // <sessionDir>/subagents/<parent>/*_<child>.jsonl (token-meter's parentSessionId rule).
 test("resumed child without a spawn event: arm re-derived from the session file layout; no new row", () => {
@@ -120,7 +120,7 @@ test("exploit reads the posterior meter-report wrote to state.json (rewards: the
   assert.equal(h.api().armFor("s1").id, ids[5]);
 });
 
-// T8.9: the assignment line names its design. Lines without `design` are v1 (the five-factor 2^(5-1) design, 5-char arm ids).
+// The assignment line names its design. Lines without `design` are v1 (the five-factor 2^(5-1) design, 5-char arm ids).
 test("assignment lines carry design \"v3\" (6-char arm ids, the same six factors as v2)", () => {
   const h = harness();
   h.start("s1");
@@ -151,7 +151,7 @@ test("a session assigned under v1 keeps its arm and flags (not re-assigned, no n
   assert.deepEqual(h.rows().slice(1).map((r) => r.design), Array(16).fill("v3"));
 });
 
-// T8.10: v3 = v2's factors and arms with a new meaning of foldHint = cache-aware: resumed v2 sessions keep "v2", v2 rows do not balance v3.
+// v3 = v2's factors and arms with a new meaning of foldHint = cache-aware: resumed v2 sessions keep "v2", v2 rows do not balance v3.
 test("a resumed v2 session keeps its arm and design \"v2\" (no new row); new sessions are v3 and v2 rows do not skew their balance", () => {
   const h = harness();
   const arms = design(h.settings.factors, 16);

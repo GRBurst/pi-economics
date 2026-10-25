@@ -1,4 +1,4 @@
-// experiments: one fractional-factorial arm per main session (spec §5.6):
+// experiments: one fractional-factorial arm per main session:
 // design + explore/exploit assignment (core/design.ts, core/assign.ts), spawn
 // inheritance for children, factor flags for the other extensions
 // (`globalThis.__piExperimentsApi_v1`). Thin shell; all logic lives in ./core/shell.ts.

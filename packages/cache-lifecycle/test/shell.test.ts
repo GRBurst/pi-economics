@@ -4,7 +4,7 @@ import { install } from "../core/shell.ts";
 import { defaults } from "../core/settings.ts";
 import { fakePi } from "./fake-pi.ts";
 
-// --- masking on the first request after cache expiry (T7.5) ---
+// --- masking on the first request after cache expiry ---
 import { fakeCtx } from "./fake-pi.ts";
 import { asst, tool, user } from "./msgs.ts";
 
@@ -89,7 +89,7 @@ test("tools+thinking also drops old thinking blocks", () => {
   assert.deepEqual((f.appended[0].data as any).ids, ["think:r1:0"]);
 });
 
-// --- 1 h TTL for the main session (T7.6) ---
+// --- 1 h TTL for the main session ---
 const req = () => ({ payload: { system: [{ type: "text", text: "s", cache_control: { type: "ephemeral" } }], messages: [] } });
 const ttlOf = (res: any) => res?.system[0].cache_control.ttl;
 const withApi = (sessionIds: string[]) => ({ list: () => sessionIds.map((sessionId) => ({ sessionId })) });
@@ -130,7 +130,7 @@ test("cache expiry follows the TTL in force: with 1h, six minutes after a reques
   assert.ok(f.call("context", { messages: base() }, c));
 });
 
-// --- warming decision (T7.2) ---
+// --- warming decision ---
 type Info = { name: string; sessionId: string; state: "running" | "idle" | "paused" };
 const mkApi = (infos: Info[]) => {
   const listeners: Array<(e: any) => void> = [];
@@ -185,7 +185,7 @@ test("a paused or killed child is finished: stop", () => {
   assert.equal(decide("c1"), undefined, "kill also ends the wait");
 });
 
-// D2 (2026-10-03 live check, L6): actor-subagents' list() carries a `main`
+// Live check of 2026-10-03: actor-subagents' list() carries a `main`
 // record carrying the MAIN session id (index.ts: the singleton record is
 // refreshed to the foreground sessionId). It must not count as a child.
 const MAIN = { name: "main", sessionId: "main", state: "running" as const };
