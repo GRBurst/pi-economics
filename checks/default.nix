@@ -170,5 +170,7 @@ in {
   };
   # (M5.1) The task-router tests run when it builds (spec §8.1, "Package tests").
   task-router = self.packages.${pkgs.stdenv.hostPlatform.system}.task-router;
+  # (M5.4) The decisions of R', recorded once (spec §6.3).
+  router-golden = pkgs.callPackage ./router-golden {};
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
