@@ -20,6 +20,29 @@
   fileAt = target: cfg: lib.findFirst (f: f.target == target) null (lib.attrValues cfg.home.file);
   settingsOf = dir: ic: (fileAt "${dir}/infinite-context/settings.json" (eval dir ic)).text;
   bare = hm.evalBare {};
+  # The host's values (homes/pallon/default.nix:32-54 at 4c714f0).
+  hostReminders = {
+    overrides = {
+      "anthropic/claude-opus-5-5" = {
+        startTokens = 400000;
+        everyTokens = 100000;
+      };
+      "anthropic/claude-sonnet-5-5" = {
+        startTokens = 400000;
+        everyTokens = 100000;
+      };
+    };
+    prices = {
+      "anthropic/claude-opus-5-5" = {
+        w = 5;
+        r = 0.2;
+      };
+      "anthropic/claude-sonnet-5-5" = {
+        w = 2.5;
+        r = 0.2;
+      };
+    };
+  };
 in {
   # (M6.8) Off by default: no registry entry, no file.
   infinite-context-off = let
@@ -61,4 +84,33 @@ in {
     (sorted (targets bare ++ ["${dir}/extensions/infinite-context" "${dir}/infinite-context/settings.json"]))
     ++ eq "settings text (${dir})" (settingsOf dir {}) ''{"reminders":{"default":{},"overrides":{}}}'')
   dirs;
+
+  # (M6.9) The reminder options render as the host's piContextReminders did:
+  # nulls are left out, prices, TTL and foldHint only when set.
+  infinite-context-reminders = let
+    host = builtins.fromJSON (settingsOf ".pi/agent" {reminders = hostReminders;});
+    all = builtins.fromJSON (settingsOf ".pi/agent" {
+      reminders = {
+        default.startTokens = 150000;
+        overrides.anthropic.everyTokens = 20000;
+        cacheTtlMinutes = 60;
+        foldHint = "fixed";
+      };
+    });
+  in
+    eq "host's values" host {
+      reminders = {
+        default = {};
+        inherit (hostReminders) overrides;
+      };
+      inherit (hostReminders) prices;
+    }
+    ++ eq "every option" all {
+      reminders = {
+        default.startTokens = 150000;
+        overrides.anthropic.everyTokens = 20000;
+      };
+      cacheTtlMinutes = 60;
+      foldHint = "fixed";
+    };
 }
