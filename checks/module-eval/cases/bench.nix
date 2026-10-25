@@ -102,7 +102,7 @@ in {
     eq "PI_BENCH_ROUTER" (lib.importJSON v.PI_BENCH_ROUTER) router;
 
   # (M5.12) With taskRouter, the arms get its model keys and both switches
-  # off; a definition replaces one key; without taskRouter nothing (spec §7).
+  # off; a definition replaces one leaf; without taskRouter nothing (spec §7).
   bench-router-default = let
     s = {
       models.sonnet.model = "m";
@@ -157,6 +157,35 @@ in {
       spotCheck.enabled = false;
     }
     ++ holds "without taskRouter: nothing exported" (!((hm.eval {programs.piEconomics.bench.enable = true;}).home.sessionVariables ? PI_BENCH_ROUTER));
+
+  # (review-m5 M2, FU1) The projection is one mkDefault per leaf: a host's
+  # definition of one member's model replaces that leaf only; the member's other
+  # keys and the other members stay, a blank one among them (spec §7).
+  bench-router-leaf = let
+    s.models = {
+      qwen-local = {
+        model = "llama/q";
+        health = "http://h:2";
+      };
+      qwen-cloud.model = "";
+      sonnet.model = "m";
+    };
+    c = hm.eval {
+      programs.piEconomics = {
+        bench = {
+          enable = true;
+          router.models.qwen-local.model = "llama/other";
+        };
+        actorSubagents.enable = true;
+        taskRouter = {
+          enable = true;
+          settings = s;
+        };
+      };
+    };
+  in
+    eq "router.models" (pe c).bench.router.models (lib.recursiveUpdate s.models {qwen-local.model = "llama/other";})
+    ++ eq "failed assertions" (failed "" c) [];
 
   # (from review-m6; M5.13) A host's definition of one default name wins over
   # that name's mkDefault without a conflict and leaves the other defaults (spec

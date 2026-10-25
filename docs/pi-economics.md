@@ -72,7 +72,7 @@ at its empty default exports nothing, and the bench keeps its own default.
 | (agent source) | `<home>/<agentDir>`, not an option | `PI_BENCH_AGENT_SRC` |
 | `workDir` | `null` (the bench: `$XDG_RUNTIME_DIR/pi/tmp/bench`) | `PI_BENCH_WORK` |
 | `extensions` | the flake's packages the bench loads by name, one `mkDefault` each: `actor-subagents`, `infinite-context`, `pi-retry`, `task-router`, `token-meter` (see below) | `PI_BENCH_EXT_DIR`, a `linkFarm` of name → path |
-| `router` | `{}` (an arm's file: its own keys); while `taskRouter` is enabled, its model keys with `randomize` and `spotCheck` off, one `mkDefault` each | `PI_BENCH_ROUTER`, a JSON file; an orch arm merges its `routing`, `delegation`, `t0Limits` over it as `lib.recursiveUpdate` does |
+| `router` | `{}` (an arm's file: its own keys); while `taskRouter` is enabled, its model keys with `randomize` and `spotCheck` off, one `mkDefault` per leaf | `PI_BENCH_ROUTER`, a JSON file; an orch arm merges its `routing`, `delegation`, `t0Limits` over it as `lib.recursiveUpdate` does |
 | `agentsBaseline` | `null` (the bench: `<agent source>/notes/…`) | `PI_BENCH_AGENTS_OFF` |
 
 The bench's `extensions` default covers the flake's own packages. A
@@ -246,11 +246,14 @@ absence of the API, so without the patched build it would do nothing); an
 assertion says so (`pi-economics: taskRouter requires actorSubagents …`).
 
 With `bench.enable`, the bench's `router` base is defined while `taskRouter`
-is enabled, one `mkDefault` per key: the keys of `taskRouter.settings` that
-name the models and where to reach them (`models`, `queueMaxSec`,
-`contextFit`, `localHealthUrl`, `cloudDailyCap`, `contextWindow`), with
-`randomize.enabled` and `spotCheck.enabled` forced to `false`. The bench's `extensions` default
-holds `task-router` too. A definition of one name replaces that name only.
+is enabled, one `mkDefault` per leaf (a list is a leaf): the keys of
+`taskRouter.settings` that name the models and where to reach them (`models`,
+`queueMaxSec`, `contextFit`, `localHealthUrl`, `cloudDailyCap`,
+`contextWindow`), with `randomize.enabled` and `spotCheck.enabled` set to
+`false`. A definition of one leaf (`bench.router.models.<m>.model`) replaces
+that leaf only; the member's other keys and the other members stay. The
+bench's `extensions` default holds `task-router` too. A definition of one name
+replaces that name only.
 
 **Golden test.** `checks/router-golden/golden.txt` records every decision of
 `planSpawn` over the router's own golden grid (`test/golden/grid.ts`: 146,880

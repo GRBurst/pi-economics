@@ -15,6 +15,12 @@
   # maps (core/settings.ts); `contextFit` too, since the context filter picks
   # among the models by it (plan router-g3-g7, D15).
   routerModelKeys = ["models" "queueMaxSec" "contextFit" "localHealthUrl" "cloudDailyCap" "contextWindow"];
+  # One mkDefault per leaf (an attribute set is descended, a list is a leaf): a
+  # host's definition of one leaf replaces that leaf only (review-m5 M2).
+  mkDefaultLeaves = v:
+    if lib.isAttrs v
+    then lib.mapAttrs (_: mkDefaultLeaves) v
+    else lib.mkDefault v;
 in {
   options.programs.piEconomics.bench = {
     enable = lib.mkEnableOption "the pi-bench harness (pi-bench, bench-report)";
@@ -72,11 +78,13 @@ in {
         (`PI_BENCH_ROUTER`, made with `builtins.toFile`, so no value may carry
         a store path's context); `{}` exports nothing, and an arm's file is the
         arm's keys alone.
-        While taskRouter is enabled it is defined, one `mkDefault` per key, as
-        the keys of taskRouter.settings that name the models and where to reach
-        them (`models`, `queueMaxSec`, `contextFit`, `localHealthUrl`,
-        `cloudDailyCap`, `contextWindow`) with `randomize.enabled` and
-        `spotCheck.enabled` forced to `false`.
+        While taskRouter is enabled it is defined, one `mkDefault` per leaf
+        (a list is a leaf), as the keys of taskRouter.settings that name the
+        models and where to reach them (`models`, `queueMaxSec`, `contextFit`,
+        `localHealthUrl`, `cloudDailyCap`, `contextWindow`) with
+        `randomize.enabled` and `spotCheck.enabled` set to `false`: a
+        definition of one leaf (`router.models.<m>.model`) replaces that leaf
+        only, and the other members stay.
       '';
     };
 
@@ -106,7 +114,7 @@ in {
     };
     # (M5.12) The arms run on the models the host configures, never with its
     # randomization or spot checks (spec §7).
-    programs.piEconomics.bench.router = lib.mkIf pe.taskRouter.enable (lib.mapAttrs (_: lib.mkDefault) (lib.recursiveUpdate
+    programs.piEconomics.bench.router = lib.mkIf pe.taskRouter.enable (mkDefaultLeaves (lib.recursiveUpdate
       (lib.filterAttrs (n: _: lib.elem n routerModelKeys) pe.taskRouter.settings)
       {
         randomize.enabled = false;
