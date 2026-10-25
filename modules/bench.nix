@@ -54,7 +54,7 @@ in {
         leave out some it does. Exported as a directory of links
         (`PI_BENCH_EXT_DIR`). Defined by default, one `mkDefault` each, for the
         flake's packages the bench loads by name: `actor-subagents`,
-        `infinite-context`, `pi-retry`, `token-meter`. A definition adds names
+        `infinite-context`, `pi-retry`, `task-router`, `token-meter`. A definition adds names
         or replaces one; `lib.mkForce {}` exports nothing, and the bench then
         looks the names up in `~/.pi/agent/extensions`.
       '';
@@ -101,6 +101,7 @@ in {
       infinite-context = "${pe.infiniteContext.package}/extensions/infinite-context";
       pi-retry = "${pe.retry.package}";
       token-meter = "${pe.tokenMeter.package}";
+      task-router = "${pe.taskRouter.package}"; # (M5.13)
     };
     # (M5.12) The arms run on the models the host configures, never with its
     # randomization or spot checks (spec §7).

@@ -86,6 +86,7 @@ in {
       infinite-context = "${p.infiniteContext.package}/extensions/infinite-context";
       pi-retry = "${p.retry.package}";
       token-meter = "${p.tokenMeter.package}";
+      task-router = "${p.taskRouter.package}";
     }
     ++ holds "mkForce {} exports nothing" (!((on {extensions = lib.mkForce {};}).home.sessionVariables ? PI_BENCH_EXT_DIR));
 
@@ -153,4 +154,21 @@ in {
       spotCheck.enabled = false;
     }
     ++ holds "without taskRouter: nothing exported" (!((hm.eval {programs.piEconomics.bench.enable = true;}).home.sessionVariables ? PI_BENCH_ROUTER));
+
+  # (from review-m6; M5.13) A host's definition of one default name wins over
+  # that name's mkDefault without a conflict and leaves the other defaults (spec
+  # §7): checked for every name the default holds, pi-retry and task-router
+  # among them.
+  bench-extensions-override = let
+    defaults = (pe (on {})).bench.extensions;
+    one = name: let
+      c = on {extensions.${name} = "/x";};
+      got = (pe c).bench.extensions;
+    in
+      eq "${name} is the host's" got.${name} "/x"
+      ++ eq "the other defaults stay (${name})" (removeAttrs got [name]) (removeAttrs defaults [name])
+      ++ eq "failed assertions (${name})" (failed "" c) [];
+  in
+    holds "the defaults hold pi-retry and task-router" (defaults ? pi-retry && defaults ? task-router)
+    ++ lib.concatMap one (lib.attrNames defaults);
 }
