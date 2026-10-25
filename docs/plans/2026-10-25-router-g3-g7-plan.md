@@ -754,3 +754,10 @@ Option `example`: `{ models = { qwen-local.health = "http://localhost:11545"; ha
 
 # Execution Record
 
+
+# Decisions on the open questions (main, 2026-10-25)
+
+Q1–Q9 accepted as recommended. Q4: the host's W4.2 pins only the local qwen
+model and `localHealthUrl`, and additionally sets the qwen-cloud member's model
+to `""` (owner: the OpenRouter free model is gone; a blank member is skipped),
+so Group 5's defaults reach the host at its lock move.
