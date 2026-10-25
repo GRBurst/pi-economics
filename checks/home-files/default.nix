@@ -30,6 +30,9 @@
           };
         };
         retry.enable = true;
+        # (M5.15)
+        actorSubagents.enable = true;
+        taskRouter.enable = true;
       };
     };
     pe = c.programs.piEconomics;
@@ -62,9 +65,10 @@
       done
     done
     # cacheLifecycle's op, through the script the activation entry runs.
+    # (M5.15) actorSubagents, enabled for the router, adds its own piRetry op.
     printf '{"theme":"dark"}\n' >"$TMPDIR/settings.json"
     ${lib.getExe pe.piSettings.package} "$TMPDIR/settings.json" 2>/dev/null
-    jq -e '. == {theme: "dark", cacheWarming: "idle"}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the op: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }
+    jq -e 'del(.piRetry) == {theme: "dark", cacheWarming: "idle"}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the op: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }
     # (M6.16) infiniteContext: the extension pi loads, and the rendered file
     # accepted by the extension's own parser (an invalid file is rejected whole).
     ic=${pe.extensions.infinite-context.path}
@@ -84,6 +88,11 @@
     printf '{"packages":["https://github.com/monotykamary/pi-retry","git:github.com/monotykamary/pi-retry","npm:x"]}\n' >"$TMPDIR/retry.json"
     ${lib.getExe pe.piSettings.package} "$TMPDIR/retry.json" 2>/dev/null
     jq -e '.packages == ["npm:x"]' "$TMPDIR/retry.json" >/dev/null || { echo "FAIL ${dir}: settings.json after ops.retry: $(cat "$TMPDIR/retry.json")" >&2; exit 1; }
+    # (M5.15) taskRouter: the extension pi loads.
+    tr=${pe.extensions.task-router.path}
+    for f in package.json index.ts core/shell.ts; do
+      [ -f "$tr/$f" ] || { echo "FAIL ${dir}: task-router lacks $f" >&2; exit 1; }
+    done
     echo "ok ${dir}"
   '';
 in
