@@ -1037,3 +1037,56 @@ Each with the planner's proposed decision; the plan follows the proposal.
 - **Q10.** M3 needs M2 landed (M3.0 Step 2): `cases/together.nix`, `childExtensions`, `homeModules.default` as an attrset. Proposal: M3 starts after M2's Execution Record; if M2 deviates in `checks/default.nix`, `flake.nix`, `caseFiles` or `together.nix`, the implementer adapts S1/S9 to M2's actual text, and N is M2's final case count.
 
 # Execution Record
+
+Executed 2026-10-18/25 (agent impl-m3b), on the plan at `d79e261` and M2 as landed (`a620f78`). Q1–Q10 accepted as proposed. Every task done; builds under `ulimit -v 20971520`, `--option eval-cache false`, timeouts 1800 s; the host read only through `git dot`. M3.0: M2's record read (Q1 changed there: `childExtensions` in `settings` is an assertion error, which M3 does not touch); the M2 landing checks pass (check listing, `grep -c` = 1, `homeModules.default` an attrset); M2's final count was 32 cases, so N = 32. Drift at M3.0: none against the host's `f6a3c81`.
+
+| Task | Commit | Red seen | Deviation |
+|---|---|---|---|
+| M3.0 | — | — | none |
+| M3.1 | `c505840` | the check/package missing; planted `dir: "m3"` in `test/settings.test.ts` → `ℹ fail` and `builder failed` | none; copy tree-identical but `nix/` and `package.nix`, built outputs of the host's and the flake's `package.nix` `diff -r` equal; `ℹ pass 154` |
+| M3.2 | `136ed1d` | `typecheck-token-meter` red on `core/analyse.ts:191` | D3's one-line annotation (S3), tests still `pass 154` |
+| M3.3 | `41c95d7` | option missing; plants `forChildren = false` and no `checkPath` → `FAIL token-meter-defaults`, IFD red | none; 35 cases |
+| M3.4 | `c19a534` | three `FAIL token-meter-files` per agentDir; plant (link `.pi/agent/LOGS.md` fixed) → only the `custom/agent` case fails | none; 36 cases |
+| M3.5 | `302be8a` | `option … tokenMeter.settings does not exist`; plant `mkIf true` → `FAIL token-meter-files: home.file targets` ×2 | none; 37 cases |
+| M3.6 | `2d42070` | green first; plant `forChildren = false` → `FAIL token-meter-children` ×2 and `token-meter-defaults` ×2 | 38 cases |
+| M3.7 | `c862631` | `attribute 'analysisSkill' missing`; plants (a) path always set, (b) only `LOGS.md` substituted → `FAIL analysis-skill-off: path`, `FAIL analysis-skill-text: no other agent dir (custom/agent)` | none; 41 cases; SKILL.md byte-equal to the host's |
+| M3.8 | `d74037b` | `FAIL analysis-skill-requires-meter: without tokenMeter: expected [ "pi-economics: analysisSkill requires …" ], got [ ]`; plant `assertion = true` → the same | the test commit missed the module edit (the edit tool failed); amended into one commit; 42 → 43 cases |
+| M3.9 | `089089f` | plants (skill says `pi-analyze`; fixed `.pi/agent/LOGS.md` link) → 5 `FAIL analysis-skill-contract` lines | green first (characterisation); 43 cases |
+| M3.10 | `587db93` | plants (skill dir `x/SKILL.md`; LOGS.md source `package.json`) → `FAIL .pi/agent: the skill directory holds: x`, `FAIL .pi/agent: LOGS.md is not the package's` | `home-files` green first (new check; the plants are its reds) |
+| M3.11 | `6205d57` | plant `home.file.planted` → `FAIL components-together: home.file targets`, 1 failure in 43 | none; 43 cases |
+| M3.12 | `81d4c02` | the grep counted 18 lines → rc=1 after | 16 files, 18 comment lines (plan said 17 pairs; `test/delegation.test.ts` had a second `T13.9` line); 0 non-comment lines changed; `pass 154` |
+| M3.13 | `0b6cab3` | — | none; no `MISSING`, `leak` green |
+| M3.14 | this record's commit | — | see below |
+
+## Deviations
+
+1. M3.8: one commit instead of test + module (see the table).
+2. M3.12: 18 lines in 16 files, not 17 in 15 (one extra citation in `test/delegation.test.ts:1`).
+3. `/tmp` is private to the sandbox's commands: a backup in `/tmp` could not be read back, so planted edits were undone with `git checkout --` on staged files.
+4. The host moved while M3 ran: the owner committed his inputs/patches update as `4c714f0` (pi 1.2.0). **A pi 1.2.0 resync is pending** (a separate task). M3's sources stay on `f6a3c81`. Drift against `4c714f0` over the M3.0 paths: only `checks/pi-extensions.nix` (a comment about the patched pi-infinite-context, two lines), nothing in token-meter, the skill, `pi-log-contract`, `pi-bench`, `pi-extensions.nix` or `pi-settings-migrate`.
+
+## Gate (M3.14), 2026-10-25
+
+Each check's output deleted before its build (when not in use), one capped build each (`~/.cache/pi/m2gate.sh`), GNU `time`. Listing, same under both refs: `actor-subagents bench home-files iface-harness iface-subagents-bench-probe leak leak-selftest module-eval npm-deps pi-settings-migrate token-meter typecheck-actor-subagents typecheck-bench typecheck-harness typecheck-token-meter`. No `FAILED`, no `LISTING FAILED`.
+
+| Check | `git+file://` peak · time | `path:` peak · time |
+|---|---|---|
+| `actor-subagents` | 138268 KiB · 3.83 s | 138572 KiB · 2.07 s |
+| `bench` | 154864 KiB · 6.56 s | 155264 KiB · 4.24 s |
+| `home-files` | 427156 KiB · 2.85 s | 427620 KiB · 2.97 s |
+| `iface-harness` | 245156 KiB · 6.46 s | 245288 KiB · 3.34 s |
+| `iface-subagents-bench-probe` | 245716 KiB · 13.20 s | 244884 KiB · 7.86 s |
+| `leak` | 240004 KiB · 1.65 s | 240432 KiB · 3.86 s |
+| `leak-selftest` | 239672 KiB · 3.61 s | 239536 KiB · 1.73 s |
+| `module-eval` (43 cases) | 1421968 KiB · 34.99 s | 1535436 KiB · 33.97 s |
+| `npm-deps` | 157344 KiB · 3.39 s | 156964 KiB · 1.02 s |
+| `pi-settings-migrate` | 561548 KiB · 11.70 s | 560376 KiB · 7.71 s |
+| `token-meter` (154 tests) | 138060 KiB · 0.68 s | 138564 KiB · 0.80 s |
+| `typecheck-actor-subagents` | 245324 KiB · 8.55 s | 245020 KiB · 8.28 s |
+| `typecheck-bench` | 245584 KiB · 5.08 s | 245320 KiB · 3.19 s |
+| `typecheck-harness` | 245212 KiB · 8.39 s | 246168 KiB · 8.35 s |
+| `typecheck-token-meter` | 245612 KiB · 4.78 s | 245176 KiB · 4.66 s |
+
+The `token-meter` times are short because `home-files` references its output, so the gate's delete step cannot remove it and the build is a no-op; a separate `nix build --rebuild` of `checks.x86_64-linux.token-meter` ran the suite: `ℹ pass 154`, `ℹ fail 0`. `packages.x86_64-linux` is `["actor-subagents","bench","token-meter"]`; `homeModules` is `["default"]`; `formatter.x86_64-linux.drvPath` evaluates; `alejandra --check` over every tracked `.nix` file is clean. `git diff a620f78 -- flake.lock` is empty. The gate ran while HEAD moved from `0b6cab3` by another agent's docs-only commit (`efcb918`, m6 plan).
+
+Open questions: Q1–Q10 accepted. Follow-ups, not done: the pi 1.2.0 resync (deviation 4); W2 wires `analysisSkill.path` with `lib.optionalAttrs (path != null)`.
