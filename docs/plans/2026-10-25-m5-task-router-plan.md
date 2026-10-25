@@ -435,3 +435,717 @@ Run only when M6's Execution Record says M6.D was "moved to M5"; otherwise mark 
 - [ ] **Step 4 (P-out):** `hostFull; flag`; `a=$( (ulimit -v $cap && exec timeout -s KILL 1800 nix build --no-link --print-out-paths "path:$TMPDIR/hostR-full#checks.x86_64-linux.pi-task-router" "${o[@]}") )`, `b=$(ne packages.x86_64-linux.task-router.outPath --raw)` (built by Step 2); `diff -rq "$a" "$b"` → only `core/shell.ts`.
 - [ ] **Step 5:** fill the Execution Record: R' and how it was named; P1–P5 with evidence (and any handed over); the drift; per task commit, red seen, deviations; `T`, the final case count; the `earth` lines kept (M5.2); the open questions as answered.
 - [ ] Commit.
+
+## Snippets
+
+### S1 — `packages/task-router/package.nix`
+
+R'’s `nix/package.nix` with `../package.json` → `./package.json`, `./..` → `./.`, and this header instead of the host's two lines (which name `./hm-module.nix`):
+
+```nix
+# The task-router pi package (spec §2, §6), tested at build time: node --test
+# over test/*.test.ts in checkPhase. pi loads index.ts and core/ uncompiled.
+```
+
+The body is otherwise R'’s (`stdenvNoCC.mkDerivation`, `pname = manifest.name`, `src = lib.cleanSource ./.`, `doCheck`, the `checkPhase` with `HOME=$TMPDIR/home`, `installPhase` copying `package.json index.ts core`). Diff against M4's `packages/cache-lifecycle/package.nix`: the header and no `bin` line.
+
+### S2 — `flake.nix`, `checks/default.nix` (diffs)
+
+```diff
+--- a/flake.nix
++++ b/flake.nix
+@@ packages
+       experiments = pkgs.callPackage ./packages/experiments/package.nix {};
++      task-router = pkgs.callPackage ./packages/task-router/package.nix {};
+--- a/checks/default.nix
++++ b/checks/default.nix
+@@ before home-files
++  # (M5.1) The task-router tests run when it builds (spec §8.1, "Package tests").
++  task-router = self.packages.${pkgs.stdenv.hostPlatform.system}.task-router;
++  # (M5.4) The decisions of R', recorded once (spec §6.3).
++  router-golden = pkgs.callPackage ./router-golden {};
++  # (M5.5)
++  typecheck-task-router = typecheck.typecheck {
++    name = "task-router";
++    src = ../packages/task-router;
++  };
++  # (M5.6, M5.7) The router's copies of both globalThis APIs (spec §5.3, §8.1).
++  iface-subagents-task-router = iface.compare {
++    name = "subagents-task-router";
++    provider = subagentsProvider;
++    consumer = {
++      src = ../packages/task-router;
++      file = "core/api.ts";
++      type = "SubagentsApiV1";
++    };
++  };
++  iface-experiments-task-router = iface.compare {
++    name = "experiments-task-router";
++    provider = experimentsProvider;
++    consumer = {
++      src = ../packages/task-router;
++      file = "core/shell.ts";
++      type = "ExperimentsApi";
++    };
++  };
++  # (M5.11) Every log writer through pi-analyse (spec §8.1).
++  log-contract = pkgs.callPackage ./log-contract {};
+   home-files = import ./home-files {inherit lib pkgs hm;};
+```
+
+Each entry lands in its own task (column "Task" of "File structure").
+
+### S3 — `packages/task-router/test/free-cloud-slot.test.ts`
+
+```ts
+// P2 (pi-economics spec §6.1): the free-cloud slot is optional. With it empty, no spawn takes the cloud route, the cloud
+// counter stays at 0, and no spawn waits for a cloud slot, whether the local slot is up or down.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { accepted, card, harness } from "./harness.ts";
+import { defaults } from "../core/settings.ts";
+
+const EMPTY = { models: { "qwen-cloud": { model: "" } } } as any;
+const FREE = defaults().models["qwen-cloud"].model;
+
+for (const [name, health] of [["local up", undefined], ["local down", { health: 0, slots: 0 }]] as const) {
+  test(`P2, ${name}: an empty free-cloud slot is never routed to, counts nothing and makes no spawn wait`, async () => {
+    const h = harness({ settings: EMPTY, ...(health ? { health } : {}) });
+    const models: string[] = [];
+    for (const n of ["a", "b", "c", "d"]) {
+      models.push((accepted(await h.a.spawn({ name: n, task: card() })) as any).model);
+      h.a.emit({ type: "turn", name: n, ts: 1 });
+    }
+    assert.ok(models.every((m) => m !== FREE && m !== ""), models.join());
+    const count = join(h.agentDir, "task-router", "cloud-count.json");
+    assert.ok(!existsSync(count) || Object.values(JSON.parse(readFileSync(count, "utf8"))).every((v) => v === 0), "cloud counter");
+    assert.deepEqual(h.sleeps, []);
+  });
+}
+```
+
+Plant (M5.3 Step 2), in `core/chain.ts`: `if (blocked || s.cloudToday >= s.cloudDailyCap) {` → `if (blocked) {`, and `if (s.cloudRunning === 0) return { route: "cloud" };` → `if (s.cloudRunning === 0 && s.cloudDailyCap >= 0) return { route: "cloud" };`.
+
+### S4 — Type-only edits (`core/shell.ts` for M5.7, the tests for M5.5; measured against `f1b140e`)
+
+```diff
+--- a/packages/task-router/core/shell.ts
++++ b/packages/task-router/core/shell.ts
+@@ -42,6 +42,9 @@
+   getThinkingLevel?(): ThinkingLevel;
+   setThinkingLevel?(level: ThinkingLevel): void;
+ };
++/** What the task-router reads of the experiments package's globalThis.__piExperimentsApi_v1; the type check compares it with the provider's ExperimentsApiV1 (spec §5.3). */
++export type ExperimentsApi = { flag(n: string, d: string, s?: string): string; armFor?(s: string): { id?: string } | undefined };
++
+ export type Deps = {
+   agentDir: string; now?: () => Date; settings?: Settings;
+   /** What the settings loader found wrong (spec §5.4); reported once by the shell (T1.8). */
+@@ -61,9 +64,9 @@
+   // routing / verifyGate / autoEscalate / freshOnCold come from the experiments arm when that package is loaded.
+   let sessionId: string | undefined;
+   const settings = withFlags(own, (name, def) =>
+-    (globalThis as { __piExperimentsApi_v1?: { flag(n: string, d: string, s?: string): string } }).__piExperimentsApi_v1?.flag(name, def, sessionId) ?? def);
++    (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1?.flag(name, def, sessionId) ?? def);
+   const armOf = (sid: string): string | undefined =>
+-    (globalThis as { __piExperimentsApi_v1?: { armFor?(s: string): { id?: string } | undefined } }).__piExperimentsApi_v1?.armFor?.(sid)?.id;
++    (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1?.armFor?.(sid)?.id;
+   const track = (ctx: any): void => { sessionId = ctx?.sessionManager?.getSessionId?.() ?? sessionId; };
+   const now = deps.now ?? (() => new Date());
+   const made = new Set<string>();
+--- a/packages/task-router/test/brief.test.ts
++++ b/packages/task-router/test/brief.test.ts
+@@ -1,10 +1,13 @@
+ import { test } from "node:test";
+ import assert from "node:assert/strict";
+ import { briefAppend } from "../core/brief.ts";
+-import { planFor, type TierPlan as Plan } from "./tier-plan.ts";
++import { planFor as tierPlanFor, type TierPlan } from "./tier-plan.ts";
+ import { profileFor } from "../core/profile.ts";
+ import { defaults } from "../core/settings.ts";
+-import type { Card, Profile } from "../core/types.ts";
++import type { Card, Plan, Profile } from "../core/types.ts";
++
++// The fixtures are tier plans (test/tier-plan.ts); briefAppend reads only what both shapes share.
++const planFor = (...a: Parameters<typeof tierPlanFor>): Plan => tierPlanFor(...a) as unknown as Plan;
+ 
+ const T0 = { bounded: true, specified: true, verifiable: true, lowRisk: true, small: true, linear: true };
+ const card = (o: Partial<Card> = {}): Card => ({ kind: "implement", files: ["a.ts", "b.md"], acceptance: ["x"], t0: T0, t2: [], ...o });
+@@ -13,7 +16,7 @@
+   if (!r.ok) throw new Error(r.errors.join());
+   return r.value;
+ };
+-const plan = (base: Plan["base"] = "qwen", i: Plan["importance"] = "normal", kind = "implement"): Plan => planFor(base, i, kind);
++const plan = (base: TierPlan["base"] = "qwen", i: TierPlan["importance"] = "normal", kind = "implement"): Plan => planFor(base, i, kind);
+ 
+ const HANDSHAKE = "Start immediately; no understanding/questions reply.";
+ const LIMIT = "Report in ≤ 300 words plus file paths; put details in a file.";
+--- a/packages/task-router/test/card.test.ts
++++ b/packages/task-router/test/card.test.ts
+@@ -131,7 +131,7 @@
+ 
+ test("skillNames (P-profile): profile skills ∪ card skills, deduplicated, order kept", async () => {
+   const { skillNames } = await import("../core/profile.ts");
+-  const p = { tools: "all", skills: ["a", "b"], report: "default" } as const;
++  const p: import("../core/types.ts").Profile = { tools: "all", skills: ["a", "b"], report: "default" };
+   assert.deepEqual(skillNames(p, { skills: ["c", "a", "d", "c"] }), ["a", "b", "c", "d"]);
+   assert.deepEqual(skillNames(p, {}), ["a", "b"]);
+   assert.deepEqual(skillNames({ ...p, skills: [] }, {}), []);
+--- a/packages/task-router/test/delegation.test.ts
++++ b/packages/task-router/test/delegation.test.ts
+@@ -3,7 +3,11 @@
+ import assert from "node:assert/strict";
+ import { countCalls, nudgeText } from "../core/delegation.ts";
+ import { briefAppend } from "../core/brief.ts";
+-import { planFor } from "./tier-plan.ts";
++import { planFor as tierPlanFor } from "./tier-plan.ts";
++import type { Plan } from "../core/types.ts";
++
++// The fixtures are tier plans (test/tier-plan.ts); briefAppend reads only what both shapes share.
++const planFor = (...a: Parameters<typeof tierPlanFor>): Plan => tierPlanFor(...a) as unknown as Plan;
+ import { defaults, loadSettings } from "../core/settings.ts";
+ import { accepted, card, harness } from "./harness.ts";
+ import { mkdtempSync, writeFileSync } from "node:fs";
+@@ -119,7 +123,7 @@
+   const s = defaults();
+   const c = card();
+   const p = planFor("qwen", "normal", "implement");
+-  const prof = { tools: "all", skills: [], report: "default" } as const;
++  const prof: import("../core/types.ts").Profile = { tools: "all", skills: [], report: "default" };
+   assert.ok(briefAppend(c, p, true, prof, "", true).includes(HANDSHAKE));
+   const b = briefAppend(c, p, true, prof, "", false);
+   assert.ok(!b.includes("Start immediately"));
+--- a/packages/task-router/test/fake-pi.ts
++++ b/packages/task-router/test/fake-pi.ts
+@@ -1,4 +1,5 @@
+ // Minimal stand-in for pi's ExtensionAPI: records handlers and tools, lets tests fire events and call tools.
++import type { ThinkingLevel } from "../core/types.ts";
+ type Handler = (e: any, ctx: any) => unknown;
+ type Tool = { name: string; description: string; parameters: any; execute: (id: string, params: any, signal: unknown, onUpdate: unknown, ctx: any) => Promise<any> };
+ 
+@@ -12,7 +13,7 @@
+     thinking,
+     sent,
+     pi: {
+-      getThinkingLevel: () => thinking.level,
++      getThinkingLevel: () => thinking.level as ThinkingLevel,
+       setThinkingLevel(l: string) { thinking.level = l; thinking.sets.push(l); },
+       on(name: string, h: Handler) { handlers.set(name, [...(handlers.get(name) ?? []), h]); },
+       sendMessage(msg: any, opts: any) { sent.push({ msg, opts }); },
+--- a/packages/task-router/test/outcome.test.ts
++++ b/packages/task-router/test/outcome.test.ts
+@@ -15,7 +15,7 @@
+   kind: "implement", files: [`src/${SECRET}.ts`], check: `run ${SECRET}`, acceptance: [`${SECRET} works`],
+   t0: { bounded: true, specified: true, verifiable: true, lowRisk: true, small: true, linear: true }, t2: [], failure: SECRET,
+ };
+-const plan: Plan = { worker: { tier: "qwen", effort: "xhigh" }, review: { tier: "T1", effort: "high" }, base: "qwen", importance: "high", reasons: ["all t0 criteria hold"] };
++const plan = { worker: { tier: "qwen", effort: "xhigh" }, review: { tier: "T1", effort: "high" }, base: "qwen", importance: "high", reasons: ["all t0 criteria hold"] } as unknown as Plan;
+ const long = "x".repeat(5000);
+ 
+ const sample = () => [
+--- a/packages/task-router/test/prompt.test.ts
++++ b/packages/task-router/test/prompt.test.ts
+@@ -46,7 +46,7 @@
+       assert.ok(r.reject.includes(w), `${w} in: ${r.reject}`);
+     }
+   }
+-  assert.match(bad.reject, /files: missing/);
++  assert.match((bad as { reject: string }).reject, /files: missing/);
+ });
+ 
+ test("the injected section and the rejection share one schema text (cannot drift)", () => {
+--- a/packages/task-router/test/randomize.test.ts
++++ b/packages/task-router/test/randomize.test.ts
+@@ -92,7 +92,7 @@
+ 
+ test("a re-spawn with attemptOf and a qwen-pinned profile are never randomized", async () => {
+   const h = harness({
+-    settings: { randomize: { enabled: true, share: 1 }, profiles: { cheap: { tier: "qwen", tools: "all", skills: [], report: "default" } } },
++    settings: { randomize: { enabled: true, share: 1 }, profiles: { cheap: { tier: "qwen", tools: "all", skills: [], report: "default" } as never } },
+     extra: { rng: () => 0 } as never,
+   });
+   accepted(await h.a.spawn({ name: "p1", task: card({ kind: "cheap" }) }));
+--- a/packages/task-router/test/shell.test.ts
++++ b/packages/task-router/test/shell.test.ts
+@@ -10,7 +10,7 @@
+ 
+ const NOW = new Date(Date.UTC(2026, 9, 2, 12, 0, 0));
+ const card: Card = { kind: "implement", files: [], acceptance: [], t0: { bounded: true, specified: true, verifiable: true, lowRisk: true, small: true, linear: true }, t2: [] };
+-const plan: Plan = { worker: { tier: "qwen", effort: "xhigh" }, base: "qwen", importance: "normal", reasons: [] };
++const plan = { worker: { tier: "qwen", effort: "xhigh" }, base: "qwen", importance: "normal", reasons: [] } as unknown as Plan;
+ 
+ function setup() {
+   const agentDir = mkdtempSync(join(tmpdir(), "task-router-shell-"));
+```
+
+Forms, for an error R' adds: a fixture of a tier-era shape passed where a production type is expected → `as unknown as <T>` at the fixture; a test fake's member typed `string` where a union is expected → cast at the member; an `as const` object passed as a mutable production type → annotate the binding with the type; never an edit in `core/` or `index.ts` (except D5).
+
+### S5 — The golden test: `checks/router-golden/{generate.ts,default.nix,golden.txt}`
+
+`generate.ts` (the prototype's, `~/.cache/pi/m5plan/generate.ts`):
+
+```ts
+// The router's golden decisions (spec §6.3): R''s planSpawn over the golden grid (test/golden/grid.ts) and the Qwen chain's
+// 96 states through resolveLeg, under two settings: R''s defaults and EMPTY_SLOT (every member's model set, the free cloud
+// empty). Usage: node --experimental-strip-types generate.ts <task-router dir>  > decisions (stdout).
+// Run by hand once on a host checkout at R' (header added by the caller); checks/router-golden runs it on packages/task-router.
+import { join, resolve } from "node:path";
+
+const dir = resolve(process.argv[2] ?? ".");
+const grid = await import(join(dir, "test/golden/grid.ts"));
+const { sutSpawn } = await import(join(dir, "test/golden/sut.ts"));
+const { parseSettings } = await import(join(dir, "core/settings.ts"));
+const { resolveLeg } = await import(join(dir, "core/policy.ts"));
+
+/** Every member's model set to a neutral name, the free cloud empty (spec §6.1 P1, P2). */
+export const EMPTY_SLOT = {
+  models: {
+    "qwen-local": { model: "local/qwen", health: "http://local.invalid:11545" },
+    "qwen-cloud": { model: "" },
+    haiku: { model: "api/haiku" },
+    sonnet: { model: "api/sonnet" },
+    opus: { model: "api/opus" },
+  },
+};
+const FIXTURES: [string, Record<string, unknown>][] = [["defaults", {}], ["empty-slot", EMPTY_SLOT]];
+const out: string[] = [];
+const id = (n: number, w: number) => n.toString(36).padStart(w, "0");
+
+/** Interns rows of labels; grid lines carry one id per t0 vector (64), rows are listed after their grid. */
+function section(name: string, lines: [string, string[]][]): void {
+  const rows = new Map<string, number>();
+  for (const [, rs] of lines) for (const r of rs) if (!rows.has(r)) rows.set(r, rows.size);
+  const w = Math.max(1, Math.ceil(Math.log(rows.size + 1) / Math.log(36)));
+  for (const [key, rs] of lines) out.push(`${name} ${key} ${rs.map((r) => id(rows.get(r)!, w)).join("")}`);
+  for (const [r, n] of rows) out.push(`${name}-row ${id(n, w)} ${r}`);
+}
+
+for (const [fx, raw] of FIXTURES) {
+  const cache = new Map<string, unknown>();
+  const settings = (v: { name: string; profiles: object }, rnd: boolean) => {
+    const k = `${v.name} ${rnd}`;
+    if (!cache.has(k)) cache.set(k, parseSettings({ ...structuredClone(raw), profiles: v.profiles, randomize: { enabled: rnd, share: 0.5 } }).settings);
+    return cache.get(k);
+  };
+  const model = (m: string | undefined) => (fx === "defaults" || m === undefined ? m : ({ [grid.MODELS.local]: "local/qwen", [grid.MODELS.haiku]: "api/haiku", [grid.MODELS.sonnet]: "api/sonnet", [grid.MODELS.opus]: "api/opus" } as Record<string, string>)[m] ?? m);
+  const plan: [string, string[]][] = [], expl: [string, string[]][] = [];
+  let nPlan = 0, nExpl = 0;
+  for (const v of grid.VARIANTS) {
+    const byKey = new Map<string, { p: string[]; e: string[] }>();
+    for (const f of grid.firsts(v)) {
+      const key = `${fx} ${v.name} ${f.kind} ${f.t2m} ${f.imp}`;
+      if (!byKey.has(key)) byKey.set(key, { p: [], e: [] });
+      const row = byKey.get(key)!;
+      const p: string[] = [];
+      for (const rnd of grid.RNDS) for (const seq of grid.SEQS) {
+        nPlan++;
+        const ctx = { settings: settings(v, rnd !== "off"), attempts: new Map() };
+        p.push([...grid.spawns({ ...f, rnd, seq })].map((sp: { id: string; attemptOf?: string; t2: boolean }) => sutSpawn(ctx, { taskId: sp.id, kind: f.kind, t0: f.t0, t2: sp.t2, force: f.t2m === "force", need: 0, imp: f.imp, draw: rnd === "hit", ...(sp.attemptOf ? { attemptOf: sp.attemptOf } : {}) }).label).join(" | "));
+      }
+      row.p.push(p.join(" ; "));
+      const e: string[] = [];
+      for (const m of grid.MODS) for (const ef of grid.EFFS) {
+        nExpl++;
+        const ctx = { settings: settings(v, false), attempts: new Map() };
+        const mm = model(m);
+        e.push(sutSpawn(ctx, { taskId: "t0", kind: f.kind, t0: f.t0, t2: f.t2m === "t2", force: f.t2m === "force", need: 0, imp: f.imp, draw: false, ...(mm !== undefined ? { model: mm } : {}), ...(ef !== undefined ? { effort: ef } : {}) }).start ?? "REJECT");
+      }
+      row.e.push(e.join(" "));
+    }
+    for (const [k, r] of byKey) { plan.push([k, r.p]); expl.push([k, r.e]); }
+  }
+  out.push(`count ${fx} plan ${nPlan} explicit ${nExpl}`);
+  section("plan", plan);
+  section("explicit", expl);
+  // The Qwen chain: 4 local × 4 cloud running × 3 cloud states × {queue deadline not reached, reached} (test/chain-table.test.ts).
+  const s = parseSettings(structuredClone(raw)).settings;
+  const NOW = 1_000_000;
+  class Wait extends Error {}
+  for (const local of ["up", "busy", "own", "down"]) for (const cr of [0, 1, 2, 3]) for (const cloud of ["open", "blocked", "capped"]) {
+    const picks: string[] = [];
+    for (const expired of [false, true]) {
+      const children = new Map<string, unknown>();
+      const add = (route: string, n: number) => { for (let i = 0; i < n; i++) children.set(`${route}${i}`, { route, at: NOW }); };
+      add("local", local === "own" ? 1 : 0); add("cloud", cr);
+      let now = NOW;
+      const cap = s.models["qwen-cloud"].dailyCap ?? 0;
+      const d = {
+        settings: s, children, now: () => now,
+        api: () => ({ list: () => [...children.keys()].map((name) => ({ name, state: "running" })) }),
+        probe: async () => ({ up: local === "up" || local === "own", busy: local === "busy" }),
+        cloud: { today: () => (cloud === "capped" ? cap : 0), blockedUntil: () => (cloud === "blocked" ? NOW + 1 : undefined), block() {} },
+        sleep: async (ms: number) => { if (!expired) throw new Wait(); now += ms + s.queueMaxSec * 1000; },
+      };
+      try { const r = await resolveLeg(d, { tier: "qwen", effort: "xhigh" }); picks.push(`${r.route}:${r.model}:${r.effort}`); }
+      catch (e) { if (e instanceof Wait) picks.push("wait"); else throw e; }
+    }
+    out.push(`chain ${fx} local=${local} cloudRunning=${cr} cloud=${cloud} ${picks.join(" ")}`);
+  }
+}
+process.stdout.write(out.join("\n") + "\n");
+```
+
+`default.nix`:
+
+```nix
+# The router's golden test (spec §6.3): the decisions of packages/task-router
+# equal the ones recorded from the host's R' in golden.txt (comment lines
+# aside), and with the free-cloud slot empty no Qwen-chain decision takes the
+# cloud route or waits (spec §6.1 P2). golden.txt is written by hand with
+# generate.ts, once per deliberate behaviour change (plan M5, Task M5.4).
+{
+  runCommand,
+  nodejs,
+  diffutils,
+}:
+runCommand "check-router-golden" {nativeBuildInputs = [nodejs diffutils];} ''
+  set -euo pipefail
+  grep -v '^#' ${./golden.txt} > want.txt
+  if grep -E '^chain empty-slot .*( cloud:| wait)' want.txt >&2; then
+    echo "router-golden: an empty free-cloud slot is routed to or waited for" >&2
+    exit 1
+  fi
+  export HOME=$TMPDIR/home
+  mkdir -p "$HOME"
+  node --experimental-strip-types --no-warnings ${./generate.ts} ${../../packages/task-router} > got.txt
+  if ! diff -u want.txt got.txt > diff.txt; then
+    echo "router-golden: decisions differ from R' ($(grep -c '^[-+][a-z]' diff.txt) lines); the first 40:" >&2
+    head -n 40 diff.txt >&2
+    exit 1
+  fi
+  touch "$out"
+''
+```
+
+`golden.txt` (prototype on `f1b140e`: `~/.cache/pi/m5plan/golden-f1b140e.txt`, 755 lines). Shape:
+
+```text
+# task-router golden decisions (spec §6.3), from checks/router-golden/generate.ts
+# R' = <id> (host dotfiles), <date>
+count defaults plan 146880 explicit 470016
+plan defaults v1 scout none normal <64 row ids, one per t0 vector 0..63>
+…
+plan-row 0 <15 labels: randomize {off, hit, miss} × attempts {0, 1, 2, 3, t2add}, joined " ; ">
+…
+explicit defaults v1 scout none normal <64 row ids>
+…
+explicit-row 0 <48 starts: models × efforts, joined " ">
+…
+chain defaults local=up cloudRunning=0 cloud=open <route:model:effort before the queue deadline> <… after it>
+…
+count empty-slot plan 146880 explicit 470016
+…
+```
+
+### S6 — `modules/task-router.nix`
+
+```nix
+# The task-router (spec §2, §6): routes subagent spawns by task card through
+# actor-subagents' spawn policy. Main session only: children do not route, and
+# the router's policy, guards and outcome log belong to the orchestrator.
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
+  pe = config.programs.piEconomics;
+  cfg = pe.taskRouter;
+in {
+  options.programs.piEconomics.taskRouter = {
+    enable = lib.mkEnableOption "the pi task-router extension (card-based routing of subagent spawns; requires actorSubagents)";
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.callPackage ../packages/task-router/package.nix {};
+      defaultText = lib.literalExpression "pkgs.callPackage <pi-economics>/packages/task-router/package.nix { }";
+      description = "The extension (package.json, index.ts, core/); its tests run when it builds.";
+    };
+    # (M5.9)
+    settings = lib.mkOption {
+      type = lib.types.attrsOf (pkgs.formats.json {}).type;
+      default = {};
+      example = {
+        randomize = {
+          enabled = true;
+          share = 0.2;
+        };
+        spotCheck = {
+          enabled = true;
+          share = 0.1;
+        };
+      };
+      description = ''
+        Written to `<agentDir>/task-router/settings.json` when non-empty.
+        Free-form (spec §6.2): every key has a default in the package's
+        core/settings.ts, which owns the schema, so `{}` writes no file.
+        `models.<member>.model` names a member's model (`""` removes the
+        member); `randomize` and `spotCheck` default to `enabled = false`.
+      '';
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    # (M5.8) Main session only (the host's pi-extensions.nix entry).
+    programs.piEconomics.extensions.task-router = {
+      path = "${cfg.package}";
+      # The source, not the package: probing a build output would be
+      # import-from-derivation.
+      checkPath = ../packages/task-router/index.ts;
+      forChildren = false;
+      description = "Routes subagent spawns by task card: tier and effort by rule, Qwen chain, attempts and an outcome log (<agentDir>/task-router/outcomes/YYYY-MM.jsonl); registers the task_verdict tool.";
+    };
+    # (M5.9) Literal text (spec §4): checks read it with builtins.fromJSON.
+    home.file."${pe.agentDir}/task-router/settings.json" =
+      lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
+    # (M5.10) A hard dependency (spec §4.1).
+    assertions = [
+      {
+        assertion = pe.actorSubagents.enable && (pe.actorSubagents.package.passthru.spawnPolicyApi or 0) >= 1;
+        message = "pi-economics: taskRouter requires actorSubagents with passthru.spawnPolicyApi >= 1 (the router registers through registerSpawnPolicy, and shell.ts swallows its absence: without the patched build the router does nothing)";
+      }
+    ];
+  };
+}
+```
+
+The registry description is R'’s (`pi-extensions.nix:214` at `f1b140e`); take R'’s text if it changed.
+
+### S7 — `checks/module-eval/cases/task-router.nix`
+
+```nix
+# Cases for modules/task-router.nix (spec §4, §4.1, §5.1, §6.2).
+{
+  lib,
+  hm,
+  self,
+  expect,
+}: let
+  inherit (expect) eq holds failed;
+  pe = cfg: cfg.programs.piEconomics;
+  dirs = [".pi/agent" "custom/agent"];
+  # tr: taskRouter options, null = not enabled; more: other options.
+  eval = dir: tr: more:
+    hm.eval {
+      programs.piEconomics =
+        {agentDir = dir;}
+        // lib.optionalAttrs (tr != null) {taskRouter = {enable = true;} // tr;}
+        // more;
+    };
+  withActor = {actorSubagents.enable = true;};
+  sorted = lib.sort lib.lessThan;
+  targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
+  fileAt = target: cfg: lib.findFirst (f: f.target == target) null (lib.attrValues cfg.home.file);
+  bare = hm.evalBare {};
+  message = "pi-economics: taskRouter requires actorSubagents with passthru.spawnPolicyApi >= 1 (the router registers through registerSpawnPolicy, and shell.ts swallows its absence: without the patched build the router does nothing)";
+in {
+  # (M5.8) Off by default: no registry entry, no file.
+  task-router-off = let
+    c = eval ".pi/agent" null {};
+  in
+    holds "no registry entry" (!(pe c).extensions ? task-router)
+    ++ eq "home.file targets" (targets c) (targets bare);
+
+  # (M5.8) On, with actorSubagents: the entry (main session only), the link
+  # following agentDir, the flake's package, no settings file.
+  task-router-defaults = lib.concatMap (dir: let
+    c = eval dir {} withActor;
+    e = (pe c).extensions.task-router;
+    actorOnly = hm.eval {programs.piEconomics = {agentDir = dir;} // withActor;};
+  in
+    eq "registry entry (${dir})" {inherit (e) path input forChildren;} {
+      path = "${(pe c).taskRouter.package}";
+      input = null;
+      forChildren = false;
+    }
+    ++ holds "checkPath is the source's index.ts (${dir})" (lib.hasSuffix "/packages/task-router/index.ts" (toString e.checkPath))
+    ++ eq "children (${dir})" (lib.filter (lib.hasSuffix "/task-router") (pe c).childExtensions) []
+    ++ eq "home.file targets (${dir})" (sorted (targets c)) (sorted (targets actorOnly ++ ["${dir}/extensions/task-router"]))
+    ++ eq "drvPath (${dir})" (pe c).taskRouter.package.drvPath self.packages.x86_64-linux.task-router.drvPath
+    ++ eq "failed assertions (${dir})" (failed "" c) []
+    ++ eq "warnings (${dir})" c.warnings actorOnly.warnings)
+  dirs;
+
+  # (M5.9) settings: written as given under agentDir (the host's check value,
+  # checks/pi-extensions.nix:64); {} writes nothing.
+  task-router-settings = lib.concatMap (dir: let
+    s = {cloudDailyCap = 500;};
+    f = fileAt "${dir}/task-router/settings.json" (eval dir {settings = s;} withActor);
+  in
+    eq "settings file (${dir})" (builtins.fromJSON f.text) s
+    ++ eq "no file for {} (${dir})" (fileAt "${dir}/task-router/settings.json" (eval dir {} withActor)) null)
+  dirs;
+
+  # (M5.10) The hard dependency (spec §4.1), both halves.
+  task-router-requires-actor-subagents =
+    eq "assertions" (failed "pi-economics: taskRouter" (eval ".pi/agent" {} {})) [message];
+  task-router-requires-spawn-policy-api =
+    eq "assertions" (failed "pi-economics: taskRouter" (eval ".pi/agent" {} {
+      actorSubagents = {
+        enable = true;
+        # A package without passthru.spawnPolicyApi (the router's own).
+        package = self.packages.x86_64-linux.task-router;
+      };
+    })) [message];
+
+  # (M5.14) The host's combination from W4 on (spec §9.1): M6's m6-host-like
+  # plus taskRouter with the host's settings (homes/pallon/default.nix:197-209).
+  # Copy m6-host-like's configuration and expectations, then: links gain
+  # task-router, childExtensions stay M6's four, the settings file is the host's.
+  m5-host-like = "<M6's m6-host-like with taskRouter = {enable = true; settings = {randomize = {enabled = true; share = 0.2;}; spotCheck = {enabled = true; share = 0.1;};};}, expecting: childExtensions = M6's (cache-lifecycle, infinite-context, pi-retry, token-meter); links = M6's ++ [\".pi/agent/extensions/task-router\"] (sorted); fromJSON task-router/settings.json = the settings; failed assertions []; warnings = bare's>";
+}
+```
+
+`m5-host-like` is written in M5.14 from M6's landed case (its exact helpers); the string above states its content.
+
+### S8 — `checks/log-contract/{default.nix,contract.ts}`
+
+```nix
+# The log contract, part 1 (spec §8.1; part 2 is module-eval's
+# analysis-skill-contract): contract.ts runs every log writer's real code path
+# (token-meter, task-router, cache-lifecycle, experiments; each package's own
+# test fakes stand in for pi) into one agent dir, then requires
+# `pi-analyse --check` to pass, every line to carry the current schema version
+# and every report section to have data.
+{
+  lib,
+  runCommand,
+  nodejs,
+}: let
+  src = lib.fileset.toSource {
+    root = ../..;
+    fileset = lib.fileset.unions [
+      ./contract.ts
+      ../../packages/token-meter
+      ../../packages/task-router
+      ../../packages/cache-lifecycle
+      ../../packages/experiments
+    ];
+  };
+in
+  runCommand "check-log-contract" {nativeBuildInputs = [nodejs];} ''
+    set -euo pipefail
+    export HOME=$TMPDIR/home
+    mkdir -p "$HOME"
+    node --experimental-strip-types --no-warnings ${src}/checks/log-contract/contract.ts "$TMPDIR/work"
+    touch "$out"
+  ''
+```
+
+`contract.ts` = R'’s `checks/pi-log-contract/contract.ts` with (a) every `../../modules/home-manager/features/ai/extensions/` → `../../packages/` (10 lines: 8 imports, `BIN`, none elsewhere at `f1b140e`) and (b) line 1 `// Spec 2026-10-02 §5.7 / plan T13.4 \`pi-log-contract\`: the logs pi writes carry everything` → `// spec §8.1 \`log-contract\`: the logs pi writes carry everything`; nothing else (§2). Prototype output: `pi-log-contract: ok (meter 28, outcomes 6, assignments 2, guards 5); contract ok: every required field present`.
+
+### S9 — bench: `modules/bench.nix`, `checks/module-eval/cases/bench.nix` (on M6's state)
+
+```diff
+--- a/modules/bench.nix
++++ b/modules/bench.nix
+@@ let
+   agentSrc = "${config.home.homeDirectory}/${pe.agentDir}";
++  # (M5.12) The router's keys that say which models exist and where to reach
++  # them (spec §7), in R'’s schema and in the legacy forms its loader still
++  # maps (core/settings.ts).
++  routerModelKeys = ["models" "queueMaxSec" "localHealthUrl" "cloudDailyCap" "contextWindow"];
+@@ router option description
+-        a store path's context); `{}` exports nothing, and an arm's file is the
+-        arm's keys alone.
++        a store path's context); `{}` exports nothing, and an arm's file is the
++        arm's keys alone. While taskRouter is enabled it is defined, one
++        `mkDefault` per key, as the keys of taskRouter.settings that name the
++        models and where to reach them (`models`, `queueMaxSec`,
++        `localHealthUrl`, `cloudDailyCap`, `contextWindow`) with
++        `randomize.enabled` and `spotCheck.enabled` forced to `false`.
+@@ config = lib.mkIf cfg.enable {
++    # (M5.12) The arms run on the models the host configures, never with its
++    # randomization or spot checks (spec §7).
++    programs.piEconomics.bench.router = lib.mkIf pe.taskRouter.enable (lib.mapAttrs (_: lib.mkDefault) (lib.recursiveUpdate
++      (lib.filterAttrs (n: _: lib.elem n routerModelKeys) pe.taskRouter.settings)
++      {
++        randomize.enabled = false;
++        spotCheck.enabled = false;
++      }));
+```
+
+and in M6's `bench.extensions` defaults (its `lib.mapAttrs (_: lib.mkDefault) { … }`), one more name, with the option description's list extended:
+
+```nix
+        task-router = "${pe.taskRouter.package}"; # (M5.13)
+```
+
+Cases:
+
+```nix
+  # (M5.12) With taskRouter, the arms get its model keys and both switches
+  # off; a definition replaces one key; without taskRouter nothing (spec §7).
+  bench-router-default = let
+    s = {
+      models.sonnet.model = "m";
+      localHealthUrl = "http://h:1";
+      queueMaxSec = 5;
+      randomize = {
+        enabled = true;
+        share = 0.2;
+      };
+      spotCheck = {
+        enabled = true;
+        share = 0.1;
+      };
+      t0Limits.files = 3;
+      profiles.x.ability = "read";
+    };
+    ev = more:
+      hm.eval {
+        programs.piEconomics =
+          {
+            bench.enable = true;
+            actorSubagents.enable = true;
+            taskRouter = {
+              enable = true;
+              settings = s;
+            };
+          }
+          // more;
+      };
+    want = {
+      models.sonnet.model = "m";
+      localHealthUrl = "http://h:1";
+      queueMaxSec = 5;
+      randomize.enabled = false;
+      spotCheck.enabled = false;
+    };
+    c = ev {};
+  in
+    eq "router" (pe c).bench.router want
+    ++ eq "PI_BENCH_ROUTER" (lib.importJSON c.home.sessionVariables.PI_BENCH_ROUTER) want
+    ++ eq "a definition replaces one key" (pe (ev {bench = {enable = true; router.queueMaxSec = 9;};})).bench.router (want // {queueMaxSec = 9;})
+    ++ eq "empty settings: the switches only" (pe (ev {taskRouter.enable = true;})).bench.router {
+      randomize.enabled = false;
+      spotCheck.enabled = false;
+    }
+    ++ holds "without taskRouter: nothing exported" (!((hm.eval {programs.piEconomics.bench.enable = true;}).home.sessionVariables ? PI_BENCH_ROUTER));
+```
+
+`bench-extensions-default` (M6): its expected attrset gains `task-router = "${p.taskRouter.package}";`; `bench-defaults`' `PI_BENCH_EXT_DIR` follows by construction (it links `(pe c).bench.extensions`).
+
+### S10 — `docs/pi-economics.md`, section `taskRouter`
+
+- What it does, main session only, the hard dependency (`actorSubagents` with `spawnPolicyApi >= 1`; the message).
+- Options `enable`, `package`, `settings` (free-form; schema and defaults in `packages/task-router/core/settings.ts`; written when non-empty).
+- Source: the host's router at R' (the redesign's Group 2 and its review fixes); the redesign's Groups 3–7 continue in this repository (spec §6.1 amendment); its spec and plan stay in the host as the record.
+- The golden test: what `golden.txt` records (grid, chain, two settings), how to re-record it after a deliberate change (`generate.ts`, header with the source and date, the diff in the change's record), and that P2 is asserted on it.
+- The bench: `router` and `extensions` defaults.
+- The log contract: the four writers, `pi-analyse --check`.
+- Checks: `task-router`, `typecheck-task-router`, `iface-{subagents,experiments}-task-router`, `router-golden`, `log-contract`.
+
+## Open questions (each with the proposed decision)
+
+- **Q1 (D7):** the golden file as interned text in the repository (754 lines, 101 KB). *Proposal:* accept; it is diffable and the leak check reads it. Alternative: an `xz` file of 6 KB (binary, unscanned).
+- **Q2 (D4):** 26 `tsc --strict` errors, all in tests that still use tier-era shapes after G2, fixed by type-only casts in 9 files. *Proposal:* accept, so that the redesign's next groups work on type-checked tests here. Alternative: type-check `index.ts` and `core/` only (M6 D8's form) until the redesign's close-out.
+- **Q3 (D8):** `EMPTY_SLOT` sets `haiku`'s model, which enables the Haiku member at R' (the host's today configuration blanks it). *Proposal:* set it ("every model key", §6.3), so the golden file records R'’s routing with Haiku too. Alternative: `haiku.model = ""`, as the host runs today.
+- **Q4 (D13):** the router's code keeps its citations byte-equal to R' (both the redesign's and some of the 2026-10-02 spec's), against §2's re-pointing. *Proposal:* keep them until the redesign's close-out or P, whichever comes first, and record that in the spec's next amendment. Alternative: re-point the 2026-10-02 ones now (M4.19's form), separating them from the redesign's by hand.
+- **Q5 (D14):** with `taskRouter` enabled and empty settings, `bench.router` still holds the two forced switches, so `PI_BENCH_ROUTER` is exported (behaviour unchanged: both default to off). *Proposal:* accept (robust if a later default turns either on). Alternative: define the default only when the projection is non-empty.
+- **Q6:** where the redesign's Groups 3–7 are planned and recorded in this repository after W. *Proposal:* a continuation plan `docs/plans/<date>-task-router-redesign-g3-g7-plan.md` that cites the host plan by commit; the host plan's Execution Record gets a closing line pointing at it (a host edit for main or the owner).
+
+---
+
+# Execution Record
