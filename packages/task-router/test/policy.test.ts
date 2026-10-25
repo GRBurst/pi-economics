@@ -361,3 +361,65 @@ test("no API → no sweep: the router keeps its entries", async () => {
   await settle();
   assert.ok(h.a.retunes.some((r) => r.name === "g1")); // g1's entry survived the spawn without an API
 });
+
+// --- explicit model resolution (HP T3.6: D14, OD19, §4.10 row 15); Step 2b: the same with the cloud blank (MP2) ---------
+const explicitLocal = async (settings: Record<string, unknown>, health: { health: number; slots: number }) => {
+  const h = harness({ settings: { queueMaxSec: 10, ...settings } as any, health });
+  const r = await h.a.spawn({ name: "q1", model: LOCAL, task: card() });
+  h.a.emit({ type: "turn", name: "q1", ts: 1 });
+  const file = join(h.agentDir, "task-router", "member-count.json");
+  const counted = existsSync(file) ? JSON.stringify(JSON.parse(readFileSync(file, "utf8"))) : "";
+  return { r: r as any, slept: h.sleeps.reduce((a, b) => a + b, 0), urls: h.urls, cloud: counted.includes("qwen-cloud") };
+};
+for (const [variant, settings] of [["", {}], [" (qwen-cloud blank)", BLANK_CLOUD]] as const) {
+  test(`explicit llama/qwen3.8${variant}: local free → LOCAL, never the cloud; no cloud probe or count`, async () => {
+    const x = await explicitLocal(settings, { health: 200, slots: 200 });
+    assert.equal(x.r.model, LOCAL);
+    assert.equal(x.slept, 0);
+    assert.ok(x.urls.every((u) => u.startsWith("http://earth:11545/")), x.urls.join());
+    assert.equal(x.cloud, false);
+  });
+  test(`explicit llama/qwen3.8${variant}: local busy → waits queueMaxSec, then rejected; never the cloud`, async () => {
+    const x = await explicitLocal(settings, { health: 200, slots: 503 });
+    assert.equal(x.r.reject, "explicit model llama/qwen3.8: no free slot after 10 s; leave `model` unset to let the router choose");
+    assert.ok(x.slept >= 10_000);
+    assert.equal(x.cloud, false);
+  });
+  test(`explicit llama/qwen3.8${variant}: local down → rejected at once`, async () => {
+    const x = await explicitLocal(settings, { health: 0, slots: 0 });
+    assert.equal(x.r.reject, "explicit model llama/qwen3.8: down; leave `model` unset to let the router choose");
+    assert.equal(x.slept, 0);
+  });
+}
+
+test("explicit Sonnet with the local slot busy → Sonnet at once", async () => {
+  const h = harness({ settings: { ...BLANK_CLOUD, queueMaxSec: 10 }, health: { health: 200, slots: 503 } });
+  assert.equal((accepted(await h.a.spawn({ name: "s1", model: SONNET, task: card() })) as any).model, SONNET);
+  assert.deepEqual(h.sleeps, []);
+});
+
+test("an explicit model whose window is below the files' need is accepted, with the context reason (contextFit 1)", async () => {
+  const h = harness({ settings: { contextFit: 1, models: { "qwen-local": { contextWindow: 200 } } } as any });
+  assert.equal((accepted(await h.a.spawn({ name: "q1", model: LOCAL, task: card() })) as any).model, LOCAL);
+  h.a.emit({ type: "spawn", name: "q1", by: "main", parent: "main", childSessionId: "s-q1", ts: 1 });
+  const [e] = h.lines();
+  assert.ok((e.reasons as string[]).includes("context: files need ~278 tokens; explicit qwen-local holds 200"), e.reasons.join("\n"));
+});
+
+test("effort without a model on a Qwen plan whose fallback is Sonnet → Sonnet at its own step (high)", async () => {
+  const h = harness({ base: "today", settings: { ...BLANK_CLOUD, queueMaxSec: 0 }, health: { health: 0, slots: 0 } });
+  const r = accepted(await h.a.spawn({ name: "q1", thinkingLevel: "xhigh", task: card() })) as any;
+  assert.deepEqual([r.model, r.thinkingLevel], [SONNET, "high"]);
+});
+
+test("an explicit model's failover stays at or above it: an explicit Sonnet child moves to another provider's T1, never down to Qwen", async () => {
+  const sonnet2 = {
+    model: "openrouter/anthropic/claude-sonnet", tier: "T1", route: "T1", abilities: { write: 1, read: 2 },
+    efforts: ["high", "xhigh"], contextWindow: 1000000, cost: 3, order: 1,
+  };
+  const h = harness({ settings: { models: { sonnet2 } } as any });
+  assert.equal((accepted(await h.a.spawn({ name: "s1", model: SONNET, task: card() })) as any).model, SONNET);
+  h.a.emit({ type: "error", name: "s1", reason: "retries exhausted", ts: 1 });
+  await settle();
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["s1", sonnet2.model]]);
+});

@@ -3,7 +3,7 @@ import type { Caller, SpawnPolicy, SubagentsApiV1 } from "./api.ts";
 import type { AttemptState } from "./attempts.ts";
 import { briefAppend } from "./brief.ts";
 import { parseCard } from "./card.ts";
-import { effortAt, named, sameLadder } from "./members.ts";
+import { effortAt, lvl, named, sameLadder } from "./members.ts";
 import type { Named } from "./members.ts";
 import type { MemberCounter } from "./counter.ts";
 import type { Health } from "./health.ts";
@@ -104,12 +104,16 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     const blocks = names.length ? skillBlocks(names, d.skills() ?? { find: () => undefined, read: () => "" }) : { ok: true as const, value: "" };
     if (!blocks.ok) return reject(blocks.errors);
     // The selection runs on the plan's candidates (D12); a pinned start (an explicit model) runs on its member alone.
-    // The entry is written at the pick, inside resolveLeg; its plan gets the selection's reason after.
-    const st = sp.value.start, leg = sp.value.cands.map((n) => named(s.models, n)!);
-    const plan: Plan = { ...sp.value.plan, reasons: [...sp.value.plan.reasons] };
+    // A pinned start (an explicit model, D14) runs on its member alone, whose window never rejects (OD17: a reason instead),
+    // and fails over only at or above it. The entry is written at the pick, inside resolveLeg; its plan gets the selection's reason after.
+    const st = sp.value.start, leg = sp.value.cands.map((n) => named(s.models, n)!), M = named(s.models, st.member)!;
+    const plan: Plan = { ...sp.value.plan, reasons: [...sp.value.plan.reasons] }, a = plan.ability, need = v.tokens ?? 0;
+    const failover = (st.pinned ? leg.filter((m) => lvl(m, a) >= lvl(M, a)) : leg).map((m) => m.name);
+    if (st.pinned && s.contextFit > 0 && need > s.contextFit * M.contextWindow)
+      plan.reasons.push(`context: files need ~${Math.round(need)} tokens; explicit ${M.name} holds ${M.contextWindow}`);
     const to = await resolveLeg(d, {
-      name: args.name, cands: st.pinned ? [named(s.models, st.member)!] : leg, planned: leg[0], step: plan.worker.step,
-      effort: st.pinned ? st.effort : args.thinkingLevel, pinned: st.pinned, failover: leg.map((c) => c.name),
+      name: args.name, cands: st.pinned ? [M] : leg, planned: leg[0], step: plan.worker.step,
+      effort: st.pinned ? st.effort : args.thinkingLevel, pinned: st.pinned, failover,
       entry: { parent: caller.name, parentSession: caller.sessionId, card, plan, cwd, importance, ...(v.unresolved ? { unresolved: true as const } : {}) },
     });
     if (!to.ok) return reject(to.errors);
