@@ -15,6 +15,7 @@
     ./cases/actor-subagents.nix
     ./cases/token-meter.nix
     ./cases/analysis-skill.nix
+    ./cases/cache-lifecycle.nix
     ./cases/together.nix
   ];
   cases =

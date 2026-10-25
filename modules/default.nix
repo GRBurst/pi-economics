@@ -6,5 +6,6 @@
     ./actor-subagents.nix
     ./token-meter.nix
     ./analysis-skill.nix
+    ./cache-lifecycle.nix
   ];
 }
