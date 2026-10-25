@@ -245,3 +245,192 @@ flag() { while [ -e ~/.cache/pi/pluto-exec/owner-deploy.flag ]; do sleep 60; don
 | `docs/pi-token-economics.md` | the moved document (M6's S13) | M5.D (if handed over) |
 
 Interfaces M5 publishes: options `programs.piEconomics.taskRouter.{enable, package, settings}` (W4 moves the host's `taskRouter.settings` here, plus the model and health-URL values it relies on, §9.1); registry entry `task-router` (`forChildren = false`); `packages.x86_64-linux.task-router`; `bench.router` and `bench.extensions` defaults; checks `router-golden` and `log-contract` (W2/W6 decide on the host's `pi-log-contract` with it, §9.1); `checks/router-golden/generate.ts` for the redesign's later groups.
+
+---
+
+## Tasks
+
+| Task | Delivers | Commit |
+|---|---|---|
+| M5.0 | read; M6 landed; R' named; drift; P1–P5 at R' | — |
+| M5.1 | the copy, `packages.task-router`, check `task-router` | `m5: task-router package and check from the host's R'` |
+| M5.2 | neutral fixture name | `m5(task-router): neutral fixture name (spec §8.3)` |
+| M5.3 | P2 test | `m5(task-router): P2, the empty free-cloud slot` |
+| M5.4 | golden generator, golden file, check `router-golden` | `m5(task-router): golden decisions of R'` |
+| M5.5 | `typecheck-task-router` (type-only test edits) | `m5(task-router): tsc --strict` |
+| M5.6 | `iface-subagents-task-router` | `m5(task-router): iface against __subagentsApi_v1` |
+| M5.7 | `ExperimentsApi`, `iface-experiments-task-router` | `m5(task-router): iface against __piExperimentsApi_v1` |
+| M5.8 | taskRouter: `enable`, `package`, registry entry | `m5(task-router): module, package, registry entry` |
+| M5.9 | `settings` → the file | `m5(task-router): settings file` |
+| M5.10 | the hard assertion | `m5(task-router): requires actorSubagents with spawnPolicyApi` |
+| M5.11 | `log-contract` | `m5: log contract over the four packages` |
+| M5.12 | bench `router` default | `m5(bench): router default from taskRouter` |
+| M5.13 | bench `extensions` gains `task-router` | `m5(bench): task-router in the extensions default` |
+| M5.14 | the host's combination (characterisation) | `m5: the host's combination of M2–M6 with taskRouter` |
+| M5.15 | `home-files` for M5 | `m5: home-files builds the router` |
+| M5.16 | every component together | `m5: taskRouter together with the rest` |
+| M5.17 | docs | `m5: docs for taskRouter` |
+| M5.D | **if handed over by M6:** the doc move | `m5: move docs/pi-token-economics.md` |
+| M5.18 | gate, purity, Execution Record | `m5: execution record` |
+
+Every task starts at `[ ]`. One failing check at a time; a task's commit holds only green checks.
+
+### Task M5.0 — Read, M6 landed, R', drift, P1–P5
+
+- [ ] **Step 1:** read "Files to read first".
+- [ ] **Step 2 (M6 landed):** M6's Execution Record is closed; note its final module-eval count `N6` and whether M6.D says "moved to M5" (then M5.D runs).
+- [ ] **Step 3 (R'):** in the host, `git dot log --oneline f1b140e..HEAD -- $tr docs/plans/2026-10-17-task-router-abilities-plan.md`; R' is the commit the redesign plan's Execution Record names as the end of Group 2's review fixes. Set `RP`, record it. If the record names none yet, stop and ask main (do not guess).
+- [ ] **Step 4 (drift, §9):** `cd ~/projects/nixos/new && git dot diff --stat 4c714f0 $RP -- flake.lock $ai/pi-actor-subagents* $ai/pi-infinite-context* $ai/pi-retry* checks/pi-actor-subagents checks/pi-infinite-context checks/pi-retry $ai/pi-extensions.nix $ai/pi-settings-migrate.nix checks/pi-settings-migrate homes/pallon/default.nix docs/pi-token-economics.md pkgs/pi-bench $ai/extensions/{token-meter,cache-lifecycle,experiments} $ai/skills/pi-token-economics-analysis checks/pi-log-contract checks/pi-extensions.nix` — expected empty (empty at `f1b140e`). A change in a moved path is ported first, each with its test, as its own task `M5.0.<n>` before M5.1 (M6.0's form), and recorded. If M6 moved its source past `4c714f0`, diff from M6's recorded source instead.
+- [ ] **Step 5 (P1–P5 at R', D1):** record each with its evidence; a property that fails is recorded as "handed to the redesign" and M5 continues (§6.1 amendment).
+  - P1: `hr $tr/core/settings.ts | grep -n 'models: {'` (the defaults) and `hr $tr/test/settings.test.ts | grep -n 'models: { sonnet: { model: "m" } }'` (a file sets a model). Holds at `f1b140e` (`settings.ts:26`, `settings.test.ts:39`).
+  - P2: `hr $tr/test/cloud.test.ts | grep -n 'a blank qwen-cloud is skipped'` (the route only; holds at `f1b140e`, `:84`); the full property is M5.3's test, run at R' there.
+  - P3: `hr $tr/core/shell.ts | grep -n 'registerSpawnPolicy\|__piExperimentsApi_v1'` (holds at `f1b140e`: `:123`, `:64`, `:66`); the comparisons are M5.6, M5.7.
+  - P4: the host's `pi-log-contract` at R': `hostR`-free form, `flag; (ulimit -v $cap && exec timeout -s KILL 1800 nix build --no-link "path:$TMPDIR/hostR-full#checks.x86_64-linux.pi-log-contract" "${o[@]}")` on a `git dot archive "$RP" -- .` of the whole flake (from `~/projects/nixos/new`) into `$TMPDIR/hostR-full`; or the redesign's own gate record at R' if it ran G2 (`pi-log-contract … ok`). Held at `5903562` (gate `g2`).
+  - P5: `hr $tr/nix/hm-module.nix | grep -n 'formats.json\|settings != {}'` (free-form, written when non-empty; holds at `f1b140e`).
+- [ ] **Step 6:** `flag; nb module-eval` green at M6's end (baseline `N6`).
+
+### Task M5.1 — The copy, `packages.task-router`, check `task-router`
+
+**Files:** `packages/task-router/**`, `flake.nix`, `checks/default.nix`.
+
+- [ ] **Step 1 (RED):** add `task-router = self.packages.${…}.task-router;` to `checks/default.nix` (S2) → `nb task-router` fails: `attribute 'task-router' missing`. [ ] red seen
+- [ ] **Step 2 (GREEN):** `hostR; mkdir -p packages/task-router && (cd $HR && tar -c --exclude=./nix --exclude='./test/host-*' .) | tar -x -C packages/task-router`; `package.nix` (S1); `flake.nix` output (S2); `git add packages/task-router flake.nix checks/default.nix`; `nb task-router` green. Record the suite count `T` (`cd packages/task-router && node --test --experimental-strip-types test/*.test.ts | grep '^ℹ tests'`; 346 at `f1b140e`).
+- [ ] **Step 3 (planted):** the `queueMaxSec === 121` assertion → FAIL. [ ] red seen. Restore.
+- [ ] **Step 4:** `diff -r --exclude=nix --exclude='host-*' $HR packages/task-router` lists only `package.nix`. Commit.
+
+### Task M5.2 — Neutral fixture name (§8.3)
+
+**Files:** `packages/task-router/test/members.test.ts`.
+
+- [ ] **Step 1 (RED):** the probe `grep -rn 'earth' packages/task-router` lists six lines (at `f1b140e`: `core/settings.ts:29`, `test/settings.test.ts:29`, `test/policy.test.ts:82`, `test/oracle/legacy-settings.ts:20`, `test/fixtures/today-config.json:13`, `test/members.test.ts:61`). [ ] red seen
+- [ ] **Step 2 (GREEN):** `test/members.test.ts:61`: `provider: "earth" })), "earth")` → `provider: "lan" })), "lan")`. The probe lists the other five, each kept by §8.3 (Approach); the Execution Record names them. `nb task-router` green, count `T`.
+- [ ] Commit.
+
+### Task M5.3 — P2: the empty free-cloud slot
+
+**Files:** `packages/task-router/test/free-cloud-slot.test.ts` (new, S3).
+
+- [ ] **Step 1 (against R' first, D10):** `cp ~/.cache/pi/m5plan/free-cloud-slot.test.ts $HR/test/ && (cd $HR && node --test --experimental-strip-types test/free-cloud-slot.test.ts)` → expected `pass 2` (seen on `f1b140e`). Red at R' → P2 does not hold: record it, add `{ todo: "P2 does not hold at R' (handed to the redesign)" }` as the tests' options, and go on.
+- [ ] **Step 2 (RED, planted, S3's plant in `core/chain.ts`):** → `fail 2`. [ ] red seen. Restore.
+- [ ] **Step 3 (GREEN):** the file in `packages/task-router/test/`; `nb task-router` green, count `T + 2`.
+- [ ] Commit.
+
+### Task M5.4 — Golden decisions of R', check `router-golden`
+
+**Files:** `checks/router-golden/{generate.ts,default.nix,golden.txt}`, `checks/default.nix`.
+
+- [ ] **Step 1:** `generate.ts` (S5), `default.nix` (S5), `golden.txt` = the header lines only; `router-golden = pkgs.callPackage ./router-golden {};` (S2); `git add checks/router-golden`.
+- [ ] **Step 2 (RED):** `nb router-golden` → `router-golden: decisions differ from R'` (every line, 754 at `f1b140e`). [ ] red seen
+- [ ] **Step 3 (GREEN, by hand, once):** `hostR; { printf '# task-router golden decisions (spec §6.3), from checks/router-golden/generate.ts\n'; printf "# R' = %s (host dotfiles), %s\n" "$RP" "$(date -u +%F)"; gen "$HR"; } > checks/router-golden/golden.txt`; `grep '^count' checks/router-golden/golden.txt` → two lines `146880`/`470016`; `cmp <(gen packages/task-router) <(grep -v '^#' checks/router-golden/golden.txt)`; `nb router-golden` green. If R'’s `test/golden/{grid,sut}.ts` or `resolveLeg`'s deps changed after `f1b140e`, adapt `generate.ts` to them first and record the change.
+- [ ] **Step 4 (planted):** the write-table plant, the chain plant, the appended empty-slot line (table "Planted violations") → three FAILs. [ ] red seen ×3. Restore.
+- [ ] Commit.
+
+### Task M5.5 — `typecheck-task-router`
+
+**Files:** the eight test files of S4, `checks/default.nix`.
+
+- [ ] **Step 1 (RED):** `typecheck-task-router` (S2) → the errors of the "Type checking strategy" table (26 at `f1b140e`; record R'’s list). [ ] red seen
+- [ ] **Step 2 (GREEN):** S4's edits, nothing else; for an error R' adds beyond the table, the same forms (cast at the fixture, never in `core/`), each listed in the record. `nb typecheck-task-router` green.
+- [ ] **Step 3 (evidence, before/after):** `nb task-router` (count `T + 2`, unchanged) and `nb router-golden` green; `diff -r --exclude=nix --exclude='host-*' $HR packages/task-router` lists only `package.nix`, S4's files, `members.test.ts`, `free-cloud-slot.test.ts`.
+- [ ] Commit.
+
+### Task M5.6 — `iface-subagents-task-router`
+
+- [ ] **Step 1 (GREEN-first):** S2's check → green (consumer `core/api.ts` `SubagentsApiV1`, already exported; green in the prototype after S4).
+- [ ] **Step 2 (planted):** `unknownMember(): void;` in the router's copy → FAIL `TS2741`. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M5.7 — `ExperimentsApi`, `iface-experiments-task-router`
+
+**Files:** `packages/task-router/core/shell.ts`, `checks/default.nix`.
+
+- [ ] **Step 1 (RED):** S2's check → `TS2305`/`TS2724`: `ExperimentsApi` is not exported. [ ] red seen
+- [ ] **Step 2 (GREEN):** D5's alias and the two casts (S4, `core/shell.ts` hunk). Green; `nb task-router`, `nb router-golden`, `nb typecheck-task-router` green.
+- [ ] **Step 3 (planted):** `d: number` → FAIL `TS2322`. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M5.8 — taskRouter: module, package, registry entry
+
+**Files:** `modules/task-router.nix` (S6), `modules/default.nix`, `checks/module-eval/cases/task-router.nix` (S7), `checks/module-eval/default.nix`.
+
+- [ ] **Step 1 (RED):** `task-router-off`, `task-router-defaults` (S7) and the case file in `caseFiles` → `The option 'programs.piEconomics.taskRouter' does not exist`. [ ] red seen
+- [ ] **Step 2 (GREEN):** `modules/task-router.nix` with `enable`, `package`, the registry entry (S6 without `settings` and the assertion); import in `modules/default.nix`. `flag; nb module-eval` green, count `N6 + 2`.
+- [ ] **Step 3 (planted):** `forChildren = true` → FAIL `task-router-defaults`. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M5.9 — `settings` → the file
+
+- [ ] **Step 1 (RED):** `task-router-settings` (S7) → unknown option `settings`. [ ] red seen
+- [ ] **Step 2 (GREEN):** the option and the file (S6). Green, `N6 + 3`.
+- [ ] **Step 3 (planted):** `lib.mkIf true` → FAIL. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M5.10 — The hard assertion
+
+- [ ] **Step 1 (RED):** `task-router-requires-actor-subagents`, `task-router-requires-spawn-policy-api` (S7) → `assertions: expected [ "pi-economics: taskRouter requires …" ], got [ ]`. [ ] red seen
+- [ ] **Step 2 (GREEN):** S6's `assertions`. Green, `N6 + 5`. Existing cases that enable `taskRouter` without `actorSubagents`: none before M5.
+- [ ] **Step 3 (planted):** drop the `spawnPolicyApi` half → FAIL the second case. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M5.11 — `log-contract`
+
+**Files:** `checks/log-contract/{default.nix,contract.ts}` (S8), `checks/default.nix`.
+
+- [ ] **Step 1 (RED, natural):** `cp $TMPDIR/hostR/checks/pi-log-contract/contract.ts checks/log-contract/`; `default.nix` (S8); `log-contract = pkgs.callPackage ./log-contract {};`; `git add`; `nb log-contract` → `ERR_MODULE_NOT_FOUND` (`../../modules/home-manager/features/ai/extensions/token-meter/core/shell.ts`). [ ] red seen
+- [ ] **Step 2 (GREEN):** `sed -i 's|\.\./\.\./modules/home-manager/features/ai/extensions/|../../packages/|g' checks/log-contract/contract.ts` (10 lines) and the header (S8). `nb log-contract` green: `pi-log-contract: ok (meter …, outcomes …, assignments …, guards …)`.
+- [ ] **Step 3 (planted):** drop `arm` from the router's `spawnEvent` (`packages/task-router/core/outcome.ts`) → FAIL naming `arm`. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M5.12 — bench `router` default
+
+**Files:** `modules/bench.nix`, `checks/module-eval/cases/bench.nix` (S9).
+
+- [ ] **Step 1 (RED):** `bench-router-default` (S9) → `router: expected { localHealthUrl = …; models = …; randomize = { enabled = false; }; spotCheck = …; }, got { }`. M1's `bench-router` and `bench-defaults` stay unchanged (the bench without `taskRouter`). [ ] red seen
+- [ ] **Step 2 (GREEN):** S9's definition and option description. Green, `N6 + 6`.
+- [ ] **Step 3 (planted):** drop `spotCheck.enabled = false` → FAIL. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M5.13 — bench `extensions` gains `task-router`
+
+- [ ] **Step 1 (RED):** M6's `bench-extensions-default` expects `task-router` too (S9; an existing case changes because §7/M6 Q3 extend the default to the router; its other expectations stay) → `extensions: expected …`. [ ] red seen
+- [ ] **Step 2 (GREEN):** D15's line, the description's name list. Green (count unchanged).
+- [ ] **Step 3 (planted):** drop it → FAIL. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M5.14 — The host's combination (characterisation)
+
+- [ ] **Step 1 (GREEN-first):** `m5-host-like` (S7) → green.
+- [ ] **Step 2 (planted):** `forChildren = true` for `task-router` → FAIL (`children`). [ ] red seen. Restore.
+- [ ] Commit. Count `N6 + 7`.
+
+### Task M5.15 — `home-files` for M5
+
+- [ ] **Step 1 (RED):** the configuration gains `actorSubagents` (if M6's lacks it) and `taskRouter`; the shell part checks `package.json`, `index.ts`, `core/shell.ts` under the linked `extensions/task-router` (M4 D15's form), with a wrong name first (`core/missing.ts`) → `FAIL … task-router`. [ ] red seen
+- [ ] **Step 2 (GREEN):** the right name. `nb home-files` green.
+- [ ] Commit.
+
+### Task M5.16 — Every component together
+
+- [ ] **Step 1 (GREEN-first):** `components` += `"taskRouter"` in `cases/together.nix` (the case enables `actorSubagents` already) → green.
+- [ ] **Step 2 (planted):** M6.17's form, a file only `taskRouter ∧ retry` renders → FAIL `components-together`. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M5.17 — Docs
+
+**Files:** `docs/pi-economics.md`.
+
+- [ ] **Step 1:** section `taskRouter` (S10): options, the file, the hard dependency, the registry entry, the bench defaults, the golden test (what it records, how a later group re-records it, D16), the log contract, the source R' and that the redesign's Groups 3–7 continue here (spec §6.1 amendment). `nb leak`.
+- [ ] Commit.
+
+### Task M5.D — The doc move (only if M6 handed it over)
+
+Run only when M6's Execution Record says M6.D was "moved to M5"; otherwise mark it "done in M6" in the record. It is M6.D verbatim (M6 plan, Task M6.D, Steps 1–4, scrub table S13), with these substitutions: the drift diff runs `4c714f0..$RP`; `h` reads `$RP` (`hr`); the router's section describes the router as moved (R'), and the scrub's `extensions/task-router` → `packages/task-router`. Commit `m5: move docs/pi-token-economics.md`. Last task before M5.18, and before W0.
+
+### Task M5.18 — Gate and Execution Record
+
+- [ ] **Step 1:** `fmt --check $(git ls-files '*.nix')` clean.
+- [ ] **Step 2 (every check, both refs):** `flag`; list the checks with `ne checks.x86_64-linux --apply builtins.attrNames --json` (a failed or empty listing is a failure) and build each, capped, with `nb` and with `nbp`; name every failure at the end.
+- [ ] **Step 3 (P-copy):** `diff -rq --exclude=nix --exclude='host-*' $HR packages/task-router` = the list of P-copy.
+- [ ] **Step 4 (P-out):** `flag`; build the host's package at R' from the archive: `(ulimit -v $cap && exec timeout -s KILL 900 nix build --no-link --print-out-paths --impure --expr "(import <nixpkgs> {}).callPackage $HR/nix/package.nix {}")` is not pinned to the host's nixpkgs — use instead `nix build --no-link --print-out-paths "path:$TMPDIR/hostR-full#checks.x86_64-linux.pi-task-router" "${o[@]}"` (M5.0 Step 5's archive) and `nb`'s `task-router` output (`ne packages.x86_64-linux.task-router.outPath --raw`); `diff -r` the two → only `core/shell.ts`.
+- [ ] **Step 5:** fill the Execution Record: R' and how it was named; P1–P5 with evidence (and any handed over); the drift; per task commit, red seen, deviations; `T`, the final case count; the `earth` lines kept (M5.2); the open questions as answered.
+- [ ] Commit.
