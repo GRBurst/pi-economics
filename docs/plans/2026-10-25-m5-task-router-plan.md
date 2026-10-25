@@ -1180,6 +1180,18 @@ Cases:
 - **Q5 (D14):** with `taskRouter` enabled and empty settings, `bench.router` still holds the two forced switches, so `PI_BENCH_ROUTER` is exported (behaviour unchanged: both default to off). *Proposal:* accept (robust if a later default turns either on). Alternative: define the default only when the projection is non-empty.
 - **Q6:** where the redesign's Groups 3–7 are planned and recorded in this repository after W. *Proposal:* a continuation plan `docs/plans/<date>-task-router-redesign-g3-g7-plan.md` that cites the host plan by commit; the host plan's Execution Record gets a closing line pointing at it (a host edit for main or the owner).
 
+**Decisions (main, 2026-10-25):**
+
+| Q | Decision | Effect on this plan |
+|---|---|---|
+| Q1 (D7) | The golden file is interned text | as written (S5) |
+| Q2 (D4) | Type-only casts in the tests | as written (S4, M5.5) |
+| Q3 (D8) | `EMPTY_SLOT` sets `haiku`'s model | as written (S5) |
+| Q4 (D13) | The router's citations stay byte-equal to R'; P re-points them | as written; P carries the re-pointing |
+| Q5 (D14) | Both switches are forced off whenever `taskRouter` is enabled (review 3's request) | as written (S9) |
+| Q6 | A continuation plan for the redesign's Groups 3–7 in this repository, but later: it is priority 2, after W | not part of M5 |
+| Q7 | The spec's §9.1 amendment sentence stands: the host receives Groups 3–7 only when its `pi-economics` lock moves | none |
+
 ---
 
 # Execution Record
