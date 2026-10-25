@@ -3,11 +3,10 @@
 import type { ApiEvent } from "./api.ts";
 import { freeCapHit } from "./chain.ts";
 import { routeMember } from "./members.ts";
-import type { Child, PolicyDeps } from "./policy.ts";
+import type { Child, Leg, PolicyDeps } from "./policy.ts";
 import { resolveLeg } from "./policy.ts";
-import type { ThinkingLevel } from "./types.ts";
 
-type Target = { model: string; route: Child["route"]; effort: ThinkingLevel };
+type Target = Omit<Leg, "why">;
 
 export function createFailover(d: PolicyDeps & { log: { reroute(taskId: string, from: string, to: string, reason: string): void } }) {
   const m = d.settings.models;
@@ -21,7 +20,7 @@ export function createFailover(d: PolicyDeps & { log: { reroute(taskId: string, 
       return void console.warn(`task-router: reroute of ${name} failed: ${(e as Error).message}`);
     }
     d.log.reroute(name, c.route, to.route, reason);
-    Object.assign(c, { route: to.route, effort: to.effort });
+    Object.assign(c, { member: to.member, model: to.model, route: to.route, effort: to.effort });
   };
   /** Next route after an ordinary failure: local → free cloud (if open) → Sonnet; Sonnet and Opus have none (same provider, more quota). */
   const next = async (c: Child): Promise<Target | undefined> => {
@@ -29,7 +28,7 @@ export function createFailover(d: PolicyDeps & { log: { reroute(taskId: string, 
     const cloud = c.route === "local" ? await resolveLeg(d, { tier: "qwen", effort: c.effort }, { failover: true }) : undefined;
     if (cloud?.route === "cloud") return cloud;
     const t1 = routeMember(m, "T1");
-    return t1 ? { model: t1.model, route: "T1", effort: "high" } : undefined; // a blank Sonnet: nothing to move to
+    return t1 ? { member: t1.name, model: t1.model, route: "T1", effort: "high" } : undefined; // a blank Sonnet: nothing to move to
   };
   return (e: ApiEvent): void => {
     if (e.type !== "error") return;
@@ -39,7 +38,7 @@ export function createFailover(d: PolicyDeps & { log: { reroute(taskId: string, 
     void (async () => {
       try {
         if (cap) {
-          d.cloud.block(cap.until);
+          d.blocks.set(c.member, cap.until);
           for (const n of new Set([e.name, ...d.children.keys()])) { // the erroring child first
             const x = d.children.get(n);
             if (x?.route === "cloud") await move(n, x, await resolveLeg(d, { tier: "qwen", effort: x.effort }), "free-cap");

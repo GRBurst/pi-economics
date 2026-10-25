@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { accepted, card, harness } from "./harness.ts";
 
 const turn = (name: string) => ({ type: "turn" as const, name, ts: 1 });
-const countFile = (dir: string) => join(dir, "task-router", "cloud-count.json");
+const countFile = (dir: string) => join(dir, "task-router", "member-count.json");
 const read = (dir: string) => JSON.parse(readFileSync(countFile(dir), "utf8"));
 
 test("every request of a cloud child counts, keyed by UTC date; local, Sonnet and unknown children do not", async () => {
@@ -14,7 +14,7 @@ test("every request of a cloud child counts, keyed by UTC date; local, Sonnet an
   for (const n of ["c1", "l1"]) accepted(await h.a.spawn({ name: n, task: card() })); // cloud, local
   accepted(await h.a.spawn({ name: "s1", task: card({ t0: { ...card().t0, linear: false } }) }));
   for (const n of ["c1", "c1", "c1", "l1", "s1", "ghost"]) h.a.emit(turn(n));
-  assert.deepEqual(read(h.agentDir), { "2026-10-02": 3 });
+  assert.deepEqual(read(h.agentDir), { "2026-10-02": { "qwen-cloud": 3 } });
 });
 
 test("429 retries are requests too: each retry's turn counts", async () => {
@@ -23,7 +23,7 @@ test("429 retries are requests too: each retry's turn counts", async () => {
   h.a.emit(turn("c1"));
   h.a.emit({ type: "error", name: "c1", reason: "429: Rate limit exceeded", ts: 2 });
   h.a.emit(turn("c1"));
-  assert.equal(read(h.agentDir)["2026-10-02"], 2);
+  assert.deepEqual(read(h.agentDir), { "2026-10-02": { "qwen-cloud": 2 } });
 });
 
 test("the count survives a restart and rolls over at 00:00 UTC", async () => {
@@ -34,10 +34,10 @@ test("the count survives a restart and rolls over at 00:00 UTC", async () => {
   const h2 = harness({ agentDir });
   accepted(await h2.a.spawn({ name: "c1", task: card() }));
   h2.a.emit(turn("c1"));
-  assert.equal(read(agentDir)["2026-10-02"], 3);
+  assert.deepEqual(read(agentDir), { "2026-10-02": { "qwen-cloud": 3 } });
   h2.clock.t = Date.UTC(2026, 9, 3, 0, 0, 1);
   h2.a.emit(turn("c1"));
-  assert.deepEqual(read(agentDir), { "2026-10-03": 1 });
+  assert.deepEqual(read(agentDir), { "2026-10-03": { "qwen-cloud": 1 } });
 });
 
 test("the counter feeds the chain: at cloudDailyCap new Qwen spawns leave the free cloud", async () => {
@@ -63,7 +63,7 @@ test("a corrupt or missing count file starts at 0", async () => {
   const h = harness({ agentDir });
   accepted(await h.a.spawn({ name: "c1", task: card() }));
   h.a.emit(turn("c1"));
-  assert.equal(read(agentDir)["2026-10-02"], 1);
+  assert.deepEqual(read(agentDir), { "2026-10-02": { "qwen-cloud": 1 } });
 });
 
 // --- review fixes: cap 0 and blank members at runtime (G0/G1 review m1, m2) ----------------------

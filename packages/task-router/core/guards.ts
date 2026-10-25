@@ -1,6 +1,5 @@
 // Runaway and context guards (spec §5.2.7): one notice per threshold and child, sent to the child's parent.
 import type { ApiEvent } from "./api.ts";
-import { routeMember } from "./members.ts";
 import type { PolicyDeps } from "./policy.ts";
 
 export function createGuards(d: PolicyDeps) {
@@ -14,7 +13,7 @@ export function createGuards(d: PolicyDeps) {
     seen.set(e.name, st);
     st.requests++;
     const info = d.api()?.list().find((a) => a.name === e.name);
-    const window = routeMember(d.settings.models, c.route)!.contextWindow;
+    const window = d.settings.models[c.member].contextWindow;
     const ctx = info?.contextTokens ?? 0;
     const notes: [string, boolean, string][] = [
       ["requests", st.requests > d.settings.runaway.requests, `has made ${st.requests} requests (limit ${d.settings.runaway.requests}); check it is not looping`],

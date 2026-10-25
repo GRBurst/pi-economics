@@ -4,9 +4,9 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "n
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ApiEvent, SubagentsApiV1 } from "./api.ts";
-import { createProbe } from "./health.ts";
+import { createProbes } from "./health.ts";
 import type { FetchLike } from "./health.ts";
-import { createCloudCounter } from "./cloud.ts";
+import { createMemberCounter } from "./counter.ts";
 import { installEffortGuard } from "./effort.ts";
 import { createFailover } from "./failover.ts";
 import { withFlags } from "./flags.ts";
@@ -16,7 +16,6 @@ import type { NudgePi } from "./nudge.ts";
 import { createGate, runCheck } from "./gate.ts";
 import type { Runner } from "./gate.ts";
 import { createGuards } from "./guards.ts";
-import { routeMember } from "./members.ts";
 import { createOutcomeLog } from "./log.ts";
 import { cardSection } from "./prompt.ts";
 import { createPolicy } from "./policy.ts";
@@ -85,15 +84,13 @@ export function install(pi: PiLike, deps: Deps) {
   const children = new Map<string, Child>();
   let skills: Array<{ name: string; filePath: string; baseDir: string }> = [];
   const skillPort: SkillPort = { find: (n) => skills.find((x) => x.name === n), read: (path) => readFileSync(path, "utf8") };
-  const cloudCount = createCloudCounter(join(deps.agentDir, "task-router", "cloud-count.json"), now);
-  let blockedUntil: number | undefined;
+  const counter = createMemberCounter(join(deps.agentDir, "task-router", "member-count.json"), now);
   const pd: PolicyDeps = {
     settings, api, children, attempts: new Map(), now: nowMs, skills: () => skillPort,
     rng: deps.rng ?? Math.random, home: deps.home ?? homedir(),
     fs: deps.fs ?? { exists: existsSync, size: (p) => statSync(p).size, isDir: (p) => existsSync(p) && statSync(p).isDirectory() },
     sleep: deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))),
-    probe: createProbe({ fetch: deps.fetch ?? (globalThis.fetch as unknown as FetchLike), url: routeMember(settings.models, "local")?.health ?? "", now: nowMs }),
-    cloud: { today: cloudCount.today, blockedUntil: () => blockedUntil, block: (until) => { blockedUntil = until; } },
+    probe: createProbes({ fetch: deps.fetch ?? (globalThis.fetch as unknown as FetchLike), now: nowMs }), counter, blocks: new Map(),
   };
   const policy = createPolicy(pd);
   const failover = createFailover({ ...pd, log });
@@ -111,7 +108,7 @@ export function install(pi: PiLike, deps: Deps) {
       const parentSession = agents.find((a) => a.name === e.parent)?.sessionId;
       if (kid) log.spawn({ taskId: e.name, card: UNROUTED_CARD, plan: unroutedPlan(kid, settings), arm: parentSession && armOf(parentSession), sessionId: e.childSessionId, parentSessionId: parentSession });
     }
-    if (e.type === "turn" && c?.route === "cloud") cloudCount.bump(); // one request per turn, 429 retries included
+    if (e.type === "turn" && c && settings.models[c.member]?.dailyCap !== undefined) counter.bump(c.member); // one request per turn, 429 retries included
     failover(e);
     gate(e);
     guards(e);

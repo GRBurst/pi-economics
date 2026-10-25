@@ -64,3 +64,13 @@ test("unknown children and killed children are ignored; a respawned name starts 
   await settle();
   assert.equal(notices(h).length, 1);
 });
+
+test("a child on `sonnet` with a configured contextWindow: 200000 gets the note at 101k (the window of its member)", async () => {
+  const h = harness({ settings: { models: { sonnet: { contextWindow: 200_000 } } } as any });
+  accepted(await h.a.spawn({ name: "s1", task: card({ t0: { ...card().t0, linear: false } }) })); // T1 → sonnet
+  h.a.agents.push(info("s1", { contextTokens: 101_000 }));
+  h.a.emit(turn("s1"));
+  await settle();
+  assert.equal(notices(h).length, 1);
+  assert.match(notices(h)[0].text, /s1.*context 101k.*51 %.*200k window/);
+});

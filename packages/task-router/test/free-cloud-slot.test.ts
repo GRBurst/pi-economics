@@ -19,8 +19,8 @@ for (const [name, health] of [["local up", undefined], ["local down", { health: 
       h.a.emit({ type: "turn", name: n, ts: 1 });
     }
     assert.ok(models.every((m) => m !== FREE && m !== ""), models.join());
-    const count = join(h.agentDir, "task-router", "cloud-count.json");
-    assert.ok(!existsSync(count) || Object.values(JSON.parse(readFileSync(count, "utf8"))).every((v) => v === 0), "cloud counter");
+    const count = join(h.agentDir, "task-router", "member-count.json");
+    assert.ok(!existsSync(count) || !Object.values(JSON.parse(readFileSync(count, "utf8"))).some((day: any) => day["qwen-cloud"]), "cloud counter");
     assert.deepEqual(h.sleeps, []);
   });
 }

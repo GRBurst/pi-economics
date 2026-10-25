@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { accepted, card, harness } from "./harness.ts";
@@ -191,4 +191,19 @@ test("API that appears after install is picked up at session_start; shutdown unr
   assert.ok(!a.hasPolicy());
   f.fire("session_start", {}, {});
   assert.ok(a.hasPolicy());
+});
+
+test("a chain fallback to Sonnet is member `sonnet`: its turns count nothing and its guard reads Sonnet's window", async () => {
+  const h = harness({ base: "today", settings: { models: { "qwen-cloud": { dailyCap: 1 } }, queueMaxSec: 0 } as any, health: { health: 0, slots: 0 } });
+  const info = (name: string, contextTokens: number) => ({ name, parent: "main", sessionId: name, model: "x", thinkingLevel: "high" as const, state: "running" as const, contextTokens });
+  assert.equal((accepted(await h.a.spawn({ name: "q1", task: card() })) as any).model, CLOUD);
+  h.a.emit({ type: "turn", name: "q1", ts: 1 }); // count 1 = cap
+  assert.equal((accepted(await h.a.spawn({ name: "q2", task: card() })) as any).model, "anthropic/claude-sonnet-5-5");
+  h.a.agents.push(info("q2", 140_000));
+  h.a.emit({ type: "turn", name: "q2", ts: 2 });
+  h.a.emit({ type: "turn", name: "q2", ts: 3 });
+  await new Promise((r) => setImmediate(r));
+  const file = join(h.agentDir, "task-router", "member-count.json");
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { "2026-10-02": { "qwen-cloud": 1 } });
+  assert.deepEqual(h.a.sent.filter((s) => s.from === "router"), []); // 1M window: 14 %; 262k would give 53 %
 });

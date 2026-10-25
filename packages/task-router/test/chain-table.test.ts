@@ -35,15 +35,16 @@ async function sutName(local: Local, cloudRunning: number, cloud: Cloud, expired
   const settings = parseSettings(TODAY_RAW).settings;
   const cap = settings.models["qwen-cloud"].dailyCap!;
   const children = new Map<string, Child>();
-  const add = (route: Child["route"], n: number) => { for (let i = 0; i < n; i++) children.set(`${route}${i}`, { route, at: NOW } as Child); };
+  const add = (route: Child["route"], n: number) => { for (let i = 0; i < n; i++) children.set(`${route}${i}`, { member: `qwen-${route}`, route, at: NOW } as Child); };
   add("local", local === "own" ? 1 : 0);
   add("cloud", cloudRunning);
   let now = NOW;
   const d = {
     settings, children, now: () => now,
     api: () => ({ list: () => [...children.keys()].map((name) => ({ name, state: "running" })) }),
-    probe: async () => ({ up: local === "up" || local === "own", busy: local === "busy" }),
-    cloud: { today: () => (cloud === "capped" ? cap : 0), blockedUntil: () => (cloud === "blocked" ? NOW + 1 : undefined), block() {} },
+    probe: async (_url: string) => ({ up: local === "up" || local === "own", busy: local === "busy" }),
+    counter: { today: (m: string) => (m === "qwen-cloud" && cloud === "capped" ? cap : 0), bump() {} },
+    blocks: new Map(cloud === "blocked" ? [["qwen-cloud", NOW + 1]] : []),
     sleep: async (ms: number) => { if (!expired) throw new Wait(); now += ms + settings.queueMaxSec * 1000; },
   } as unknown as PolicyDeps;
   try {

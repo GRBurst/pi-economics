@@ -80,15 +80,16 @@ for (const [fx, raw] of FIXTURES) {
     const picks: string[] = [];
     for (const expired of [false, true]) {
       const children = new Map<string, unknown>();
-      const add = (route: string, n: number) => { for (let i = 0; i < n; i++) children.set(`${route}${i}`, { route, at: NOW }); };
+      const add = (route: string, n: number) => { for (let i = 0; i < n; i++) children.set(`${route}${i}`, { member: `qwen-${route}`, route, at: NOW, reservedUntil: 0 }); };
       add("local", local === "own" ? 1 : 0); add("cloud", cr);
       let now = NOW;
       const cap = s.models["qwen-cloud"].dailyCap ?? 0;
       const d = {
         settings: s, children, now: () => now,
         api: () => ({ list: () => [...children.keys()].map((name) => ({ name, state: "running" })) }),
-        probe: async () => ({ up: local === "up" || local === "own", busy: local === "busy" }),
-        cloud: { today: () => (cloud === "capped" ? cap : 0), blockedUntil: () => (cloud === "blocked" ? NOW + 1 : undefined), block() {} },
+        probe: async (_url: string) => ({ up: local === "up" || local === "own", busy: local === "busy" }),
+        counter: { today: (m: string) => (m === "qwen-cloud" && cloud === "capped" ? cap : 0), bump() {} },
+        blocks: new Map(cloud === "blocked" ? [["qwen-cloud", NOW + 1]] : []),
         sleep: async (ms: number) => { if (!expired) throw new Wait(); now += ms + s.queueMaxSec * 1000; },
       };
       try { const r = await resolveLeg(d, { tier: "qwen", effort: "xhigh" }); picks.push(`${memberOf(r.model)}:${r.model}:${r.effort}`); }
