@@ -4,7 +4,8 @@ Home Manager components for the pi coding agent's token economics, under
 `programs.piEconomics`. Import `homeModules.default`: it brings every
 component and the shared options below. Design and milestones:
 `docs/specs/2026-10-12-pi-economics-design.md`; one plan per milestone in
-`docs/plans/`.
+`docs/plans/`. What the components log and measure, the experiment design and
+how to run the reports and the bench: `docs/pi-token-economics.md`.
 
 ## Shared options (`modules/common.nix`)
 
