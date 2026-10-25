@@ -11,7 +11,7 @@ const read = (dir: string) => JSON.parse(readFileSync(countFile(dir), "utf8"));
 
 test("every request of a cloud child counts, keyed by UTC date; local, Sonnet and unknown children do not", async () => {
   const h = harness();
-  for (const n of ["c1", "l1"]) accepted(await h.a.spawn({ name: n, task: card() })); // cloud, local
+  for (const n of ["c1", "c2", "l1"]) accepted(await h.a.spawn({ name: n, task: card() })); // cloud, cloud, local
   accepted(await h.a.spawn({ name: "s1", task: card({ t0: { ...card().t0, linear: false } }) }));
   for (const n of ["c1", "c1", "c1", "l1", "s1", "ghost"]) h.a.emit(turn(n));
   assert.deepEqual(read(h.agentDir), { "2026-10-02": { "qwen-cloud": 3 } });
@@ -81,11 +81,12 @@ test("legacy cloudDailyCap: 0 never selects the cloud: local when it is free, el
   assert.equal((accepted(await down.a.spawn({ name: "a", task: card() })) as any).model, SONNET);
 });
 
-test("a blank qwen-cloud is skipped: local first, then Sonnet (a cloud that is never selected); never model \"\"", async () => {
-  const h = harness({ settings: blank("qwen-cloud") });
+test("a blank qwen-cloud is skipped: local first, then (after waiting for the local slot, D5) Sonnet; never model \"\"", async () => {
+  const h = harness({ settings: { ...blank("qwen-cloud"), queueMaxSec: 10 } });
   const first = accepted(await h.a.spawn({ name: "a", task: card() })) as any;
   const second = accepted(await h.a.spawn({ name: "b", task: card() })) as any;
   assert.deepEqual([first.model, second.model], [LOCAL, SONNET]);
+  assert.ok(h.sleeps.reduce((x, y) => x + y, 0) >= 10_000);
 });
 
 test("a blank qwen-local is skipped: the cloud, then Sonnet; never model \"\"", async () => {
@@ -102,7 +103,7 @@ test("both Qwen members blank → Sonnet at once", async () => {
 });
 
 // T2.9: the plan layer plans on enabled members (MP2: a blank member does not exist), so a blank Sonnet moves T1 work to the next
-// member up and a blank Opus makes Sonnet the top; only the Qwen chain's fixed Sonnet fallback (the bridge until T3.4) still rejects.
+// member up and a blank Opus makes Sonnet the top; T3.4: the selection does the same for a Qwen leg (no fixed Sonnet fallback).
 test("a blank sonnet: a T1 card goes to Opus; a blank opus: a t2 card goes to Sonnet (the top that exists); never model \"\"", async () => {
   const s = harness({ settings: blank("sonnet") });
   assert.equal((accepted(await s.a.spawn({ name: "a", task: t1Card() })) as any).model, "anthropic/claude-opus-5-5");
@@ -110,8 +111,8 @@ test("a blank sonnet: a T1 card goes to Opus; a blank opus: a t2 card goes to So
   assert.equal((accepted(await o.a.spawn({ name: "a", task: card({ t2: ["security"] }) })) as any).model, SONNET);
 });
 
-test("a blank sonnet: the Qwen chain's fallback to Sonnet rejects the spawn, naming the tier", async () => {
+test("a blank sonnet: a Qwen leg with both Qwen members unavailable goes to the next candidate up, Opus (no rejection)", async () => {
   const s = harness({ settings: { ...blank("sonnet"), cloudDailyCap: 0 }, health: { health: 0, slots: 0 } });
-  const r = await s.a.spawn({ name: "a", task: card() }) as any;
-  assert.ok("reject" in r && /T1/.test(r.reject) && /not configured|blank/.test(r.reject), JSON.stringify(r));
+  const r = accepted(await s.a.spawn({ name: "a", task: card() })) as any;
+  assert.deepEqual([r.model, r.thinkingLevel], ["anthropic/claude-opus-5-5", "high"]);
 });

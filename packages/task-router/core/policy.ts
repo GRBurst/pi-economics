@@ -3,26 +3,30 @@ import type { Caller, SpawnPolicy, SubagentsApiV1 } from "./api.ts";
 import type { AttemptState } from "./attempts.ts";
 import { briefAppend } from "./brief.ts";
 import { parseCard } from "./card.ts";
-import { pickQwen } from "./chain.ts";
-import { isRoute, routeMember } from "./members.ts";
-import type { Named, Route } from "./members.ts";
+import { effortAt, named, sameLadder } from "./members.ts";
+import type { Named } from "./members.ts";
 import type { MemberCounter } from "./counter.ts";
 import type { Health } from "./health.ts";
 import { importanceOf } from "./importance.ts";
 import { planSpawn } from "./pipeline.ts";
 import { profileFor, skillBlocks, skillNames } from "./profile.ts";
+import { pickMember } from "./select.ts";
+import type { MemberState } from "./select.ts";
 import { cardRejection } from "./prompt.ts";
 import type { SkillPort } from "./profile.ts";
 import { toolsFor } from "./toolguard.ts";
 import { resolveCwd, verifyT0 } from "./verify.ts";
 import type { FsPort } from "./verify.ts";
-import type { Card, Importance, Plan, RouterSettings, ThinkingLevel } from "./types.ts";
+import type { Card, Importance, Plan, Result, RouterSettings, ThinkingLevel } from "./types.ts";
 
-export type { Route };
 /** What the router remembers about a child it spawned (keyed by child name = task id). */
-/** `cwd` is the task's (card `cwd`, else the caller's); `unresolved`: relative card files missing under it.
- *  `member`/`model`: the member it runs on (its counter and its window); `route` still drives the chain until T3.4. */
-export type Child = { parent: string; parentSession: string; member: string; model: string; route: Route; effort: ThinkingLevel; card: Card; plan: Plan; cwd: string; importance: Importance; at: number; unresolved?: true };
+/** `cwd` is the task's (card `cwd`, else the caller's); `unresolved`: relative card files missing under it. */
+export type ChildBase = { parent: string; parentSession: string; card: Card; plan: Plan; cwd: string; importance: Importance; unresolved?: true };
+/** `member`/`model`: the member it runs on (its slot, counter, window); `route`: that member's log label; `reservedUntil`: its
+ *  slot is held until then, listed or not (mi11); `failover`: the leg's candidate names, the targets of a move (spec §4.8). */
+export type Child = ChildBase & {
+  member: string; route: string; model: string; effort: ThinkingLevel; at: number; reservedUntil: number; failover: string[];
+};
 export type PolicyDeps = {
   settings: RouterSettings; api: () => SubagentsApiV1 | undefined; fs: FsPort;
   /** The health of a member's server by its `health` URL; `counter`: requests per member and day; `blocks`: member → blocked until (ms). */
@@ -34,49 +38,42 @@ export type PolicyDeps = {
 };
 
 const POLL_MS = 2000;
-const PENDING_MS = 60_000; // a child not (yet) in api.list() holds its slot this long
-const ROUTE_OF = { T1: "T1", T2: "T2" } as const;
+/** A spawned or moved child holds its slot this long, listed or not (mi11). */
+export const PENDING_MS = 60_000;
 
-/** Concrete model for a leg; for Qwen: the chain (free cloud → local → cloud), queueing up to queueMaxSec, then Sonnet. */
-/** The model of a member the M1 runtime needs and the settings blanked: the spawn is rejected, naming the tier (T3.4 replaces this by the selection). */
-export class NotConfigured extends Error {
-  constructor(tier: string) { super(`no model is configured for ${tier} (its member is blank in the router settings)`); }
+/** A candidate's state at `now` (spec §4.5): up = its endpoint answers (no `health`: up), not blocked, under its daily cap;
+ *  free = up, a slot left (running = listed `running` or reserved) and the probe not busy. */
+export function memberState(d: PolicyDeps, m: Named, listed: Map<string, string>, now: number, h?: Health): MemberState {
+  const blocked = (d.blocks.get(m.name) ?? 0) > now;
+  const capped = m.dailyCap !== undefined && d.counter.today(m.name) >= m.dailyCap;
+  const up = (m.health === undefined || h?.up === true) && !blocked && !capped;
+  const running = [...d.children].filter(([n, c]) => c.member === m.name && (listed.get(n) === "running" || c.reservedUntil > now)).length;
+  return { name: m.name, cost: m.cost, up, free: up && (m.slots === undefined || running < m.slots) && !(h?.busy ?? false) };
 }
-const memberOf = (m: RouterSettings["models"], route: string): Named => {
-  const x = routeMember(m, route);
-  if (!x) throw new NotConfigured(route);
-  return x;
-};
 
-/** A start leg: its tier label and effort; `member` (T2.9) = the accepted member. Not Qwen → that member's model and route at once
- *  (no member: the tier's bridge member); Qwen → the chain (T3.4 replaces both by the selection). */
-export type StartLeg = { tier: string; effort: ThinkingLevel; member?: string };
-export type Leg = { member: string; model: string; route: Route; effort: ThinkingLevel; why?: string };
-export async function resolveLeg(d: PolicyDeps, leg: StartLeg, o: { failover?: boolean } = {}): Promise<Leg> {
-  const m = d.settings.models;
-  const on = (x: Named, route: Route, effort: ThinkingLevel, why?: string): Leg => ({ member: x.name, model: x.model, route, effort, ...(why ? { why } : {}) });
-  if (leg.tier !== "qwen") {
-    const x = leg.member !== undefined ? m[leg.member] : undefined;
-    if (x && isRoute(x.route)) return on({ ...x, name: leg.member! }, x.route, leg.effort); // the loader drops other routes (m4)
-    return on(memberOf(m, leg.tier), ROUTE_OF[leg.tier as keyof typeof ROUTE_OF], leg.effort);
-  }
-  const deadline = d.now() + d.settings.queueMaxSec * 1000;
+/** The selection of one leg (spec §4.5): probe the candidates with a `health` URL, pick (`pickMember`), else poll every
+ *  POLL_MS until `queueMaxSec`. The effort: a pinned start keeps its own; else the requested effort when the member shares the
+ *  planned member's ladder, else the member's effort at the leg's step. */
+export type Selected = { member: Named; effort: ThinkingLevel; waitMs: number; why: string };
+export async function resolveLeg(d: PolicyDeps, x: {
+  cands: Named[]; planned: Named; step: number; effort?: ThinkingLevel; pinned: boolean;
+}): Promise<Result<Selected>> {
+  const t0 = d.now(), deadline = t0 + d.settings.queueMaxSec * 1000;
   for (;;) {
+    const health = await Promise.all(x.cands.map((m) => (m.health ? d.probe(m.health) : Promise.resolve(undefined))));
+    const now = d.now();
     const listed = new Map((d.api()?.list() ?? []).map((a) => [a.name, a.state]));
-    const running = (r: Route) =>
-      [...d.children].filter(([n, c]) => c.route === r && (listed.get(n) === "running" || (!listed.has(n) && d.now() - c.at < PENDING_MS))).length;
-    const cloud = routeMember(m, "cloud"); // a blank cloud is a cloud that is never selected: cap 0
-    const local = routeMember(m, "local");
-    const h = local ? await d.probe(local.health ?? "") : { up: false, busy: false };
-    const localRunning = running("local");
-    const pick = pickQwen({
-      localRunning, cloudRunning: running("cloud"), localAvailable: !o.failover && local !== undefined && h.up && (localRunning > 0 || !h.busy),
-      cloudToday: cloud ? d.counter.today(cloud.name) : 0, cloudDailyCap: cloud ? (cloud.dailyCap ?? Infinity) : 0,
-      cloudBlockedUntil: cloud ? d.blocks.get(cloud.name) : undefined, now: d.now(),
-    });
-    if (pick.route === "cloud" || pick.route === "local") return on(memberOf(m, pick.route), pick.route, leg.effort, `qwen chain: ${pick.route}`);
-    const why = pick.route === "sonnet" ? pick.reason : `qwen slots busy for ${d.settings.queueMaxSec} s`;
-    if (pick.route === "sonnet" || o.failover || d.now() >= deadline) return on(memberOf(m, "T1"), "T1", "high", `qwen chain → Sonnet: ${why}`);
+    const p = pickMember(x.cands.map((m, i) => memberState(d, m, listed, now, health[i])), now >= deadline);
+    if ("pick" in p) {
+      const m = x.cands.find((c) => c.name === p.pick)!;
+      const effort = x.pinned ? x.effort! : x.effort !== undefined && sameLadder(m, x.planned) ? x.effort : effortAt(m, x.step);
+      const waitMs = now - t0;
+      const why = `selection: ${m.name}${waitMs ? ` after ${Math.round(waitMs / 1000)} s` : ""}${m.name !== x.planned.name ? ` (planned ${x.planned.name})` : ""}`;
+      return { ok: true, value: { member: m, effort, waitMs, why } };
+    }
+    if ("none" in p) return { ok: false, errors: [x.pinned
+      ? `explicit model ${x.cands[0].model}: ${p.none === "no member up" ? "down" : `no free slot after ${d.settings.queueMaxSec} s`}; leave \`model\` unset to let the router choose`
+      : `no member for this leg: ${p.none}`] };
     await d.sleep(POLL_MS);
   }
 }
@@ -101,19 +98,21 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     const names = skillNames(prof.value, card);
     const blocks = names.length ? skillBlocks(names, d.skills() ?? { find: () => undefined, read: () => "" }) : { ok: true as const, value: "" };
     if (!blocks.ok) return reject(blocks.errors);
-    let to: Leg;
-    const st = sp.value.start;
-    try { to = await resolveLeg(d, { tier: st.tier, effort: st.effort, member: st.member }); } catch (e) {
-      if (e instanceof NotConfigured) return reject([e.message]);
-      throw e;
-    }
-    const plan: Plan = { ...sp.value.plan, reasons: [...sp.value.plan.reasons, ...(to.why ? [to.why] : [])] };
+    // The selection runs on the plan's candidates (D12); a pinned start (an explicit model) runs on its member alone.
+    const st = sp.value.start, leg = sp.value.cands.map((n) => named(s.models, n)!);
+    const to = await resolveLeg(d, {
+      cands: st.pinned ? [named(s.models, st.member)!] : leg, planned: leg[0], step: sp.value.plan.worker.step,
+      effort: st.pinned ? st.effort : args.thinkingLevel, pinned: st.pinned,
+    });
+    if (!to.ok) return reject(to.errors);
+    const m = to.value.member, plan: Plan = { ...sp.value.plan, reasons: [...sp.value.plan.reasons, to.value.why] };
+    const at = d.now();
     d.children.set(args.name, {
-      parent: caller.name, parentSession: caller.sessionId, at: d.now(), member: to.member, model: to.model, route: to.route, effort: to.effort, card, plan, cwd, importance,
-      ...(v.unresolved ? { unresolved: true as const } : {}),
+      parent: caller.name, parentSession: caller.sessionId, card, plan, cwd, importance, ...(v.unresolved ? { unresolved: true as const } : {}),
+      member: m.name, route: m.route, model: m.model, effort: to.value.effort, at, reservedUntil: at + PENDING_MS, failover: leg.map((c) => c.name),
     });
     return {
-      model: to.model, thinkingLevel: to.effort, briefAppend: briefAppend(card, plan, v.t0.specified, prof.value, blocks.value, s.delegation.nudge !== "off"),
+      model: m.model, thinkingLevel: to.value.effort, briefAppend: briefAppend(card, plan, v.t0.specified, prof.value, blocks.value, s.delegation.nudge !== "off"),
       ...toolsFor(prof.value, card, cwd, caller.cwd), meta: { taskId: args.name, importance },
     };
   };

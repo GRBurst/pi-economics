@@ -75,15 +75,16 @@ test("m3: a profile that overrides its ability plans on that ability's table, no
   assert.ok(same.ok && same.value.table === "review");
 });
 
-test("m4: a user-added member with a route the runtime does not know is dropped with a problem, never routed", async () => {
+// T3.4 (HP m4): the selection routes by member, so a new member's route is a label: kept, and selected by its cost.
+test("a user-added member with any route label is kept without a problem and selected in (cost, order, name) order", async () => {
   const extra = { model: "x/y", tier: "x", route: "x", abilities: { write: 1, read: 2 }, efforts: ["high"], contextWindow: 1000000, cost: 2 };
   const r = parseSettings({ models: { extra } });
-  assert.equal("extra" in r.settings.models, false);
-  assert.deepEqual(r.problems, ['models.extra.route: "x" is not a route of the runtime (local, cloud, T1, T2, haiku) until the selection lands (M3); dropped']);
+  assert.deepEqual(r.settings.models.extra, extra);
+  assert.deepEqual(r.problems, []);
   const miss = { bounded: false, specified: false, verifiable: true, lowRisk: true, small: true, linear: true };
   const h = harness({ settings: { models: { extra } } as never });
   const got = await h.a.spawn({ name: "a", task: card({ t0: miss }) });
-  assert.ok(!("reject" in got) && got.model === SONNET, JSON.stringify(got));
+  assert.ok(!("reject" in got) && got.model === "x/y" && got.thinkingLevel === "high", JSON.stringify(got)); // cost 2 < Sonnet's 3
   const ok = parseSettings({ models: { extra: { ...extra, route: "T1" } } });
   assert.deepEqual([ok.problems, ok.settings.models.extra.route], [[], "T1"]);
 });

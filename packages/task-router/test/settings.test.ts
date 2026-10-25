@@ -290,24 +290,21 @@ test("m1: legacy cloudDailyCap: 0 keeps its meaning: the member stays, with a ca
   assert.deepEqual(parseSettings({ models: { "qwen-cloud": { dailyCap: 0 } } }).problems, []);
 });
 
-test("m2: blanking a member the M1 runtime routes by (local, cloud, T1, T2) gets one problem line; blank haiku and others none", () => {
-  for (const [key, name] of [["qwen-local", "qwen-local"], ["qwen-cloud", "qwen-cloud"], ["sonnet", "sonnet"], ["opus", "opus"]]) {
+// T3.4 (HP m2, m3): the selection skips a blank member (MP2) and routes by member, so blanking a member is no problem and
+// route and tier are labels like any other field.
+test("blanking any member is no problem: the selection skips it (MP2)", () => {
+  for (const key of ["qwen-local", "qwen-cloud", "haiku", "sonnet", "opus"]) {
     const r = parseSettings({ models: { [key]: { model: "" } } });
-    assert.deepEqual(r.problems.filter((l) => !l.startsWith("importanceTable.")), [`models.${name}: blank; routing skips it until the selection lands (M3)`]); // opus: + the default tables (M1)
+    assert.deepEqual(r.problems.filter((l) => !l.startsWith("importanceTable.")), [], key); // opus: the default tables (M1) only
   }
-  assert.deepEqual(parseSettings({ models: { haiku: { model: "" } } }).problems, []);
-  assert.deepEqual(parseSettings({ models: { qwenCloud: "" } }).problems, [
-    "legacy key models.qwenCloud mapped to models.qwen-cloud.model",
-    "models.qwen-cloud: blank; routing skips it until the selection lands (M3)",
-  ]);
+  assert.deepEqual(parseSettings({ models: { qwenCloud: "" } }).problems, ["legacy key models.qwenCloud mapped to models.qwen-cloud.model"]);
 });
 
-test("m3: route and tier of a default member are fixed until M3; the rest of the member is kept", () => {
+test("route and tier of a default member are labels: an override is kept, without a problem", () => {
   const d = defaults().models;
   const r = parseSettings({ models: { sonnet: { route: "x", tier: "y", cost: 9 } } });
-  assert.deepEqual(r.settings.models.sonnet, { ...d.sonnet, cost: 9 });
-  assert.deepEqual(r.problems.sort(), ["models.sonnet.route: fixed until the selection lands (M3); default kept", "models.sonnet.tier: fixed until the selection lands (M3); default kept"]);
-  assert.deepEqual(parseSettings({ models: { sonnet: { route: "T1", tier: "T1" } } }).problems, []);
+  assert.deepEqual(r.settings.models.sonnet, { ...d.sonnet, route: "x", tier: "y", cost: 9 });
+  assert.deepEqual(r.problems, []);
 });
 
 test("m4: readOnlyReview and contextFit are checked; a bad value keeps the default and names itself", () => {
@@ -396,7 +393,6 @@ const PLAN_TIME = "at plan time a review leg above the top is lowered to it, a w
 test("M1: the default tables are validated against top(a) too; a leg above it is reported, not replaced (there is no other default)", () => {
   const r = parseSettings({ models: { opus: { model: "" } } });
   assert.deepEqual(r.problems, [
-    "models.opus: blank; routing skips it until the selection lands (M3)",
     `importanceTable.read (default): row 0.critical.review: level 3 above the top 2 of read; ${PLAN_TIME}`, // the profiles' order
     `importanceTable.write (default): row 0.critical.review: level 2 above the top 1 of write; ${PLAN_TIME}`,
     `importanceTable.review (default): row 0.critical.review: level 3 above the top 2 of read; ${PLAN_TIME}`,

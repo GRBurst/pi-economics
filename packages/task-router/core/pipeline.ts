@@ -6,14 +6,16 @@ import { acceptModel } from "./explicit.ts";
 import type { Accepted } from "./explicit.ts";
 import { randomizeLeg } from "./randomize.ts";
 import { requirementLabel, requirementOf } from "./requirement.ts";
-import { labelLeg } from "./select.ts";
+import { candidates, labelLeg } from "./select.ts";
 import { levels } from "./members.ts";
 import { beyondTop, capToTable, planLegs } from "./table.ts";
 import type { Verified } from "./verify.ts";
 import type { Card, Importance, Plan, Profile, Result, RouterSettings, ThinkingLevel } from "./types.ts";
 
 export type SpawnIn = { taskId: string; card: Card; verified: Verified; profile: Profile; importance: Importance; model?: string; effort?: ThinkingLevel };
-export type SpawnPlan = { plan: Plan; start: Accepted; esc?: Escalation };
+/** `cands`: the worker leg's candidate names in (cost, order, name) order, on this plan's capped settings and need (D12); the
+ *  policy selects over them, so plan and selection never disagree on a member the plan clamped. */
+export type SpawnPlan = { plan: Plan; start: Accepted; esc?: Escalation; cands: string[] };
 export type PlanDeps = { settings: RouterSettings; attempts: AttemptState; rng: () => number };
 
 export function planSpawn(d: PlanDeps, i: SpawnIn): Result<SpawnPlan> {
@@ -42,5 +44,6 @@ export function planSpawn(d: PlanDeps, i: SpawnIn): Result<SpawnPlan> {
     base: requirementLabel(s, req), importance: i.importance, reasons, assigned, routeBase: routeBase ?? W.leg.tier,
   };
   const acc = acceptModel(plan, i.model, i.effort, s);
-  return acc.ok ? { ok: true, value: { plan, start: acc.value, ...(att.value.esc ? { esc: att.value.esc } : {}) } } : acc;
+  const cands = candidates(s, a, worker.level, need).cands.map((m) => m.name);
+  return acc.ok ? { ok: true, value: { plan, start: acc.value, ...(att.value.esc ? { esc: att.value.esc } : {}), cands } } : acc;
 }

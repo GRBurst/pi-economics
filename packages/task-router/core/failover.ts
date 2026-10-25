@@ -1,34 +1,34 @@
-// Failover (spec §5.2.6, R6): a terminal provider error moves the child to the next route; the OpenRouter
-// free-tier daily cap blocks the free cloud at once and moves every cloud child. Attempts are not spent.
+// Failover (spec §4.8, §4.9): a terminal provider error moves the child to a free member of its leg on another provider, without
+// waiting; OpenRouter's free-tier daily cap blocks the erroring member at once and moves every child on it. Attempts are not spent.
 import type { ApiEvent } from "./api.ts";
-import { freeCapHit } from "./chain.ts";
-import { routeMember } from "./members.ts";
-import type { Child, Leg, PolicyDeps } from "./policy.ts";
-import { resolveLeg } from "./policy.ts";
-
-type Target = Omit<Leg, "why">;
+import { FREE_CAP_PROVIDER, freeCapHit } from "./freecap.ts";
+import { effortAt, named, providerOf } from "./members.ts";
+import type { Named } from "./members.ts";
+import type { Child, PolicyDeps } from "./policy.ts";
+import { PENDING_MS, memberState } from "./policy.ts";
 
 export function createFailover(d: PolicyDeps & { log: { reroute(taskId: string, from: string, to: string, reason: string): void } }) {
-  const m = d.settings.models;
-  const move = async (name: string, c: Child, to: Target, reason: string): Promise<void> => {
+  /** The first of the child's candidates (`Child.failover`) that is enabled, on another provider than the failed member, and free
+   *  now; none → the child stays. The effort: the target's at the leg's step. */
+  const move = async (name: string, c: Child, reason: string): Promise<void> => {
     const api = d.api();
     if (!api) return;
+    const failed = d.settings.models[c.member];
+    const cands = c.failover.map((n) => named(d.settings.models, n)).filter((m): m is Named =>
+      !!m && m.model !== "" && m.name !== c.member && providerOf(m) !== providerOf(failed));
+    const health = await Promise.all(cands.map((m) => (m.health ? d.probe(m.health) : Promise.resolve(undefined))));
+    const now = d.now(), listed = new Map(api.list().map((a) => [a.name, a.state]));
+    const t = cands.find((m, i) => memberState(d, m, listed, now, health[i]).free); // no wait
+    if (!t) return;
+    const effort = effortAt(t, c.plan.worker.step);
     try {
-      await api.retune(name, { model: to.model, thinkingLevel: to.effort });
+      await api.retune(name, { model: t.model, thinkingLevel: effort });
       await api.send(name, "continue", "router");
     } catch (e) {
       return void console.warn(`task-router: reroute of ${name} failed: ${(e as Error).message}`);
     }
-    d.log.reroute(name, c.route, to.route, reason);
-    Object.assign(c, { member: to.member, model: to.model, route: to.route, effort: to.effort });
-  };
-  /** Next route after an ordinary failure: local → free cloud (if open) → Sonnet; Sonnet and Opus have none (same provider, more quota). */
-  const next = async (c: Child): Promise<Target | undefined> => {
-    if (c.route === "T1" || c.route === "T2") return undefined;
-    const cloud = c.route === "local" ? await resolveLeg(d, { tier: "qwen", effort: c.effort }, { failover: true }) : undefined;
-    if (cloud?.route === "cloud") return cloud;
-    const t1 = routeMember(m, "T1");
-    return t1 ? { member: t1.name, model: t1.model, route: "T1", effort: "high" } : undefined; // a blank Sonnet: nothing to move to
+    d.log.reroute(name, c.route, t.route, reason);
+    Object.assign(c, { member: t.name, route: t.route, model: t.model, effort, reservedUntil: d.now() + PENDING_MS });
   };
   return (e: ApiEvent): void => {
     if (e.type !== "error") return;
@@ -36,20 +36,15 @@ export function createFailover(d: PolicyDeps & { log: { reroute(taskId: string, 
     if (!c) return;
     const cap = freeCapHit(e.reason, d.now());
     void (async () => {
-      try {
-        if (cap) {
-          d.blocks.set(c.member, cap.until);
-          for (const n of new Set([e.name, ...d.children.keys()])) { // the erroring child first
-            const x = d.children.get(n);
-            if (x?.route === "cloud") await move(n, x, await resolveLeg(d, { tier: "qwen", effort: x.effort }), "free-cap");
-          }
-        } else if (d.settings.autoEscalate) {
-          const to = await next(c);
-          if (to) await move(e.name, c, to, `error: ${e.reason.slice(0, 80)}`);
+      if (cap) {
+        const member = c.member, m = named(d.settings.models, member);
+        if (!m || providerOf(m) !== FREE_CAP_PROVIDER) return; // the text is OpenRouter's; on another member it is stale (r2, L2)
+        d.blocks.set(member, cap.until);
+        for (const n of new Set([e.name, ...d.children.keys()])) { // the erroring child first
+          const x = d.children.get(n);
+          if (x?.member === member) await move(n, x, "free-cap");
         }
-      } catch (err) { // a blank member the move needs (NotConfigured): the child stays where it is
-        console.warn(`task-router: reroute after "${e.reason.slice(0, 60)}" skipped: ${(err as Error).message}`);
-      }
+      } else if (d.settings.autoEscalate) await move(e.name, c, `error: ${e.reason.slice(0, 80)}`);
     })();
   };
 }

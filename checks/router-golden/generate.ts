@@ -9,6 +9,7 @@ const grid = await import(join(dir, "test/golden/grid.ts"));
 const { sutSpawn } = await import(join(dir, "test/golden/sut.ts"));
 const { parseSettings } = await import(join(dir, "core/settings.ts"));
 const { resolveLeg } = await import(join(dir, "core/policy.ts"));
+const { candidates } = await import(join(dir, "core/select.ts"));
 
 /** Every member's model set to a neutral name, the free cloud empty (spec §6.1 P1, P2). */
 export const EMPTY_SLOT = {
@@ -74,25 +75,27 @@ for (const [fx, raw] of FIXTURES) {
   const s = parseSettings(structuredClone(raw)).settings;
   const NOW = 1_000_000;
   class Wait extends Error {}
-  const memberOf = (model: string): string =>
-    Object.entries(s.models).find(([, m]: [string, any]) => m.model === model)?.[0] ?? `?${model}`;
   for (const local of ["up", "busy", "own", "down"]) for (const cr of [0, 1, 2, 3]) for (const cloud of ["open", "blocked", "capped"]) {
     const picks: string[] = [];
     for (const expired of [false, true]) {
       const children = new Map<string, unknown>();
-      const add = (route: string, n: number) => { for (let i = 0; i < n; i++) children.set(`${route}${i}`, { member: `qwen-${route}`, route, at: NOW, reservedUntil: 0 }); };
+      const add = (route: string, n: number) => { for (let i = 0; i < n; i++) children.set(`${route}${i}`, { member: `qwen-${route}`, route, at: NOW, reservedUntil: NOW + 60_000 }); };
       add("local", local === "own" ? 1 : 0); add("cloud", cr);
       let now = NOW;
       const cap = s.models["qwen-cloud"].dailyCap ?? 0;
       const d = {
-        settings: s, children, now: () => now,
+        settings: s, children, now: () => now, attempts: new Map(),
         api: () => ({ list: () => [...children.keys()].map((name) => ({ name, state: "running" })) }),
-        probe: async (_url: string) => ({ up: local === "up" || local === "own", busy: local === "busy" }),
+        probe: async (_url: string) => ({ up: local !== "down", busy: local === "busy" }), // busy = up, no free slot
         counter: { today: (m: string) => (m === "qwen-cloud" && cloud === "capped" ? cap : 0), bump() {} },
-        blocks: new Map(cloud === "blocked" ? [["qwen-cloud", NOW + 1]] : []),
+        blocks: new Map(cloud === "blocked" ? [["qwen-cloud", NOW + 86_400_000]] : []), // outlasts the deadline the driver jumps past
         sleep: async (ms: number) => { if (!expired) throw new Wait(); now += ms + s.queueMaxSec * 1000; },
       };
-      try { const r = await resolveLeg(d, { tier: "qwen", effort: "xhigh" }); picks.push(`${memberOf(r.model)}:${r.model}:${r.effort}`); }
+      const cands = candidates(s, "write", 0, 0).cands;
+      try {
+        const r = await resolveLeg(d, { name: "x", cands, planned: cands[0], step: 0, pinned: false, failover: [], entry: { parent: "p", parentSession: "s" } as any });
+        picks.push(r.ok ? `${r.value.member.name}:${r.value.member.model}:${r.value.effort}` : "none");
+      }
       catch (e) { if (e instanceof Wait) picks.push("wait"); else throw e; }
     }
     out.push(`select ${fx} local=${local} cloudRunning=${cr} cloud=${cloud} ${picks.join(" ")}`);

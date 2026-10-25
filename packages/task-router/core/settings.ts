@@ -1,7 +1,7 @@
 // Settings live in <agentDir>/task-router/settings.json. Every key has a
 // default, so the extension runs with no file at all (plain `pi install`).
 import { readFileSync } from "node:fs";
-import { EFFORTS, ROUTES, effortRank, enabled, isRoute } from "./members.ts";
+import { EFFORTS, effortRank, enabled } from "./members.ts";
 import type { Cell, Member, Profile, Rows, RouterSettings } from "./types.ts";
 
 export type Settings = RouterSettings;
@@ -197,7 +197,6 @@ function mergeTables(base: Record<string, Rows>, raw: unknown, problems: string[
   return out;
 }
 
-const BRIDGE_ROUTES = ["local", "cloud", "T1", "T2"];
 const isInt = (v: unknown, min: number): boolean => Number.isInteger(v) && (v as number) >= min;
 function memberProblem(m: Record<string, unknown>): string | undefined {
   if (typeof m.model !== "string") return "model must be a string";
@@ -334,24 +333,10 @@ function validatePlanning(s: Settings, base: Settings, problems: string[], raw: 
 }
 
 /** Spec §5.4, in order: members (an invalid default member gets its default back, an invalid new one is dropped), then the cap,
- *  the routes of new members (m4), the tables and the profiles (`validatePlanning`). */
+ *  the tables and the profiles (`validatePlanning`). */
 function validate(s: Settings, base: Settings, problems: string[], raw: Record<string, unknown>): void {
   for (const [name, m] of Object.entries(s.models)) {
-    // route and tier are the keys the M1 runtime routes by (`routeMember`, `modelTier`); T3.4 frees them.
-    if (name in base.models) for (const k of ["route", "tier"] as const) {
-      if (m[k] === base.models[name][k]) continue;
-      m[k] = base.models[name][k];
-      problems.push(`models.${name}.${k}: fixed until the selection lands (M3); default kept`);
-    }
-    if (m.model === "" && name in base.models && BRIDGE_ROUTES.includes(base.models[name].route)) {
-      problems.push(`models.${name}: blank; routing skips it until the selection lands (M3)`);
-    }
     const why = memberProblem(m as unknown as Record<string, unknown>);
-    if (why === undefined && m.model !== "" && !isRoute(m.route)) { // only a new member can get here: a default's route is restored
-      delete s.models[name];
-      problems.push(`models.${name}.route: ${JSON.stringify(m.route)} is not a route of the runtime (${ROUTES.join(", ")}) until the selection lands (M3); dropped`);
-      continue;
-    }
     if (why === undefined) continue;
     if (name in base.models) { s.models[name] = structuredClone(base.models[name]); problems.push(`models.${name}: ${why}; default kept`); }
     else { delete s.models[name]; problems.push(`models.${name}: ${why}; dropped`); }

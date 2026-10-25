@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { candidates, labelLeg, pickMember } from "../core/select.ts";
 import type { MemberState } from "../core/select.ts";
 import { defaults, parseSettings } from "../core/settings.ts";
+import { named } from "../core/members.ts";
 
 const S = defaults();
 const names = (s: typeof S, a: string, l: number) => candidates(s, a, l, 0).cands.map((m) => m.name);
@@ -140,4 +141,14 @@ test("P-empty: a blank member is no candidate, so no pick, even when it would be
   const states = (ss: typeof S) => candidates(ss, "write", 0, 0).cands.map((m) => state(m.name, m.cost, "free"));
   assert.deepEqual(pickMember(states(S), false), { pick: "qwen-cloud" });
   assert.deepEqual(pickMember(states(s), false), { pick: "qwen-local" });
+});
+
+// mi7 (HP T3.4, r2 L6): a busy probe makes a member not free whatever its slots; it stays up (a wait, not a skip).
+test("memberState: `slots: 2`, nothing running, probe busy → up, not free; not busy → free", async () => {
+  const { memberState } = await import("../core/policy.ts");
+  const m = { ...named(defaults().models, "qwen-local")!, slots: 2 };
+  const d = { children: new Map(), blocks: new Map(), counter: { today: () => 0, bump() {} } } as any;
+  assert.deepEqual(memberState(d, m, new Map(), 0, { up: true, busy: true }), { name: "qwen-local", cost: m.cost, up: true, free: false });
+  assert.deepEqual(memberState(d, m, new Map(), 0, { up: true, busy: false }), { name: "qwen-local", cost: m.cost, up: true, free: true });
+  assert.deepEqual(memberState(d, m, new Map(), 0, { up: false, busy: false }), { name: "qwen-local", cost: m.cost, up: false, free: false });
 });

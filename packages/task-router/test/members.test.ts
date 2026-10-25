@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EFFORTS, bottom, byModel, effortAt, effortRank, enabled, levels, lvl, meeting, named, next, providerOf, routeMember, sameLadder, stepOf, top } from "../core/members.ts";
+import { EFFORTS, bottom, byModel, effortAt, effortRank, enabled, levels, lvl, meeting, named, next, providerOf, sameLadder, stepOf, top } from "../core/members.ts";
 import type { Member } from "../core/types.ts";
 
 const M = (o: Partial<Member> = {}): Member => ({
@@ -66,12 +66,10 @@ test("sameLadder compares the efforts", () => {
   assert.ok(!sameLadder(M({ efforts: ["high"] }), M({ efforts: ["high", "xhigh"] })));
 });
 
-test("named and routeMember find a member by key and by its legacy route label", () => {
+test("named finds a member by key", () => {
   const ms = { a: M({ route: "local" }), b: M({ route: "T1" }) };
   assert.equal(named(ms, "b")?.name, "b");
   assert.equal(named(ms, "zz"), undefined);
-  assert.equal(routeMember(ms, "T1")?.name, "b");
-  assert.equal(routeMember(ms, "none"), undefined);
 });
 
 test("P-empty (static): an empty member is in no enabled, meeting or byModel result", () => {

@@ -26,8 +26,8 @@ export function sutSpawn(ctx: { settings: RouterSettings; attempts: AttemptState
     { taskId: x.taskId, card, verified: { t0: x.t0, forceT2: x.force, reasons: [], tokens: x.need }, profile: prof.value, importance: x.imp, model: x.model, effort: x.effort },
   );
   if (!r.ok) return { label: "REJECT", reasons: r.errors };
-  // The start's tier is read off its member (review G2, m1): `resolveLeg` routes a non-Qwen start by `start.member`, so the
-  // oracle's tier must be that member's, not the label `acceptModel` set beside it.
+  // The start's tier is read off its member (review G2, m1): a pinned start runs on `start.member` (T3.4), so the oracle's
+  // tier must be that member's, not the label `acceptModel` set beside it.
   const st = r.value.start, tier = ctx.settings.models[st.member]?.tier ?? `?${st.member}`;
   return { label: fmt(r.value.plan), start: `${tier}/${st.effort}`, reasons: r.value.plan.reasons };
 }

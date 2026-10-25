@@ -228,9 +228,13 @@ order 500, so they run first. The ops run only while `piSettings.enable` is
 
 The task-router, as it stands after the router redesign's Group 2 and its
 review fixes (source: the owner's host at commit `566fd0d`, "R'"; abilities
-and levels per member, `planSpawn` on the importance table, the Qwen chain
-until the redesign's Group 3). It routes subagent spawns by task card through
-actor-subagents' spawn policy: tier and effort by rule, the Qwen chain,
+and levels per member, `planSpawn` on the importance table), with the
+redesign's Group 3 selection in this repository: a leg runs on the cheapest
+free member among its candidates (cost order, slots, health probes, daily caps,
+the free tier's block; a busy cheapest pool is waited for up to
+`queueMaxSec`), and a provider error moves a child to a free member of its leg
+on another provider. It routes subagent spawns by task card through
+actor-subagents' spawn policy: level and effort by rule, the member selection,
 attempts and an outcome log (`<agentDir>/task-router/outcomes/YYYY-MM.jsonl`),
 and the `task_verdict` tool. Main session only: children do not route.
 

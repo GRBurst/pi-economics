@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { accepted, card, harness } from "./harness.ts";
 
 const CLOUD = "openrouter/qwen/qwen3.8-27b:free";
 const LOCAL = "llama/qwen3.8";
+const SONNET = "anthropic/claude-sonnet-5-5";
 
 test("registers the spawn policy at install", () => {
   const h = harness();
@@ -53,25 +54,36 @@ test("explicit lower model is rejected with the routed reasons", async () => {
   assert.match(r.reject, /below the routed T2/);
 });
 
-test("Qwen chain: cloud, then local, then cloud; a fourth waits and falls back to Sonnet after queueMaxSec", async () => {
+const listAs = (h: ReturnType<typeof harness>, states: Record<string, "running" | "idle">) => {
+  for (const [name, state] of Object.entries(states)) {
+    const x = h.a.agents.find((a) => a.name === name);
+    if (x) x.state = state;
+    else h.a.agents.push({ name, parent: "main", sessionId: name, model: "x", thinkingLevel: "xhigh", state });
+  }
+};
+
+// D4 (HP T3.4): cost order, the free cloud's 2 slots, no interleave; a busy cheapest pool is waited for, then Sonnet at its step.
+test("selection: cloud, cloud (its 2 slots), then local; a fourth waits queueMaxSec, then Sonnet high", async () => {
   const h = harness({ settings: { queueMaxSec: 10 } });
   const models: string[] = [];
   for (const n of ["q1", "q2", "q3"]) models.push((accepted(await h.a.spawn({ name: n, task: card() })) as any).model);
-  assert.deepEqual(models, [CLOUD, LOCAL, CLOUD]);
+  assert.deepEqual(models, [CLOUD, CLOUD, LOCAL]);
   assert.equal(h.sleeps.length, 0);
   const q4 = accepted(await h.a.spawn({ name: "q4", task: card() })) as any;
   assert.equal(q4.model, "anthropic/claude-sonnet-5-5");
-  assert.equal(q4.thinkingLevel, "high"); // xhigh → high on Sonnet
+  assert.equal(q4.thinkingLevel, "high"); // Sonnet's effort at the leg's step 0
   assert.ok(h.sleeps.reduce((a, b) => a + b, 0) >= 10_000);
 });
 
-test("a queued spawn proceeds when a Qwen child goes idle", async () => {
+// mi11: a reservation holds 60 s whether the child is listed or not, so the idle local child frees its slot only then.
+test("a queued spawn proceeds when the local child goes idle and its reservation ends", async () => {
   const h = harness();
-  for (const n of ["q1", "q2", "q3"]) await h.a.spawn({ name: n, task: card() });
-  h.a.agents.push(...["q1", "q2", "q3"].map((name) => ({ name, parent: "main", sessionId: name, model: "x", thinkingLevel: "xhigh" as const, state: "running" as const })));
-  h.hooks.onSleep = () => { h.a.agents.find((x) => x.name === "q2")!.state = "idle"; };
+  for (const n of ["q1", "q2", "q3"]) await h.a.spawn({ name: n, task: card() }); // cloud, cloud, local
+  listAs(h, { q1: "running", q2: "running", q3: "running" });
+  h.hooks.onSleep = () => listAs(h, { q3: "idle" });
   const q4 = accepted(await h.a.spawn({ name: "q4", task: card() })) as any;
   assert.equal(q4.model, LOCAL);
+  assert.ok(h.sleeps.reduce((a, b) => a + b, 0) >= 60_000);
 });
 
 test("health probe: local down → no local route; result cached 30 s", async () => {
@@ -80,30 +92,31 @@ test("health probe: local down → no local route; result cached 30 s", async ()
   const b = accepted(await h.a.spawn({ name: "q2", task: card() })) as any;
   assert.deepEqual([a.model, b.model], [CLOUD, CLOUD]);
   assert.deepEqual(h.urls, ["http://earth:11545/health"]); // one probe for both spawns
-  h.clock.t += 31_000;
-  await h.a.spawn({ name: "q3", task: card() });
-  assert.equal(h.urls.length, 2);
+  listAs(h, { q1: "idle", q2: "idle" });
+  h.clock.t += 61_000;
+  assert.equal((accepted(await h.a.spawn({ name: "q3", task: card() })) as any).model, CLOUD);
+  assert.equal(h.urls.length, 2); // the TTL itself: health.test.ts
 });
 
 test("health probe: busy slot (503) or unreachable host is not available; 404/501 is unknown = available", async () => {
-  const urlsFor = async (health: any) => {
-    const h = harness({ health });
-    await h.a.spawn({ name: "q1", task: card() });
-    return (accepted(await h.a.spawn({ name: "q2", task: card() })) as any).model;
+  const first = async (health: any) => {
+    const h = harness({ settings: { models: { "qwen-cloud": { model: "" } }, queueMaxSec: 0 } as any, health });
+    return (accepted(await h.a.spawn({ name: "q1", task: card() })) as any).model;
   };
-  assert.equal(await urlsFor({ health: 200, slots: 503 }), CLOUD);
-  assert.equal(await urlsFor({ health: 0, slots: 0 }), CLOUD);
-  assert.equal(await urlsFor({ health: 200, slots: 404 }), LOCAL);
-  assert.equal(await urlsFor({ health: 200, slots: 501 }), LOCAL);
+  assert.equal(await first({ health: 200, slots: 503 }), SONNET);
+  assert.equal(await first({ health: 0, slots: 0 }), SONNET);
+  assert.equal(await first({ health: 200, slots: 404 }), LOCAL);
+  assert.equal(await first({ health: 200, slots: 501 }), LOCAL);
 });
 
-test("our own running local child does not make the busy slot look like a third-party load", async () => {
+test("our own running local child: with the slot busy, a free cloud slot is taken at once", async () => {
   const h = harness({ health: { health: 200, slots: 200 } });
-  for (const n of ["q1", "q2"]) await h.a.spawn({ name: n, task: card() }); // cloud, local
-  h.health.slots = 503; // our local child now occupies the slot
-  h.clock.t += 31_000;
-  const q3 = accepted(await h.a.spawn({ name: "q3", task: card() })) as any;
-  assert.equal(q3.model, CLOUD); // second cloud, not a wait
+  for (const n of ["q1", "q2", "q3"]) await h.a.spawn({ name: n, task: card() }); // cloud, cloud, local
+  listAs(h, { q1: "idle", q2: "running", q3: "running" });
+  h.clock.t += 61_000;
+  h.health.slots = 503; // our local child occupies the slot
+  const q4 = accepted(await h.a.spawn({ name: "q4", task: card() })) as any;
+  assert.equal(q4.model, CLOUD);
   assert.equal(h.sleeps.length, 0);
 });
 
@@ -206,4 +219,85 @@ test("a chain fallback to Sonnet is member `sonnet`: its turns count nothing and
   const file = join(h.agentDir, "task-router", "member-count.json");
   assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { "2026-10-02": { "qwen-cloud": 1 } });
   assert.deepEqual(h.a.sent.filter((s) => s.from === "router"), []); // 1M window: 14 %; 262k would give 53 %
+});
+
+// --- selection over members (HP T3.4): reservations, blank members, static review leg, P-nomax, explicit start, D12 ----------
+
+const BLANK_CLOUD = { models: { "qwen-cloud": { model: "" } } } as any;
+
+test("a child listed `idle` right after its spawn still holds its slot (mi11); after 60 s the slot is free", async () => {
+  const h = harness({ base: "today", settings: { ...BLANK_CLOUD, queueMaxSec: 0 } });
+  assert.equal((accepted(await h.a.spawn({ name: "q1", task: card() })) as any).model, LOCAL);
+  listAs(h, { q1: "idle" }); // pi lists a fresh child idle before its first turn
+  assert.equal((accepted(await h.a.spawn({ name: "q2", task: card() })) as any).model, SONNET);
+  h.clock.t += 61_000;
+  assert.equal((accepted(await h.a.spawn({ name: "q3", task: card() })) as any).model, LOCAL);
+});
+
+test("blank `qwen-cloud`: never probed, counted or waited for (MP2)", async () => {
+  const h = harness({ base: "today", settings: BLANK_CLOUD, health: { health: 0, slots: 0 } });
+  const r = accepted(await h.a.spawn({ name: "q1", task: card() })) as any;
+  assert.equal(r.model, SONNET); // local down, the cloud does not exist: Sonnet at once
+  assert.deepEqual(h.sleeps, []);
+  assert.ok(h.urls.every((u) => u.startsWith("http://earth:11545/")), h.urls.join());
+  h.a.emit({ type: "turn", name: "q1", ts: 1 });
+  const file = join(h.agentDir, "task-router", "member-count.json");
+  assert.ok(!existsSync(file) || !JSON.stringify(JSON.parse(readFileSync(file, "utf8"))).includes("qwen-cloud"));
+});
+
+test("the review leg is named statically: local down does not change it", async () => {
+  const run = async (health: { health: number; slots: number }) => {
+    const h = harness({ base: "today", settings: { ...BLANK_CLOUD, queueMaxSec: 0 }, health });
+    const r = accepted(await h.a.spawn({ name: "q1", task: card({ importance: "high" }) })) as any;
+    h.a.emit({ type: "spawn", name: "q1", by: "main", parent: "main", childSessionId: "s", ts: 1 });
+    const [e] = h.lines();
+    return [r.model, e.reviewTier, e.reviewEffort];
+  };
+  assert.deepEqual(await run({ health: 200, slots: 200 }), [LOCAL, "T1", "high"]);
+  assert.deepEqual(await run({ health: 0, slots: 0 }), [SONNET, "T1", "high"]);
+});
+
+test("P-nomax: every router-chosen effort is on its member's ladder and never max", async () => {
+  const { defaults } = await import("../core/settings.ts");
+  const ms = Object.values(defaults().models);
+  const cards = [card(), card({ t0: { ...card().t0, linear: false } }), card({ t2: ["security"] })];
+  let n = 0;
+  for (const c of cards) for (const importance of [undefined, "high", "critical"] as const) for (const health of [200, 0]) {
+    const h = harness({ health: { health, slots: health } });
+    for (const name of ["a", "b", "c", "d"]) {
+      const r = accepted(await h.a.spawn({ name, task: { ...c, ...(importance ? { importance } : {}) } })) as any;
+      const m = ms.find((x) => x.model === r.model)!;
+      assert.ok(r.thinkingLevel !== "max" && m.efforts.includes(r.thinkingLevel), `${r.model} ${r.thinkingLevel}`);
+      n++;
+    }
+  }
+  assert.equal(n, 72);
+});
+
+test("explicit Sonnet → SONNET while the cloud is free (a pinned start is not selected over the leg)", async () => {
+  const h = harness({ base: "today" });
+  const r = accepted(await h.a.spawn({ name: "q1", model: SONNET, task: card() })) as any;
+  assert.equal(r.model, SONNET);
+});
+
+// Review Focus 2 (D12): the selection runs on the plan's candidates, computed on the plan's capped settings.
+test("short custom table: selection over the plan's candidates", async () => {
+  const { defaults, parseSettings } = await import("../core/settings.ts");
+  const { planSpawn } = await import("../core/pipeline.ts");
+  const { profileFor } = await import("../core/profile.ts");
+  const mine = structuredClone(defaults().importanceTable.write);
+  const raw = { importanceTable: { mine }, profiles: { x: { ability: "read", table: "mine" } } };
+  const s = parseSettings(structuredClone(raw)).settings;
+  const c = card({ kind: "x", t2: ["security"] });
+  const sp = planSpawn({ settings: s, attempts: new Map(), rng: () => 0.99 }, {
+    taskId: "x1", card: c, verified: { t0: c.t0, forceT2: false, reasons: [], tokens: 0 } as any, profile: (profileFor("x", s) as any).value, importance: "normal",
+  });
+  assert.ok(sp.ok);
+  const cands: string[] = (sp.value as any).cands;
+  assert.ok(Array.isArray(cands) && cands.length > 0, `SpawnPlan.cands: ${JSON.stringify(cands)}`);
+  const h = harness({ settings: raw as any });
+  const r = accepted(await h.a.spawn({ name: "x1", task: c })) as any;
+  const started = Object.entries(s.models).find(([, m]) => m.model === r.model)![0];
+  assert.ok(cands.includes(started), `${started} ∉ ${cands}`);
+  assert.equal(started, cands[0]);
 });

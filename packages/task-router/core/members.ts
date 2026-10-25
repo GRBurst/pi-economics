@@ -31,9 +31,3 @@ export function stepOf(m: Member, e: ThinkingLevel): number {
 export const byModel = (ms: Models, model: string): Named | undefined => enabled(ms).find((m) => m.model === model);
 export const providerOf = (m: Member): string => m.provider ?? m.model.split("/")[0];
 export const sameLadder = (x: Member, y: Member): boolean => x.efforts.join() === y.efforts.join();
-/** The route labels the M1 runtime knows (chain, failover, guards; T3.4 frees them): a member with another route is not loaded. */
-export const ROUTES = ["local", "cloud", "T1", "T2", "haiku"] as const;
-export type Route = (typeof ROUTES)[number];
-export const isRoute = (r: unknown): r is Route => (ROUTES as readonly unknown[]).includes(r);
-/** M1–M2 bridge (deleted in T3.4): the enabled member behind a legacy route label (local, cloud, T1, T2); a blank member has none. */
-export const routeMember = (ms: Models, route: string): Named | undefined => enabled(ms).find((m) => m.route === route);
