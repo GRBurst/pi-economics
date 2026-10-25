@@ -1457,6 +1457,8 @@ Every section keeps its content; the M5 router section, if M5 has not landed, is
 - **Q3 (D11):** the bench default as per-name `mkDefault` definitions (a host definition adds names) rather than the option's `default` (a host definition replaces all). *Proposal:* per-name; M5 adds `task-router` the same way; W adds `claude-auth`, `web-search`.
 - **Q4:** spec §2 (`actorSubagents`: "first-turn"; `retry`: "print-mode") and §9 (M2 "3 patches", M6 "print-mode and free-cap patches") name patches that `4c714f0` dropped. *Proposal:* M6.18 adds a dated "Amendment (M6)" line under §2, as §4 carries "Amendment (M2)", and the Execution Record names the deviation.
 
+**Decisions (main, 2026-10-25):** Q1 keep D5 (the host's copies of the patches are deleted at W anyway; the W plan's derivation comparison must allow this one type-only line, and the owner is told then); Q2 keep D8; Q3 per-name `mkDefault`; Q4 amendment line in M6.18. M6 starts after M4 has landed (shared `flake.nix`, `checks/`).
+
 ---
 
 # Execution Record
