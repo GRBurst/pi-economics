@@ -71,5 +71,8 @@ in {
         order = 1500;
       }
     ];
+
+    # (M4.12) A soft dependency (spec §4.1): shell.ts tolerates a missing API.
+    warnings = lib.optional (!pe.actorSubagents.enable) "pi-economics: cacheLifecycle without actorSubagents loses warming while a session waits on its children (the warm policy reads __subagentsApi_v1)";
   };
 }

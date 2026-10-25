@@ -97,4 +97,11 @@ in {
     ++ holds "no entry while piSettings.enable = false" (!(disabled.home.activation ? piSettingsMigrate))
     ++ holds "the description states the standalone caveat"
     (lib.all (w: lib.hasInfix w description) ["cacheWarming" "settings.json" "piSettings.enable"]);
+
+  # (M4.12) Alone, without actorSubagents: one warning, no assertion.
+  cache-lifecycle-warning = let
+    c = eval ".pi/agent" {} {};
+  in
+    eq "new warnings" (lib.subtractLists bare.warnings c.warnings) [warning]
+    ++ eq "failed assertions" (failed "" c) [];
 }
