@@ -687,8 +687,8 @@ Forms, for an error R' adds: a fixture of a tier-era shape passed where a produc
 `generate.ts` (the prototype's, `~/.cache/pi/m5plan/generate.ts`):
 
 ```ts
-// The router's golden decisions (spec §6.3): R''s planSpawn over the golden grid (test/golden/grid.ts) and the Qwen chain's
-// 96 states through resolveLeg, under two settings: R''s defaults and EMPTY_SLOT (every member's model set, the free cloud
+// The router's golden decisions (spec §6.3): R'’s planSpawn over the golden grid (test/golden/grid.ts) and the Qwen chain's
+// 96 states through resolveLeg, under two settings: R'’s defaults and EMPTY_SLOT (every member's model set, the free cloud
 // empty). Usage: node --experimental-strip-types generate.ts <task-router dir>  > decisions (stdout).
 // Run by hand once on a host checkout at R' (header added by the caller); checks/router-golden runs it on packages/task-router.
 import { join, resolve } from "node:path";
@@ -990,14 +990,47 @@ in {
     })) [message];
 
   # (M5.14) The host's combination from W4 on (spec §9.1): M6's m6-host-like
-  # plus taskRouter with the host's settings (homes/pallon/default.nix:197-209).
-  # Copy m6-host-like's configuration and expectations, then: links gain
-  # task-router, childExtensions stay M6's four, the settings file is the host's.
-  m5-host-like = "<M6's m6-host-like with taskRouter = {enable = true; settings = {randomize = {enabled = true; share = 0.2;}; spotCheck = {enabled = true; share = 0.1;};};}, expecting: childExtensions = M6's (cache-lifecycle, infinite-context, pi-retry, token-meter); links = M6's ++ [\".pi/agent/extensions/task-router\"] (sorted); fromJSON task-router/settings.json = the settings; failed assertions []; warnings = bare's>";
+  # (D16 there) plus taskRouter with the host's settings
+  # (homes/pallon/default.nix:197-209). The router is main-session only, so the
+  # children stay M6's four.
+  m5-host-like = let
+    host = {
+      randomize = {
+        enabled = true;
+        share = 0.2;
+      };
+      spotCheck = {
+        enabled = true;
+        share = 0.1;
+      };
+    };
+    c = hm.eval {
+      programs.piEconomics = {
+        actorSubagents.enable = true;
+        tokenMeter.enable = true;
+        cacheLifecycle.enable = true;
+        experiments.enable = true;
+        infiniteContext.enable = true;
+        retry.enable = true;
+        taskRouter = {
+          enable = true;
+          settings = host;
+        };
+        piSettings.enable = false;
+      };
+    };
+    kids = map (n: "/home/u/.pi/agent/extensions/${n}") ["cache-lifecycle" "infinite-context" "pi-retry" "token-meter"];
+  in
+    eq "childExtensions" (pe c).childExtensions kids
+    ++ eq "links" (sorted (lib.filter (lib.hasPrefix ".pi/agent/extensions/") (targets c)))
+    (map (n: ".pi/agent/extensions/${n}") ["actor-subagents" "cache-lifecycle" "experiments" "infinite-context" "pi-retry" "task-router" "token-meter"])
+    ++ eq "task-router/settings.json" (builtins.fromJSON (fileAt ".pi/agent/task-router/settings.json" c).text) host
+    ++ eq "failed assertions" (failed "" c) []
+    ++ eq "warnings" c.warnings bare.warnings;
 }
 ```
 
-`m5-host-like` is written in M5.14 from M6's landed case (its exact helpers); the string above states its content.
+If M6's landed `m6-host-like` uses other helpers or another home directory than `/home/u`, follow it; the expectations stay these.
 
 ### S8 — `checks/log-contract/{default.nix,contract.ts}`
 
