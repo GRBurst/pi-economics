@@ -464,3 +464,9 @@ After the "Step Q" bullet of §7:
 # Execution Record
 
 (To be filled by Q.6: per task commit, red seen, deviations; gate table; open questions as decided.)
+
+# Main's decisions on the open questions (2026-10-25)
+
+OQ1–OQ5 accepted as recommended. OQ2: Q runs in a git worktree on branch
+`q-retire-qwen` (~/.cache/pi/q-wt) and is merged into main after G3's T3.8.
+OQ3: Q may land any time before P (spec order amended by this record).
