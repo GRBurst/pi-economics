@@ -9,7 +9,14 @@
   pkgs,
   ...
 }: let
-  cfg = config.programs.piEconomics.retry;
+  pe = config.programs.piEconomics;
+  cfg = pe.retry;
+
+  removePackage = value: {
+    op = "removeWhere";
+    path = ["packages"];
+    inherit value;
+  };
 in {
   options.programs.piEconomics.retry = {
     enable = lib.mkEnableOption "pi-retry, retries of transient provider errors with backoff";
@@ -39,5 +46,22 @@ in {
       forChildren = true;
       description = "Retries 400/413, credit and connection errors with backoff, inline for children and one-shot (print/json) hosts; never retries a hard quota such as OpenRouter's daily free-tier cap.";
     };
+
+    # (M6.12) Today's ops (checks/pi-settings-migrate/today-ops.nix): the two
+    # stale-package removals, then the child rule only with actorSubagents
+    # (spec §4.1, no warning).
+    programs.piEconomics.piSettings.ops.retry =
+      [
+        (removePackage "https://github.com/monotykamary/pi-retry")
+        (removePackage "git:github.com/monotykamary/pi-retry")
+      ]
+      ++ lib.optional pe.actorSubagents.enable {
+        op = "ensureContains";
+        path = ["piRetry" "subagents" "match" "systemPromptRegex"];
+        value = {
+          pattern = ''^You were spawned by "'';
+          flags = "m";
+        };
+      };
   };
 }

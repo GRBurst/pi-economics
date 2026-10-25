@@ -8,6 +8,9 @@
   inherit (expect) eq holds failed;
   pe = cfg: cfg.programs.piEconomics;
   dirs = [".pi/agent" "custom/agent"];
+  today = import ../../pi-settings-migrate/today-ops.nix;
+  # The op submodule's default, so module values compare with the fixture.
+  withOrder = map (op: {order = 1000;} // op);
   # dir: agentDir; rt: retry options, null = not enabled; more: other
   # programs.piEconomics options.
   eval = dir: rt: more:
@@ -52,4 +55,24 @@ in {
   in
     eq "drvPath" rt.package.drvPath self.packages.x86_64-linux.retry.drvPath
     ++ eq "name" rt.package.name "pi-retry-patched";
+
+  # (M6.12) With actorSubagents: today's ops; with the host's op the program
+  # is the one pi-settings-migrate compares with the legacy script.
+  retry-pisettings = let
+    c = eval ".pi/agent" {} asOn;
+    withHost = eval ".pi/agent" {} (asOn // {piSettings.ops.host = today.withoutWarming.host;});
+    todays = hm.eval {programs.piEconomics.piSettings.ops = today.withoutWarming;};
+  in
+    eq "ops" (pe c).piSettings.ops {retry = withOrder today.withoutWarming.retry;}
+    ++ eq "program with the host's op" (pe withHost).piSettings.program (pe todays).piSettings.program
+    ++ holds "activation entry piSettingsMigrate" (c.home.activation ? piSettingsMigrate);
+
+  # (M6.12) Without actorSubagents: the two removals, no child rule, no
+  # warning (spec §4.1).
+  retry-alone = let
+    c = eval ".pi/agent" {} {};
+  in
+    eq "ops" (pe c).piSettings.ops {retry = withOrder (lib.take 2 today.withoutWarming.retry);}
+    ++ eq "warnings" c.warnings bare.warnings
+    ++ eq "failed assertions" (failed "" c) [];
 }
