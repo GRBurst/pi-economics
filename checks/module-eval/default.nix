@@ -18,6 +18,7 @@
     ./cases/cache-lifecycle.nix
     ./cases/experiments.nix
     ./cases/infinite-context.nix
+    ./cases/retry.nix
     ./cases/together.nix
   ];
   cases =
