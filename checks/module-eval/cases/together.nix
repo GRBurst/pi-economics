@@ -7,7 +7,7 @@
   expect,
 }: let
   inherit (expect) eq failed;
-  components = ["bench" "actorSubagents" "tokenMeter" "analysisSkill"];
+  components = ["bench" "actorSubagents" "tokenMeter" "analysisSkill" "cacheLifecycle" "experiments"];
   with' = cs: hm.eval {programs.piEconomics = lib.genAttrs cs (_: {enable = true;});};
   set = l: lib.sort lib.lessThan (lib.unique l);
   targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
@@ -20,6 +20,7 @@ in {
     eq "home.file targets" (set (targets all)) (union targets)
     ++ eq "home.packages" (set (packages all)) (union packages)
     ++ eq "session variables" all.home.sessionVariables (lib.foldl' (acc: c: acc // (with' [c]).home.sessionVariables) {} components)
+    ++ eq "activation entries" (set (lib.attrNames all.home.activation)) (union (cfg: lib.attrNames cfg.home.activation))
     ++ eq "failed assertions" (failed "" all) []
     ++ eq "warnings" all.warnings (hm.evalBare {}).warnings;
 }
