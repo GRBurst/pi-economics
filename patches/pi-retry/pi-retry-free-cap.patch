@@ -1,0 +1,48 @@
+diff --git a/__tests__/unit/error-patterns.test.ts b/__tests__/unit/error-patterns.test.ts
+index 994d7f7..49f5dcc 100644
+--- a/__tests__/unit/error-patterns.test.ts
++++ b/__tests__/unit/error-patterns.test.ts
+@@ -464,6 +464,31 @@ describe('hasQuotaExhaustedError', () => {
+     expect(hasQuotaExhaustedError(createAssistantError('Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day'))).toBe(true);
+   });
+ 
++  // The cap lasts until 00:00 UTC: retrying only burns the retry budget and still fails.
++  describe('daily free cap is not retried', () => {
++    const body = (message: string) =>
++      `429: {"message":"${message}","code":429,"metadata":{"headers":{"X-RateLimit-Limit":"1000","X-RateLimit-Remaining":"0"},"limit_source":"openrouter_free_tier_daily"}}`;
++
++    it('classifies the high-balance wording as quota exhaustion', () => {
++      const msg = createAssistantError(body('Rate limit exceeded: free-models-per-day-high-balance. '));
++      expect(isNonRetryableError(msg)).toBe(true);
++      expect(hasRetryableError(msg)).toBe(false);
++      expect(getErrorCategory(msg.errorMessage!)).toBe('quota');
++    });
++
++    it('classifies by limit_source when the human-readable wording changes', () => {
++      const msg = createAssistantError(body('Daily allowance used up'));
++      expect(isNonRetryableError(msg)).toBe(true);
++      expect(hasRetryableError(msg)).toBe(false);
++      expect(getErrorCategory(msg.errorMessage!)).toBe('quota');
++    });
++
++    it('still retries an ordinary per-minute 429', () => {
++      const msg = createAssistantError('429: {"message":"Rate limit exceeded: free-models-per-min","code":429}');
++      expect(hasRetryableError(msg)).toBe(true);
++    });
++  });
++
+   it('keeps Alibaba TPM rate limiting retryable (not a hard quota)', () => {
+     const msg = createAssistantError('Allocated quota exceeded, please increase your quota limit');
+     expect(hasQuotaExhaustedError(msg)).toBe(false);
+diff --git a/src/error-patterns.ts b/src/error-patterns.ts
+index 2f33612..b2f2d99 100644
+--- a/src/error-patterns.ts
++++ b/src/error-patterns.ts
+@@ -192,6 +192,7 @@ export const QUOTA_EXHAUSTED_PATTERNS = [
+   /exceeded your current quota/i, // Kimi's "...current token quota" (balance, retryable) intentionally not matched
+   // Hard allotments
+   /free.models.per.day/i, // OpenRouter free-tier daily pool
++  /openrouter_free_tier_daily/i, // same cap, by the 429 body's limit_source when the wording changes
+   // Alibaba: bare "Allocated quota exceeded" (429 Throttling.AllocationQuota /
+   // insufficient_quota) is TPM token rate limiting — transient, auto-recovers
+   // in minutes, retryable — NOT matched here. Only the Coding Plan window

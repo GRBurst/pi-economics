@@ -22,6 +22,10 @@
       url = "github:fdietze/pi-infinite-context";
       flake = false;
     };
+    pi-retry = {
+      url = "github:monotykamary/pi-retry";
+      flake = false;
+    };
   };
 
   outputs = {
@@ -30,6 +34,7 @@
     home-manager,
     pi-actor-subagents,
     pi-infinite-context,
+    pi-retry,
   }: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
@@ -52,6 +57,7 @@
       cache-lifecycle = pkgs.callPackage ./packages/cache-lifecycle/package.nix {};
       experiments = pkgs.callPackage ./packages/experiments/package.nix {};
       infinite-context = pkgs.callPackage ./packages/infinite-context/package.nix {src = pi-infinite-context;};
+      retry = pkgs.callPackage ./packages/retry/package.nix {src = pi-retry;};
     };
 
     formatter.${system} = pkgs.alejandra;

@@ -68,12 +68,29 @@
         "type": "github"
       }
     },
+    "pi-retry": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792738326,
+        "narHash": "sha256-YHpkOBXvoeyFr/50yMrYjGVOwZiceLogHnYrHiqW5+A=",
+        "owner": "monotykamary",
+        "repo": "pi-retry",
+        "rev": "60a3b088145cf92dc6885f9fd8c785ed59a2b198",
+        "type": "github"
+      },
+      "original": {
+        "owner": "monotykamary",
+        "repo": "pi-retry",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "home-manager": "home-manager",
         "nixpkgs": "nixpkgs",
         "pi-actor-subagents": "pi-actor-subagents",
-        "pi-infinite-context": "pi-infinite-context"
+        "pi-infinite-context": "pi-infinite-context",
+        "pi-retry": "pi-retry"
       }
     }
   },

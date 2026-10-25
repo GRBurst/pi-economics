@@ -55,6 +55,8 @@
     chmod -R u+w $out
     rm $out/extensions/infinite-context/{archive-properties,forest}.test.ts
   '';
+  # (M6.6) The patched pi-retry.
+  retry = self.packages.${pkgs.stdenv.hostPlatform.system}.retry;
 in {
   leak = leakLib.check leakSrc;
   leak-selftest = leakLib.selftest;
@@ -151,6 +153,10 @@ in {
   typecheck-infinite-context = typecheck.typecheck {
     name = "infinite-context";
     src = infiniteContextTs;
+  };
+  retry = pkgs.callPackage ./retry {
+    src = retry;
+    inherit (npm) nodeModules;
   };
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
