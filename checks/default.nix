@@ -57,6 +57,12 @@
   '';
   # (M6.6) The patched pi-retry.
   retry = self.packages.${pkgs.stdenv.hostPlatform.system}.retry;
+  # (M6.7) The type-check copy: the code pi loads (retry.ts, src/) with
+  # package.json; upstream's tsconfig.json and tests stay out (D8).
+  retryTs = pkgs.runCommand "retry-ts" {} ''
+    mkdir $out
+    cp -r ${retry}/retry.ts ${retry}/src ${retry}/package.json $out/
+  '';
 in {
   leak = leakLib.check leakSrc;
   leak-selftest = leakLib.selftest;
@@ -157,6 +163,10 @@ in {
   retry = pkgs.callPackage ./retry {
     src = retry;
     inherit (npm) nodeModules;
+  };
+  typecheck-retry = typecheck.typecheck {
+    name = "retry";
+    src = retryTs;
   };
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
