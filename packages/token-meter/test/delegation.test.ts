@@ -1,4 +1,4 @@
-// T13.9: pi-analyse's delegation section per profile (card kind) × tier, the randomized comparison among spawns the router
+// pi-analyse's delegation section per profile (card kind) × tier, the randomized comparison among spawns the router
 // would have sent to Qwen, and spot-check agreement. Synthetic fixtures; every number is computed by hand.
 import { test } from "node:test";
 import assert from "node:assert/strict";

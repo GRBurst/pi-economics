@@ -226,7 +226,7 @@ test("write failure never throws into pi", () => {
   assert.doesNotThrow(() => f.fire("message_end", assistant(), fakeCtx("s1")));
 });
 
-// T8.5: every line carries the experiment arm id, read from the process-global experiments API.
+// Every line carries the experiment arm id, read from the process-global experiments API.
 test("arm: lines carry armFor(sessionId).id from __piExperimentsApi_v1; children via inheritance; absent API → no arm field", () => {
   const g = globalThis as { __piExperimentsApi_v1?: unknown };
   try {

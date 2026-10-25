@@ -1,4 +1,4 @@
-// T8.6: guard (verdict acceptance per arm, from the router's outcome log) and the kill switch (spec §5.6.3).
+// Guard (verdict acceptance per arm, from the router's outcome log) and the kill switch.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { acceptance, killSwitch } from "../core/guards.ts";
@@ -31,7 +31,7 @@ test("kill switch: no judged baseline tasks → nothing is disabled", () => {
   assert.deepEqual(killSwitch([stat("-", 9), stat("+", 9)], { "+": acc(0, 10) }, limits, "-"), {});
 });
 
-// --- T8.7: guards from <agentDir>/guards/events.jsonl (peek-after-mask, correction, rating) ---
+// --- guards from <agentDir>/guards/events.jsonl (peek-after-mask, correction, rating) ---
 import { signals } from "../core/guards.ts";
 
 const ev = (arm: string | undefined, event: string, sessionId = "s", value?: number) => ({ ts: "2026-10-03T10:00:00Z", sessionId, ...(arm ? { arm } : {}), event, ...(value === undefined ? {} : { value }) });

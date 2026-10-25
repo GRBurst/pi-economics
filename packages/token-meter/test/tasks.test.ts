@@ -1,4 +1,4 @@
-// T8.7: $ per accepted task = the cost of the subtrees of the arm's judged tasks ÷ its accepted tasks
+// $ per accepted task = the cost of the subtrees of the arm's judged tasks ÷ its accepted tasks
 // (join: outcome spawn.sessionId ↔ meter lines, descendants via parentSessionId).
 import { test } from "node:test";
 import assert from "node:assert/strict";

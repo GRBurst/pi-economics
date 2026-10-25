@@ -58,7 +58,7 @@ test("only lines of the checked set count; joins resolve against all lines", () 
   assert.deepEqual(fields(check(broken, { ...w, meter: broken.meter })), ["meter.parentSessionId"]);
 });
 
-// T13.9: optional outcome fields of the randomized-routing / spot-check experiment: never required, typed when present.
+// Optional outcome fields of the randomized-routing / spot-check experiment: never required, typed when present.
 test("optional outcome fields are never required: lines without assigned/routeBase/unresolved/cwd/reviewOf pass; a spotcheck event is a known event", () => {
   const w = world();
   w.outcomes.push({ v: 1, ts: iso(T0 + 80 * MIN), event: "spotcheck", taskId: "t1", requested: true });

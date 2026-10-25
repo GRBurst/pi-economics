@@ -1,4 +1,4 @@
-// Guard and kill switch of the experiments package (spec §5.6.3). Pure; reads the task-router outcome log as plain events.
+// Guard and kill switch of the experiments package. Pure; reads the task-router outcome log as plain events.
 import type { ArmStat } from "./arms.ts";
 
 export type Guard = { accepted: number; judged: number };

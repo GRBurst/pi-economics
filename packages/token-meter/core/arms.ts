@@ -1,4 +1,4 @@
-// Per-arm analysis of the meter log for the experiments package (spec §5.6.2, §5.6.3). Pure; bin/meter-report.ts does the I/O.
+// Per-arm analysis of the meter log for the experiments package. Pure; bin/meter-report.ts does the I/O.
 // Unit of analysis = one root session (a main session with all its children), the random effect of the design.
 export type Ev = { n: number; meanCost: number };
 export type ArmStat = { arm: string; units: number; costUsd: number; activeHours: number; costPerHour: number;

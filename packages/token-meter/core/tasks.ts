@@ -1,4 +1,4 @@
-// $ per accepted task (spec §5.6.3, routing metric). Pure; reads the meter log and the task-router outcome log as plain events.
+// $ per accepted task (routing metric). Pure; reads the meter log and the task-router outcome log as plain events.
 export type TaskCost = { accepted: number; judged: number; costUsd: number; perAccepted: number };
 
 const MAX_DEPTH = 64;

@@ -1,4 +1,4 @@
-// T13.11: fold ledger — net = n·R·r − K·(w − r) per fold, from synthetic request sequences.
+// Fold ledger — net = n·R·r − K·(w − r) per fold, from synthetic request sequences.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { foldLedger, prices, summarise, value, bucketOf } from "../core/ledger.ts";

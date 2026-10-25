@@ -1,4 +1,4 @@
-// T8.6: per-arm analysis of the meter log: $ per active hour with bootstrap CI, per-event costs
+// Per-arm analysis of the meter log: $ per active hour with bootstrap CI, per-event costs
 // (next N requests after a cold resume, after a fold), posterior rewards.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -181,7 +181,7 @@ test("T8.7: --arms reports $ per accepted task (join over the child's subtree) a
   assert.match(out, /\| - \| 5 \|.*\| 0\.25 \| – \| – \|/);
 });
 
-// --- quota attribution (T13.8): the quota is account-wide, so one global timeline is split between the roots that were active ---
+// --- quota attribution: the quota is account-wide, so one global timeline is split between the roots that were active ---
 const q5 = (arm: string, sid: string, at: number, q: number | undefined, cost = 1, extra: Record<string, unknown> = {}) =>
   L(arm, sid, at, cost, { ...(q === undefined ? {} : { q5h: q, q5hReset: "r1" }), ...extra });
 const used = (lines: any[], key: "q5h" | "q7d" = "q5h") => Object.fromEntries(rootUnits(lines).map((u) => [u.root, u[key]]));

@@ -1,5 +1,5 @@
 // Usage: pi-analyse [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--agent-dir P] [--out DIR] [--check] [--apply]
-// On-demand analysis of pi's own logs (spec §5.7; fields in <agentDir>/LOGS.md). Writes <out>/<YYYY-MM-DD>-<HHMM>-analysis.md
+// On-demand analysis of pi's own logs (fields in <agentDir>/LOGS.md). Writes <out>/<YYYY-MM-DD>-<HHMM>-analysis.md
 // and .json (UTC time of the run; default out: <agentDir>/reports). --check only checks the data contract for the period and
 // exits 1 when a required field is missing. --apply also writes the kill-switch arms and the posterior to
 // <agentDir>/experiments/state.json (atomically); without it nothing outside <out> is written.

@@ -1,4 +1,4 @@
-// On-demand analysis of pi's own logs (spec §5.7): cost, experiment, delegation & routing, guards, data quality.
+// On-demand analysis of pi's own logs: cost, experiment, delegation & routing, guards, data quality.
 // Pure; bin/pi-analyse.ts does the I/O. Reads the meter log, the task-router outcome log, experiments/assignments.jsonl
 // and guards/events.jsonl as plain JSON (packages do not import each other; <agentDir>/LOGS.md is the contract).
 import { armStats, attributeQuota, MIN_HOURS, nextState, quotaAttribution, rootUnits, type ArmStat } from "./arms.ts";

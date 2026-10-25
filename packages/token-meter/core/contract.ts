@@ -1,4 +1,4 @@
-// The data contract of pi's logs (spec §5.7, <agentDir>/LOGS.md): the fields pi-analyse needs, per log, event and
+// The data contract of pi's logs (<agentDir>/LOGS.md): the fields pi-analyse needs, per log, event and
 // schema version. `check` reports every required field missing from lines of the period; `pi-analyse --check` exits
 // non-zero on any. Relational rules (parentSessionId, arm) are what the joins need, so they are checked against the
 // other logs: a child named by a spawn event must carry its parent; a session whose root has an experiment assignment

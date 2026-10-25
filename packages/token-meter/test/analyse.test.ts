@@ -276,7 +276,7 @@ test("reportName: UTC date and HHMM of the run, so two runs of one day keep both
   assert.equal(reportName(new Date("2026-10-05T23:30:00-05:00")), "2026-10-06-0430-analysis"); // not the local time
 });
 
-// ---- design v3 (T8.10) and the fold ledger (T13.11) ----------------------------------------------
+// ---- design v3 and the fold ledger ----------------------------------------------------------------
 
 const v3 = (sessionId: string, arm: string, at: number) => ({ ...assignment(sessionId, arm, at), design: "v3" });
 /** v2 and v3 sessions on the SAME arm ids: only the session's assignment row tells them apart. */

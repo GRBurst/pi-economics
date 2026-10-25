@@ -1,4 +1,4 @@
-// Fold ledger of pi-analyse (plan T13.11): what each detected fold earned or cost in cache dollars. Pure.
+// Fold ledger of pi-analyse: what each detected fold earned or cost in cache dollars. Pure.
 //
 // A fold shrinks the prompt by R tokens. Every later request that reads the cache then reads R tokens less (saves R·r each);
 // the first request after the fold writes ≈ K more tokens than a typical turn (the cache is rebuilt from the fold point on),
