@@ -63,14 +63,13 @@ in {
   # (M5.10) The hard dependency (spec §4.1), both halves.
   task-router-requires-actor-subagents =
     eq "assertions" (failed "pi-economics: taskRouter" (eval ".pi/agent" {} {})) [message];
-  task-router-requires-spawn-policy-api =
-    eq "assertions" (failed "pi-economics: taskRouter" (eval ".pi/agent" {} {
-      actorSubagents = {
-        enable = true;
-        # A package without passthru.spawnPolicyApi (the router's own).
-        package = self.packages.x86_64-linux.task-router;
-      };
-    })) [message];
+  task-router-requires-spawn-policy-api = eq "assertions" (failed "pi-economics: taskRouter" (eval ".pi/agent" {} {
+    actorSubagents = {
+      enable = true;
+      # A package without passthru.spawnPolicyApi (the router's own).
+      package = self.packages.x86_64-linux.task-router;
+    };
+  })) [message];
 
   # (M5.14) The host's combination from W4 on (spec §9.1): M6's m6-host-like
   # (D16 there) plus taskRouter with the host's settings

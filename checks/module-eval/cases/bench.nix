@@ -143,7 +143,8 @@ in {
   in
     eq "router" (pe c).bench.router want
     ++ eq "PI_BENCH_ROUTER" (lib.importJSON c.home.sessionVariables.PI_BENCH_ROUTER) want
-    ++ eq "a definition replaces one key" (pe (ev {
+    ++ eq "a definition replaces one key"
+    (pe (ev {
       bench = {
         enable = true;
         router.queueMaxSec = 9;
