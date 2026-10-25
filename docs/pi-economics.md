@@ -90,6 +90,36 @@ from `patches/pi-actor-subagents`: child prompt, spawn policy (the
 With `settings = {}` the file is `{"childExtensions":[…]}`, the children's
 link paths, as the host wrote it.
 
+### `tokenMeter` (`modules/token-meter.nix`)
+
+The token meter (`packages/token-meter`): one JSON line per provider request
+(tokens, cost, quota headers, retries; no prompt or response text) in
+`<agentDir>/meter/YYYY-MM.jsonl`, in main sessions and children, and the
+reports over every log pi writes about itself.
+
+| Option | Default | Effect |
+|---|---|---|
+| `enable` | `false` | registry entry `token-meter` (`forChildren = true`); `meter-report` and `pi-analyse` on `PATH`; `<agentDir>/LOGS.md`, the manual of every log `pi-analyse` reads |
+| `package` | the flake's `packages/token-meter` | the extension; `passthru.report` and `passthru.analyse` are the two commands |
+| `settings` | `{}` | written to `<agentDir>/token-meter/settings.json` when non-empty (`enabled`, `dir`, `rawRatelimit`; each has a default in the package) |
+
+Without `actorSubagents` there are no children to meter and no
+`parentSessionId`; without `experiments` the lines carry no arm; without
+`taskRouter` and `experiments` the reports lack their tier and arm sections.
+None of these warns.
+
+### `analysisSkill` (`modules/analysis-skill.nix`)
+
+The agent skill `pi-token-economics-analysis`
+(`skills/pi-token-economics-analysis`): it runs `pi-analyse`, reads
+`LOGS.md` and proposes decisions. It writes no file.
+
+| Option | Default | Effect |
+|---|---|---|
+| `enable` | `false` | requires `tokenMeter` (an assertion) |
+| `package` | the skill directory, `SKILL.md` at its root | every `~/.pi/agent` in the text replaced by `~/<agentDir>`; with the default `agentDir` the text is the source |
+| `path` (read-only) | `null` while disabled | the directory to link as `<skills dir>/pi-token-economics-analysis` (the frontmatter `name`) |
+
 ## Patched upstreams
 
 A component built from an upstream repository takes it as a `flake = false`
@@ -102,7 +132,7 @@ points into `src`.
 
 | Check | Covers |
 |---|---|
-| `module-eval` | Home Manager evaluations: exports, options, registry, piSettings rendering, assertions with their negative cases |
+| `module-eval` | Home Manager evaluations: exports, options, registry, piSettings rendering, assertions with their negative cases, the skill text, the skill↔meter contract |
 | `pi-settings-migrate` | the piSettings script: the ported cases, bytes equal to the former script, the op table |
 | `npm-deps` | the shared npm lock (`checks/npm`) installs the declared toolchain |
 | `typecheck-harness` | the `tsc` runner accepts and rejects what it must |
@@ -110,6 +140,9 @@ points into `src`.
 | `typecheck-bench` | `tsc --strict` over the bench |
 | `actor-subagents` | the patched pi-actor-subagents' own suite and the host's checks of each patch's wiring |
 | `typecheck-actor-subagents` | `tsc --strict` over the patched pi-actor-subagents |
+| `token-meter` | the token meter's own tests (`node --test`), run when it builds |
+| `typecheck-token-meter` | `tsc --strict` over the token meter |
+| `home-files` | the rendered sources exist and are what pi and the harnesses read: the extension, `LOGS.md`, both commands on an empty agent dir, the skill directory |
 | `iface-harness` | the interface-comparison harness accepts a satisfied copy and rejects an unsatisfied one |
 | `iface-subagents-bench-probe` | the bench probe's copy of `__subagentsApi_v1` is satisfied by the provider's `SubagentsApiV1` |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths, `git+ssh` URLs or private addresses in tracked files |
