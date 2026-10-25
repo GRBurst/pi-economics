@@ -1462,3 +1462,48 @@ Every section keeps its content; the M5 router section, if M5 has not landed, is
 ---
 
 # Execution Record
+
+Executed 2026-10-25 (agent impl-m6) on the plan at `99a7ba2` and M4 as landed (`07f8f0e`, `module-eval` 57 cases). Source commit `4c714f0`, no drift (`git dot diff --stat 4c714f0 HEAD` over the paths of M6.0 Step 3: empty; host HEAD `f1b140e`, router commits only). Q1–Q4 as decided by main (keep D5; keep D8; per-name `mkDefault`; amendment line under spec §2). Builds under `ulimit -v 20971520`, `--option eval-cache false`, `timeout -s KILL`; the host read only through `git dot`. Commits are unsigned and made with pathspecs; commits of the M5 plan by another agent sit between M6's in the history. No remote exists; the tip of `main` is green (every commit's own checks were green when it was made).
+
+## Commits
+
+| Task | Commit | Red seen | Deviation |
+|---|---|---|---|
+| M6.0 | — | — | M4 landed (22 `m4` commits), drift empty, baseline `module-eval` 57 cases (N4) |
+| M6.1 | `b250c28` | `nixpkgs: DIFFERS`, `home-manager: DIFFERS` | Step 3: all 15 checks green on the new nixpkgs, `alejandra --check` clean; none |
+| M6.2 | `3d76cdd` | hash mismatch of `npm-deps` (the generic "Copy the 'got: sha256-' value" message; my grep did not show the `got:` line, the planned hash then built) | all 12 `typecheck-*`/`iface-*` green |
+| M6.3 | `08b6ca0` | natural: `actor-subagents` builder exit 1 after 297 tests (the `deferErrorNotices` grep); `typecheck-actor-subagents` TS2353 `abortBash` | **the plan's "child-prompt is byte-equal" was wrong**: the flake's copy had other hunk headers (`@@ -27,4 +27,4 @@`, `@@ -560,8 +560,7 @@` against the host's `@@ -25,7 +25,7 @@`, `@@ -513,8 +513,7 @@`); the host's file is taken, byte for byte. D5's line applied; `diff` against the host's spawn-policy patch is line 1358 only; 331 tests |
+| M6.4 | `dde2a08` | `attribute 'infinite-context' missing`; plant (cache patch dropped) → `ℹ fail 5`, `TypeError: Cannot read properties of undefined (reading 'content')` | 59 tests; checks' files `cmp`-equal; drvPaths `i69aki1i…`, `6wbdgsx5…` equal the host's at this commit (changed by `169b1e0`) |
+| M6.5 | `4a4d08e` | 7 errors in the two fast-check tests (TS2307, TS7006 ×6) | none |
+| M6.6 | `6b74f44` | `attribute 'retry' missing`; plant (free-cap patch dropped) → build exit 1 (tests 297, the `openrouter_free_tier_daily` grep) | 300 tests in 10 files; drvPaths `5jq7phiv…`, `0jf9v492…` equal the host's |
+| M6.7 | `eccdbec` | 3 errors (`child-retry.test.ts(58)` TS2345, `error-patterns.test.ts(476,483)` TS2339) | none |
+| M6.8 | `ea3a5b0` | `The option 'programs.piEconomics.infiniteContext' does not exist` | 61 cases |
+| M6.9 | `87c0917` | `…infiniteContext.reminders' does not exist` | 62 |
+| M6.10 | `b60d90c` | `…infiniteContext.settings' does not exist`; plant `//` → `FAIL infinite-context-settings: merged (…)` ×2 | 63 |
+| M6.11 | `dfac2a1` | `The option 'programs.piEconomics.retry' does not exist` | 66 |
+| M6.12 | `f93e04e` | `FAIL retry-pisettings` (ops, program, activation entry), `FAIL retry-alone`; plant (rule unconditional) → `FAIL retry-alone: ops` | 68 |
+| M6.13 | `3154c4e` | `…retry.settings' does not exist`; plant `order = 1000` → `FAIL retry-settings: sequence` | 69 |
+| M6.14 | `60e325e` | `FAIL bench-defaults` ×2 (`PI_BENCH_EXT_DIR`), `FAIL bench-extensions-default` | `bench-extensions` passed in the RED (the default was still `{}`, so its new expectation held); plant (`pi-retry` dropped) → `FAIL bench-extensions-default: extensions`; 70 |
+| (fixtures) | `169b1e0` | — | main's request after a review (see Deviations) |
+| M6.15 | `a29f21e` | green first (71); plant `forChildren = false` → `FAIL m6-host-like: children` + `retry-defaults` ×2 | none |
+| M6.16 | `5e4ddb7` | `node: command not found`; plants → `FAIL .pi/agent: infinite-context rejects its settings.json` (`settings: unknown key "bogus"`), `FAIL .pi/agent: settings.json after ops.retry` | none |
+| M6.17 | `b5b4266` | green first (71); plant (`home.file."x"` under retry's `mkIf`) → `FAIL components-together: home.file targets` | none |
+| M6.18 | `8dc72b3` | — | the spec §2 amendment (Q4) is in this commit; the "Resync" section of `docs/pi-economics.md` names D5's line and the comment change |
+| M6.D | — | — | **skipped as ordered by main: M5 has not landed, so M5 carries the doc move** (D17); the host's `docs/pi-token-economics.md` is untouched, and `docs/pi-economics.md` links nothing to it yet |
+| M6.19 | this record's commit | — | see below |
+
+## Deviations
+
+- **Neutral names (`169b1e0`, on main's request after a review).** The reviewer found a host path in the case file's comment and in the reminders patch (line 413, a comment in the patch's own test file). The case file and `home-files` now use neutral fixtures (`example/model-a`, `example/model-b`, thresholds 200000/50000, prices 5/0.2 and 2.5/0.2) instead of the host's models and thresholds; the comment cites no host path. `infinite-context-reminders` therefore pins the render's shape, no longer the host's values: W5 compares the built files for that. The patch's line 413 loses ` (homes/<user>)` (one comment line, the hunk's line count unchanged), so the flake's `infinite-context` package and check derivations are **no longer the host's** (P2): `sh7lr28m…-pi-infinite-context-patched.drv` and `mlaqalsb…-pi-infinite-context-tests.drv` against the host's `i69aki1i…`, `6wbdgsx5…`. The W plan's comparison must allow this line next to D5's. Public upstream coordinates (`github:fdietze/…`, `github:monotykamary/pi-retry`, the two package URLs of `ops.retry`) stay.
+- M6.3's child-prompt patch (above): the host's rebased file, not the flake's copy.
+- M6.2 and M6.14: see the table.
+
+## Gate (M6.19), 2026-10-25
+
+`~/.cache/pi/m2gate.sh` (log `~/.cache/pi/m6gate.log`): per ref a listing of 27 checks (54 lines in all), each check's output deleted before its build, one capped build each; no `FAILED`, no `LISTING FAILED`. `packages` `["actor-subagents","bench","cache-lifecycle","experiments","infinite-context","retry","token-meter"]`; `homeModules` `["default"]`; the formatter `.drv` evaluates; `alejandra --check` over 43 files clean (also before the gate). Peaks: `module-eval` (71 cases) 1.74 GiB / 42 s (`git+file://`), 1.76 GiB / 51 s (`path:`); `home-files` 0.45 GiB / 3 s; every `typecheck-*`, `iface-*`, `leak` 0.24 GiB, 3–8 s; `infinite-context` 0.14 GiB / 1 s, `retry` 0.16 GiB / 5 s. Outputs that `home-files` references cannot be deleted, so `actor-subagents`, `token-meter`, `cache-lifecycle`, `experiments` (and `bench`) were short no-op builds there; `nix build --rebuild` of each ran the suites: `ℹ pass 331`, `154`, `78`, `47`, `76`, all `ℹ fail 0`. `infinite-context` `ℹ pass 59`, `retry` `Tests 300 passed (300)`, both `fail 0`. `leak` green at the tip.
+
+`lockeq nixpkgs home-manager pi-actor-subagents pi-infinite-context pi-retry`: five times "as the host".
+
+Purity (P2), the host at `4c714f0` extracted to a scratch directory: `checks.pi-retry` `0jf9v492…` = this flake's `checks.retry`; `pi-retry-patched` `5jq7phiv…` = `packages.retry`. `pi-infinite-context`: differs by the comment line above (equal before `169b1e0`). `pi-actor-subagents`: host `jy5x2gsl…`, flake `p3zhqm79…`: D5's line (Q1), the only difference between the patch files.
+
+Final `module-eval` count 71 (= N4 57 + 14). Follow-ups, not done: M6.D (M5 carries it); W5/W6 re-point the host's reminder values and `retry` settings, and the W plan allows D5's line and the one comment line.
