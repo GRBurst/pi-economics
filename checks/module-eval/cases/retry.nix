@@ -102,4 +102,25 @@ in {
       "1000:retry:ensureContains:piRetry.subagents.match.systemPromptRegex"
     ]
     ++ eq "values" (map (o: o.value) sets) [60000 true [{pattern = "x";}]];
+
+  # (M6.15) The host's combination of M2-M6 from W5 on (spec §9.1): the
+  # flake's children, no activation entry while the host's script runs.
+  m6-host-like = let
+    c = hm.eval {
+      programs.piEconomics = {
+        actorSubagents.enable = true;
+        tokenMeter.enable = true;
+        cacheLifecycle.enable = true;
+        experiments.enable = true;
+        infiniteContext.enable = true;
+        retry.enable = true;
+        piSettings.enable = false;
+      };
+    };
+    childNames = map baseNameOf (builtins.fromJSON (lib.findFirst (f: f.target == ".pi/agent/actor-subagents/settings.json") null (lib.attrValues c.home.file)).text).childExtensions;
+  in
+    eq "children" childNames ["cache-lifecycle" "infinite-context" "pi-retry" "token-meter"]
+    ++ holds "no activation entry" (!(c.home.activation ? piSettingsMigrate))
+    ++ eq "failed assertions" (failed "" c) []
+    ++ eq "warnings" c.warnings bare.warnings;
 }
