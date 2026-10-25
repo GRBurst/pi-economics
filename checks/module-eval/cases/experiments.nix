@@ -87,4 +87,28 @@ in {
   in
     eq "new warnings" (lib.subtractLists bare.warnings c.warnings) [warning]
     ++ eq "failed assertions" (failed "" c) [];
+
+  # (M4.16) The host's combination from W3 on (spec §9.1): M2–M4's extension
+  # components, piSettings off (the host's own script runs until W6). Children
+  # load cache-lifecycle and token-meter, not experiments: today's file
+  # (host pi-extensions.nix:389-390) for that registry.
+  cache-experiments-host-like = let
+    c = hm.eval {
+      programs.piEconomics = {
+        actorSubagents.enable = true;
+        tokenMeter.enable = true;
+        cacheLifecycle.enable = true;
+        experiments.enable = true;
+        piSettings.enable = false;
+      };
+    };
+    kids = ["/home/u/.pi/agent/extensions/cache-lifecycle" "/home/u/.pi/agent/extensions/token-meter"];
+  in
+    eq "childExtensions" (pe c).childExtensions kids
+    ++ eq "actor-subagents/settings.json" (fileAt ".pi/agent/actor-subagents/settings.json" c).text (builtins.toJSON {childExtensions = kids;})
+    ++ eq "links" (sorted (lib.filter (lib.hasPrefix ".pi/agent/extensions/") (targets c)))
+    (map (n: ".pi/agent/extensions/${n}") ["actor-subagents" "cache-lifecycle" "experiments" "token-meter"])
+    ++ holds "no piSettingsMigrate entry" (!(c.home.activation ? piSettingsMigrate))
+    ++ eq "failed assertions" (failed "" c) []
+    ++ eq "warnings" c.warnings bare.warnings;
 }
