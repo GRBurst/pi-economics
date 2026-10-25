@@ -12,8 +12,9 @@
   agentSrc = "${config.home.homeDirectory}/${pe.agentDir}";
   # (M5.12) The router's keys that say which models exist and where to reach
   # them (spec §7), in R's schema and in the legacy forms its loader still
-  # maps (core/settings.ts).
-  routerModelKeys = ["models" "queueMaxSec" "localHealthUrl" "cloudDailyCap" "contextWindow"];
+  # maps (core/settings.ts); `contextFit` too, since the context filter picks
+  # among the models by it (plan router-g3-g7, D15).
+  routerModelKeys = ["models" "queueMaxSec" "contextFit" "localHealthUrl" "cloudDailyCap" "contextWindow"];
 in {
   options.programs.piEconomics.bench = {
     enable = lib.mkEnableOption "the pi-bench harness (pi-bench, bench-report)";
@@ -73,9 +74,9 @@ in {
         arm's keys alone.
         While taskRouter is enabled it is defined, one `mkDefault` per key, as
         the keys of taskRouter.settings that name the models and where to reach
-        them (`models`, `queueMaxSec`, `localHealthUrl`, `cloudDailyCap`,
-        `contextWindow`) with `randomize.enabled` and `spotCheck.enabled`
-        forced to `false`.
+        them (`models`, `queueMaxSec`, `contextFit`, `localHealthUrl`,
+        `cloudDailyCap`, `contextWindow`) with `randomize.enabled` and
+        `spotCheck.enabled` forced to `false`.
       '';
     };
 

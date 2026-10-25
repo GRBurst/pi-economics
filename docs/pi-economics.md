@@ -248,8 +248,8 @@ assertion says so (`pi-economics: taskRouter requires actorSubagents …`).
 With `bench.enable`, the bench's `router` base is defined while `taskRouter`
 is enabled, one `mkDefault` per key: the keys of `taskRouter.settings` that
 name the models and where to reach them (`models`, `queueMaxSec`,
-`localHealthUrl`, `cloudDailyCap`, `contextWindow`), with `randomize.enabled`
-and `spotCheck.enabled` forced to `false`. The bench's `extensions` default
+`contextFit`, `localHealthUrl`, `cloudDailyCap`, `contextWindow`), with
+`randomize.enabled` and `spotCheck.enabled` forced to `false`. The bench's `extensions` default
 holds `task-router` too. A definition of one name replaces that name only.
 
 **Golden test.** `checks/router-golden/golden.txt` records every decision of

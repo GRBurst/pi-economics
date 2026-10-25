@@ -108,6 +108,7 @@ in {
       models.sonnet.model = "m";
       localHealthUrl = "http://h:1";
       queueMaxSec = 5;
+      contextFit = 1;
       randomize = {
         enabled = true;
         share = 0.2;
@@ -136,6 +137,7 @@ in {
       models.sonnet.model = "m";
       localHealthUrl = "http://h:1";
       queueMaxSec = 5;
+      contextFit = 1;
       randomize.enabled = false;
       spotCheck.enabled = false;
     };
