@@ -101,14 +101,17 @@ in {
   in
     eq "PI_BENCH_ROUTER" (lib.importJSON v.PI_BENCH_ROUTER) router;
 
-  # (M5.12) With taskRouter, the arms get its model keys and both switches
-  # off; a definition replaces one leaf; without taskRouter nothing (spec §7).
+  # (M5.12) With taskRouter, the arms get its model keys (every one of
+  # routerModelKeys, the legacy ones too: review-m5 L1) and both switches off;
+  # a definition replaces one leaf; without taskRouter nothing (spec §7).
   bench-router-default = let
     s = {
       models.sonnet.model = "m";
       localHealthUrl = "http://h:1";
       queueMaxSec = 5;
       contextFit = 1;
+      cloudDailyCap = 7;
+      contextWindow.T1 = 200000;
       randomize = {
         enabled = true;
         share = 0.2;
@@ -138,6 +141,8 @@ in {
       localHealthUrl = "http://h:1";
       queueMaxSec = 5;
       contextFit = 1;
+      cloudDailyCap = 7;
+      contextWindow.T1 = 200000;
       randomize.enabled = false;
       spotCheck.enabled = false;
     };
