@@ -70,8 +70,8 @@ at its empty default exports nothing, and the bench keeps its own default.
 | `dataDir` | `<home>/<agentDir>/bench` | `PI_BENCH_DATA` |
 | (agent source) | `<home>/<agentDir>`, not an option | `PI_BENCH_AGENT_SRC` |
 | `workDir` | `null` (the bench: `$XDG_RUNTIME_DIR/pi/tmp/bench`) | `PI_BENCH_WORK` |
-| `extensions` | the flake's packages the bench loads by name, one `mkDefault` each: `actor-subagents`, `infinite-context`, `pi-retry`, `token-meter` (see below) | `PI_BENCH_EXT_DIR`, a `linkFarm` of name → path |
-| `router` | `{}` (an arm's file: its own keys) | `PI_BENCH_ROUTER`, a JSON file; an orch arm merges its `routing`, `delegation`, `t0Limits` over it as `lib.recursiveUpdate` does |
+| `extensions` | the flake's packages the bench loads by name, one `mkDefault` each: `actor-subagents`, `infinite-context`, `pi-retry`, `task-router`, `token-meter` (see below) | `PI_BENCH_EXT_DIR`, a `linkFarm` of name → path |
+| `router` | `{}` (an arm's file: its own keys); while `taskRouter` is enabled, its model keys with `randomize` and `spotCheck` off, one `mkDefault` each | `PI_BENCH_ROUTER`, a JSON file; an orch arm merges its `routing`, `delegation`, `t0Limits` over it as `lib.recursiveUpdate` does |
 | `agentsBaseline` | `null` (the bench: `<agent source>/notes/…`) | `PI_BENCH_AGENTS_OFF` |
 
 The bench's `extensions` default covers the flake's own packages. A
@@ -223,6 +223,54 @@ in `piRetry.subagents.match.systemPromptRegex`; `settings` leaves come at
 order 500, so they run first. The ops run only while `piSettings.enable` is
 `true`. Without `actorSubagents` there is no child rule and no warning.
 
+### `taskRouter` (`modules/task-router.nix`)
+
+The task-router, as it stands after the router redesign's Group 2 and its
+review fixes (source: the owner's host at commit `566fd0d`, "R'"; abilities
+and levels per member, `planSpawn` on the importance table, the Qwen chain
+until the redesign's Group 3). It routes subagent spawns by task card through
+actor-subagents' spawn policy: tier and effort by rule, the Qwen chain,
+attempts and an outcome log (`<agentDir>/task-router/outcomes/YYYY-MM.jsonl`),
+and the `task_verdict` tool. Main session only: children do not route.
+
+| Option | Default | Effect |
+|---|---|---|
+| `enable` | `false` | registry entry `task-router` (link `<agentDir>/extensions/task-router` → the package; `forChildren = false`) |
+| `package` | the flake's `packages/task-router` | the extension (`package.json`, `index.ts`, `core/`); its tests run when it builds |
+| `settings` | `{}` | written to `<agentDir>/task-router/settings.json` when non-empty; free-form, the schema and defaults are `packages/task-router/core/settings.ts` (`models.<member>.model` names a member's model, `""` removes the member) |
+
+Hard dependency: `taskRouter` needs `actorSubagents` with `passthru.spawnPolicyApi >= 1`
+(the router registers through `registerSpawnPolicy`, and its shell swallows the
+absence of the API, so without the patched build it would do nothing); an
+assertion says so (`pi-economics: taskRouter requires actorSubagents …`).
+
+With `bench.enable`, the bench's `router` base is defined while `taskRouter`
+is enabled, one `mkDefault` per key: the keys of `taskRouter.settings` that
+name the models and where to reach them (`models`, `queueMaxSec`,
+`localHealthUrl`, `cloudDailyCap`, `contextWindow`), with `randomize.enabled`
+and `spotCheck.enabled` forced to `false`. The bench's `extensions` default
+holds `task-router` too. A definition of one name replaces that name only.
+
+**Golden test.** `checks/router-golden/golden.txt` records every decision of
+`planSpawn` over the router's own golden grid (`test/golden/grid.ts`: 146,880
+plan cases, 470,016 explicit-model cases) and of `resolveLeg` over the Qwen
+chain's 96 states, under the defaults and under a fixture with every member's
+model set and the free-cloud slot empty. `generate.ts <router dir>` prints it;
+the check `router-golden` runs it on `packages/task-router`, diffs against the
+file (comment lines aside) and asserts that with the free-cloud slot empty no
+chain decision takes the cloud route or waits (P2). After a deliberate change of
+a decision, a group of the redesign re-records the file by hand
+(`node --experimental-strip-types checks/router-golden/generate.ts packages/task-router`,
+header `# R' = <source>, <date>`) and puts the diff of old and new file in its
+record. The redesign's Groups 3–7 continue in this repository.
+
+**Log contract.** `log-contract` runs the real code path of every log writer
+(token-meter, task-router, cache-lifecycle, experiments) into one agent dir and
+requires `pi-analyse --check` to pass and every report section to have data.
+
+Checks: `task-router`, `typecheck-task-router`, `iface-subagents-task-router`,
+`iface-experiments-task-router`, `router-golden`, `log-contract`.
+
 ## Patched upstreams
 
 A component built from an upstream repository takes it as a `flake = false`
@@ -256,6 +304,11 @@ points into `src`.
 | `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's two `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
 | `retry` | the patched pi-retry's vitest suite (300 tests) on the shared npm lock, and the greps that pin the free-cap patch and the inline print/json route |
 | `typecheck-retry` | `tsc --strict` over `retry.ts` and `src/`; the tests stay out (one upstream test and the free-cap patch's own test do not type-check; vitest runs them) |
+| `task-router` | the router's own tests (`node --test`, 357), run when it builds; includes the redesign's golden grid against its frozen oracle |
+| `typecheck-task-router` | `tsc --strict` over `index.ts`, `core/` and `test/` |
+| `iface-subagents-task-router`, `iface-experiments-task-router` | the router's copies of `__subagentsApi_v1` and `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`) are satisfied by the providers' types |
+| `router-golden` | every decision of the router on the golden grid and the Qwen chain, equal to the recorded ones; P2 over the empty-slot lines |
+| `log-contract` | every log writer through `pi-analyse --check` and a full report |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths, `git+ssh` URLs or private addresses in tracked files |
 
 How to run them: `AGENTS.md`, "Commands".
