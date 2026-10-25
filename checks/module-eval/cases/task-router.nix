@@ -72,11 +72,20 @@ in {
   })) [message];
 
   # (M5.14) The host's combination from W4 on (spec §9.1): M6's m6-host-like
-  # (D16 there) plus taskRouter with the host's settings
-  # (homes/pallon/default.nix:197-209). The router is main-session only, so the
-  # children stay M6's four.
+  # (D16 there) plus taskRouter with the host's settings (its home's router
+  # block; review-m5 L4) and the bench. The router is main-session only, so the
+  # children stay M6's four. The host's W4.2 keys (review-m5 L3): the local
+  # member's model and health URL, the free cloud member blank; the values here
+  # are stand-ins.
   m5-host-like = let
     host = {
+      models = {
+        qwen-local = {
+          model = "llama/qwen3.8";
+          health = "http://local.invalid:11545";
+        };
+        qwen-cloud.model = "";
+      };
       randomize = {
         enabled = true;
         share = 0.2;
@@ -98,6 +107,7 @@ in {
           enable = true;
           settings = host;
         };
+        bench.enable = true;
         piSettings.enable = false;
       };
     };
@@ -106,6 +116,11 @@ in {
     ++ eq "links" (sorted (lib.filter (lib.hasPrefix ".pi/agent/extensions/") (targets c)))
     (map (n: ".pi/agent/extensions/${n}") ["actor-subagents" "cache-lifecycle" "experiments" "infinite-context" "pi-retry" "task-router" "token-meter"])
     ++ eq "task-router/settings.json" (builtins.fromJSON (fileAt ".pi/agent/task-router/settings.json" c).text) host
+    ++ eq "PI_BENCH_ROUTER" (lib.importJSON c.home.sessionVariables.PI_BENCH_ROUTER) {
+      inherit (host) models;
+      randomize.enabled = false;
+      spotCheck.enabled = false;
+    }
     ++ eq "failed assertions" (failed "" c) []
     ++ eq "warnings" c.warnings bare.warnings;
 }
