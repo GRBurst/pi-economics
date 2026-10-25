@@ -126,5 +126,14 @@ in {
       type = "ExperimentsApi";
     };
   };
+  iface-experiments-cache-lifecycle = iface.compare {
+    name = "experiments-cache-lifecycle";
+    provider = experimentsProvider;
+    consumer = {
+      src = ../packages/cache-lifecycle;
+      file = "core/shell.ts";
+      type = "ExperimentsApi";
+    };
+  };
   home-files = import ./home-files {inherit lib pkgs hm;};
 }

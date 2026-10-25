@@ -25,6 +25,9 @@ export type Deps = {
   api?: () => Pick<SubagentsApiV1, "list" | "subscribe"> | undefined;
 };
 
+/** What cache-lifecycle reads of the experiments package's globalThis.__piExperimentsApi_v1; the type check compares it with the provider's ExperimentsApiV1 (spec §5.3). */
+export type ExperimentsApi = { flag(n: string, d: string, s?: string): string; armFor?(s: string): { id?: string } | undefined };
+
 const MASKS = "cache-lifecycle/masks";
 const MIN = 60_000;
 const WARM_CAP_MS = 60 * MIN;
@@ -36,7 +39,7 @@ export function install(pi: PiLike, deps: Deps) {
   const { settings } = deps;
   const api = deps.api ?? (() => (globalThis as { __subagentsApi_v1?: SubagentsApiV1 }).__subagentsApi_v1);
   // The one seam for the factors the experiments package switches (spec §5.6): its arm's value, else the own setting.
-  const experiments = () => (globalThis as { __piExperimentsApi_v1?: { flag(n: string, d: string, s?: string): string; armFor?(s: string): { id?: string } | undefined } }).__piExperimentsApi_v1;
+  const experiments = () => (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1;
   const flag = (name: "warmPolicy" | "mainCacheTtl" | "maskOnCold", sid: string): string => {
     const own = settings[name];
     const v = experiments()?.flag(name, own, sid) ?? own;
