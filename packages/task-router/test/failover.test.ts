@@ -176,3 +176,60 @@ test("a Haiku child whose files Qwen cannot hold does not move to LOCAL (P-ctx f
   assert.deepEqual(h.a.retunes, []);
   assert.deepEqual(reroutes(h), []);
 });
+
+// --- failover reserves before retune (HP T3.7: spec §4.8, RD5, AC3) ------------------------------------------------------
+const warnings = async (fn: () => Promise<void>) => {
+  const warned: string[] = [], orig = console.warn;
+  console.warn = (...a: unknown[]) => void warned.push(a.join(" "));
+  try { await fn(); } finally { console.warn = orig; }
+  return warned;
+};
+const gate = () => { let open!: () => void; const p = new Promise<void>((r) => { open = r; }); return { p, open }; };
+
+test("slow retune: a spawn during the await retune sees the target taken", async () => {
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
+  await spawnAll(h, ["q0", "q1"]); // cloud, cloud: its two slots
+  listAs(h, { q0: "running", q1: "running" });
+  const g = gate();
+  h.a.control.gate = g.p;
+  h.a.emit(err("q1", "retries exhausted")); // target: the free local slot
+  await settle();
+  const q2 = accepted(await h.a.spawn({ name: "q2", task: card() })) as any; // during the await retune
+  assert.equal(q2.model, CLOUD); // the slot q1 left, never q1's target
+  g.open();
+  await settle();
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", LOCAL]]);
+  assert.deepEqual(reroutes(h).map((r) => [r.taskId, r.from, r.to]), [["q1", "cloud", "local"]]);
+});
+
+test("retune throws → entry restored, the target's slot free at once, one warning, no reroute line", async () => {
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
+  await spawnAll(h, ["q0", "q1"]); // cloud, cloud: its two slots
+  listAs(h, { q0: "running", q1: "running" });
+  h.a.control.fail = new Error("no such agent");
+  const warned = await warnings(async () => { h.a.emit(err("q1", "retries exhausted")); await settle(); await settle(); });
+  delete h.a.control.fail;
+  assert.equal(warned.length, 1, warned.join("\n"));
+  assert.match(warned[0], /reroute of q1 failed: no such agent/);
+  assert.deepEqual(reroutes(h), []);
+  assert.equal((accepted(await h.a.spawn({ name: "q2", task: card() })) as any).model, LOCAL); // the target's slot is free
+  // q1 is back on the cloud: its two slots are full, the local slot is q2's
+  assert.equal((accepted(await h.a.spawn({ name: "q3", task: card() })) as any).model, SONNET);
+});
+
+test("P-slots with a move and two spawns in flight", async () => {
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
+  await spawnAll(h, ["q1"]); // cloud
+  listAs(h, { q1: "running" });
+  const g = gate();
+  h.a.control.gate = g.p;
+  h.a.emit(err("q1", "retries exhausted")); // q1 → local, retune in flight
+  await settle();
+  const spawns = Promise.all(["q2", "q3"].map((n) => h.a.spawn({ name: n, task: card() })));
+  g.open();
+  const models = [LOCAL, ...(await spawns).map((r) => (accepted(r) as any).model)]; // q1 now runs on local
+  await settle();
+  const on = (m: string) => models.filter((x) => x === m).length;
+  assert.ok(on(LOCAL) <= 1 && on(CLOUD) <= 2, models.join());
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", LOCAL]]);
+});

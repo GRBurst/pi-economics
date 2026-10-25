@@ -7,6 +7,8 @@ export function fakeApi() {
   const retunes: Array<{ name: string; model?: string; thinkingLevel?: string }> = [];
   const sent: Array<{ to: string; text: string; from?: string }> = [];
   const agents: AgentInfo[] = [];
+  /** `retune` awaits `gate` when a test sets it (a slow retune), then throws `fail` when set (T3.7). */
+  const control: { gate?: Promise<void>; fail?: Error } = {};
   const api: SubagentsApiV1 = {
     version: 1,
     registerSpawnPolicy(fn) {
@@ -15,13 +17,17 @@ export function fakeApi() {
       return () => { if (policy === fn) policy = undefined; };
     },
     subscribe(l) { listeners.push(l); return () => { listeners.splice(listeners.indexOf(l), 1); }; },
-    async retune(name, t) { retunes.push({ name, ...t }); },
+    async retune(name, t) {
+      await control.gate;
+      if (control.fail) throw control.fail;
+      retunes.push({ name, ...t });
+    },
     async send(to, text, from) { sent.push({ to, text, from }); },
     list: () => agents,
   };
   const caller = { name: "main", sessionId: "s-main", model: "anthropic/claude-opus-5-5", thinkingLevel: "high" as const, cwd: "/work" };
   return {
-    api, retunes, sent, agents,
+    api, retunes, sent, agents, control,
     emit(e: ApiEvent) { for (const l of [...listeners]) l(e); },
     /** Run the registered policy like the spawner would. */
     spawn: (args: Partial<Parameters<SpawnPolicy>[0]> & { name: string }, c: Partial<typeof caller> & { policyMeta?: unknown } = {}) =>

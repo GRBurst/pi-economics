@@ -23,9 +23,11 @@ import type { Card, Importance, Plan, Result, RouterSettings, ThinkingLevel } fr
 /** `cwd` is the task's (card `cwd`, else the caller's); `unresolved`: relative card files missing under it. */
 export type ChildBase = { parent: string; parentSession: string; card: Card; plan: Plan; cwd: string; importance: Importance; unresolved?: true };
 /** `member`/`model`: the member it runs on (its slot, counter, window); `route`: that member's log label; `reservedUntil`: its
- *  slot is held until then, listed or not (mi11); `failover`: the leg's candidate names, the targets of a move (spec §4.8). */
+ *  slot is held until then, listed or not (mi11); `failover`: the leg's candidate names, the targets of a move (spec §4.8);
+ *  `prev`: while a move's `retune` is in flight, where the child ran (restored if the retune throws). */
 export type Child = ChildBase & {
   member: string; route: string; model: string; effort: ThinkingLevel; at: number; reservedUntil: number; failover: string[];
+  prev?: { member: string; route: string; model: string; effort: ThinkingLevel; reservedUntil: number };
 };
 export type PolicyDeps = {
   settings: RouterSettings; api: () => SubagentsApiV1 | undefined; fs: FsPort;
