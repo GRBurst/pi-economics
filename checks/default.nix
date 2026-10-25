@@ -32,6 +32,12 @@
   '';
   # (M2.3)
   iface = import ./iface {inherit lib pkgs typecheck;};
+  # (M4.5) The provider of the globalThis API __subagentsApi_v1 (spec §5.3).
+  subagentsProvider = {
+    src = actorSubagentsTs;
+    file = "extensions/actor-subagents/api.ts";
+    type = "SubagentsApiV1";
+  };
 in {
   leak = leakLib.check leakSrc;
   leak-selftest = leakLib.selftest;
@@ -84,6 +90,16 @@ in {
   typecheck-experiments = typecheck.typecheck {
     name = "experiments";
     src = ../packages/experiments;
+  };
+  # (M4.5, M4.6) The copies of __subagentsApi_v1 in cache-lifecycle and experiments (spec §5.3, §8.1).
+  iface-subagents-cache-lifecycle = iface.compare {
+    name = "subagents-cache-lifecycle";
+    provider = subagentsProvider;
+    consumer = {
+      src = ../packages/cache-lifecycle;
+      file = "core/api.ts";
+      type = "SubagentsApiV1";
+    };
   };
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
