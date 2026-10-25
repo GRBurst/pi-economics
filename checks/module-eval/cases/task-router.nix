@@ -71,4 +71,42 @@ in {
         package = self.packages.x86_64-linux.task-router;
       };
     })) [message];
+
+  # (M5.14) The host's combination from W4 on (spec §9.1): M6's m6-host-like
+  # (D16 there) plus taskRouter with the host's settings
+  # (homes/pallon/default.nix:197-209). The router is main-session only, so the
+  # children stay M6's four.
+  m5-host-like = let
+    host = {
+      randomize = {
+        enabled = true;
+        share = 0.2;
+      };
+      spotCheck = {
+        enabled = true;
+        share = 0.1;
+      };
+    };
+    c = hm.eval {
+      programs.piEconomics = {
+        actorSubagents.enable = true;
+        tokenMeter.enable = true;
+        cacheLifecycle.enable = true;
+        experiments.enable = true;
+        infiniteContext.enable = true;
+        retry.enable = true;
+        taskRouter = {
+          enable = true;
+          settings = host;
+        };
+        piSettings.enable = false;
+      };
+    };
+  in
+    eq "children" (map baseNameOf (builtins.fromJSON (fileAt ".pi/agent/actor-subagents/settings.json" c).text).childExtensions) ["cache-lifecycle" "infinite-context" "pi-retry" "token-meter"]
+    ++ eq "links" (sorted (lib.filter (lib.hasPrefix ".pi/agent/extensions/") (targets c)))
+    (map (n: ".pi/agent/extensions/${n}") ["actor-subagents" "cache-lifecycle" "experiments" "infinite-context" "pi-retry" "task-router" "token-meter"])
+    ++ eq "task-router/settings.json" (builtins.fromJSON (fileAt ".pi/agent/task-router/settings.json" c).text) host
+    ++ eq "failed assertions" (failed "" c) []
+    ++ eq "warnings" c.warnings bare.warnings;
 }
