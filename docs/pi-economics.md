@@ -233,7 +233,10 @@ redesign's Group 3 selection in this repository: a leg runs on the cheapest
 free member among its candidates (cost order, slots, health probes, daily caps,
 the free tier's block; a busy cheapest pool is waited for up to
 `queueMaxSec`), and a provider error moves a child to a free member of its leg
-on another provider. It routes subagent spawns by task card through
+on another provider. The pick or the move reserves the slot at once (60 s, and
+while pi lists the child running), so concurrent spawns and moves never share
+one; an explicit `model` runs on its member alone (it waits `queueMaxSec`, then
+the spawn is rejected) and fails over only at or above it. It routes subagent spawns by task card through
 actor-subagents' spawn policy: level and effort by rule, the member selection,
 attempts and an outcome log (`<agentDir>/task-router/outcomes/YYYY-MM.jsonl`),
 and the `task_verdict` tool. Main session only: children do not route.
@@ -314,7 +317,7 @@ points into `src`.
 | `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's two `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
 | `retry` | the patched pi-retry's vitest suite (300 tests) on the shared npm lock, and the greps that pin the free-cap patch and the inline print/json route |
 | `typecheck-retry` | `tsc --strict` over `retry.ts` and `src/`; the tests stay out (one upstream test and the free-cap patch's own test do not type-check; vitest runs them) |
-| `task-router` | the router's own tests (`node --test`, 357), run when it builds; includes the redesign's golden grid against its frozen oracle |
+| `task-router` | the router's own tests (`node --test`, 402), run when it builds; includes the redesign's golden grid against its frozen oracle |
 | `typecheck-task-router` | `tsc --strict` over `index.ts`, `core/` and `test/` |
 | `iface-subagents-task-router`, `iface-experiments-task-router` | the router's copies of `__subagentsApi_v1` and `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`) are satisfied by the providers' types |
 | `router-golden` | every decision of the router on the golden grid and the selection, equal to the recorded ones; P2 (the invariance) over the empty-slot `select` lines |
