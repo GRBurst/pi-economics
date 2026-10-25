@@ -19,7 +19,7 @@ export type PlanDeps = { settings: RouterSettings; attempts: AttemptState; rng: 
 export function planSpawn(d: PlanDeps, i: SpawnIn): Result<SpawnPlan> {
   const s = capToTable(d.settings, i.profile); // the member cap is per table, for this plan only (review G2 M2 (b))
   const req = requirementOf(i.card, i.verified, i.profile, s);
-  const a = req.ability, need = 0; // need: the files' tokens from T3.1 on
+  const a = req.ability, need = i.verified.tokens ?? 0; // the files' tokens: the context filter's need (T3.1)
   const T = levels(s.models, a).at(-1); // a requirement above top(a) (a floor; spec "never a crash") is rejected (review G2 M1)
   if (T === undefined || req.level > T) return { ok: false, errors: [beyondTop(a, req.level, T)] };
   const legs = planLegs(req, i.importance, i.profile, s, need);

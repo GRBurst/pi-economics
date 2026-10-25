@@ -23,7 +23,7 @@ export function sutSpawn(ctx: { settings: RouterSettings; attempts: AttemptState
   const card: Card = { kind: x.kind, files: [], acceptance: [], t0: x.t0, t2: x.t2 ? ["security"] : [], ...(x.attemptOf !== undefined ? { attemptOf: x.attemptOf } : {}) };
   const r = planSpawn(
     { settings: ctx.settings, attempts: ctx.attempts, rng: () => (x.draw ? 0 : 0.99) },
-    { taskId: x.taskId, card, verified: { t0: x.t0, forceT2: x.force, reasons: [] }, profile: prof.value, importance: x.imp, model: x.model, effort: x.effort },
+    { taskId: x.taskId, card, verified: { t0: x.t0, forceT2: x.force, reasons: [], tokens: x.need }, profile: prof.value, importance: x.imp, model: x.model, effort: x.effort },
   );
   if (!r.ok) return { label: "REJECT", reasons: r.errors };
   // The start's tier is read off its member (review G2, m1): `resolveLeg` routes a non-Qwen start by `start.member`, so the

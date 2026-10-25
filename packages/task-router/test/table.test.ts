@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { effortAt, enabled, firstMeeting } from "../core/members.ts";
-import { planLegs } from "../core/table.ts";
+import { effortAt, effortRank, enabled, firstMeeting } from "../core/members.ts";
+import { planSpawn } from "../core/pipeline.ts";
+import { profileFor } from "../core/profile.ts";
+import { capToTable, planLegs } from "../core/table.ts";
 import { defaults, parseSettings } from "../core/settings.ts";
-import type { Importance, Leg, Profile, Requirement, RouterSettings } from "../core/types.ts";
+import type { Card, Importance, Leg, Plan, Profile, Requirement, RouterSettings, T0 } from "../core/types.ts";
 
 const S = defaults();
 const IMPS: Importance[] = ["normal", "high", "critical"];
@@ -186,4 +188,66 @@ test("P-ro and P-imp over resolved members: all read-only profiles × requiremen
     }
   }
   assert.ok(n >= 30, String(n));
+});
+
+// The read-only rule's W is the planned member at the card's need: the first context candidate (spec §4.4 rule 4; r2 M1; HP T3.1;
+// r4 cases.mts). M5 defaults written out: Haiku enabled, the free cloud blank, contextFit 1; the rule on.
+const ALL: T0 = { bounded: true, specified: true, verifiable: true, lowRisk: true, small: true, linear: true };
+const M5 = (o: Record<string, unknown> = {}, models: Record<string, unknown> = {}) => parseSettings({
+  readOnlyReview: "effort-step", contextFit: 1, ...o, models: { ...HAIKU, "qwen-cloud": { model: "" }, ...models },
+}).settings;
+const spawn = (s: RouterSettings, p: Profile, i: Importance, need: number, c: Pick<Card, "t0" | "t2"> = { t0: ALL, t2: [] }): Plan => {
+  const card: Card = { kind: "x", files: [], acceptance: [], ...c };
+  const r = planSpawn({ settings: s, attempts: new Map(), rng: () => 0.99 }, { taskId: "t", card, verified: { t0: card.t0, forceT2: false, reasons: [], tokens: need }, profile: p, importance: i });
+  if (!r.ok) throw new Error(r.errors.join("; "));
+  return r.value.plan;
+};
+const label = (p: Plan) => `${p.base}/${p.worker.tier}/${p.worker.effort}/${p.review?.tier ?? ""}/${p.review?.effort ?? ""}`;
+const ROW = P({ tools: "read-only" });
+
+test("read-only rule, Case A: W = Haiku (Qwen cannot hold 500k) has a step left → Haiku high, no review", () => {
+  const s = M5({ importanceTable: { write: { "0": { critical: { worker: { level: 0, step: 0 }, review: { level: 1, step: 0 } } } } } });
+  const p = spawn(s, ROW, "critical", 500000);
+  assert.equal(label(p), "qwen/haiku/high//");
+  assert.ok(p.reasons.includes("read-only critical: review → haiku high"), p.reasons.join("; "));
+  assert.equal(label(spawn({ ...s, readOnlyReview: "review" }, ROW, "critical", 500000)), "qwen/haiku/medium/T1/high");
+});
+
+test("read-only rule, Case B: W = Opus (only it holds 1.5M) at its last step, nothing above → Opus xhigh + Opus-xhigh review (= rule off)", () => {
+  const s = M5({}, { opus: { contextWindow: 2000000, efforts: ["xhigh"] } });
+  const p = spawn(s, ROW, "critical", 1500000);
+  assert.equal(label(p), "qwen/T2/xhigh/T2/xhigh");
+  assert.ok(p.reasons.includes("read-only critical: no step left, review kept"), p.reasons.join("; "));
+  assert.equal(label(spawn({ ...s, readOnlyReview: "review" }, ROW, "critical", 1500000)), "qwen/T2/xhigh/T2/xhigh");
+});
+
+test("P-ro and P-imp over resolved members at the card's need: needs × Opus 1M/2M × read-only profiles × cards × importances (840 plans)", () => {
+  const NEEDS = [0, 200000, 300000, 950000, 1063824, 1500000, 2500000];
+  const CARDS: Pick<Card, "t0" | "t2">[] = [{ t0: ALL, t2: [] }, { t0: { ...ALL, small: false }, t2: [] }, { t0: { ...ALL, linear: false }, t2: [] }, { t0: ALL, t2: ["security"] }];
+  let n = 0;
+  for (const ow of [1000000, 2000000]) {
+    const s = M5({}, { opus: { contextWindow: ow } }), off = { ...s, readOnlyReview: "review" as const };
+    const prof = (k: string) => { const r = profileFor(k, s); if (!r.ok) throw new Error(k); return r.value; };
+    const profiles = [prof("scout"), prof("review"), P({ ability: "read", minLevel: 2, tools: "read-only" }), RO, ROW];
+    for (const p of profiles) for (const c of CARDS) for (const need of NEEDS) {
+      const a = p.ability ?? "write", M = capToTable(s, p).models;
+      const res = (pl: Plan) => [M[pl.worker.member].abilities[a], effortRank(pl.worker.effort)];
+      const le = (x: number[], y: number[]) => x[0] < y[0] || (x[0] === y[0] && x[1] <= y[1]);
+      const on = IMPS.map((i) => spawn(s, p, i, need, c)), ro = IMPS.map((i) => spawn(off, p, i, need, c));
+      const id = `opus ${ow} ${p.table ?? a} ${p.minLevel ?? ""} ${JSON.stringify(c)} need ${need}`;
+      for (const k of [0, 1]) assert.deepEqual(on[k], ro[k], `P-ro normal/high ${id}`);
+      const [cr, c0] = [on[2], ro[2]];
+      if (c0.review && !cr.review) assert.ok(!le(res(cr), res(c0)), `P-imp review dropped, worker not raised ${id}: ${label(cr)} vs ${label(c0)}`);
+      if (cr.review) {
+        const W = M[cr.worker.member], above = enabled(M).some((m) => (m.abilities[a] ?? -1) > W.abilities[a]);
+        assert.ok(cr.worker.effort === W.efforts.at(-1) && !above && label(cr) === label(c0), `P-ro review kept ${id}: ${label(cr)}`);
+      }
+      for (const [i, j] of [[0, 1], [1, 2], [0, 2]]) {
+        if (j !== 2 || on[j].review || !on[i].review) assert.ok(le(res(on[i]), res(on[j])), `P-imp worker ${IMPS[i]} ≤ ${IMPS[j]} ${id}`);
+        if (on[i].review && j !== 2) assert.ok(on[j].review, `P-imp review ${IMPS[i]} ⇒ ${IMPS[j]} ${id}`);
+      }
+      n += 3;
+    }
+  }
+  assert.equal(n, 840);
 });

@@ -4,8 +4,10 @@ import { globMatch } from "./glob.ts";
 import type { Card, RouterSettings, T0, T2 } from "./types.ts";
 
 export interface FsPort { exists(p: string): boolean; size(p: string): number; isDir(p: string): boolean }
-/** `unresolved`: a relative file's directory is missing under the cwd (wrong cwd?); bounded stays lowered, analysis can exclude it. */
-export type Verified = { t0: T0; forceT2: boolean; reasons: string[]; unresolved?: true };
+/** `unresolved`: a relative file's directory is missing under the cwd (wrong cwd?); bounded stays lowered, analysis can exclude it.
+ *  `tokens`: the files' estimate (Σ size / 3.6, a new file 0), the context filter's need (T3.1); `verifyT0` always sets it, a
+ *  hand-made `Verified` (tests) may leave it out (need 0). */
+export type Verified = { t0: T0; forceT2: boolean; reasons: string[]; tokens?: number; unresolved?: true };
 
 /** The task's working directory: the card's `cwd` (`~` expanded) or the caller's. */
 export function resolveCwd(cardCwd: string | undefined, callerCwd: string, home: string): string {
@@ -46,5 +48,5 @@ export function verifyT0(c: Card, cwd: string, fs: FsPort, s: RouterSettings): V
     const w = hit(words, text);
     if (w) { forceT2 = true; lower("lowRisk", `${cat} keyword "${w}"`); }
   }
-  return { t0, forceT2, reasons, ...(relative.length ? { unresolved: true as const } : {}) };
+  return { t0, forceT2, reasons, tokens, ...(relative.length ? { unresolved: true as const } : {}) };
 }

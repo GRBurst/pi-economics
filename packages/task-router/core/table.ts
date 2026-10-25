@@ -1,6 +1,7 @@
 // The importance table per level (spec §4.4): the cell, the draft rule, the pin rule, the read-only rule. Pure.
-import { bottom, effortAt, firstMeeting, lvl, meeting, next, top } from "./members.ts";
+import { bottom, effortAt, firstMeeting, lvl, next, top } from "./members.ts";
 import type { Named } from "./members.ts";
+import { candidates } from "./select.ts";
 import type { Importance, Leg, Profile, Requirement, RouterSettings, Rows } from "./types.ts";
 
 /** The highest numbered row of a table (−1: none). */
@@ -26,7 +27,7 @@ export const beyondTop = (a: string, l: number, T: number | undefined): string =
   ? `no enabled member has ability ${a} (its members are blank or missing in the router settings)`
   : `no enabled member reaches ${a} level ${l} (the top of ${a} is ${T}; a member above it is blank or missing in the router settings)`;
 
-/** `need`: the files' tokens, for the read-only rule's planned member once candidates have a context part (T3.1). `error`: the
+/** `need`: the files' tokens, for the read-only rule's planned member (its first context candidate, T3.1). `error`: the
  *  worker leg lies above top(a) and the spawn is rejected; a review leg there is lowered to top(a) (review G2 M1). */
 export function planLegs(req: Requirement, imp: Importance, p: Profile, s: RouterSettings, need = 0): { worker: Leg; review?: Leg; reasons: string[]; error?: string } {
   const a = req.ability, M = s.models;
@@ -49,9 +50,8 @@ export function planLegs(req: Requirement, imp: Importance, p: Profile, s: Route
   if (review && review.level > T) { reasons.push(`review ${a} ${review.level} above the top: lowered to ${T}`); review = { ...review, level: T }; }
   // Read-only rule (RD4, OD8, OD18): a read-only profile at critical raises the worker instead of adding a review.
   if (s.readOnlyReview === "effort-step" && p.tools === "read-only" && imp === "critical" && review) {
-    // The planned member of a leg = its first candidate (spec §4.1, §4.4 rule 4; r2, M1). T2.4: no context part exists yet,
-    // so `meeting(M, a, l)[0]`; T3.1 switches to `candidates(s, a, l, need).cands[0]` (core/select.ts).
-    const planned = (l: number): Named => meeting(M, a, l)[0];
+    // The planned member of a leg = its first candidate at the card's need, context filter included (spec §4.1, §4.4 rule 4; r2, M1).
+    const planned = (l: number): Named => candidates(s, a, l, need).cands[0];
     const W = planned(worker.level);
     if (worker.step < W.efforts.length - 1) {
       worker = { level: worker.level, step: worker.step + 1 }; review = undefined;

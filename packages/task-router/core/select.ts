@@ -1,11 +1,21 @@
-// Candidates of a leg and its label (spec §4.1, §4.5 first item, mi5). Pure. T3.1 adds the context part, T3.2 `pickMember`.
+// Candidates of a leg and its label (spec §4.1, §4.5 first item, mi5), with the context filter (T3.1). Pure. T3.2 adds `pickMember`.
 import { effortAt, meeting } from "./members.ts";
 import type { Named } from "./members.ts";
 import type { Ability, Leg, PlanLeg, RouterSettings } from "./types.ts";
 
-/** The enabled members meeting the level, in (cost, order, name) order. `need` (tokens of the files) is read from T3.1 on. */
+/** The enabled members meeting the level, in (cost, order, name) order, filtered by context (spec §4.5, OD17): with
+ *  `contextFit > 0` and `need` (the files' tokens) > 0, those whose `contextFit · contextWindow` holds the files, the others named
+ *  in the reason; none holds them → the largest window, still in (cost, order, name) order, with a reason. Never empty for context. */
 export function candidates(s: RouterSettings, a: Ability, level: number, need: number): { cands: Named[]; reason?: string } {
-  return { cands: meeting(s.models, a, level) };
+  const meet = meeting(s.models, a, level);
+  if (!(s.contextFit > 0) || !(need > 0)) return { cands: meet };
+  const fit = meet.filter((m) => need <= s.contextFit * m.contextWindow);
+  const out = meet.filter((m) => !fit.includes(m));
+  const n = Math.round(need);
+  if (fit.length) return { cands: fit, ...(out.length ? { reason: `context: files need ~${n} tokens; excluded ${out.map((m) => `${m.name} (${m.contextWindow})`).join(", ")}` } : {}) };
+  const maxW = Math.max(...meet.map((m) => m.contextWindow));
+  const big = meet.filter((m) => m.contextWindow === maxW);
+  return { cands: big, reason: `context: files need ~${n} tokens (whole files); no member meeting ${a} ${level} holds them; took the largest window (${big[0].name}, ${maxW} tokens): list only the files the task reads, or split the task` };
 }
 
 /** A leg labelled with its planned member: the first candidate, its effort at the step (clamped to its ladder). */

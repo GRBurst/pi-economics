@@ -20,7 +20,12 @@ const CWD = "/w";
 const FS = memfs({ "/w/src/a.ts": 1000, "/w/src/b.ts": 1000, "/w/src/c.ts": 1000, "/w/src/d.ts": 1000 });
 
 test("honest card passes unchanged", () => {
-  assert.deepEqual(verifyT0(card(), CWD, FS, S), { t0, forceT2: false, reasons: [] });
+  assert.deepEqual(verifyT0(card(), CWD, FS, S), { t0, forceT2: false, reasons: [], tokens: 1000 / 3.6 });
+});
+
+test("tokens: the files' estimate (Σ size / 3.6, a new file 0) is reported, for the context filter (T3.1)", () => {
+  assert.equal(verifyT0(card({ files: ["src/a.ts", "src/b.ts", "src/new.ts"] }), CWD, FS, S).tokens, 2000 / 3.6);
+  assert.equal(verifyT0(card({ files: [] }), CWD, FS, S).tokens, 0);
 });
 
 test("files resolve against cwd; absolute paths stay", () => {
