@@ -23,7 +23,7 @@ The host is **read-only** (another agent commits there with pathspecs): `git dot
 - **Checks:** `infinite-context` = the host's `checks/pi-infinite-context` (all files byte-equal) on the package; `retry` = the host's `checks/pi-retry/default.nix` with its private `nodeModules` replaced by the shared `npm.nodeModules` (the same derivation: same pname, source set and hash). `typecheck-infinite-context` over the patched `extensions/` without upstream's two fast-check tests, plus `package.json`; `typecheck-retry` over `retry.ts`, `src/` and `package.json` (D7, D8). No interface comparison (§5.3: the infinite-context patch is excluded; pi-retry exposes no API).
 - **Modules:** `modules/infinite-context.nix` (S6): `enable`, `src` (internal, set by `homeModules.default` from the input, as actorSubagents, M2 Q3), `package`, `reminders.{prices,cacheTtlMinutes,foldHint,default,overrides}` (the host's options and descriptions), `settings`; the registry entry; the file `lib.recursiveUpdate (render reminders) settings`. `modules/retry.nix` (S7): `enable`, `src`, `package`, `settings`; the registry entry; `piSettings.ops.retry`.
 - **Bench:** `bench.extensions` gets one `lib.mkDefault` definition per flake package the bench loads by name (`actor-subagents`, `infinite-context`, `pi-retry`, `token-meter`), so the host adds `claude-auth` and `web-search` at W without repeating them (D11). `bench-defaults` changes: `PI_BENCH_EXT_DIR` is now exported by default (§7).
-- **Cases:** `checks/module-eval/cases/infinite-context.nix` (8) and `cases/retry.nix` (7) (S8, S9), a host-like case, `bench-extensions-default` in `cases/bench.nix`, both components in `cases/together.nix`. `home-files` builds both extension directories, parses the rendered `infinite-context/settings.json` with the package's own `parseSettingsWithError`, and runs `ops.retry` through the activation's script (S10).
+- **Cases:** `checks/module-eval/cases/infinite-context.nix` (6) and `cases/retry.nix` (7, the host-like case included) (S8, S9), `bench-extensions-default` in `cases/bench.nix`, both components in `cases/together.nix`. `home-files` builds both extension directories, parses the rendered `infinite-context/settings.json` with the package's own `parseSettingsWithError`, and runs `ops.retry` through the activation's script (S10).
 - **Doc move** (M6.D, movable): `docs/pi-token-economics.md` moves here, scrubbed, in the last of M5/M6 to land, before W (§2, M0 plan Q5).
 
 ## Decisions
@@ -70,7 +70,7 @@ No principles document; the gate is §4's rules, §8's testing rules, `AGENTS.md
 | `flake.lock` changes only as needed | PASS: two new inputs and three moved nodes, all equal to the host's (M6.1, M6.3, M6.4, M6.6) |
 | Leak patterns (§8.3) | PASS: `leak` green in the prototype with both upstreams and the host's tests |
 | Host read-only | PASS: `git dot show`/`archive`/`diff` only |
-| Every check built with both `git+file://` and `path:` refs | PASS: M6.20 (prototype: all 19 checks green under both, on M3's state) |
+| Every check built with both `git+file://` and `path:` refs | PASS: M6.19 (prototype: all 19 checks green under both, on M3's state) |
 | Pure move (§1) | PASS with one exception: package and check derivations of infinite-context and retry are the host's (D6, D9); actorSubagents' differs by D5's one type-only line (Q1); default files and ops are today's (M6.8, M6.12) |
 | Plan ends with `# Execution Record` | PASS |
 
@@ -105,7 +105,7 @@ Listed, not quoted; the tasks show only what changes.
 | Package tests, patched upstreams (`actor-subagents`, `infinite-context`, `retry`) | the host's checks: actor-subagents' `node --test` suite (331 tests in the previous prototype); infinite-context's settings, nudge, fold-hint, resync, overlay-foreign, integration (59 tests) and the `index.ts` greps; pi-retry's vitest suite (300 tests in 10 files) and the free-cap greps | nodejs; the stubs; the shared lock for retry; seconds each |
 | Type check (`typecheck-*`) | `--strict` over the copies of D5, D7, D8 | the shared lock; ~15 s, 0.25 GiB |
 | Interface comparisons (`iface-*`) | unchanged; they re-run against the resynced actor-subagents | M2's harness |
-| Module evaluation (`module-eval`) | both components off, on, package, files, today's default file, the reminder render, the merge, the registry entries, today's ops and program, the child rule's soft dependency, the settings leaves, the host-like combination, the bench's extension default, every component together | Home Manager; M4's final count + 15 cases (prototype on M3's state: 57) |
+| Module evaluation (`module-eval`) | both components off, on, package, files, today's default file, the reminder render, the merge, the registry entries, today's ops and program, the child rule's soft dependency, the settings leaves, the host-like combination, the bench's extension default, every component together | Home Manager; M4's final count + 14 cases (prototype on M3's state: 57) |
 | Build check (`home-files`) | the extension directories pi loads, the rendered settings file through the extension's parser, `ops.retry` through the activation's script | ~10 s |
 | piSettings script (`pi-settings-migrate`, M0) | today's ops incl. `retry`'s, byte-compared with the legacy script | unchanged; `retry-pisettings` ties the component to it |
 | Leak (`leak`) | the copied checks and the patches | — |
@@ -139,7 +139,7 @@ Listed, not quoted; the tasks show only what changes.
 ## Properties
 
 - P1 `∀ i ∈ {nixpkgs, home-manager, pi-actor-subagents, pi-infinite-context, pi-retry}: lock(i).{locked, original} = hostLock(i).{locked, original}` (jq over both locks).
-- P2 `drv(packages.infinite-context) = drv(host piInfiniteContext)`, `drv(packages.retry) = drv(host piRetry)`, `drv(checks.{infinite-context,retry}) = drv(host checks.pi-{infinite-context,retry})` (M6.20, `h`-archived host tree; prefixes in D6, D9).
+- P2 `drv(packages.infinite-context) = drv(host piInfiniteContext)`, `drv(packages.retry) = drv(host piRetry)`, `drv(checks.{infinite-context,retry}) = drv(host checks.pi-{infinite-context,retry})` (M6.19, `h`-archived host tree; prefixes in D6, D9).
 - P3 `∀ dir ∈ dirs: targets(on) = targets(bare) ∪ {dir/extensions/infinite-context, dir/infinite-context/settings.json}`.
 - P4 `fromJSON(file(reminders = v, settings = s)) = recursiveUpdate (render v) s`, with `render` the host's; for `v = default, s = {}` the text is today's literal (the literal *is* W5's criterion).
 - P5 `ops.retry(actorSubagents) = withOrder today.retry`; `ops.retry(¬actorSubagents) = take 2 (withOrder today.retry)`; `program(ops.retry ∪ host) = program(today)`.
@@ -195,3 +195,255 @@ flag() { while [ -e ~/.cache/pi/pluto-exec/owner-deploy.flag ]; do sleep 60; don
 - `module-eval`'s derivation depends only on the failure report and the case count: a change that keeps both green and the count equal is a cached build (no log). `nbl module-eval` forces the log.
 - Plain `git` here; `git dot` only to read the host. Commits unsigned. Undo a plant with `git checkout -- <file>` after staging the green state; never `git checkout HEAD -- <dir>` over new files.
 - TypeScript edits keep each file's indentation (the patches use tabs).
+
+## File structure
+
+| File | Responsibility | Task |
+|---|---|---|
+| `flake.lock` | `nixpkgs`, `home-manager` (M6.1), `pi-actor-subagents` (M6.3), `pi-infinite-context` (M6.4), `pi-retry` (M6.6) at the host's revisions | M6.1, M6.3, M6.4, M6.6 |
+| `checks/npm/{package.json,package-lock.json}`, `checks/npm/default.nix` | the host's pi-retry lock at `4c714f0`; hash; header `f6a3c81` → `4c714f0` | M6.2 |
+| `checks/actor-subagents/default.nix` | the host's `checks/pi-actor-subagents/default.nix` at `4c714f0` | M6.3 |
+| `patches/pi-actor-subagents/*` | spawn-policy = the host's + D5's line; first-turn deleted | M6.3 |
+| `packages/actor-subagents/package.nix` | two patches, header (S5) | M6.3 |
+| `flake.nix` | inputs `pi-infinite-context`, `pi-retry`; `packages.{infinite-context,retry}`; `homeModules.default` sets both `src` (S1) | M6.4, M6.6, M6.8, M6.11 |
+| `patches/pi-infinite-context/pi-infinite-context-{reminders,cache}.patch`, `packages/infinite-context/package.nix` | the host's patches; the derivation (S3) | M6.4 |
+| `checks/infinite-context/{default.nix,integration.test.ts,overlay-foreign.test.ts,stubs/**}` | the host's check, byte for byte | M6.4 |
+| `patches/pi-retry/pi-retry-free-cap.patch`, `packages/retry/package.nix` | the host's patch; the derivation (S3) | M6.6 |
+| `checks/retry/default.nix` | the host's check on the shared lock (S4) | M6.6 |
+| `checks/default.nix` | `infiniteContext`, `infiniteContextTs`, `retry`, `retryTs`; checks `infinite-context`, `typecheck-infinite-context`, `retry`, `typecheck-retry` (S2) | M6.4–M6.7 |
+| `modules/infinite-context.nix`, `modules/default.nix` | the component (S6) | M6.8–M6.10 |
+| `checks/module-eval/cases/infinite-context.nix`, `checks/module-eval/default.nix` | 6 cases (S8); `caseFiles` | M6.8–M6.10 |
+| `modules/retry.nix`, `modules/default.nix` | the component (S7) | M6.11–M6.13 |
+| `checks/module-eval/cases/retry.nix` | 7 cases (S9) | M6.11–M6.13, M6.15 |
+| `modules/bench.nix`, `checks/module-eval/cases/bench.nix` | the extension defaults; `bench-defaults`, `bench-extensions` changed, `bench-extensions-default` new (S10) | M6.14 |
+| `checks/home-files/default.nix` | both extension directories, the parser, `ops.retry` (S11) | M6.16 |
+| `checks/module-eval/cases/together.nix` | `components` += `infiniteContext`, `retry` | M6.17 |
+| `docs/pi-economics.md` | component sections, checks, the resync (S12) | M6.18 |
+| `docs/pi-token-economics.md` | the moved document (S13) | M6.D (movable) |
+
+Interfaces M6 publishes: options `programs.piEconomics.infiniteContext.{enable, package, reminders.{prices, cacheTtlMinutes, foldHint, default, overrides}, settings}` (W5 re-points the host's `piContextReminders` values here, W7 adds Haiku, §5.2) and `programs.piEconomics.retry.{enable, package, settings}` (W6); `src` of both (internal); `piSettings.ops.retry`; registry entries `infinite-context`, `pi-retry` (`forChildren = true`); `packages.x86_64-linux.{infinite-context,retry}`; `bench.extensions` defaults for four names (M5 adds `task-router` the same way); `cases/together.nix` with eight components; the shared npm lock at pi 1.3.0.
+
+---
+
+## Tasks
+
+| Task | Delivers | Commit |
+|---|---|---|
+| M6.0 | read; M4 landed; drift | — |
+| **M6.0 resync** | | |
+| M6.1 | lock nodes `nixpkgs`, `home-manager` = the host's | `m6.0: nixpkgs and home-manager at the host's 4c714f0` |
+| M6.2 | shared npm lock = the host's pi-retry lock (pi 1.3.0) | `m6.0: shared npm lock at the host's 4c714f0` |
+| M6.3 | actorSubagents at `822a228`: check, two patches, header, D5 | `m6.0(actor-subagents): resync to the host's 4c714f0` |
+| **M6 proper** | | |
+| M6.4 | infinite-context: input, patches, package, check | `m6: infinite-context package and check from the host` |
+| M6.5 | `typecheck-infinite-context` | `m6(infinite-context): tsc --strict` |
+| M6.6 | retry: input, patch, package, check | `m6: pi-retry package and check from the host` |
+| M6.7 | `typecheck-retry` | `m6(retry): tsc --strict` |
+| M6.8 | infiniteContext: `enable`, `src`, `package`, registry entry, the file | `m6(infinite-context): module, package, registry entry, settings file` |
+| M6.9 | `reminders` options | `m6(infinite-context): reminder options` |
+| M6.10 | `settings` merged | `m6(infinite-context): settings merged into the file` |
+| M6.11 | retry: `enable`, `src`, `package`, registry entry | `m6(retry): module, package, registry entry` |
+| M6.12 | `ops.retry`: today's ops, child rule with actorSubagents | `m6(retry): today's piSettings ops` |
+| M6.13 | `settings` → leaves at order 500 | `m6(retry): settings as piRetry leaves` |
+| M6.14 | bench `extensions` defaults | `m6(bench): extensions default from the packages` |
+| M6.15 | the host's combination (characterisation) | `m6: the host's combination of M2–M6` |
+| M6.16 | `home-files` for M6 | `m6: home-files builds the M6 sources` |
+| M6.17 | every component together | `m6: infiniteContext and retry together with the rest` |
+| M6.18 | docs | `m6: docs for infiniteContext and retry` |
+| M6.D | **movable:** the doc move, in the last of M5/M6 to land | `m<5|6>: move docs/pi-token-economics.md` |
+| M6.19 | gate, purity, Execution Record | `m6: execution record` |
+
+Every task starts at `[ ]`. One failing check at a time; a task's commit holds only green checks.
+
+### Task M6.0 — Read, M4 landed, drift
+
+- [ ] **Step 1:** read "Files to read first".
+- [ ] **Step 2:** M4 landed: `git log --oneline | grep -c '^.\{8\} m4'` ≥ 21 commits and M4's Execution Record closed; note M4's final module-eval count `N4`.
+- [ ] **Step 3 (drift):** `cd ~/projects/nixos/new && git dot diff --stat 4c714f0 HEAD -- flake.lock $ai/pi-actor-subagents* $ai/pi-infinite-context* $ai/pi-retry* checks/pi-actor-subagents checks/pi-infinite-context checks/pi-retry $ai/pi-extensions.nix $ai/pi-settings-migrate.nix checks/pi-settings-migrate homes/pallon/default.nix docs/pi-token-economics.md pkgs/pi-bench $ai/extensions/{token-meter,cache-lifecycle,experiments}` — expected empty (2026-10-25). A non-empty diff in a moved path is ported first, each change with its test (§9), and the source commit of this plan moves to that commit (`h` and the revisions below follow it); record it.
+- [ ] **Step 4:** `flag; nb module-eval` green at M4's end (baseline).
+
+### Task M6.1 — `nixpkgs`, `home-manager` at the host's revisions
+
+**Files:** `flake.lock`.
+
+- [ ] **Step 1 (RED):** `lockeq nixpkgs home-manager` → `nixpkgs: DIFFERS`, `home-manager: DIFFERS`.
+- [ ] **Step 2 (GREEN):** `flag;` then
+  ```sh
+  (ulimit -v $cap && timeout -s KILL 600 nix flake lock "${o[@]}" \
+    --override-input nixpkgs github:nixos/nixpkgs/3ec636362e1816bc2f0888fa0fa2c69f1bc9e504 \
+    --override-input home-manager github:nix-community/home-manager/c216bf5a1f173b0481bd5c8c489ebe5595ecc68c)
+  lockeq nixpkgs home-manager pi-actor-subagents
+  ```
+  → `nixpkgs: as the host`, `home-manager: as the host` (`pi-actor-subagents: DIFFERS` until M6.3).
+- [ ] **Step 3 (GREEN, every check):** the full loop of M6.19 Step 2 with `git+file:` only: every check green on the new nixpkgs (the prototype on M3's state: green). A red check here is drift of nixpkgs, not of the host: stop and report it.
+- [ ] **Step 4 (CLEAN):** `$(fmt --version >/dev/null; echo)`; `fmt --check $(git ls-files '*.nix')` (the formatter moved with nixpkgs) → no file "Requires formatting"; if one does, reformat it in this commit and say so.
+- [ ] Commit.
+
+### Task M6.2 — Shared npm lock at pi 1.3.0
+
+**Files:** `checks/npm/{package.json,package-lock.json,default.nix}`.
+
+- [ ] **Step 1 (RED, drift):** `cmp <(h checks/pi-retry/package-lock.json) checks/npm/package-lock.json` → differs.
+- [ ] **Step 2 (RED):** `h checks/pi-retry/package.json > checks/npm/package.json; h checks/pi-retry/package-lock.json > checks/npm/package-lock.json; git add checks/npm; nb npm-deps` → hash mismatch, `got: sha256-S8lO6fS9S3hRNlUdv7hztyfECeHBzeNArqaDjDQYqBE=`. [ ] red seen
+- [ ] **Step 3 (GREEN):** `npmDepsHash = "sha256-S8lO6fS9S3hRNlUdv7hztyfECeHBzeNArqaDjDQYqBE=";`; header `f6a3c81` → `4c714f0` (S5). `nb npm-deps` green; then every `typecheck-*` and `iface-*` check green (prototype: harness, bench, token-meter, actor-subagents at M2's state, iface-harness, iface-subagents-bench-probe; the previous prototype: cache-lifecycle shows only M4's two planned errors, experiments clean — so after M4 all green).
+- [ ] Commit.
+
+### Task M6.3 — actorSubagents at the host's `4c714f0`
+
+**Files:** `checks/actor-subagents/default.nix`, `patches/pi-actor-subagents/*`, `packages/actor-subagents/package.nix`, `flake.lock`.
+
+- [ ] **Step 1 (RED):** `h checks/pi-actor-subagents/default.nix > checks/actor-subagents/default.nix; git add -A; nb actor-subagents` → fails (the old source lacks `engine.deferErrorNotices = true`). [ ] red seen
+- [ ] **Step 2 (GREEN):**
+  ```sh
+  h $ai/pi-actor-subagents-spawn-policy.patch > patches/pi-actor-subagents/pi-actor-subagents-spawn-policy.patch
+  cmp <(h $ai/pi-actor-subagents-child-prompt.patch) patches/pi-actor-subagents/pi-actor-subagents-child-prompt.patch
+  git rm -q patches/pi-actor-subagents/pi-actor-subagents-first-turn.patch
+  (ulimit -v $cap && timeout -s KILL 600 nix flake lock "${o[@]}" \
+    --override-input pi-actor-subagents github:fdietze/pi-actor-subagents/822a228e4d6e494c98a6946c9cf812fdd0c96a9d)
+  lockeq pi-actor-subagents
+  ```
+  and `package.nix` per S5 (two patches, the first-turn bullet gone, "three" → "two"). `nb actor-subagents` green (331 tests in the previous prototype).
+- [ ] **Step 3 (RED):** `nb typecheck-actor-subagents` → `spawn-policy.test.ts:25:3 - error TS2353 … 'abortBash' …`. [ ] red seen
+- [ ] **Step 4 (GREEN, D5):** `sed -n 1358p` of the spawn-policy patch is `+\t};`; replace it (S5). `nb typecheck-actor-subagents`, `nb iface-subagents-bench-probe`, `nb iface-subagents-cache-lifecycle`, `nb iface-subagents-experiments`, `nb actor-subagents` green.
+- [ ] **Step 5 (purity):** `diff <(h $ai/pi-actor-subagents-spawn-policy.patch) patches/pi-actor-subagents/pi-actor-subagents-spawn-policy.patch` shows exactly line 1358. Note in the Execution Record that the package's derivation differs from the host's by this line (Q1).
+- [ ] Commit.
+
+### Task M6.4 — infinite-context: input, patches, package, check
+
+**Files:** `flake.nix`, `flake.lock`, `patches/pi-infinite-context/*`, `packages/infinite-context/package.nix`, `checks/infinite-context/**`, `checks/default.nix`.
+
+- [ ] **Step 1 (RED):** copy the check (`for f in default.nix integration.test.ts overlay-foreign.test.ts stubs/{pi-coding-agent,typebox}/{index.js,package.json}; do h checks/pi-infinite-context/$f > checks/infinite-context/$f; done`), add the `infiniteContext` binding and the check `infinite-context` (S2); `git add -A; nb infinite-context` → `attribute 'infinite-context' missing`. [ ] red seen
+- [ ] **Step 2 (GREEN):** input and package (S1, S3), the two patches (`h $ai/pi-infinite-context-{reminders,cache}.patch`); lock with `--override-input pi-infinite-context github:fdietze/pi-infinite-context/4c66601b71e629210cf1606f12526e6af5a8a8bf`; `lockeq pi-infinite-context` → as the host. `nb infinite-context` green (59 tests).
+- [ ] **Step 3 (planted):** drop the cache patch from `package.nix` → `nb infinite-context` FAILS (test failures). [ ] red seen. Restore.
+- [ ] **Step 4 (purity):** `for f in …; do cmp <(h checks/pi-infinite-context/$f) checks/infinite-context/$f; done` silent; `drvPath` of `packages.x86_64-linux.infinite-context` begins `i69aki1i`, of `checks.x86_64-linux.infinite-context` `6wbdgsx5` (prototype; the host's, M6.19 Step 4).
+- [ ] **Step 5 (CLEAN):** `fmt` on the new `.nix` files; `nb leak`.
+- [ ] Commit.
+
+### Task M6.5 — `typecheck-infinite-context`
+
+**Files:** `checks/default.nix`.
+
+- [ ] **Step 1 (RED):** `infiniteContextTs` without the `rm` line (S2) and the check `typecheck-infinite-context` → TS2307 `Cannot find module 'fast-check'` in `archive-properties.test.ts`, `forest.test.ts`. [ ] red seen
+- [ ] **Step 2 (GREEN):** the `rm` line (D7). Green, 0 errors.
+- [ ] Commit.
+
+### Task M6.6 — retry: input, patch, package, check
+
+**Files:** `flake.nix`, `flake.lock`, `patches/pi-retry/pi-retry-free-cap.patch`, `packages/retry/package.nix`, `checks/retry/default.nix`, `checks/default.nix`.
+
+- [ ] **Step 1 (RED):** `checks/retry/default.nix` per S4; the `retry` binding and the check `retry` (S2) → `attribute 'retry' missing`. [ ] red seen
+- [ ] **Step 2 (GREEN):** input and package (S1, S3), the patch; lock with `--override-input pi-retry github:monotykamary/pi-retry/60a3b088145cf92dc6885f9fd8c785ed59a2b198`; `lockeq pi-retry`. `nb retry` green (300 tests, 10 files).
+- [ ] **Step 3 (planted):** drop the free-cap patch → FAILS. [ ] red seen. Restore.
+- [ ] **Step 4 (purity):** `diff <(h checks/pi-retry/default.nix) checks/retry/default.nix` shows only the header lines, the `let … in` with `nodeModules` and the de-indent; `drvPath`s begin `5jq7phiv` (package) and `0jf9v492` (check).
+- [ ] Commit.
+
+### Task M6.7 — `typecheck-retry`
+
+**Files:** `checks/default.nix`.
+
+- [ ] **Step 1 (RED, planted):** `retryTs` with `${retry}/__tests__` also copied → 3 errors (D8). [ ] red seen
+- [ ] **Step 2 (GREEN):** `retryTs` per S2. Green.
+- [ ] Commit.
+
+### Task M6.8 — infiniteContext: module, package, registry entry, file
+
+**Files:** `modules/infinite-context.nix`, `modules/default.nix`, `flake.nix` (`homeModules.default`), `checks/module-eval/cases/infinite-context.nix`, `checks/module-eval/default.nix`.
+
+- [ ] **Step 1 (RED):** the cases `infinite-context-{off,defaults,package,files}` (S8) and `caseFiles` entry → `nb module-eval` fails: `The option 'programs.piEconomics.infiniteContext' does not exist`. [ ] red seen
+- [ ] **Step 2 (GREEN):** S6 without `reminders` and `settings` (`rendered` = `{reminders = {default = {}; overrides = {};};}` for now), `modules/default.nix` imports it, `homeModules.default` sets `infiniteContext.src` (S1). Green, `N4 + 4` cases.
+- [ ] Commit.
+
+### Task M6.9 — Reminder options
+
+**Files:** `modules/infinite-context.nix`, `checks/module-eval/cases/infinite-context.nix`.
+
+- [ ] **Step 1 (RED):** `infinite-context-reminders` (S8) → `The option 'programs.piEconomics.infiniteContext.reminders' does not exist`. [ ] red seen
+- [ ] **Step 2 (GREEN):** `reminderRule`, `renderRule`, `rendered`, the `reminders` options (S6). Green.
+- [ ] Commit.
+
+### Task M6.10 — `settings` merged
+
+- [ ] **Step 1 (RED):** `infinite-context-settings` (S8) → `The option '….infiniteContext.settings' does not exist`. [ ] red seen
+- [ ] **Step 2 (GREEN):** `settings` and `lib.recursiveUpdate rendered cfg.settings` (S6). Green.
+- [ ] **Step 3 (planted):** `rendered // cfg.settings` → FAIL `infinite-context-settings`. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M6.11 — retry: module, package, registry entry
+
+**Files:** `modules/retry.nix`, `modules/default.nix`, `flake.nix`, `checks/module-eval/cases/retry.nix`, `checks/module-eval/default.nix`.
+
+- [ ] **Step 1 (RED):** `retry-{off,defaults,package}` (S9), `caseFiles` → `The option 'programs.piEconomics.retry' does not exist`. [ ] red seen
+- [ ] **Step 2 (GREEN):** S7 without `ops` and `settings`; import; `homeModules.default` sets `retry.src`. Green.
+- [ ] Commit.
+
+### Task M6.12 — `ops.retry`: today's ops, the child rule with actorSubagents
+
+- [ ] **Step 1 (RED):** `retry-pisettings`, `retry-alone` (S9) → `ops: expected { retry = [ … ]; }, got { }`. [ ] red seen
+- [ ] **Step 2 (GREEN):** `removePackage` and `piSettings.ops.retry` without `leaves` (S7). Green.
+- [ ] **Step 3 (planted):** the child rule unconditional → FAIL `retry-alone`. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M6.13 — `settings` as `piRetry` leaves
+
+- [ ] **Step 1 (RED):** `retry-settings` (S9) → `The option '….retry.settings' does not exist`. [ ] red seen
+- [ ] **Step 2 (GREEN):** `settings`, `leaves` (S7). Green.
+- [ ] **Step 3 (planted):** `order = 1000` in `leaves` → FAIL `retry-settings` (`sequence`). [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M6.14 — bench `extensions` default
+
+**Files:** `modules/bench.nix`, `checks/module-eval/cases/bench.nix`.
+
+- [ ] **Step 1 (RED):** `bench-extensions-default` and the changed `bench-defaults`, `bench-extensions` (S10) → `extensions: expected { actor-subagents = …; }, got { }` and the two changed cases fail on `PI_BENCH_EXT_DIR`. Existing cases change because §7 changes the default: `bench-defaults` now expects the variable, `bench-extensions` expects its two names added to the defaults. [ ] red seen
+- [ ] **Step 2 (GREEN):** the `mapAttrs (_: lib.mkDefault)` definition and the option description (S10). Green.
+- [ ] **Step 3 (planted):** drop `pi-retry` from the defaults → FAIL `bench-extensions-default`. [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M6.15 — The host's combination (characterisation)
+
+- [ ] **Step 1 (GREEN-first):** `m6-host-like` (S9) → green at once (a characterisation of M2–M6).
+- [ ] **Step 2 (planted):** `forChildren = false` in `modules/retry.nix` → FAIL `m6-host-like` (`children`). [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M6.16 — `home-files` for M6
+
+**Files:** `checks/home-files/default.nix`.
+
+- [ ] **Step 1 (RED):** the configuration gains `infiniteContext`, `retry` (S11) and the shell part; without `pkgs.nodejs` in `nativeBuildInputs` → `node: command not found`. [ ] red seen
+- [ ] **Step 2 (GREEN):** `pkgs.nodejs`. `nb home-files` green.
+- [ ] **Step 3 (planted):** `infiniteContext.settings.bogus = 1` → `FAIL .pi/agent: infinite-context rejects its settings.json` (`settings: unknown key "bogus"`); a third package `"keep"` in the scratch file → `FAIL .pi/agent: settings.json after ops.retry`. [ ] red seen ×2. Restore.
+- [ ] Commit.
+
+### Task M6.17 — Every component together
+
+- [ ] **Step 1 (GREEN-first):** `components` += `"infiniteContext" "retry"` in `cases/together.nix` → green.
+- [ ] **Step 2 (planted):** `home.file."x".text = "";` inside `modules/retry.nix`'s `mkIf` → FAIL `components-together` only if it is not in the union — it is, so plant instead `lib.mkIf (pe.infiniteContext.enable && cfg.enable) {home.file."x".text = "";}` in `modules/retry.nix`'s config → FAIL `components-together` (`home.file targets`). [ ] red seen. Restore.
+- [ ] Commit.
+
+### Task M6.18 — Docs
+
+**Files:** `docs/pi-economics.md`.
+
+- [ ] **Step 1:** sections `infiniteContext` and `retry` (options, files, ops, soft dependencies, checks), the bench default, the M6.0 resync (pi 1.3.0 lock; the three dropped patches and why: spec §2's and §9's patch lists name them, the code supersedes, S12). `nb leak`.
+- [ ] Commit.
+
+### Task M6.D — Movable: the doc move (in the last of M5/M6 to land, before W)
+
+Executed in **this** milestone only if M5 has landed by the time M6.18 is committed; otherwise it is skipped here, marked "moved to M5" in the Execution Record, and M5's plan carries it verbatim as its last task before its close-out. Either way it lands before W0.
+
+**Files:** `docs/pi-token-economics.md` (new), `docs/pi-economics.md` (link), `checks/default.nix` only if `leakSrc` needs no change (it does not: `docs/` outside `specs`/`plans` is scanned).
+
+- [ ] **Step 1 (drift):** `cd ~/projects/nixos/new && git dot diff --stat 4c714f0 HEAD -- docs/pi-token-economics.md` — port any change.
+- [ ] **Step 2 (RED):** `h docs/pi-token-economics.md > docs/pi-token-economics.md; git add docs; nb leak` → FAIL naming the host name `earth` (line 62, `localHealthUrl`) and the user `pallon`. [ ] red seen
+- [ ] **Step 3 (GREEN, scrub, S13):** host paths re-pointed to this flake (`modules/home-manager/features/ai/extensions/<c>` → `packages/<c>`, `pkgs/pi-bench` → `packages/bench`, `ai/pi-*.nix` → `packages/<c>/package.nix` and `modules/<c>.nix`), the host's 2026-10-02 spec/plan and `~/.pi/agent/notes/…` citations dropped (§2), the host's names replaced by placeholders (`<host>`, `<user>`); settings tables re-pointed to `programs.piEconomics.*`. `nb leak` green.
+- [ ] **Step 4:** `docs/pi-economics.md` links it. The host's pointer page is W's docs step (§9.1), not this task.
+- [ ] Commit.
+
+### Task M6.19 — Gate and Execution Record
+
+- [ ] **Step 1:** `fmt --check $(git ls-files '*.nix')` clean.
+- [ ] **Step 2 (every check, both refs):** `flag`; list the checks with `ne checks.x86_64-linux --apply builtins.attrNames --json` (a failed or empty listing is a failure) and build each, capped, with `nb` and with `nbp`; name every failure at the end.
+- [ ] **Step 3:** `lockeq nixpkgs home-manager pi-actor-subagents pi-infinite-context pi-retry` → five times "as the host".
+- [ ] **Step 4 (purity, P2):** `git dot archive 4c714f0 -- . | tar -x -C $TMPDIR/host` from `~/projects/nixos/new`, then compare, capped, `nix eval --raw path:$TMPDIR/host#checks.x86_64-linux.pi-{infinite-context,retry}.drvPath` with this flake's `checks.x86_64-linux.{infinite-context,retry}.drvPath` (equal), and the same for `pi-actor-subagents` (differs by D5 only). Above 2 GiB: `flag` first.
+- [ ] **Step 5:** fill the Execution Record (per task: commit, red seen, deviations; the final case count; Q1–Q4 as answered).
+- [ ] Commit.
