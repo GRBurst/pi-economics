@@ -44,6 +44,7 @@
       bench = pkgs.callPackage ./packages/bench/package.nix {};
       actor-subagents = pkgs.callPackage ./packages/actor-subagents/package.nix {src = pi-actor-subagents;};
       token-meter = pkgs.callPackage ./packages/token-meter/package.nix {};
+      cache-lifecycle = pkgs.callPackage ./packages/cache-lifecycle/package.nix {};
     };
 
     formatter.${system} = pkgs.alejandra;

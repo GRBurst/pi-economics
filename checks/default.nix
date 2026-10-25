@@ -73,5 +73,7 @@ in {
     name = "token-meter";
     src = ../packages/token-meter;
   };
+  # The cache-lifecycle tests run when it builds (spec §8.1, "Package tests").
+  cache-lifecycle = self.packages.${pkgs.stdenv.hostPlatform.system}.cache-lifecycle;
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
