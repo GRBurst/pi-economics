@@ -24,6 +24,22 @@ in {
       defaultText = lib.literalExpression "pkgs.callPackage <pi-economics>/packages/experiments/package.nix { }";
       description = "The extension (package.json, index.ts, core/); its tests run when it builds.";
     };
+
+    # (M4.14)
+    settings = lib.mkOption {
+      type = lib.types.attrsOf (pkgs.formats.json {}).type;
+      default = {};
+      example = {
+        mode = "explore";
+        minExplore = 0.15;
+      };
+      description = ''
+        Written to `<agentDir>/experiments/settings.json` when non-empty.
+        Every key has a default in the package's core/settings.ts (`mode`,
+        `factors`, `maxArms`, `minExplore`, `baseline`, `guards`,
+        `correctionRegex`), so `{}` writes no file.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -35,5 +51,9 @@ in {
       forChildren = false;
       description = "One fractional-factorial arm per main session (explore/exploit assignment); children inherit the parent's arm, other extensions read the factor flags.";
     };
+
+    # (M4.14) Literal text (spec §4).
+    home.file."${pe.agentDir}/experiments/settings.json" =
+      lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
   };
 }

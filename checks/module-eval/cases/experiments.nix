@@ -66,4 +66,18 @@ in {
     eq "home.file targets (${dir})" (sorted (targets (eval dir {} {})))
     (sorted (targets bare ++ ["${dir}/extensions/experiments"])))
   dirs;
+
+  # (M4.14) settings: written as given (the host's check value,
+  # checks/pi-extensions.nix:262).
+  experiments-settings = lib.concatMap (dir: let
+    s = {minExplore = 0.15;};
+    f = fileAt "${dir}/experiments/settings.json" (eval dir {settings = s;} {});
+  in
+    eq "settings file (${dir})" (
+      if f == null
+      then null
+      else builtins.fromJSON f.text
+    )
+    s)
+  dirs;
 }
