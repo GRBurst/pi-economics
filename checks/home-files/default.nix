@@ -13,6 +13,8 @@
         agentDir = dir;
         tokenMeter.enable = true;
         analysisSkill.enable = true;
+        cacheLifecycle.enable = true;
+        experiments.enable = true;
       };
     };
     pe = c.programs.piEconomics;
@@ -38,10 +40,20 @@
         if grep -qF '.pi/agent' ${skill}/SKILL.md; then echo "FAIL ${dir}: SKILL.md still names .pi/agent" >&2; exit 1; fi
       ''
     }
+    # cacheLifecycle and experiments: the extensions pi loads.
+    for e in ${pe.extensions.cache-lifecycle.path} ${pe.extensions.experiments.path}; do
+      for f in package.json index.ts core/shell.ts; do
+        [ -f "$e/$f" ] || { echo "FAIL ${dir}: $e lacks $f" >&2; exit 1; }
+      done
+    done
+    # cacheLifecycle's op, through the script the activation entry runs.
+    printf '{"theme":"dark"}\n' >"$TMPDIR/settings.json"
+    ${lib.getExe pe.piSettings.package} "$TMPDIR/settings.json" 2>/dev/null
+    jq -e '. == {theme: "dark", cacheWarming: "idle"}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the op: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }
     echo "ok ${dir}"
   '';
 in
-  pkgs.runCommand "home-files" {nativeBuildInputs = [pkgs.gnugrep pkgs.diffutils];} ''
+  pkgs.runCommand "home-files" {nativeBuildInputs = [pkgs.gnugrep pkgs.diffutils pkgs.jq];} ''
     set -euo pipefail
     ${lib.concatMapStrings case dirs}
     touch $out
