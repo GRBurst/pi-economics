@@ -81,5 +81,9 @@ in {
   };
   # The experiments tests run when it builds.
   experiments = self.packages.${pkgs.stdenv.hostPlatform.system}.experiments;
+  typecheck-experiments = typecheck.typecheck {
+    name = "experiments";
+    src = ../packages/experiments;
+  };
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
