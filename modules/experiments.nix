@@ -55,5 +55,8 @@ in {
     # (M4.14) Literal text (spec §4).
     home.file."${pe.agentDir}/experiments/settings.json" =
       lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
+
+    # (M4.15) A soft dependency (spec §4.1): shell.ts tolerates a missing API.
+    warnings = lib.optional (!pe.actorSubagents.enable) "pi-economics: experiments without actorSubagents loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
   };
 }

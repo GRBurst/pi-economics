@@ -80,4 +80,11 @@ in {
     )
     s)
   dirs;
+
+  # (M4.15) Alone, without actorSubagents: one warning, no assertion.
+  experiments-warning = let
+    c = eval ".pi/agent" {} {};
+  in
+    eq "new warnings" (lib.subtractLists bare.warnings c.warnings) [warning]
+    ++ eq "failed assertions" (failed "" c) [];
 }
