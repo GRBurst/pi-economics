@@ -96,7 +96,7 @@ const withApi = (sessionIds: string[]) => ({ list: () => sessionIds.map((session
 const setupTtl = (settings: Partial<ReturnType<typeof defaults>>, api?: ReturnType<typeof withApi>) => {
   const f = fakePi();
   const clock = { now: 100 * MIN };
-  install(f.pi as never, { settings: { ...defaults(), ...settings }, now: () => clock.now, api: () => api });
+  install(f.pi as never, { settings: { ...defaults(), ...settings }, now: () => clock.now, api: () => api as never });
   return { f, clock };
 };
 

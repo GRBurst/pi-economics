@@ -36,7 +36,7 @@ export function install(pi: PiLike, deps: Deps) {
   const { settings } = deps;
   const api = deps.api ?? (() => (globalThis as { __subagentsApi_v1?: SubagentsApiV1 }).__subagentsApi_v1);
   // The one seam for the factors the experiments package switches (spec §5.6): its arm's value, else the own setting.
-  const experiments = () => (globalThis as { __piExperimentsApi_v1?: { flag(n: string, d: string, s?: string): string } }).__piExperimentsApi_v1;
+  const experiments = () => (globalThis as { __piExperimentsApi_v1?: { flag(n: string, d: string, s?: string): string; armFor?(s: string): { id?: string } | undefined } }).__piExperimentsApi_v1;
   const flag = (name: "warmPolicy" | "mainCacheTtl" | "maskOnCold", sid: string): string => {
     const own = settings[name];
     const v = experiments()?.flag(name, own, sid) ?? own;
