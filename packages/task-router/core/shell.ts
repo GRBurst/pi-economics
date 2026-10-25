@@ -42,6 +42,8 @@ export type PiLike = NudgePi & {
   getThinkingLevel?(): ThinkingLevel;
   setThinkingLevel?(level: ThinkingLevel): void;
 };
+/** What the task-router reads of the experiments package's globalThis.__piExperimentsApi_v1; the type check compares it with the provider's ExperimentsApiV1 (spec §5.3). */
+export type ExperimentsApi = { flag(n: string, d: string, s?: string): string; armFor?(s: string): { id?: string } | undefined };
 export type Deps = {
   agentDir: string; now?: () => Date; settings?: Settings;
   /** What the settings loader found wrong (spec §5.4); reported once by the shell (T1.8). */
@@ -61,9 +63,9 @@ export function install(pi: PiLike, deps: Deps) {
   // routing / verifyGate / autoEscalate / freshOnCold come from the experiments arm when that package is loaded.
   let sessionId: string | undefined;
   const settings = withFlags(own, (name, def) =>
-    (globalThis as { __piExperimentsApi_v1?: { flag(n: string, d: string, s?: string): string } }).__piExperimentsApi_v1?.flag(name, def, sessionId) ?? def);
+    (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1?.flag(name, def, sessionId) ?? def);
   const armOf = (sid: string): string | undefined =>
-    (globalThis as { __piExperimentsApi_v1?: { armFor?(s: string): { id?: string } | undefined } }).__piExperimentsApi_v1?.armFor?.(sid)?.id;
+    (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1?.armFor?.(sid)?.id;
   const track = (ctx: any): void => { sessionId = ctx?.sessionManager?.getSessionId?.() ?? sessionId; };
   const now = deps.now ?? (() => new Date());
   const made = new Set<string>();

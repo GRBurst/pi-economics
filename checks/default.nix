@@ -187,5 +187,15 @@ in {
       type = "SubagentsApiV1";
     };
   };
+  # (M5.7) The router's copy of __piExperimentsApi_v1 (spec §5.3, §8.1).
+  iface-experiments-task-router = iface.compare {
+    name = "experiments-task-router";
+    provider = experimentsProvider;
+    consumer = {
+      src = ../packages/task-router;
+      file = "core/shell.ts";
+      type = "ExperimentsApi";
+    };
+  };
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
