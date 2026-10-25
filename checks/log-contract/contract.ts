@@ -86,6 +86,16 @@ async function mainSession(sid: string, child: string, usd: number): Promise<voi
   tr.clock.t = clock.t;
   const v = await tr.f.callTool("task_verdict", { name: child, verdict: "accepted", note: "contract" });
   assert.ok(!v.isError, `${child}: task_verdict failed`);
+  // a failover (an engine error on a routed child → reroute) and a re-spawn with attemptOf (→ escalate), real path
+  const fail = `${child}-fail`, again = `${child}-again`;
+  tr.clock.t = clock.t;
+  assert.ok(!("reject" in await tr.a.spawn({ name: fail, task: card() }, { sessionId: sid })), `${fail}: spawn rejected`);
+  tr.a.emit({ type: "spawn", name: fail, by: "main", parent: "main", childSessionId: fail, ts: clock.t });
+  tr.a.emit({ type: "error", name: fail, reason: "500 upstream", ts: clock.t });
+  await settle(); await settle();
+  tr.clock.t = clock.t;
+  assert.ok(!("reject" in await tr.a.spawn({ name: again, task: card({ attemptOf: fail }) }, { sessionId: sid })), `${again}: spawn rejected`);
+  tr.a.emit({ type: "spawn", name: again, by: "main", parent: "main", childSessionId: again, ts: clock.t });
   // guards
   expFire("message_end", { message: { role: "assistant" } }, sid);
   expFire("input", { text: "No, that's wrong, revert it", source: "interactive" }, sid);
@@ -117,7 +127,7 @@ for (const [name, lines] of Object.entries(logs)) {
   const old = lines.filter((l) => l.v !== 1);
   if (old.length) failures.push(`${name}: ${old.length} line(s) without schema version v=1, e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
 }
-for (const e of ["spawn", "check", "verdict"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
+for (const e of ["spawn", "check", "verdict", "reroute", "escalate"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
 for (const e of ["correction", "rating", "peek-after-mask"]) if (!logs.guards.some((l) => l.event === e)) failures.push(`guards: no ${e} event`);
 
 // --- pi-analyse --check over the produced lines, then the full analysis
