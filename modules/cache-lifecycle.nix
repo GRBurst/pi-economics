@@ -24,6 +24,19 @@ in {
       defaultText = lib.literalExpression "pkgs.callPackage <pi-economics>/packages/cache-lifecycle/package.nix { }";
       description = "The extension (package.json, index.ts, core/); its tests run when it builds.";
     };
+
+    # (M4.10)
+    settings = lib.mkOption {
+      type = lib.types.attrsOf (pkgs.formats.json {}).type;
+      default = {};
+      example = {maskOnCold = "tools";};
+      description = ''
+        Written to `<agentDir>/cache-lifecycle/settings.json` when non-empty.
+        Every key has a default in the package's core/settings.ts
+        (`warmPolicy`, `mainCacheTtl`, `maskOnCold`, `protectedTailTokens`,
+        `identityShim`), so `{}` writes no file.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -37,5 +50,9 @@ in {
       forChildren = true;
       description = "Elides stale tool results and thinking on the first request after the prompt cache expired (outside a protected tail) and can request a 1 h cache TTL for the main session; settings in <agentDir>/cache-lifecycle/settings.json.";
     };
+
+    # (M4.10) Literal text (spec §4): checks read it with builtins.fromJSON.
+    home.file."${pe.agentDir}/cache-lifecycle/settings.json" =
+      lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
   };
 }

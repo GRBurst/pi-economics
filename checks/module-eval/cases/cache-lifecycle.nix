@@ -65,4 +65,18 @@ in {
     eq "home.file targets (${dir})" (sorted (targets (eval dir {} {})))
     (sorted (targets bare ++ ["${dir}/extensions/cache-lifecycle"])))
   dirs;
+
+  # (M4.10) settings: written as given under agentDir (the host's check value,
+  # checks/pi-extensions.nix:260).
+  cache-lifecycle-settings = lib.concatMap (dir: let
+    s = {maskOnCold = "tools";};
+    f = fileAt "${dir}/cache-lifecycle/settings.json" (eval dir {settings = s;} {});
+  in
+    eq "settings file (${dir})" (
+      if f == null
+      then null
+      else builtins.fromJSON f.text
+    )
+    s)
+  dirs;
 }
