@@ -120,6 +120,46 @@ The agent skill `pi-token-economics-analysis`
 | `package` | the skill directory, `SKILL.md` at its root | every `~/.pi/agent` in the text replaced by `~/<agentDir>`; with the default `agentDir` the text is the source |
 | `path` (read-only) | `null` while disabled | the directory to link as `<skills dir>/pi-token-economics-analysis` (the frontmatter `name`) |
 
+### `cacheLifecycle` (`modules/cache-lifecycle.nix`)
+
+The prompt-cache lifecycle (`packages/cache-lifecycle`): on the first request
+after the prompt cache expired it elides stale tool results and thinking
+outside a protected tail; it can request a 1 h cache TTL for the main
+session; and it decides pi's idle cache warming (orchestrator-aware: a main
+with running children, and a child awaiting a reply, stay warm). Main
+sessions and children load it.
+
+| Option | Default | Effect |
+|---|---|---|
+| `enable` | `false` | registry entry `cache-lifecycle` (`forChildren = true`); the piSettings op `ops.cacheLifecycle`: `set ["cacheWarming"] "idle"`, order 1500 |
+| `package` | the flake's `packages/cache-lifecycle` | the extension |
+| `settings` | `{}` | written to `<agentDir>/cache-lifecycle/settings.json` when non-empty (`warmPolicy`, `mainCacheTtl`, `maskOnCold`, `protectedTailTokens`, `identityShim`; each has a default in the package) |
+
+pi asks for a warming decision only while its `settings.json` says
+`cacheWarming` is `"idle"`, and pi's default is `streaming`. The op edits an
+existing file only: standalone, pi keeps its default while there is no
+`settings.json`, and while `piSettings.enable` is `false`. Without
+`actorSubagents` it warns: no warming while a session waits on its children.
+Without `infiniteContext` the `context_peek` guard has nothing to log; without
+`experiments` its own settings decide every factor. Neither warns.
+
+### `experiments` (`modules/experiments.nix`)
+
+The online experiment (`packages/experiments`): one fractional-factorial arm
+per main session, recorded in `<agentDir>/experiments/assignments.jsonl` and
+published as `globalThis.__piExperimentsApi_v1`, whose factor flags
+`cacheLifecycle`, `tokenMeter`, the task router and `infiniteContext` read.
+Corrections and `/rate` ratings go to `<agentDir>/guards/events.jsonl`. There
+is no timer: `meter-report --arms --posterior` updates the posterior on demand.
+
+| Option | Default | Effect |
+|---|---|---|
+| `enable` | `false` | registry entry `experiments` (`forChildren = false`: children inherit their parent's arm) |
+| `package` | the flake's `packages/experiments` | the extension |
+| `settings` | `{}` | written to `<agentDir>/experiments/settings.json` when non-empty (`mode`, `factors`, `maxArms`, `minExplore`, `baseline`, `guards`, `correctionRegex`) |
+
+Without `actorSubagents` it warns: children do not inherit an arm.
+
 ## Patched upstreams
 
 A component built from an upstream repository takes it as a `flake = false`
@@ -132,7 +172,7 @@ points into `src`.
 
 | Check | Covers |
 |---|---|
-| `module-eval` | Home Manager evaluations: exports, options, registry, piSettings rendering, assertions with their negative cases, the skill text, the skill↔meter contract |
+| `module-eval` | Home Manager evaluations: exports, options, registry, piSettings rendering, assertions with their negative cases, the skill text, the skill↔meter contract, soft-dependency warnings, the host's combination |
 | `pi-settings-migrate` | the piSettings script: the ported cases, bytes equal to the former script, the op table |
 | `npm-deps` | the shared npm lock (`checks/npm`) installs the declared toolchain |
 | `typecheck-harness` | the `tsc` runner accepts and rejects what it must |
@@ -142,9 +182,13 @@ points into `src`.
 | `typecheck-actor-subagents` | `tsc --strict` over the patched pi-actor-subagents |
 | `token-meter` | the token meter's own tests (`node --test`), run when it builds |
 | `typecheck-token-meter` | `tsc --strict` over the token meter |
-| `home-files` | the rendered sources exist and are what pi and the harnesses read: the extension, `LOGS.md`, both commands on an empty agent dir, the skill directory |
+| `home-files` | the rendered sources exist and are what pi and the harnesses read: the extension, `LOGS.md`, both commands on an empty agent dir, the skill directory, the cache-lifecycle and experiments directories, cacheLifecycle's op through the activation's script |
 | `iface-harness` | the interface-comparison harness accepts a satisfied copy and rejects an unsatisfied one |
 | `iface-subagents-bench-probe` | the bench probe's copy of `__subagentsApi_v1` is satisfied by the provider's `SubagentsApiV1` |
+| `cache-lifecycle`, `experiments` | each package's own tests (`node --test`), run when it builds |
+| `typecheck-cache-lifecycle`, `typecheck-experiments` | `tsc --strict` over each package |
+| `iface-subagents-cache-lifecycle`, `iface-subagents-experiments` | their copies of `__subagentsApi_v1` are satisfied by the provider's `SubagentsApiV1` |
+| `iface-experiments-token-meter`, `iface-experiments-cache-lifecycle` | their copies of `__piExperimentsApi_v1` are satisfied by the provider's `ExperimentsApiV1` |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths, `git+ssh` URLs or private addresses in tracked files |
 
 How to run them: `AGENTS.md`, "Commands".
