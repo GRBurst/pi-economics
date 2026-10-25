@@ -8,5 +8,6 @@
     ./analysis-skill.nix
     ./cache-lifecycle.nix
     ./experiments.nix
+    ./infinite-context.nix
   ];
 }

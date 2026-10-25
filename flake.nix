@@ -44,8 +44,9 @@
     # common.nix, so every option a cross-component assertion reads exists.
     homeModules.default = {
       imports = [./modules];
-      # The upstream source the patched component builds from (spec §3).
+      # The upstream sources the patched components build from (spec §3).
       programs.piEconomics.actorSubagents.src = lib.mkDefault pi-actor-subagents;
+      programs.piEconomics.infiniteContext.src = lib.mkDefault pi-infinite-context;
     };
 
     # One package per component (spec §3); the module's `package` default
