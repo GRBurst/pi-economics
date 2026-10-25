@@ -10,5 +10,6 @@
     ./experiments.nix
     ./infinite-context.nix
     ./retry.nix
+    ./task-router.nix
   ];
 }
