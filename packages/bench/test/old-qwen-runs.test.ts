@@ -28,3 +28,19 @@ test("report: an arm without factors adds nothing to a row, so old qwen runs rep
 	assert.deepEqual(factors.filter((f) => f in row), [], "no factor column on an old qwen row");
 	assert.equal(row.verdicts.opus, "partial");
 });
+
+// Q.2
+test("judge TASK JUDGE qwen sonnet and judge-all qwen: old qwen runs stay judgeable with explicit arms", () => {
+	const b = judgeBench(["qwen", "sonnet"]);
+	cliRun(b.env, "judge", "T", "opus", "qwen", "sonnet");
+	assert.deepEqual(b.judged("opus"), ["qwen", "sonnet"]);
+	cliRun(b.env, "judge-all", "--once", "qwen");
+	assert.deepEqual(b.judged("gpt"), ["qwen", "sonnet"]);
+});
+
+test("judge: a task's recorded blind map wins over the requested pair, so both judges see the same two runs", () => {
+	const b = judgeBench(["qwen", "qwenl", "sonnet"]);
+	cliRun(b.env, "judge", "T", "opus", "qwen", "sonnet");
+	cliRun(b.env, "judge", "T", "gpt", "qwenl", "sonnet");
+	assert.deepEqual(b.judged("gpt"), ["qwen", "sonnet"]);
+});
