@@ -49,4 +49,14 @@ in {
     ++ eq "failed assertions (${dir})" (failed "" c) []
     ++ eq "warnings (${dir})" c.warnings actorOnly.warnings)
   dirs;
+
+  # (M5.9) settings: written as given under agentDir (the host's check value,
+  # checks/pi-extensions.nix:64); {} writes nothing.
+  task-router-settings = lib.concatMap (dir: let
+    s = {cloudDailyCap = 500;};
+    f = fileAt "${dir}/task-router/settings.json" (eval dir {settings = s;} withActor);
+  in
+    eq "settings file (${dir})" (builtins.fromJSON f.text) s
+    ++ eq "no file for {} (${dir})" (fileAt "${dir}/task-router/settings.json" (eval dir {} withActor)) null)
+  dirs;
 }
