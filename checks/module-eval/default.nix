@@ -16,6 +16,7 @@
     ./cases/token-meter.nix
     ./cases/analysis-skill.nix
     ./cases/cache-lifecycle.nix
+    ./cases/experiments.nix
     ./cases/together.nix
   ];
   cases =

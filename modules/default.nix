@@ -7,5 +7,6 @@
     ./token-meter.nix
     ./analysis-skill.nix
     ./cache-lifecycle.nix
+    ./experiments.nix
   ];
 }
