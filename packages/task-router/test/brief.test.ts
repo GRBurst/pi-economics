@@ -1,10 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { briefAppend } from "../core/brief.ts";
-import { planFor, type TierPlan as Plan } from "./tier-plan.ts";
+import { planFor as tierPlanFor, type TierPlan } from "./tier-plan.ts";
 import { profileFor } from "../core/profile.ts";
 import { defaults } from "../core/settings.ts";
-import type { Card, Profile } from "../core/types.ts";
+import type { Card, Plan, Profile } from "../core/types.ts";
+
+// The fixtures are tier plans (test/tier-plan.ts); briefAppend reads only what both shapes share.
+const planFor = (...a: Parameters<typeof tierPlanFor>): Plan => tierPlanFor(...a) as unknown as Plan;
 
 const T0 = { bounded: true, specified: true, verifiable: true, lowRisk: true, small: true, linear: true };
 const card = (o: Partial<Card> = {}): Card => ({ kind: "implement", files: ["a.ts", "b.md"], acceptance: ["x"], t0: T0, t2: [], ...o });
@@ -13,7 +16,7 @@ const prof = (k: string): Profile => {
   if (!r.ok) throw new Error(r.errors.join());
   return r.value;
 };
-const plan = (base: Plan["base"] = "qwen", i: Plan["importance"] = "normal", kind = "implement"): Plan => planFor(base, i, kind);
+const plan = (base: TierPlan["base"] = "qwen", i: TierPlan["importance"] = "normal", kind = "implement"): Plan => planFor(base, i, kind);
 
 const HANDSHAKE = "Start immediately; no understanding/questions reply.";
 const LIMIT = "Report in ≤ 300 words plus file paths; put details in a file.";

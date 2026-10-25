@@ -92,7 +92,7 @@ test("rng < share decides: 0.19 < 0.2 randomizes, 0.2 does not", () => {
 
 test("a re-spawn with attemptOf and a qwen-pinned profile are never randomized", async () => {
   const h = harness({
-    settings: { randomize: { enabled: true, share: 1 }, profiles: { cheap: { tier: "qwen", tools: "all", skills: [], report: "default" } } },
+    settings: { randomize: { enabled: true, share: 1 }, profiles: { cheap: { tier: "qwen", tools: "all", skills: [], report: "default" } as never } },
     extra: { rng: () => 0 } as never,
   });
   accepted(await h.a.spawn({ name: "p1", task: card({ kind: "cheap" }) }));

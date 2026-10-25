@@ -172,5 +172,10 @@ in {
   task-router = self.packages.${pkgs.stdenv.hostPlatform.system}.task-router;
   # (M5.4) The decisions of R', recorded once (spec §6.3).
   router-golden = pkgs.callPackage ./router-golden {};
+  # (M5.5)
+  typecheck-task-router = typecheck.typecheck {
+    name = "task-router";
+    src = ../packages/task-router;
+  };
   home-files = import ./home-files {inherit lib pkgs hm;};
 }

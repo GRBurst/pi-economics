@@ -3,7 +3,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { countCalls, nudgeText } from "../core/delegation.ts";
 import { briefAppend } from "../core/brief.ts";
-import { planFor } from "./tier-plan.ts";
+import { planFor as tierPlanFor } from "./tier-plan.ts";
+import type { Plan } from "../core/types.ts";
+
+// The fixtures are tier plans (test/tier-plan.ts); briefAppend reads only what both shapes share.
+const planFor = (...a: Parameters<typeof tierPlanFor>): Plan => tierPlanFor(...a) as unknown as Plan;
 import { defaults, loadSettings } from "../core/settings.ts";
 import { accepted, card, harness } from "./harness.ts";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -119,7 +123,7 @@ test("brief: handoff=false drops the no-handshake line, the rest stays", () => {
   const s = defaults();
   const c = card();
   const p = planFor("qwen", "normal", "implement");
-  const prof = { tools: "all", skills: [], report: "default" } as const;
+  const prof: import("../core/types.ts").Profile = { tools: "all", skills: [], report: "default" };
   assert.ok(briefAppend(c, p, true, prof, "", true).includes(HANDSHAKE));
   const b = briefAppend(c, p, true, prof, "", false);
   assert.ok(!b.includes("Start immediately"));

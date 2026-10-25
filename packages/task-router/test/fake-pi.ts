@@ -1,4 +1,5 @@
 // Minimal stand-in for pi's ExtensionAPI: records handlers and tools, lets tests fire events and call tools.
+import type { ThinkingLevel } from "../core/types.ts";
 type Handler = (e: any, ctx: any) => unknown;
 type Tool = { name: string; description: string; parameters: any; execute: (id: string, params: any, signal: unknown, onUpdate: unknown, ctx: any) => Promise<any> };
 
@@ -12,7 +13,7 @@ export function fakePi() {
     thinking,
     sent,
     pi: {
-      getThinkingLevel: () => thinking.level,
+      getThinkingLevel: () => thinking.level as ThinkingLevel,
       setThinkingLevel(l: string) { thinking.level = l; thinking.sets.push(l); },
       on(name: string, h: Handler) { handlers.set(name, [...(handlers.get(name) ?? []), h]); },
       sendMessage(msg: any, opts: any) { sent.push({ msg, opts }); },

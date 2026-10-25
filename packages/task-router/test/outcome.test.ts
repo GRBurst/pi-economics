@@ -15,7 +15,7 @@ const card: Card = {
   kind: "implement", files: [`src/${SECRET}.ts`], check: `run ${SECRET}`, acceptance: [`${SECRET} works`],
   t0: { bounded: true, specified: true, verifiable: true, lowRisk: true, small: true, linear: true }, t2: [], failure: SECRET,
 };
-const plan: Plan = { worker: { tier: "qwen", effort: "xhigh" }, review: { tier: "T1", effort: "high" }, base: "qwen", importance: "high", reasons: ["all t0 criteria hold"] };
+const plan = { worker: { tier: "qwen", effort: "xhigh" }, review: { tier: "T1", effort: "high" }, base: "qwen", importance: "high", reasons: ["all t0 criteria hold"] } as unknown as Plan;
 const long = "x".repeat(5000);
 
 const sample = () => [

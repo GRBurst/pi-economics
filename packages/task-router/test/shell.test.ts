@@ -10,7 +10,7 @@ import type { Card, Plan } from "../core/types.ts";
 
 const NOW = new Date(Date.UTC(2026, 9, 2, 12, 0, 0));
 const card: Card = { kind: "implement", files: [], acceptance: [], t0: { bounded: true, specified: true, verifiable: true, lowRisk: true, small: true, linear: true }, t2: [] };
-const plan: Plan = { worker: { tier: "qwen", effort: "xhigh" }, base: "qwen", importance: "normal", reasons: [] };
+const plan = { worker: { tier: "qwen", effort: "xhigh" }, base: "qwen", importance: "normal", reasons: [] } as unknown as Plan;
 
 function setup() {
   const agentDir = mkdtempSync(join(tmpdir(), "task-router-shell-"));

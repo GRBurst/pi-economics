@@ -131,7 +131,7 @@ test("skillBlocks: unknown skill → error naming it", () => {
 
 test("skillNames (P-profile): profile skills ∪ card skills, deduplicated, order kept", async () => {
   const { skillNames } = await import("../core/profile.ts");
-  const p = { tools: "all", skills: ["a", "b"], report: "default" } as const;
+  const p: import("../core/types.ts").Profile = { tools: "all", skills: ["a", "b"], report: "default" };
   assert.deepEqual(skillNames(p, { skills: ["c", "a", "d", "c"] }), ["a", "b", "c", "d"]);
   assert.deepEqual(skillNames(p, {}), ["a", "b"]);
   assert.deepEqual(skillNames({ ...p, skills: [] }, {}), []);

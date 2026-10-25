@@ -46,7 +46,7 @@ test("rejections are self-contained: every schema field, t0 key, t2 value and ki
       assert.ok(r.reject.includes(w), `${w} in: ${r.reject}`);
     }
   }
-  assert.match(bad.reject, /files: missing/);
+  assert.match((bad as { reject: string }).reject, /files: missing/);
 });
 
 test("the injected section and the rejection share one schema text (cannot drift)", () => {

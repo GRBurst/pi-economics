@@ -19,7 +19,7 @@ const SHORT = () => ({ importanceTable: { mine: structuredClone(defaults().impor
 async function spawn(settings: object, kind: string, importance?: Importance, t2: string[] = []): Promise<string> {
   const h = harness({ settings: settings as never });
   provideSkills(h, SK);
-  const r = await h.a.spawn({ name: "a", task: card({ kind, ...(importance ? { importance } : {}), t2 }) });
+  const r = await h.a.spawn({ name: "a", task: card({ kind, ...(importance ? { importance } : {}), t2 } as never) });
   return "reject" in r ? `REJECT ${r.reject}` : `${r.model} ${r.thinkingLevel}`;
 }
 
