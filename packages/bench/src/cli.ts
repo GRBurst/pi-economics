@@ -12,7 +12,7 @@ import { runOne } from "./run.ts";
 import type { Task } from "./types.ts";
 
 const USAGE = `usage: pi-bench <command>
-  run TASK ARM [REP]              one run (ARM: qwen | qwenl | sonnet | orch | orch-<signs> | arms.json); prints result.json
+  run TASK ARM [REP]              one run (ARM: qwenl | sonnet | orch | orch-<signs> | arms.json); prints result.json
   sched ARM PARALLEL TASK...      each task once, PARALLEL at a time; log in <work>/sched.ARM.log
   judge TASK JUDGE [X Y]          blind pairwise judge (opus | gpt) of runs TASK.X.1 vs TASK.Y.1 (default ${DEFAULT_PAIR.x} ${DEFAULT_PAIR.y})
   judge --all [--judges opus,gpt] [--parallel N] [--min-runs M]

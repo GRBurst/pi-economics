@@ -14,7 +14,6 @@ const printArm = (model: string, thinking: string): Arm => ({
 
 /** claude-auth is required for anthropic models (without it: 400 "out of extra usage"). */
 export const defaultArms = (): Record<string, Arm> => ({
-	qwen: printArm("openrouter/qwen/qwen3.8-27b:free", "xhigh"),
 	qwenl: printArm("llama/qwen3.8", "xhigh"),
 	sonnet: printArm("anthropic/claude-sonnet-5-5", "high"),
 	orch: {
