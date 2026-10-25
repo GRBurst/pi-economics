@@ -212,6 +212,7 @@ hr() { git dot show "$RP:projects/nixos/new/$1"; }
 ai=modules/home-manager/features/ai; tr=$ai/extensions/task-router
 hostR() { rm -rf "$TMPDIR/hostR" && mkdir -p "$TMPDIR/hostR" && (cd ~/projects/nixos/new && git dot archive "$RP" -- $tr checks/pi-log-contract) | tar -x -C "$TMPDIR/hostR"; }
 HR=$TMPDIR/hostR/$tr                                       # R'’s router, after hostR
+hostFull() { rm -rf "$TMPDIR/hostR-full" && mkdir -p "$TMPDIR/hostR-full" && (cd ~/projects/nixos/new && git dot archive "$RP" -- .) | tar -x -C "$TMPDIR/hostR-full"; }   # the whole host flake at R'
 gen() { node --experimental-strip-types --no-warnings checks/router-golden/generate.ts "$1"; }
 flag() { while [ -e ~/.cache/pi/pluto-exec/owner-deploy.flag ]; do sleep 60; done; }   # before every build above 2 GiB
 ```
@@ -285,7 +286,7 @@ Every task starts at `[ ]`. One failing check at a time; a task's commit holds o
   - P1: `hr $tr/core/settings.ts | grep -n 'models: {'` (the defaults) and `hr $tr/test/settings.test.ts | grep -n 'models: { sonnet: { model: "m" } }'` (a file sets a model). Holds at `f1b140e` (`settings.ts:26`, `settings.test.ts:39`).
   - P2: `hr $tr/test/cloud.test.ts | grep -n 'a blank qwen-cloud is skipped'` (the route only; holds at `f1b140e`, `:84`); the full property is M5.3's test, run at R' there.
   - P3: `hr $tr/core/shell.ts | grep -n 'registerSpawnPolicy\|__piExperimentsApi_v1'` (holds at `f1b140e`: `:123`, `:64`, `:66`); the comparisons are M5.6, M5.7.
-  - P4: the host's `pi-log-contract` at R': `hostR`-free form, `flag; (ulimit -v $cap && exec timeout -s KILL 1800 nix build --no-link "path:$TMPDIR/hostR-full#checks.x86_64-linux.pi-log-contract" "${o[@]}")` on a `git dot archive "$RP" -- .` of the whole flake (from `~/projects/nixos/new`) into `$TMPDIR/hostR-full`; or the redesign's own gate record at R' if it ran G2 (`pi-log-contract … ok`). Held at `5903562` (gate `g2`).
+  - P4: the host's `pi-log-contract` green at R': the redesign's gate record at R', if its review fixes ran G2 (`pi-log-contract … ok`); otherwise `hostFull; flag; (ulimit -v $cap && exec timeout -s KILL 1800 nix build --no-link "path:$TMPDIR/hostR-full#checks.x86_64-linux.pi-log-contract" "${o[@]}")`. Held at `5903562` (gate `g2`).
   - P5: `hr $tr/nix/hm-module.nix | grep -n 'formats.json\|settings != {}'` (free-form, written when non-empty; holds at `f1b140e`).
 - [ ] **Step 6:** `flag; nb module-eval` green at M6's end (baseline `N6`).
 
@@ -431,6 +432,6 @@ Run only when M6's Execution Record says M6.D was "moved to M5"; otherwise mark 
 - [ ] **Step 1:** `fmt --check $(git ls-files '*.nix')` clean.
 - [ ] **Step 2 (every check, both refs):** `flag`; list the checks with `ne checks.x86_64-linux --apply builtins.attrNames --json` (a failed or empty listing is a failure) and build each, capped, with `nb` and with `nbp`; name every failure at the end.
 - [ ] **Step 3 (P-copy):** `diff -rq --exclude=nix --exclude='host-*' $HR packages/task-router` = the list of P-copy.
-- [ ] **Step 4 (P-out):** `flag`; build the host's package at R' from the archive: `(ulimit -v $cap && exec timeout -s KILL 900 nix build --no-link --print-out-paths --impure --expr "(import <nixpkgs> {}).callPackage $HR/nix/package.nix {}")` is not pinned to the host's nixpkgs — use instead `nix build --no-link --print-out-paths "path:$TMPDIR/hostR-full#checks.x86_64-linux.pi-task-router" "${o[@]}"` (M5.0 Step 5's archive) and `nb`'s `task-router` output (`ne packages.x86_64-linux.task-router.outPath --raw`); `diff -r` the two → only `core/shell.ts`.
+- [ ] **Step 4 (P-out):** `hostFull; flag`; `a=$( (ulimit -v $cap && exec timeout -s KILL 1800 nix build --no-link --print-out-paths "path:$TMPDIR/hostR-full#checks.x86_64-linux.pi-task-router" "${o[@]}") )`, `b=$(ne packages.x86_64-linux.task-router.outPath --raw)` (built by Step 2); `diff -rq "$a" "$b"` → only `core/shell.ts`.
 - [ ] **Step 5:** fill the Execution Record: R' and how it was named; P1–P5 with evidence (and any handed over); the drift; per task commit, red seen, deviations; `T`, the final case count; the `earth` lines kept (M5.2); the open questions as answered.
 - [ ] Commit.
