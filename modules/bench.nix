@@ -10,6 +10,10 @@
   pe = config.programs.piEconomics;
   cfg = pe.bench;
   agentSrc = "${config.home.homeDirectory}/${pe.agentDir}";
+  # (M5.12) The router's keys that say which models exist and where to reach
+  # them (spec §7), in R's schema and in the legacy forms its loader still
+  # maps (core/settings.ts).
+  routerModelKeys = ["models" "queueMaxSec" "localHealthUrl" "cloudDailyCap" "contextWindow"];
 in {
   options.programs.piEconomics.bench = {
     enable = lib.mkEnableOption "the pi-bench harness (pi-bench, bench-report)";
@@ -67,6 +71,11 @@ in {
         (`PI_BENCH_ROUTER`, made with `builtins.toFile`, so no value may carry
         a store path's context); `{}` exports nothing, and an arm's file is the
         arm's keys alone.
+        While taskRouter is enabled it is defined, one `mkDefault` per key, as
+        the keys of taskRouter.settings that name the models and where to reach
+        them (`models`, `queueMaxSec`, `localHealthUrl`, `cloudDailyCap`,
+        `contextWindow`) with `randomize.enabled` and `spotCheck.enabled`
+        forced to `false`.
       '';
     };
 
@@ -93,6 +102,14 @@ in {
       pi-retry = "${pe.retry.package}";
       token-meter = "${pe.tokenMeter.package}";
     };
+    # (M5.12) The arms run on the models the host configures, never with its
+    # randomization or spot checks (spec §7).
+    programs.piEconomics.bench.router = lib.mkIf pe.taskRouter.enable (lib.mapAttrs (_: lib.mkDefault) (lib.recursiveUpdate
+      (lib.filterAttrs (n: _: lib.elem n routerModelKeys) pe.taskRouter.settings)
+      {
+        randomize.enabled = false;
+        spotCheck.enabled = false;
+      }));
     home.sessionVariables =
       {
         PI_BENCH_DATA = cfg.dataDir;

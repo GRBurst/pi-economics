@@ -99,4 +99,58 @@ in {
     v = (on {inherit router;}).home.sessionVariables;
   in
     eq "PI_BENCH_ROUTER" (lib.importJSON v.PI_BENCH_ROUTER) router;
+
+  # (M5.12) With taskRouter, the arms get its model keys and both switches
+  # off; a definition replaces one key; without taskRouter nothing (spec §7).
+  bench-router-default = let
+    s = {
+      models.sonnet.model = "m";
+      localHealthUrl = "http://h:1";
+      queueMaxSec = 5;
+      randomize = {
+        enabled = true;
+        share = 0.2;
+      };
+      spotCheck = {
+        enabled = true;
+        share = 0.1;
+      };
+      t0Limits.files = 3;
+      profiles.x.ability = "read";
+    };
+    ev = more:
+      hm.eval {
+        programs.piEconomics =
+          {
+            bench.enable = true;
+            actorSubagents.enable = true;
+            taskRouter = {
+              enable = true;
+              settings = s;
+            };
+          }
+          // more;
+      };
+    want = {
+      models.sonnet.model = "m";
+      localHealthUrl = "http://h:1";
+      queueMaxSec = 5;
+      randomize.enabled = false;
+      spotCheck.enabled = false;
+    };
+    c = ev {};
+  in
+    eq "router" (pe c).bench.router want
+    ++ eq "PI_BENCH_ROUTER" (lib.importJSON c.home.sessionVariables.PI_BENCH_ROUTER) want
+    ++ eq "a definition replaces one key" (pe (ev {
+      bench = {
+        enable = true;
+        router.queueMaxSec = 9;
+      };
+    })).bench.router (want // {queueMaxSec = 9;})
+    ++ eq "empty settings: the switches only" (pe (ev {taskRouter.enable = true;})).bench.router {
+      randomize.enabled = false;
+      spotCheck.enabled = false;
+    }
+    ++ holds "without taskRouter: nothing exported" (!((hm.eval {programs.piEconomics.bench.enable = true;}).home.sessionVariables ? PI_BENCH_ROUTER));
 }
