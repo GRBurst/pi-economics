@@ -7,7 +7,7 @@
   expect,
 }: let
   inherit (expect) eq failed;
-  components = ["bench" "actorSubagents" "tokenMeter" "analysisSkill" "cacheLifecycle" "experiments" "infiniteContext" "retry"];
+  components = ["bench" "actorSubagents" "tokenMeter" "analysisSkill" "cacheLifecycle" "experiments" "infiniteContext" "retry" "taskRouter"];
   with' = cs: hm.eval {programs.piEconomics = lib.genAttrs cs (_: {enable = true;});};
   set = l: lib.sort lib.lessThan (lib.unique l);
   targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
@@ -19,7 +19,13 @@ in {
   components-together =
     eq "home.file targets" (set (targets all)) (union targets)
     ++ eq "home.packages" (set (packages all)) (union packages)
-    ++ eq "session variables" all.home.sessionVariables (lib.foldl' (acc: c: acc // (with' [c]).home.sessionVariables) {} components)
+    # (M5.16) The one variable only a combination renders: bench with
+    # taskRouter exports the router base (bench.router, M5.12).
+    ++ eq "session variables" (removeAttrs all.home.sessionVariables ["PI_BENCH_ROUTER"]) (lib.foldl' (acc: c: acc // (with' [c]).home.sessionVariables) {} components)
+    ++ eq "PI_BENCH_ROUTER" (lib.importJSON all.home.sessionVariables.PI_BENCH_ROUTER) {
+      randomize.enabled = false;
+      spotCheck.enabled = false;
+    }
     ++ eq "activation entries" (set (lib.attrNames all.home.activation)) (union (cfg: lib.attrNames cfg.home.activation))
     ++ eq "failed assertions" (failed "" all) []
     ++ eq "warnings" all.warnings (hm.evalBare {}).warnings;
