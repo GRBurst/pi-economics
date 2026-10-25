@@ -70,6 +70,8 @@ export type LoggedPlan = {
   base: string; importance: Importance; reasons: string[]; assigned?: "router" | "random"; routeBase?: string;
   ability?: Ability; level?: number; draft?: true;
 };
+/** What a routed child started on (spec §6.4, AC4): its member and model, the effort it started at, the time it waited. */
+export type Start = { member: string; model: string; effort: ThinkingLevel; waitMs: number };
 
 export type RouterSettings = {
   t0Limits: { files: number; tokens: number };

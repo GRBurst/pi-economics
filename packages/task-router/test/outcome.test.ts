@@ -8,7 +8,12 @@ const K_ALLOWED = new Set([
   "v", "ts", "event", "taskId", "cardHash", "kind", "workerTier", "workerEffort", "reviewTier", "reviewEffort",
   "base", "importance", "reasons", "arm", "sessionId", "parentSessionId", "attemptOf", "from", "to", "reason",
   "exit", "durationMs", "verdict", "note", "unresolved", "assigned", "routeBase", "reviewOf", "requested",
+  // T4.1 (spec §6.4, AC4, RD2)
+  "ability", "level", "draft", "workerLevel", "reviewLevel", "workerMember", "workerModel", "startEffort", "waitMs",
+  "fromModel", "toModel", "fromLevel", "toLevel",
 ]);
+/** The T4.1 spawn fields (spec §6.4): the requirement, the plan's levels, what the child started on, the wait. */
+const NEW_SPAWN_KEYS = ["ability", "level", "draft", "workerLevel", "reviewLevel", "workerMember", "workerModel", "startEffort", "waitMs"];
 const NOW = new Date(Date.UTC(2026, 9, 2, 12, 0, 0));
 const SECRET = "SECRET-PROMPT-TEXT";
 const card: Card = {
@@ -17,6 +22,12 @@ const card: Card = {
 };
 const plan = { worker: { tier: "qwen", effort: "xhigh" }, review: { tier: "T1", effort: "high" }, base: "qwen", importance: "high", reasons: ["all t0 criteria hold"] } as unknown as Plan;
 const long = "x".repeat(5000);
+/** A routed write-0 draft plan with a review leg, started on Sonnet after a wait (a queue fallback). */
+const routed = {
+  ability: "write", level: 0, draft: true, worker: { tier: "qwen", effort: "xhigh", level: 0 }, review: { tier: "T1", effort: "high", level: 1 },
+  base: "qwen-draft", importance: "normal", reasons: ["soft miss: small"],
+} as unknown as Plan;
+const start = { member: "sonnet", model: "anthropic/claude-sonnet-5-5", effort: "high" as const, waitMs: 12000 };
 
 const sample = () => [
   spawnEvent({ now: NOW, taskId: "t1", card, plan, arm: "a1", sessionId: "s1", parentSessionId: "p1", attemptOf: "t0" }),
@@ -26,10 +37,11 @@ const sample = () => [
   escalateEvent({ now: NOW, taskId: "t1", from: "qwen", to: "T1", attemptOf: "t0" }),
   verdictEvent({ now: NOW, taskId: "t1", verdict: "accepted", note: "ok", reviewOf: "t0" }),
   spotcheckEvent({ now: NOW, taskId: "t1" }),
+  spawnEvent({ now: NOW, taskId: "t1", card, plan: routed, start }),
 ];
 
 test("every builder: event name, ts, taskId; keys ⊆ allowlist", () => {
-  const names = ["spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck"];
+  const names = ["spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck", "spawn"];
   sample().forEach((e, i) => {
     assert.equal(e.event, names[i]);
     assert.equal(e.v, 1, "schema version (LOGS.md)");
@@ -71,6 +83,24 @@ test("spawn event carries the optional T5.20\u2013T5.22 fields only when set; sp
   const none = spawnEvent({ now: NOW, taskId: "t3", card, plan, unresolved: false });
   for (const k of ["assigned", "routeBase", "unresolved", "reviewOf"]) assert.ok(!(k in none), k);
   assert.deepEqual(spotcheckEvent({ now: NOW, taskId: "t1" }), { v: 1, ts: NOW.toISOString(), event: "spotcheck", taskId: "t1", requested: true });
+});
+
+test("T4.1 spawn line: requirement, plan levels, the started member, model and effort, the wait; workerEffort stays planned (AC4, RD2)", () => {
+  const e = spawnEvent({ now: NOW, taskId: "t1", card, plan: routed, start });
+  assert.deepEqual(Object.fromEntries(NEW_SPAWN_KEYS.map((k) => [k, e[k]])), {
+    ability: "write", level: 0, draft: true, workerLevel: 0, reviewLevel: 1,
+    workerMember: "sonnet", workerModel: "anthropic/claude-sonnet-5-5", startEffort: "high", waitMs: 12000,
+  });
+  assert.deepEqual([e.workerTier, e.workerEffort], ["qwen", "xhigh"]); // the planned leg (RD2)
+  // draft only when true; no review leg → no reviewLevel; no start → no started fields
+  const noDraft = spawnEvent({ now: NOW, taskId: "t2", card, plan: { ...routed, draft: undefined, review: undefined } as unknown as Plan });
+  for (const k of ["draft", "reviewLevel", "workerMember", "workerModel", "startEffort", "waitMs"]) assert.ok(!(k in noDraft), k);
+  assert.deepEqual([noDraft.ability, noDraft.level, noDraft.workerLevel], ["write", 0, 0]);
+});
+
+test("T4.1 an unrouted spawn line has none of the new fields", () => {
+  const e = spawnEvent({ now: NOW, taskId: "u1", card, plan });
+  for (const k of NEW_SPAWN_KEYS) assert.ok(!(k in e), k);
 });
 
 test("cardHash: 16 hex chars, stable, sensitive to the card", () => {

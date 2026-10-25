@@ -423,3 +423,49 @@ test("an explicit model's failover stays at or above it: an explicit Sonnet chil
   await settle();
   assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["s1", sonnet2.model]]);
 });
+
+// T4.1 (AC4, RD2, MP4): the spawn line carries the requirement, the plan's levels and what the child started on.
+const LOG_KEYS = ["workerTier", "workerEffort", "ability", "level", "draft", "workerLevel", "reviewLevel", "workerMember", "workerModel", "startEffort", "waitMs"];
+const spawnLine = (h: ReturnType<typeof harness>, name: string): Record<string, unknown> => {
+  h.a.emit({ type: "spawn", name, by: "main", parent: "main", childSessionId: `s-${name}`, ts: 0 });
+  const l = h.lines().find((x) => x.event === "spawn" && x.taskId === name)!;
+  return Object.fromEntries(LOG_KEYS.filter((k) => k in l).map((k) => [k, l[k]]));
+};
+
+test("T4.1 spawn line: an all-t0 card logs write 0, worker level 0, no review, and the member it started on", async () => {
+  const h = harness({ base: "today" });
+  accepted(await h.a.spawn({ name: "q1", task: card() }));
+  assert.deepEqual(spawnLine(h, "q1"), {
+    workerTier: "qwen", workerEffort: "xhigh", ability: "write", level: 0, workerLevel: 0,
+    workerMember: "qwen-cloud", workerModel: CLOUD, startEffort: "xhigh", waitMs: 0,
+  });
+});
+
+test("T4.1 spawn line: a draft (one soft miss) logs draft and the draft rule's review level", async () => {
+  const h = harness({ base: "today" });
+  accepted(await h.a.spawn({ name: "d1", task: card({ t0: { ...card().t0, small: false } }) }));
+  const l = spawnLine(h, "d1");
+  assert.deepEqual([l.ability, l.level, l.draft, l.workerLevel, l.reviewLevel], ["write", 0, true, 0, 1]);
+});
+
+test("T4.1 spawn line: a Sonnet fallback of a write-0 plan logs the planned qwen xhigh and the started sonnet high after the wait (RD2)", async () => {
+  const h = harness({ base: "today", settings: { queueMaxSec: 10 } });
+  for (const n of ["q1", "q2", "q3"]) accepted(await h.a.spawn({ name: n, task: card() }));
+  assert.equal((accepted(await h.a.spawn({ name: "q4", task: card() })) as any).model, SONNET);
+  const l = spawnLine(h, "q4");
+  assert.deepEqual([l.workerTier, l.workerEffort, l.workerMember, l.workerModel, l.startEffort], ["qwen", "xhigh", "sonnet", SONNET, "high"]);
+  assert.ok((l.waitMs as number) >= 10_000, String(l.waitMs));
+});
+
+test("T4.1 spawn line: an explicit effort logs workerEffort planned and startEffort given; an explicit model is the started member", async () => {
+  const h = harness({ base: "today" });
+  const t1 = card({ t0: { ...card().t0, linear: false } });
+  assert.equal((accepted(await h.a.spawn({ name: "s1", thinkingLevel: "xhigh", task: t1 })) as any).thinkingLevel, "xhigh");
+  assert.deepEqual(spawnLine(h, "s1"), {
+    workerTier: "T1", workerEffort: "high", ability: "write", level: 1, workerLevel: 1,
+    workerMember: "sonnet", workerModel: SONNET, startEffort: "xhigh", waitMs: 0,
+  });
+  accepted(await h.a.spawn({ name: "o1", model: "anthropic/claude-opus-5-5", task: t1 }));
+  const o = spawnLine(h, "o1");
+  assert.deepEqual([o.workerTier, o.workerEffort, o.workerMember, o.workerModel, o.startEffort], ["T1", "high", "opus", "anthropic/claude-opus-5-5", "high"]);
+});

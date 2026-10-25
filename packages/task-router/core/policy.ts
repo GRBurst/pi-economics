@@ -17,16 +17,17 @@ import type { SkillPort } from "./profile.ts";
 import { toolsFor } from "./toolguard.ts";
 import { resolveCwd, verifyT0 } from "./verify.ts";
 import type { FsPort } from "./verify.ts";
-import type { Card, Importance, Plan, Result, RouterSettings, ThinkingLevel } from "./types.ts";
+import type { Card, Importance, Plan, Result, RouterSettings, Start, ThinkingLevel } from "./types.ts";
 
 /** What the router remembers about a child it spawned (keyed by child name = task id). */
 /** `cwd` is the task's (card `cwd`, else the caller's); `unresolved`: relative card files missing under it. */
 export type ChildBase = { parent: string; parentSession: string; card: Card; plan: Plan; cwd: string; importance: Importance; unresolved?: true };
 /** `member`/`model`: the member it runs on (its slot, counter, window); `route`: that member's log label; `reservedUntil`: its
  *  slot is held until then, listed or not (mi11); `failover`: the leg's candidate names, the targets of a move (spec §4.8);
- *  `prev`: while a move's `retune` is in flight, where the child ran (restored if the retune throws). */
+ *  `prev`: while a move's `retune` is in flight, where the child ran (restored if the retune throws); `start`: where it started
+ *  (the spawn line's, AC4; a move leaves it). */
 export type Child = ChildBase & {
-  member: string; route: string; model: string; effort: ThinkingLevel; at: number; reservedUntil: number; failover: string[];
+  member: string; route: string; model: string; effort: ThinkingLevel; at: number; reservedUntil: number; failover: string[]; start: Start;
   prev?: { member: string; route: string; model: string; effort: ThinkingLevel; reservedUntil: number };
 };
 export type PolicyDeps = {
@@ -74,7 +75,8 @@ export async function resolveLeg(d: PolicyDeps, x: {
       const m = x.cands.find((c) => c.name === p.pick)!;
       const effort = x.pinned ? x.effort! : x.effort !== undefined && sameLadder(m, x.planned) ? x.effort : effortAt(m, x.step);
       const waitMs = now - t0;
-      d.children.set(x.name, { ...x.entry, member: m.name, route: m.route, model: m.model, effort, at: now, reservedUntil: now + PENDING_MS, failover: x.failover });
+      d.children.set(x.name, { ...x.entry, member: m.name, route: m.route, model: m.model, effort, at: now, reservedUntil: now + PENDING_MS,
+        failover: x.failover, start: { member: m.name, model: m.model, effort, waitMs } });
       const why = `selection: ${m.name}${waitMs ? ` after ${Math.round(waitMs / 1000)} s` : ""}${m.name !== x.planned.name ? ` (planned ${x.planned.name})` : ""}`;
       return { ok: true, value: { member: m, effort, waitMs, why } };
     }

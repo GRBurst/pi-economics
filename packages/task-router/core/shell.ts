@@ -99,7 +99,7 @@ export function install(pi: PiLike, deps: Deps) {
   const onEvent = (e: ApiEvent): void => {
     const c = children.get((e as { name?: string }).name ?? "");
     if (e.type === "spawn" && c) {
-      log.spawn({ taskId: e.name, card: c.card, plan: c.plan, arm: armOf(c.parentSession), sessionId: e.childSessionId, parentSessionId: c.parentSession, unresolved: c.unresolved });
+      log.spawn({ taskId: e.name, card: c.card, plan: c.plan, start: c.start, arm: armOf(c.parentSession), sessionId: e.childSessionId, parentSessionId: c.parentSession, unresolved: c.unresolved });
       if (c.card.attemptOf) log.escalate(e.name, children.get(c.card.attemptOf)?.route ?? "?", c.route, c.card.attemptOf);
     }
     if (e.type === "spawn" && !c && !settings.routing && e.name !== "main") { // nothing routed it, but the outcome log still knows the child

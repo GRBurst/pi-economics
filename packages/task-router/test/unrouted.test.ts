@@ -56,3 +56,10 @@ test("routing=false: the engine's own spawn event for main (it registers itself)
   h.a.emit({ type: "spawn", name: "main", by: "main", parent: "main", childSessionId: "s-main", ts: 0 });
   assert.deepEqual(h.lines(), []);
 });
+
+test("T4.1 routing=false: the unrouted line has none of the router's new spawn fields", async () => {
+  const h = rig();
+  spawned(h, "kid", "s-kid");
+  const [l] = h.lines();
+  for (const k of ["ability", "level", "draft", "workerLevel", "reviewLevel", "workerMember", "workerModel", "startEffort", "waitMs"]) assert.ok(!(k in l), k);
+});
