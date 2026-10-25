@@ -1195,3 +1195,60 @@ Cases:
 ---
 
 # Execution Record
+
+Executed 2026-10-25 (agent impl-m5) on M6 as landed (`79442de`, 27 checks, `module-eval` 71 cases = N6). **R' = host commit `566fd0d`** (named by main in the task brief; it is G2 plus the review fixes `843d8bc`; `git dot log f1b140e..566fd0d -- <router>` is that one commit). Builds under `ulimit -v 20971520`, `--option eval-cache false`, `timeout -s KILL`; the host read only through `git dot`. Commits unsigned, with pathspecs. `leak` green at every commit from M5.1 on (checked at M5.1, M5.4, M5.11, M5.D and in the final gate; the golden file, the generator and `contract.ts` carry neutral values).
+
+## M5.0
+
+- Drift (§9): `git dot diff --stat 4c714f0 566fd0d -- <every moved path>` is **empty**; the router itself differs from `f1b140e` by `843d8bc` only (M1 guards, per-table `capToTable`, `ROUTES`/`isRoute`, m3 table-by-ability, `sut.ts` reading `start.member`; 357 tests instead of 348).
+- P1: `core/settings.ts:26` (`models: {`), `test/settings.test.ts:40,102` (a file sets `models.sonnet.model`). P2: `test/cloud.test.ts:84` (route only); the full property is `free-cloud-slot.test.ts`, which **passed at R'** (2 tests). P3: `core/shell.ts:123` (`registerSpawnPolicy`), `:64,:66` (the two casts). P4: holds in this flake: `log-contract` is green against the copied router (`pi-log-contract: ok (meter 28, outcomes 6, assignments 2, guards 5)`; I did not build the host's own `pi-log-contract` at R'). P5: `nix/hm-module.nix:27,60` (`formats.json`, `settings != {}`). **None handed to the redesign.**
+
+## Commits
+
+| Task | Commit | Red seen | Deviation |
+|---|---|---|---|
+| M5.1 | `807f7b9` | `attribute 'task-router' missing`; `Path 'packages/task-router/package.nix' does not exist`; plant `queueMaxSec === 121` → `ℹ fail 1` | none; suite `T` = 355 (R' 357 minus `host-replay.test.ts`'s two) |
+| M5.2 | `95b683a` | probe: six `earth` lines | none; five remain (below) |
+| M5.3 | `241fc83` | plant in `core/chain.ts` → `fail 2` (and `pass 2` at R' first) | none; suite 357 |
+| M5.4 | `5743bdf` | `router-golden: decisions differ from R' (754 lines)`; plants: write row → 234 lines, chain → 2 lines, appended empty-slot line → the P2 message | `default.nix`: `{ grep -v '^#' golden.txt \|\| true; }` (an empty golden file made `grep` exit 1 under `pipefail` before the message); the generator of `f1b140e` gives the **same 754 lines** at R' (0 diff against `~/.cache/pi/m5plan/golden-f1b140e.txt`): the review fixes move no decision on the grid |
+| M5.5 | `2bf8d9a` | **27** errors in 10 files | 26 as measured on `f1b140e` plus `test/top.test.ts:22` (`t2: string[]` against `T2[]`, `importance` `Importance` against `"high"\|"critical"`): `card({ … } as never)` at the fixture, S4's form |
+| M5.6 | `424752c` | green-first; plant `unknownMember(): void;` → `TS2741` | none |
+| M5.7 | `09656ee` | `TS2305` (no `ExperimentsApi`); plant `d: number` → `TS2322` | none |
+| M5.8 | `8c46897` | `The option 'programs.piEconomics.taskRouter' does not exist`; plant `forChildren = true` → 2 FAIL lines per `agentDir` | 73 cases |
+| M5.9 | `7cfc951` | `option 'taskRouter.settings' does not exist`; plant `mkIf true` → `task-router-defaults: home.file targets` (the `{}` side of `task-router-settings` is not what turned red; a file appears in the defaults case) | 74 cases |
+| M5.10 | `eeb1716` | both cases `assertions: expected [ … ]`; plant (drop the `spawnPolicyApi` half) → `task-router-requires-spawn-policy-api` | 76 cases |
+| M5.11 | `e2a82a2` | `ERR_MODULE_NOT_FOUND`; plant (drop `arm` from `spawnEvent`) → `pi-log-contract: FAILED … 2 line(s) miss arm` | none |
+| M5.12 | `bcda228` | `attribute 'PI_BENCH_ROUTER' missing`; plant (drop `spotCheck.enabled = false`) → `bench-router-default: router`, `PI_BENCH_ROUTER` | 77 cases |
+| M5.13 | `544381a` | `bench-extensions-default: extensions: expected …` | **plus the extra case `bench-extensions-override` (from review-m6, below)**; 78 cases |
+| M5.14 | `93d1d4a` | green-first; plant `forChildren = true` → `m5-host-like: children` | the case reads the children from `actor-subagents/settings.json` (M6's `m6-host-like` form), not a `childExtensions` option; 79 cases |
+| M5.15 | `486e172` | `FAIL … task-router lacks core/missing.ts` | the configuration enables `actorSubagents` (the assertion needs it), which adds `piRetry.subagents` to the seed ops: the cacheLifecycle check reads `del(.piRetry) == {theme, cacheWarming}` instead of `. == {…}` (first red: that jq, then the planned one) |
+| M5.16 | `9563984` | **red on the first run, not green-first**: `components-together: session variables` | only `bench ∧ taskRouter` renders `PI_BENCH_ROUTER` (M5.12). The case now compares the other variables to the union and `PI_BENCH_ROUTER`'s content to `{randomize.enabled = false; spotCheck.enabled = false}`; plant (a file only `taskRouter ∧ retry` renders) → `home.file targets` |
+| M5.17 | `ac7430f` | — | none |
+| M5.D | `e5c161f` | scrub probe (below) | M6 handed it over ("moved to M5"); done as M6.D with S13 |
+| fmt | `540005b` | `Requires formatting` ×2 | alejandra on `cases/bench.nix`, `cases/task-router.nix` |
+
+## Deviations and findings
+
+- **From review-m6 (Medium), `bench-extensions-override`** (`checks/module-eval/cases/bench.nix`): for every name the extensions default holds (`actor-subagents`, `infinite-context`, `pi-retry`, `task-router`, `token-meter`) a host definition `bench.extensions.<name> = "/x"` wins, leaves the other defaults equal and fails no assertion. Plants, both red: a plain definition instead of `mkDefault` for the whole set → `conflicting definition values` for `bench.extensions.actor-subagents`; a plain definition for `task-router` alone → `conflicting definition values` for `bench.extensions.task-router`.
+- **From review-m6 (Low), accepted as is, no change:** an empty nested attribute in `retry.settings` emits no op.
+- M5.5's 27th error (above), M5.15's `del(.piRetry)`, M5.16's split of the session-variable comparison, `router-golden`'s `|| true`: see the table.
+- The case file `task-router.nix` is S7 with M6's children form; `m5-host-like` uses neutral `/home/u` as M6's does.
+- `earth` lines kept (§8.3): `core/settings.ts:29`, `test/settings.test.ts:30`, `test/policy.test.ts:82`, `test/oracle/legacy-settings.ts:20`, `test/fixtures/today-config.json:13`.
+- **Doc move scrub (M5.D):** the probe `grep -nE 'earth|pallon|programs\.pi\.|modules/home-manager|pkgs/pi-bench|ai/pi-|2026-10-02|notes/'` listed 13 lines on the host's text; none after. The 2026-10-02 spec/plan citations and the two `~/.pi/agent/notes/` paths are dropped, `programs.pi.*` → `programs.piEconomics.*`, `my.hm…piContextReminders` → `infiniteContext.reminders`, the Settings paragraph about `linkExtension` and `nix/hm-module.nix` rewritten for the registry, the components table re-pointed to `packages/`, `patches/`, `modules/common.nix`. `docs/pi-economics.md` links it.
+
+## Gate (M5.18), 2026-10-25
+
+- `alejandra --check` over 48 files clean.
+- `~/.cache/pi/m5gate.sh` (= `m2gate.sh` plus the owner-flag wait; log `~/.cache/pi/m5gate.log`): per ref a listing of **33 checks** (27 plus `task-router`, `router-golden`, `typecheck-task-router`, `iface-subagents-task-router`, `iface-experiments-task-router`, `log-contract`), each output deleted before its build, one capped build each, both refs (`git+file://` and `path:`): no `FAILED`, no `LISTING FAILED`; `GATE-DONE`. `packages` `["actor-subagents","bench","cache-lifecycle","experiments","infinite-context","retry","task-router","token-meter"]`; `homeModules` `["default"]`; the formatter `.drv` evaluates. Peaks: `module-eval` (79 cases) 1.75 GiB / 60 s and 2.02 GiB / 54 s; `home-files` 0.46 GiB; `router-golden` 0.14 GiB / 27 s; `task-router` 0.14 GiB / 15 s; `log-contract` 0.14 GiB / 5 s; `typecheck-task-router`, `iface-*-task-router` 0.25 GiB, 4–13 s. `leak` green at the tip.
+- P-copy: `diff -rq --exclude=nix --exclude='host-*' R' packages/task-router` = `package.nix` (new), `core/shell.ts`, `test/free-cloud-slot.test.ts` (new), and the test files `brief`, `card`, `delegation`, `fake-pi`, `members`, `outcome`, `prompt`, `randomize`, `shell`, `top`.
+- P-out: the host's `checks.pi-task-router` at R' (`hostFull`, `n1ihghsx…`) against `packages.task-router` (`5qg0h048…`): `diff -rq` differs in `core/shell.ts` only (D5's alias and the two casts).
+- Final `module-eval` count **79** (= N6 71 + 8: 7 planned + `bench-extensions-override`). Suite `T` 357.
+
+## For the W plan: byte differences against the host at `566fd0d`
+
+1. `packages/task-router` (build output): `core/shell.ts` only (D5: `export type ExperimentsApi`, two casts name it).
+2. `packages/task-router` (source): minus `nix/`, `test/host-replay.test.ts`, `test/host-fixtures/`; plus `package.nix`, `test/free-cloud-slot.test.ts`; test edits in `test/{brief,card,delegation,fake-pi,members,outcome,prompt,randomize,shell,top}.test.ts` (type-only except `members.test.ts:61`, a fixture name `earth` → `lan`). The router's checks (`pi-task-router`) therefore is not the host's derivation: W must expect `core/shell.ts` in the output and the test files in the source.
+3. `checks/log-contract/contract.ts` against `checks/pi-log-contract/contract.ts`: 10 import paths (`../../modules/home-manager/features/ai/extensions/` → `../../packages/`) and line 1 (the 2026-10-02 citation → `spec §8.1 …`).
+4. Router defaults at the host's `homes/pallon` (`taskRouter.settings`, the model and health-URL values) move to `programs.piEconomics.taskRouter.settings` at W4; `bench.router` then follows them as `mkDefault` keys (`models`, `queueMaxSec`, `localHealthUrl`, `cloudDailyCap`, `contextWindow`) with `randomize`/`spotCheck` off, so a host that sets those on `bench.router` itself keeps its own.
+5. Carried from M6 (unchanged): actor-subagents' spawn-policy patch (D5's line) and the one comment line in the infinite-context reminders patch.
+6. `docs/pi-token-economics.md` here is the scrubbed copy; the host's pointer page is W's docs step.
