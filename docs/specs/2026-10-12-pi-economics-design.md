@@ -742,6 +742,21 @@ Arms:
   - The check fails a step that reaches pluto's evaluation in any other way.
     Whether the snapshot's new lock entry still evaluates on pluto is the
     reachability check above.
+  - Amendment (W plan, 2026-10-25; host
+    `docs/plans/2026-10-25-pi-economics-wiring-plan.md`, D2): "pluto has no
+    Home Manager" (§1, here, §9) holds for pluto's system only. Since the
+    pluto plan's S4, jelias' standalone home
+    (`homeConfigurations."jelias@pluto"`) imports the host's whole
+    `modules/home-manager`, and pluto evaluates it (deploys from pluto,
+    `pluto-sparse` forcing the deploy node), where the `git+file:` path does
+    not exist. That home is therefore excluded from the input: the host
+    passes it `removeAttrs inputs ["fdietze-dotfiles" "pi-economics"]` (as
+    for `fdietze-dotfiles`, R29), and every module under
+    `modules/home-manager` that imports `homeModules.default` or defines
+    `programs.piEconomics` is guarded by `inputs ? pi-economics`. The host
+    check `pluto-home-headless` fails when the home's `inputs` argument holds
+    `pi-economics`. Each W step also shows jelias' home drvPath unchanged and
+    evaluating with the input unfetchable (W plan, Layer B LB-4 (d), (e)).
 - **Home files:** each W step compares pallon's built home files before and
   after the step, following the links into the packages (`diff -r`), and its
   plan lists every difference. W5 shows `infinite-context/settings.json`
