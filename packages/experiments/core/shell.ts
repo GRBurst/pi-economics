@@ -14,8 +14,8 @@ export type PiLike = {
   on(name: string, handler: (e: any, ctx: any) => unknown): void;
   registerCommand(name: string, command: { description: string; handler: (args: string, ctx: any) => unknown }): void;
 };
-/** The part of the actor-subagents API this package reads (own copy: packages do not import each other). */
-type SubagentsApi = {
+/** The part of the actor-subagents API this package reads (own copy: packages do not import each other); the type check compares it with the provider's SubagentsApiV1 (spec §5.3). */
+export type SubagentsApi = {
   list(): Array<{ name: string; sessionId: string }>;
   subscribe(l: (e: { type: string; parent?: string; childSessionId?: string }) => void): () => void;
 };

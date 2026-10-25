@@ -101,5 +101,14 @@ in {
       type = "SubagentsApiV1";
     };
   };
+  iface-subagents-experiments = iface.compare {
+    name = "subagents-experiments";
+    provider = subagentsProvider;
+    consumer = {
+      src = ../packages/experiments;
+      file = "core/shell.ts";
+      type = "SubagentsApi";
+    };
+  };
   home-files = import ./home-files {inherit lib pkgs hm;};
 }
