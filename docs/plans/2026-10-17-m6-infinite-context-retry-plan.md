@@ -276,7 +276,7 @@ Every task starts at `[ ]`. One failing check at a time; a task's commit holds o
   ```
   → `nixpkgs: as the host`, `home-manager: as the host` (`pi-actor-subagents: DIFFERS` until M6.3).
 - [ ] **Step 3 (GREEN, every check):** the full loop of M6.19 Step 2 with `git+file:` only: every check green on the new nixpkgs (the prototype on M3's state: green). A red check here is drift of nixpkgs, not of the host: stop and report it.
-- [ ] **Step 4 (CLEAN):** `$(fmt --version >/dev/null; echo)`; `fmt --check $(git ls-files '*.nix')` (the formatter moved with nixpkgs) → no file "Requires formatting"; if one does, reformat it in this commit and say so.
+- [ ] **Step 4 (CLEAN):** `fmt --check $(git ls-files '*.nix')` (the formatter moved with nixpkgs) → no file "Requires formatting"; if one does, reformat it in this commit and say so.
 - [ ] Commit.
 
 ### Task M6.2 — Shared npm lock at pi 1.3.0
@@ -417,7 +417,7 @@ Every task starts at `[ ]`. One failing check at a time; a task's commit holds o
 ### Task M6.17 — Every component together
 
 - [ ] **Step 1 (GREEN-first):** `components` += `"infiniteContext" "retry"` in `cases/together.nix` → green.
-- [ ] **Step 2 (planted):** `home.file."x".text = "";` inside `modules/retry.nix`'s `mkIf` → FAIL `components-together` only if it is not in the union — it is, so plant instead `lib.mkIf (pe.infiniteContext.enable && cfg.enable) {home.file."x".text = "";}` in `modules/retry.nix`'s config → FAIL `components-together` (`home.file targets`). [ ] red seen. Restore.
+- [ ] **Step 2 (planted):** a file that only the combination renders: in `modules/retry.nix`, `config = lib.mkMerge [(lib.mkIf cfg.enable {…}) (lib.mkIf (cfg.enable && pe.infiniteContext.enable) {home.file."x".text = "";})]` → FAIL `components-together` (`home.file targets`). [ ] red seen. Restore.
 - [ ] Commit.
 
 ### Task M6.18 — Docs
@@ -431,11 +431,11 @@ Every task starts at `[ ]`. One failing check at a time; a task's commit holds o
 
 Executed in **this** milestone only if M5 has landed by the time M6.18 is committed; otherwise it is skipped here, marked "moved to M5" in the Execution Record, and M5's plan carries it verbatim as its last task before its close-out. Either way it lands before W0.
 
-**Files:** `docs/pi-token-economics.md` (new), `docs/pi-economics.md` (link), `checks/default.nix` only if `leakSrc` needs no change (it does not: `docs/` outside `specs`/`plans` is scanned).
+**Files:** `docs/pi-token-economics.md` (new), `docs/pi-economics.md` (link). `leakSrc` scans `docs/` outside `specs`/`plans` already.
 
 - [ ] **Step 1 (drift):** `cd ~/projects/nixos/new && git dot diff --stat 4c714f0 HEAD -- docs/pi-token-economics.md` — port any change.
-- [ ] **Step 2 (RED):** `h docs/pi-token-economics.md > docs/pi-token-economics.md; git add docs; nb leak` → FAIL naming the host name `earth` (line 62, `localHealthUrl`) and the user `pallon`. [ ] red seen
-- [ ] **Step 3 (GREEN, scrub, S13):** host paths re-pointed to this flake (`modules/home-manager/features/ai/extensions/<c>` → `packages/<c>`, `pkgs/pi-bench` → `packages/bench`, `ai/pi-*.nix` → `packages/<c>/package.nix` and `modules/<c>.nix`), the host's 2026-10-02 spec/plan and `~/.pi/agent/notes/…` citations dropped (§2), the host's names replaced by placeholders (`<host>`, `<user>`); settings tables re-pointed to `programs.piEconomics.*`. `nb leak` green.
+- [ ] **Step 2 (RED):** `h docs/pi-token-economics.md > docs/pi-token-economics.md`; the scrub probe `grep -nE 'earth|pallon|programs\.pi\.|modules/home-manager|pkgs/pi-bench|ai/pi-|2026-10-02|notes/' docs/pi-token-economics.md` lists lines (54, 62, …). `leak` stays green on it (generic patterns, §8.3: it would not catch these; the names are the publication check's, P). [ ] red seen
+- [ ] **Step 3 (GREEN, scrub, S13):** the probe prints nothing; host paths re-pointed to this flake (`modules/home-manager/features/ai/extensions/<c>` → `packages/<c>`, `pkgs/pi-bench` → `packages/bench`, `ai/pi-*.nix` → `packages/<c>/package.nix` and `modules/<c>.nix`), the host's 2026-10-02 spec/plan and `~/.pi/agent/notes/…` citations dropped (§2), the host's names replaced by placeholders (`<host>`, `<user>`); settings tables re-pointed to `programs.piEconomics.*`. `nb leak` green.
 - [ ] **Step 4:** `docs/pi-economics.md` links it. The host's pointer page is W's docs step (§9.1), not this task.
 - [ ] Commit.
 
@@ -447,3 +447,1016 @@ Executed in **this** milestone only if M5 has landed by the time M6.18 is commit
 - [ ] **Step 4 (purity, P2):** `git dot archive 4c714f0 -- . | tar -x -C $TMPDIR/host` from `~/projects/nixos/new`, then compare, capped, `nix eval --raw path:$TMPDIR/host#checks.x86_64-linux.pi-{infinite-context,retry}.drvPath` with this flake's `checks.x86_64-linux.{infinite-context,retry}.drvPath` (equal), and the same for `pi-actor-subagents` (differs by D5 only). Above 2 GiB: `flag` first.
 - [ ] **Step 5:** fill the Execution Record (per task: commit, red seen, deviations; the final case count; Q1–Q4 as answered).
 - [ ] Commit.
+
+## Snippets
+
+Generated from the prototype (scratch clone of `0b6cab3`, M3's state; every check green under both refs). Where M4's end state differs, the snippet says so.
+
+### S1 — `flake.nix` (diff against M4's end state; M4 does not touch it except `packages`)
+
+```diff
+@@ -12,12 +12,20 @@
+       inputs.nixpkgs.follows = "nixpkgs";
+     };
+ 
+-    # A patched upstream (spec §3), locked to the host's revision; the host
+-    # makes it follow its own input.
++    # The patched upstreams (spec §3), locked to the host's revisions; the host
++    # makes them follow its own inputs.
+     pi-actor-subagents = {
+       url = "github:fdietze/pi-actor-subagents";
+       flake = false;
+     };
++    pi-infinite-context = {
++      url = "github:fdietze/pi-infinite-context";
++      flake = false;
++    };
++    pi-retry = {
++      url = "github:monotykamary/pi-retry";
++      flake = false;
++    };
+   };
+ 
+   outputs = {
+@@ -25,6 +33,8 @@
+     nixpkgs,
+     home-manager,
+     pi-actor-subagents,
++    pi-infinite-context,
++    pi-retry,
+   }: let
+     system = "x86_64-linux";
+     pkgs = nixpkgs.legacyPackages.${system};
+@@ -34,8 +44,10 @@
+     # common.nix, so every option a cross-component assertion reads exists.
+     homeModules.default = {
+       imports = [./modules];
+-      # The upstream source the patched component builds from (spec §3).
++      # The upstream sources the patched components build from (spec §3).
+       programs.piEconomics.actorSubagents.src = lib.mkDefault pi-actor-subagents;
++      programs.piEconomics.infiniteContext.src = lib.mkDefault pi-infinite-context;
++      programs.piEconomics.retry.src = lib.mkDefault pi-retry;
+     };
+ 
+     # One package per component (spec §3); the module's `package` default
+@@ -44,6 +56,8 @@
+       bench = pkgs.callPackage ./packages/bench/package.nix {};
+       actor-subagents = pkgs.callPackage ./packages/actor-subagents/package.nix {src = pi-actor-subagents;};
+       token-meter = pkgs.callPackage ./packages/token-meter/package.nix {};
++      infinite-context = pkgs.callPackage ./packages/infinite-context/package.nix {src = pi-infinite-context;};
++      retry = pkgs.callPackage ./packages/retry/package.nix {src = pi-retry;};
+     };
+ 
+     formatter.${system} = pkgs.alejandra;
+```
+
+### S2 — `checks/default.nix` (diff)
+
+```diff
+@@ -32,6 +32,24 @@
+   '';
+   # (M2.3)
+   iface = import ./iface {inherit lib pkgs typecheck;};
++  # (M6.4) The patched pi-infinite-context, and its type-check copy: the
++  # extension without upstream's tsconfig.json (TS5112, M2.2) and without the
++  # two property tests that import fast-check, which the shared lock does not
++  # hold (the check does not run them either).
++  infiniteContext = self.packages.${pkgs.stdenv.hostPlatform.system}.infinite-context;
++  infiniteContextTs = pkgs.runCommand "infinite-context-ts" {} ''
++    mkdir $out
++    cp -r ${infiniteContext}/extensions ${infiniteContext}/package.json $out/
++    chmod -R u+w $out
++    rm $out/extensions/infinite-context/{archive-properties,forest}.test.ts
++  '';
++  # (M6.6) The patched pi-retry, and its type-check copy: the code pi loads
++  # (retry.ts, src/) with package.json; upstream's tsconfig.json and tests stay out (D8).
++  retry = self.packages.${pkgs.stdenv.hostPlatform.system}.retry;
++  retryTs = pkgs.runCommand "retry-ts" {} ''
++    mkdir $out
++    cp -r ${retry}/retry.ts ${retry}/src ${retry}/package.json $out/
++  '';
+ in {
+   leak = leakLib.check leakSrc;
+   leak-selftest = leakLib.selftest;
+@@ -74,4 +92,18 @@ in {
+     src = ../packages/token-meter;
+   };
+   home-files = import ./home-files {inherit lib pkgs hm;};
++  # The patched upstreams' suites, with the host's checks (spec §8.1).
++  infinite-context = pkgs.callPackage ./infinite-context {src = infiniteContext;};
++  typecheck-infinite-context = typecheck.typecheck {
++    name = "infinite-context";
++    src = infiniteContextTs;
++  };
++  retry = pkgs.callPackage ./retry {
++    src = retry;
++    inherit (npm) nodeModules;
++  };
++  typecheck-retry = typecheck.typecheck {
++    name = "retry";
++    src = retryTs;
++  };
+ }
+```
+
+### S3 — `packages/infinite-context/package.nix`, `packages/retry/package.nix`
+
+```nix
+# pi-infinite-context with two local patches, applied in this order (spec §2):
+#
+# - reminders: absolute fold-reminder thresholds per provider or model
+#   (`reminders.default` / `reminders.overrides`, fields startTokens /
+#   everyTokens: exact provider/modelId, then provider, then default), read
+#   from getAgentDir()/infinite-context/settings.json, which
+#   programs.piEconomics.infiniteContext writes. Without a rule the reminder
+#   starts at 75% of the model window and repeats every 5% of it. The
+#   `reminders` block and the cache patch's keys are strict: an invalid value
+#   or an unknown key rejects the whole file with a session-start warning.
+# - cache: a cost-aware fold hint (payoff in turns while the prompt cache is
+#   warm, "folding is free" when cold; prices and TTL from the same file;
+#   `foldHint = "fixed"` turns it off; the experiments flag `foldHint`
+#   overrides it per session through __piExperimentsApi_v1, cast inline,
+#   spec §5.3), a fold_timing prompt section, a re-sync of a snapshot that no
+#   longer matches the branch, and a handoff notice instead of the raw
+#   transcript when folds cannot be applied.
+#
+# Foreign messages that other context handlers insert need no patch: upstream
+# matches the projection as an ordered subsequence (e6ff6803);
+# checks/infinite-context pins that (overlay-foreign.test.ts).
+#
+# The patch files keep the host's names, so the store paths, and with the
+# same nixpkgs the derivation, are the host's. A patch that no longer applies
+# fails this build; checks/infinite-context runs the tests on it.
+{
+  applyPatches,
+  src,
+}:
+applyPatches {
+  name = "pi-infinite-context-patched";
+  inherit src;
+  patches = [
+    ../../patches/pi-infinite-context/pi-infinite-context-reminders.patch
+    ../../patches/pi-infinite-context/pi-infinite-context-cache.patch
+  ];
+}
+```
+
+```nix
+# pi-retry with one local patch (spec §2):
+#
+# - free-cap: a 429 for OpenRouter's daily free-tier cap is not retried; it
+#   lasts until 00:00 UTC, so retrying only burns the retry budget. Offer it
+#   upstream.
+#
+# Print and json sessions need no patch: upstream 0.11.0 retries them inline
+# (prompt-scoped sessions); checks/retry pins that route.
+#
+# The whole repository, not a subdirectory: pi finds the entry point
+# (retry.ts) through package.json `pi.extensions`. The patch file keeps the
+# host's name, so the store path, and with the same nixpkgs the derivation,
+# are the host's. A patch that no longer applies fails this build;
+# checks/retry runs the upstream vitest suite on it.
+{
+  applyPatches,
+  src,
+}:
+applyPatches {
+  name = "pi-retry-patched";
+  inherit src;
+  patches = [
+    ../../patches/pi-retry/pi-retry-free-cap.patch
+  ];
+}
+```
+
+### S4 — `checks/retry/default.nix` (after `fmt`)
+
+```nix
+# Runs the upstream vitest suite of the PATCHED pi-retry (the exact source
+# ~/.pi/agent/extensions/pi-retry links to). A patch that no longer applies
+# fails this build in applyPatches; a patch that applies but breaks the
+# extension fails the suite.
+#
+# Unlike the other pi extension checks this needs an npm closure: upstream's
+# tests use vitest and import pi's own packages (AgentSession, Agent), which
+# exist only inside the pi binary. They come from the shared npm lock
+# (checks/npm, spec §3), upstream's devDependencies; bump it together with
+# the input pi-retry.
+{
+  pkgs,
+  src,
+  nodeModules,
+}:
+pkgs.runCommand "pi-retry-tests" {nativeBuildInputs = [pkgs.nodejs];} ''
+  cp -r ${src} work
+  chmod -R u+w work
+  cd work
+  ln -s ${nodeModules}/node_modules node_modules
+  export HOME=$TMPDIR/home
+  mkdir -p "$HOME"
+  node node_modules/vitest/vitest.mjs run
+
+  # The free-cap patch's own test must be part of what ran. Print/json
+  # sessions retry inline upstream (prompt-scoped sessions, formerly a local
+  # patch); keep that route pinned, `pi -p` had no retry at all without it.
+  grep -q 'daily free cap is not retried' __tests__/unit/error-patterns.test.ts
+  grep -q 'prompt-scoped ordinary sessions' __tests__/integration/native-child-lifecycle.test.ts
+  grep -q 'isPromptScopedMode(ctx.mode)' retry.ts
+  grep -q 'openrouter_free_tier_daily' src/error-patterns.ts
+  touch $out
+''
+```
+
+### S5 — The resync edits: D5's line, `packages/actor-subagents/package.nix`, `checks/npm/default.nix`
+
+D5, `patches/pi-actor-subagents/pi-actor-subagents-spawn-policy.patch` line 1358 (a tab after `+`):
+
+```diff
+1358c1358
+< +	};
+---
+> +	} as Partial<SessionLike> as SessionLike & { delivered: RoutedAgentMessage[] };
+```
+
+```diff
+diff --git a/checks/npm/default.nix b/checks/npm/default.nix
+--- a/checks/npm/default.nix
++++ b/checks/npm/default.nix
+@@ -1,5 +1,5 @@
+ # The shared npm lock (spec §3, "npm dependencies"). ./package.json and
+-# ./package-lock.json are the host's checks/pi-retry files at f6a3c81, byte for
++# ./package-lock.json are the host's checks/pi-retry files at 4c714f0, byte for
+ # byte: pi-retry's devDependencies, which pin typescript, @types/node and pi's
+ # own packages for the type check and, from M6, vitest for pi-retry's suite.
+ # pname and source set are the host's, so the derivation is the host's.
+@@ -14,7 +14,7 @@
+       root = ./.;
+       fileset = lib.fileset.unions [./package.json ./package-lock.json];
+     };
+-    npmDepsHash = "sha256-7fOhIoTUaTY4k6zvDN2F2YSy8of9TBCu9gQ4qEPDiqM=";
++    npmDepsHash = "sha256-S8lO6fS9S3hRNlUdv7hztyfECeHBzeNArqaDjDQYqBE=";
+     npmDepsFetcherVersion = 2;
+     dontNpmBuild = true;
+     installPhase = ''
+diff --git a/packages/actor-subagents/package.nix b/packages/actor-subagents/package.nix
+--- a/packages/actor-subagents/package.nix
++++ b/packages/actor-subagents/package.nix
+@@ -1,4 +1,4 @@
+-# pi-actor-subagents with three local patches, applied in this order (spec §2):
++# pi-actor-subagents with two local patches, applied in this order (spec §2):
+ #
+ # - child-prompt: upstream builds every child with `systemPromptOverride`, and
+ #   in pi a custom system prompt drops the default `tools` and `rules`
+@@ -11,12 +11,6 @@
+ #   tools, tool guard), an optional `task` parameter, neutral model wording,
+ #   send/list, childSessionId on spawn events, and a grace period before a
+ #   child's transient error (429 under pi-retry) wakes its parent.
+-# - first-turn: a child's first task arrived through
+-#   session.sendCustomMessage({triggerTurn: true}), which on an idle pi 1.0
+-#   session starts the run without before_agent_start, the system prompt and
+-#   the tool loadout. The first message of a session now goes through
+-#   sendUserMessage (prompt()); later ones stay custom messages. Drop it once
+-#   pi's sendCustomMessage prepares the loadout itself.
+ #
+ # The patch files keep the host's names, so the store paths, and with the
+ # same nixpkgs the derivation, are the host's. A patch that no longer applies
+@@ -31,7 +25,6 @@
+   patches = [
+     ../../patches/pi-actor-subagents/pi-actor-subagents-child-prompt.patch
+     ../../patches/pi-actor-subagents/pi-actor-subagents-spawn-policy.patch
+-    ../../patches/pi-actor-subagents/pi-actor-subagents-first-turn.patch
+   ];
+ }).overrideAttrs (old: {
+   # The version of __subagentsApi_v1 this build provides; taskRouter asserts
+```
+
+### S6 — `modules/infinite-context.nix` (state after M6.10)
+
+```nix
+# pi-infinite-context (spec §2, §4, §5.2): folds ranges of the agent's own
+# conversation and unfolds them on demand. The upstream extension with two
+# local patches (packages/infinite-context/package.nix), linked through the
+# registry for sessions and children, and its settings file, always written.
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
+  pe = config.programs.piEconomics;
+  cfg = pe.infiniteContext;
+  r = cfg.reminders;
+
+  reminderRule = lib.types.submodule {
+    options = {
+      startTokens = lib.mkOption {
+        type = lib.types.nullOr lib.types.ints.positive;
+        default = null;
+        description = "Context size, in tokens, at which the first fold reminder is sent. null inherits (provider, then default, then 75% of the model window). Never later than 75% of the window.";
+      };
+      everyTokens = lib.mkOption {
+        type = lib.types.nullOr lib.types.ints.positive;
+        default = null;
+        description = "Tokens between further reminders above startTokens. null inherits (provider, then default, then 5% of the model window).";
+      };
+    };
+  };
+
+  # Nulls mean "inherit" and are left out, so the file carries only what was set.
+  renderRule = rule: lib.filterAttrs (_: v: v != null) rule;
+
+  # (M6.9) The reminder options as the extension reads them.
+  rendered =
+    {
+      reminders = {
+        default = renderRule r.default;
+        overrides = lib.mapAttrs (_: renderRule) r.overrides;
+      };
+    }
+    // lib.optionalAttrs (r.prices != {}) {inherit (r) prices;}
+    // lib.optionalAttrs (r.cacheTtlMinutes != null) {inherit (r) cacheTtlMinutes;}
+    // lib.optionalAttrs (r.foldHint != null) {inherit (r) foldHint;};
+in {
+  options.programs.piEconomics.infiniteContext = {
+    enable = lib.mkEnableOption "pi-infinite-context, folds of the agent's own conversation with cost-aware fold reminders";
+
+    src = lib.mkOption {
+      type = lib.types.path;
+      internal = true;
+      description = ''
+        The unpatched upstream source. The flake's homeModules.default sets it
+        from its input `pi-infinite-context`; the registry's existence assertion
+        probes it.
+      '';
+    };
+
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.callPackage ../packages/infinite-context/package.nix {inherit (cfg) src;};
+      defaultText = lib.literalExpression "pkgs.callPackage <pi-economics>/packages/infinite-context/package.nix { src = <input pi-infinite-context>; }";
+      description = "The patched extension source (`extensions/infinite-context`).";
+    };
+
+    # (M6.9) The host's piContextReminders (spec §5.2).
+    reminders = {
+      prices = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.submodule {
+          options = {
+            w = lib.mkOption {
+              type = lib.types.numbers.positive;
+              description = "Cache-write price (any unit; only w/r matters).";
+            };
+            r = lib.mkOption {
+              type = lib.types.numbers.positive;
+              description = "Cache-read price, same unit; at most w.";
+            };
+          };
+        });
+        default = {};
+        example = {
+          "anthropic/claude-opus-5-5" = {
+            w = 5;
+            r = 0.2;
+          };
+        };
+        description = ''
+          Prompt-cache prices per exact `provider/modelId` or provider. With a
+          price the fold reminder says after how many turns a fold pays off
+          (((w - r) / r) · K/R, 24·K/R on Opus 5.5); without one it carries no
+          cost hint. A cold cache always gets "folding is free now".
+        '';
+      };
+      cacheTtlMinutes = lib.mkOption {
+        type = lib.types.nullOr lib.types.ints.positive;
+        default = null;
+        description = "Prompt-cache lifetime the fold hint uses to tell warm from cold. null keeps the extension's 5 minutes.";
+      };
+      foldHint = lib.mkOption {
+        type = lib.types.nullOr (lib.types.enum ["fixed" "cache-aware"]);
+        default = null;
+        description = ''
+          "fixed": reminders carry no cost hint. "cache-aware": they carry the
+          fold hint. null keeps the extension's default (cache-aware). The
+          experiments package (factor foldHint) overrides this per session.
+        '';
+      };
+      default = lib.mkOption {
+        type = reminderRule;
+        default = {};
+        description = "Fold-reminder thresholds for every model without an override.";
+      };
+      overrides = lib.mkOption {
+        type = lib.types.attrsOf reminderRule;
+        default = {};
+        example = {
+          anthropic = {
+            startTokens = 200000;
+            everyTokens = 20000;
+          };
+        };
+        description = ''
+          Fold-reminder thresholds keyed by pi provider (`anthropic`) or exact
+          `provider/modelId`. Each field resolves on its own: exact model, then
+          provider, then `default`, then infinite-context's built-in 75% / 5%
+          of the model window. Read once per extension instance, so a change
+          applies to sessions and subagents started after the switch.
+        '';
+      };
+    };
+
+    # (M6.10)
+    settings = lib.mkOption {
+      type = lib.types.attrsOf (pkgs.formats.json {}).type;
+      default = {};
+      example = {nudgeAtPercent = 60;};
+      description = ''
+        Merged into `<agentDir>/infinite-context/settings.json` with
+        `lib.recursiveUpdate`, on the right of what `reminders` renders: a
+        nested key replaces only its own leaf. The extension accepts
+        `nudgeAtTokens`, `nudgeAtPercent`, `reminders`, `prices`,
+        `cacheTtlMinutes` and `foldHint`; an unknown key or an invalid value
+        rejects the whole file with a warning at session start.
+      '';
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    programs.piEconomics.extensions.infinite-context = {
+      path = "${cfg.package}/extensions/infinite-context";
+      checkPath = "${cfg.src}/extensions/infinite-context/index.ts";
+      input = "pi-infinite-context";
+      forChildren = true;
+      description = "context_map, context_fold, context_unfold, context_peek and context_search: folds ranges of the agent's own conversation by message id and unfolds them on demand, without rewriting live messages. Also steers a maintenance reminder: by default from 75% of the model window, every 5 points; patched to take absolute token thresholds per provider or model from infiniteContext.reminders.";
+    };
+
+    # Always written, even with every option at its default: the path stays
+    # Home Manager-owned instead of a file the agent could create. Literal
+    # text (spec §4).
+    home.file."${pe.agentDir}/infinite-context/settings.json".text =
+      builtins.toJSON (lib.recursiveUpdate rendered cfg.settings);
+  };
+}
+```
+
+`modules/default.nix` imports `./infinite-context.nix` and `./retry.nix` after M4's entries; `checks/module-eval/default.nix`'s `caseFiles` gains `./cases/infinite-context.nix` and `./cases/retry.nix` before `./cases/together.nix`.
+
+### S7 — `modules/retry.nix` (state after M6.13)
+
+```nix
+# pi-retry (spec §2, §4, §5.4): retries transient provider errors with
+# backoff. The upstream extension with one local patch
+# (packages/retry/package.nix), linked through the registry for sessions and
+# children; no file of its own: its settings live in pi's mutable
+# settings.json, edited through piSettings ops.
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
+  pe = config.programs.piEconomics;
+  cfg = pe.retry;
+
+  removePackage = value: {
+    op = "removeWhere";
+    path = ["packages"];
+    inherit value;
+  };
+
+  # (M6.13) One `set` per leaf of settings, under piRetry, at order 500: before
+  # the child rule's ensureContains (1000). A list is a leaf, replaced whole;
+  # no whole object is set, so keys written by pi or the user survive.
+  leaves = path: v:
+    if lib.isAttrs v
+    then lib.concatLists (lib.mapAttrsToList (k: leaves (path ++ [k])) v)
+    else [
+      {
+        op = "set";
+        inherit path;
+        value = v;
+        order = 500;
+      }
+    ];
+in {
+  options.programs.piEconomics.retry = {
+    enable = lib.mkEnableOption "pi-retry, retries of transient provider errors with backoff";
+
+    src = lib.mkOption {
+      type = lib.types.path;
+      internal = true;
+      description = ''
+        The unpatched upstream source. The flake's homeModules.default sets it
+        from its input `pi-retry`; the registry's existence assertion probes it.
+      '';
+    };
+
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.callPackage ../packages/retry/package.nix {inherit (cfg) src;};
+      defaultText = lib.literalExpression "pkgs.callPackage <pi-economics>/packages/retry/package.nix { src = <input pi-retry>; }";
+      description = "The patched extension, the whole repository (pi finds `retry.ts` through `package.json`).";
+    };
+
+    # (M6.13)
+    settings = lib.mkOption {
+      type = lib.types.attrsOf (pkgs.formats.json {}).type;
+      default = {};
+      example = {
+        maxDelayMs = 60000;
+        subagents.enabled = true;
+      };
+      description = ''
+        pi-retry's keys under `piRetry` in pi's mutable settings file
+        (`piSettings.file`), one `set` per leaf at order 500 (upstream keys:
+        `maxRetriesAtMaxDelay`, `baseDelayMs`, `maxDelayMs`, `multiplier`,
+        `messageFreeRetries`, `subagents.*`). Applied by the activation entry
+        `piSettingsMigrate`, so only while `piSettings.enable`. With
+        actorSubagents enabled, the child rule is added to
+        `piRetry.subagents.match.systemPromptRegex` after these.
+      '';
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    programs.piEconomics.extensions.pi-retry = {
+      path = "${cfg.package}";
+      checkPath = "${cfg.src}/retry.ts";
+      input = "pi-retry";
+      forChildren = true;
+      description = "Retries 400/413, credit and connection errors with backoff, inline for children and one-shot (print/json) hosts; never retries a hard quota such as OpenRouter's daily free-tier cap.";
+    };
+
+    # (M6.12, M6.13) Today's ops (checks/pi-settings-migrate/today-ops.nix),
+    # the child rule only with actorSubagents (spec §4.1, no warning), then
+    # the settings' leaves.
+    programs.piEconomics.piSettings.ops.retry =
+      [
+        (removePackage "https://github.com/monotykamary/pi-retry")
+        (removePackage "git:github.com/monotykamary/pi-retry")
+      ]
+      ++ lib.optional pe.actorSubagents.enable {
+        op = "ensureContains";
+        path = ["piRetry" "subagents" "match" "systemPromptRegex"];
+        value = {
+          pattern = ''^You were spawned by "'';
+          flags = "m";
+        };
+      }
+      ++ leaves ["piRetry"] cfg.settings;
+  };
+}
+```
+
+### S8 — `checks/module-eval/cases/infinite-context.nix` (state after M6.10)
+
+```nix
+# Cases for modules/infinite-context.nix (spec §4, §5.1, §5.2).
+{
+  lib,
+  hm,
+  self,
+  expect,
+}: let
+  inherit (expect) eq holds failed;
+  pe = cfg: cfg.programs.piEconomics;
+  dirs = [".pi/agent" "custom/agent"];
+  # dir: agentDir; ic: infiniteContext options, null = not enabled.
+  eval = dir: ic:
+    hm.eval {
+      programs.piEconomics =
+        {agentDir = dir;}
+        // lib.optionalAttrs (ic != null) {infiniteContext = {enable = true;} // ic;};
+    };
+  sorted = lib.sort lib.lessThan;
+  targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
+  fileAt = target: cfg: lib.findFirst (f: f.target == target) null (lib.attrValues cfg.home.file);
+  settingsOf = dir: ic: (fileAt "${dir}/infinite-context/settings.json" (eval dir ic)).text;
+  bare = hm.evalBare {};
+  # The host's values (homes/pallon/default.nix:32-54 at 4c714f0).
+  hostReminders = {
+    overrides = {
+      "anthropic/claude-opus-5-5" = {
+        startTokens = 400000;
+        everyTokens = 100000;
+      };
+      "anthropic/claude-sonnet-5-5" = {
+        startTokens = 400000;
+        everyTokens = 100000;
+      };
+    };
+    prices = {
+      "anthropic/claude-opus-5-5" = {
+        w = 5;
+        r = 0.2;
+      };
+      "anthropic/claude-sonnet-5-5" = {
+        w = 2.5;
+        r = 0.2;
+      };
+    };
+  };
+in {
+  # (M6.8) Off by default: no registry entry, no file.
+  infinite-context-off = let
+    c = eval ".pi/agent" null;
+  in
+    holds "no registry entry" (!(pe c).extensions ? infinite-context)
+    ++ eq "home.file targets" (targets c) (targets bare);
+
+  # (M6.8) On: the registry entry, loaded into children, its link following
+  # agentDir; the existence probe reads the unpatched input, so evaluation
+  # builds nothing.
+  infinite-context-defaults = lib.concatMap (dir: let
+    c = eval dir {};
+    e = (pe c).extensions.infinite-context;
+  in
+    eq "registry entry (${dir})" {inherit (e) path input forChildren;} {
+      path = "${(pe c).infiniteContext.package}/extensions/infinite-context";
+      input = "pi-infinite-context";
+      forChildren = true;
+    }
+    ++ eq "checkPath (${dir})" (toString e.checkPath) "${self.inputs.pi-infinite-context}/extensions/infinite-context/index.ts"
+    ++ eq "derivations behind checkPath (${dir})"
+    (lib.filter (v: v ? outputs) (lib.attrValues (builtins.getContext (toString e.checkPath)))) []
+    ++ eq "failed assertions (${dir})" (failed "" c) []
+    ++ eq "warnings (${dir})" c.warnings bare.warnings)
+  dirs;
+
+  # (M6.8) The package is the flake's, under the host's derivation name.
+  infinite-context-package = let
+    ic = (pe (eval ".pi/agent" {})).infiniteContext;
+  in
+    eq "drvPath" ic.package.drvPath self.packages.x86_64-linux.infinite-context.drvPath
+    ++ eq "name" ic.package.name "pi-infinite-context-patched";
+
+  # (M6.8) Files: the link and the settings file, always written; with every
+  # option at its default the file is today's, byte for byte (spec §9.1 W5).
+  infinite-context-files = lib.concatMap (dir:
+    eq "home.file targets (${dir})" (sorted (targets (eval dir {})))
+    (sorted (targets bare ++ ["${dir}/extensions/infinite-context" "${dir}/infinite-context/settings.json"]))
+    ++ eq "settings text (${dir})" (settingsOf dir {}) ''{"reminders":{"default":{},"overrides":{}}}'')
+  dirs;
+
+  # (M6.9) The reminder options render as the host's piContextReminders did:
+  # nulls are left out, prices, TTL and foldHint only when set.
+  infinite-context-reminders = let
+    host = builtins.fromJSON (settingsOf ".pi/agent" {reminders = hostReminders;});
+    all = builtins.fromJSON (settingsOf ".pi/agent" {
+      reminders = {
+        default.startTokens = 150000;
+        overrides.anthropic.everyTokens = 20000;
+        cacheTtlMinutes = 60;
+        foldHint = "fixed";
+      };
+    });
+  in
+    eq "host's values" host {
+      reminders = {
+        default = {};
+        inherit (hostReminders) overrides;
+      };
+      inherit (hostReminders) prices;
+    }
+    ++ eq "every option" all {
+      reminders = {
+        default.startTokens = 150000;
+        overrides.anthropic.everyTokens = 20000;
+      };
+      cacheTtlMinutes = 60;
+      foldHint = "fixed";
+    };
+
+  # (M6.10) settings merge with lib.recursiveUpdate, the user's on the right:
+  # a nested key replaces its own leaf, the rendered siblings survive.
+  infinite-context-settings = lib.concatMap (dir: let
+    got = builtins.fromJSON (settingsOf dir {
+      reminders = hostReminders;
+      settings = {
+        nudgeAtPercent = 60;
+        reminders.default.everyTokens = 5000;
+        reminders.overrides."anthropic/claude-opus-5-5".startTokens = 300000;
+      };
+    });
+  in
+    eq "merged (${dir})" got {
+      nudgeAtPercent = 60;
+      reminders = {
+        default.everyTokens = 5000;
+        overrides =
+          hostReminders.overrides
+          // {
+            "anthropic/claude-opus-5-5" = {
+              startTokens = 300000;
+              everyTokens = 100000;
+            };
+          };
+      };
+      inherit (hostReminders) prices;
+    })
+  dirs;
+}
+```
+
+### S9 — `checks/module-eval/cases/retry.nix` (state after M6.15, at M4's end state)
+
+The prototype, without M4, left `cacheLifecycle` and `experiments` out of `m6-host-like` and expected the children `["infinite-context" "pi-retry" "token-meter"]`.
+
+```nix
+# Cases for modules/retry.nix (spec §4, §4.1, §5.1, §5.4).
+{
+  lib,
+  hm,
+  self,
+  expect,
+}: let
+  inherit (expect) eq holds failed;
+  pe = cfg: cfg.programs.piEconomics;
+  dirs = [".pi/agent" "custom/agent"];
+  today = import ../../pi-settings-migrate/today-ops.nix;
+  # The op submodule's default, so module values compare with the fixture.
+  withOrder = map (op: {order = 1000;} // op);
+  # dir: agentDir; rt: retry options, null = not enabled; more: other
+  # programs.piEconomics options.
+  eval = dir: rt: more:
+    hm.eval {
+      programs.piEconomics =
+        {agentDir = dir;}
+        // lib.optionalAttrs (rt != null) {retry = {enable = true;} // rt;}
+        // more;
+    };
+  targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
+  # (order, key, op, path) of every op, in the order the program runs them.
+  sequence = cfg: map (o: "${toString o.order}:${o.key}:${o.op}:${lib.concatStringsSep "." o.path}") (pe cfg).piSettings.sortedOps;
+  bare = hm.evalBare {};
+  asOn = {actorSubagents.enable = true;};
+in {
+  # (M6.11) Off by default: no registry entry, no file, no op.
+  retry-off = let
+    c = eval ".pi/agent" null {};
+  in
+    holds "no registry entry" (!(pe c).extensions ? pi-retry)
+    ++ eq "home.file targets" (targets c) (targets bare)
+    ++ eq "piSettings ops" (pe c).piSettings.ops {};
+
+  # (M6.11) On: the registry entry (the whole repository, loaded into
+  # children), its link following agentDir, and no file of its own.
+  retry-defaults = lib.concatMap (dir: let
+    c = eval dir {} asOn;
+    e = (pe c).extensions.pi-retry;
+  in
+    eq "registry entry (${dir})" {inherit (e) path input forChildren;} {
+      path = "${(pe c).retry.package}";
+      input = "pi-retry";
+      forChildren = true;
+    }
+    ++ eq "checkPath (${dir})" (toString e.checkPath) "${self.inputs.pi-retry}/retry.ts"
+    ++ eq "new home.file targets (${dir})" (lib.subtractLists (targets (eval dir null asOn)) (targets c)) ["${dir}/extensions/pi-retry"]
+    ++ eq "failed assertions (${dir})" (failed "" c) []
+    ++ eq "warnings (${dir})" c.warnings bare.warnings)
+  dirs;
+
+  # (M6.11) The package is the flake's, under the host's derivation name.
+  retry-package = let
+    rt = (pe (eval ".pi/agent" {} {})).retry;
+  in
+    eq "drvPath" rt.package.drvPath self.packages.x86_64-linux.retry.drvPath
+    ++ eq "name" rt.package.name "pi-retry-patched";
+
+  # (M6.12) With actorSubagents: today's ops; with the host's op the program
+  # is the one pi-settings-migrate compares with the legacy script.
+  retry-pisettings = let
+    c = eval ".pi/agent" {} asOn;
+    withHost = eval ".pi/agent" {} (asOn // {piSettings.ops.host = today.withoutWarming.host;});
+    todays = hm.eval {programs.piEconomics.piSettings.ops = today.withoutWarming;};
+  in
+    eq "ops" (pe c).piSettings.ops {retry = withOrder today.withoutWarming.retry;}
+    ++ eq "program with the host's op" (pe withHost).piSettings.program (pe todays).piSettings.program
+    ++ holds "activation entry piSettingsMigrate" (c.home.activation ? piSettingsMigrate);
+
+  # (M6.12) Without actorSubagents: the two removals, no child rule, no
+  # warning (spec §4.1).
+  retry-alone = let
+    c = eval ".pi/agent" {} {};
+  in
+    eq "ops" (pe c).piSettings.ops {retry = withOrder (lib.take 2 today.withoutWarming.retry);}
+    ++ eq "warnings" c.warnings bare.warnings
+    ++ eq "failed assertions" (failed "" c) [];
+
+  # (M6.13) settings: one set per leaf under piRetry at order 500, before
+  # every order-1000 op (the host's and the child rule); a list is one leaf.
+  retry-settings = let
+    c = eval ".pi/agent" {
+      settings = {
+        maxDelayMs = 60000;
+        subagents = {
+          enabled = true;
+          match.systemPromptRegex = [{pattern = "x";}];
+        };
+      };
+    } (asOn // {piSettings.ops.host = today.withoutWarming.host;});
+    sets = lib.filter (o: o.op == "set") (pe c).piSettings.ops.retry;
+  in
+    eq "sequence" (sequence c) [
+      "500:retry:set:piRetry.maxDelayMs"
+      "500:retry:set:piRetry.subagents.enabled"
+      "500:retry:set:piRetry.subagents.match.systemPromptRegex"
+      "1000:host:removeWhere:packages"
+      "1000:retry:removeWhere:packages"
+      "1000:retry:removeWhere:packages"
+      "1000:retry:ensureContains:piRetry.subagents.match.systemPromptRegex"
+    ]
+    ++ eq "values" (map (o: o.value) sets) [60000 true [{pattern = "x";}]];
+
+  # (M6.15) The host's combination of M2-M6 from W5 on (spec §9.1): the
+  # flake's children, no activation entry while the host's script runs.
+  m6-host-like = let
+    c = hm.eval {
+      programs.piEconomics = {
+        actorSubagents.enable = true;
+        tokenMeter.enable = true;
+        cacheLifecycle.enable = true;
+        experiments.enable = true;
+        infiniteContext.enable = true;
+        retry.enable = true;
+        piSettings.enable = false;
+      };
+    };
+    childNames = map baseNameOf (builtins.fromJSON (lib.findFirst (f: f.target == ".pi/agent/actor-subagents/settings.json") null (lib.attrValues c.home.file)).text).childExtensions;
+  in
+    eq "children" childNames ["cache-lifecycle" "infinite-context" "pi-retry" "token-meter"]
+    ++ holds "no activation entry" (!(c.home.activation ? piSettingsMigrate))
+    ++ eq "failed assertions" (failed "" c) []
+    ++ eq "warnings" c.warnings bare.warnings;
+}
+```
+
+### S10 — bench: `modules/bench.nix`, `checks/module-eval/cases/bench.nix` (diffs)
+
+```diff
+diff --git a/checks/module-eval/cases/bench.nix b/checks/module-eval/cases/bench.nix
+--- a/checks/module-eval/cases/bench.nix
++++ b/checks/module-eval/cases/bench.nix
+@@ -34,6 +34,8 @@ in {
+     eq "PI_BENCH_ variables (${dir})" (benchVars c) {
+       PI_BENCH_DATA = "${src}/bench";
+       PI_BENCH_AGENT_SRC = src;
++      # (M6.14) The default extensions (bench-extensions-default).
++      PI_BENCH_EXT_DIR = "${pkgs.linkFarm "pi-bench-extensions" (pe c).bench.extensions}";
+     }
+     ++ holds "home.packages holds the bench (${dir})" (lib.elem (toString (pe c).bench.package) (map toString c.home.packages))
+     ++ eq "home.file names (${dir})" (lib.attrNames c.home.file) (lib.attrNames (hm.evalBare {}).home.file)
+@@ -70,7 +72,22 @@ in {
+     };
+     v = (on {extensions = exts;}).home.sessionVariables;
+   in
+-    eq "PI_BENCH_EXT_DIR" v.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" exts}";
++    # (M6.14) Definitions add to the defaults.
++    eq "PI_BENCH_EXT_DIR" v.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" ((pe (on {})).bench.extensions // exts)}";
++
++  # (M6.14) The default: the flake's packages the bench loads by name (spec
++  # §7), each the path its registry entry links; mkForce {} exports nothing.
++  bench-extensions-default = let
++    c = on {};
++    p = pe c;
++  in
++    eq "extensions" p.bench.extensions {
++      actor-subagents = "${p.actorSubagents.package}/extensions/actor-subagents";
++      infinite-context = "${p.infiniteContext.package}/extensions/infinite-context";
++      pi-retry = "${p.retry.package}";
++      token-meter = "${p.tokenMeter.package}";
++    }
++    ++ holds "mkForce {} exports nothing" (!((on {extensions = lib.mkForce {};}).home.sessionVariables ? PI_BENCH_EXT_DIR));
+ 
+   # (M1.8) The router base as a JSON file, read back without building.
+   bench-router = let
+diff --git a/modules/bench.nix b/modules/bench.nix
+--- a/modules/bench.nix
++++ b/modules/bench.nix
+@@ -48,8 +48,11 @@ in {
+         The extensions a bench arm loads, by the name the arm uses. Data, not
+         the registry: the arms load extensions the registry does not hold, and
+         leave out some it does. Exported as a directory of links
+-        (`PI_BENCH_EXT_DIR`); `{}` exports nothing, and the bench looks the
+-        names up in `~/.pi/agent/extensions`.
++        (`PI_BENCH_EXT_DIR`). Defined by default, one `mkDefault` each, for the
++        flake's packages the bench loads by name: `actor-subagents`,
++        `infinite-context`, `pi-retry`, `token-meter`. A definition adds names
++        or replaces one; `lib.mkForce {}` exports nothing, and the bench then
++        looks the names up in `~/.pi/agent/extensions`.
+       '';
+     };
+ 
+@@ -81,6 +84,15 @@ in {
+ 
+   config = lib.mkIf cfg.enable {
+     home.packages = [cfg.package];
++    # (M6.14) The flake's packages that the bench loads by name (spec §7), one
++    # mkDefault definition each: a host adds its own extensions beside them
++    # (claude-auth, web-search) and may replace one by name.
++    programs.piEconomics.bench.extensions = lib.mapAttrs (_: lib.mkDefault) {
++      actor-subagents = "${pe.actorSubagents.package}/extensions/actor-subagents";
++      infinite-context = "${pe.infiniteContext.package}/extensions/infinite-context";
++      pi-retry = "${pe.retry.package}";
++      token-meter = "${pe.tokenMeter.package}";
++    };
+     home.sessionVariables =
+       {
+         PI_BENCH_DATA = cfg.dataDir;
+```
+
+### S11 — `checks/home-files/default.nix` (diff against M3's state)
+
+At M4's end `nativeBuildInputs` already holds `pkgs.jq` and the configuration `cacheLifecycle`, `experiments`: add only `pkgs.nodejs`, the two attributes and the shell part. The retry probe compares `.packages` only, so M4's `cacheWarming` does not disturb it.
+
+```diff
+@@ -13,6 +13,21 @@
+         agentDir = dir;
+         tokenMeter.enable = true;
+         analysisSkill.enable = true;
++        # (M6.16)
++        infiniteContext = {
++          enable = true;
++          reminders = {
++            overrides."anthropic/claude-opus-5-5" = {
++              startTokens = 400000;
++              everyTokens = 100000;
++            };
++            prices."anthropic/claude-opus-5-5" = {
++              w = 5;
++              r = 0.2;
++            };
++          };
++        };
++        retry.enable = true;
+       };
+     };
+     pe = c.programs.piEconomics;
+@@ -38,10 +53,29 @@
+         if grep -qF '.pi/agent' ${skill}/SKILL.md; then echo "FAIL ${dir}: SKILL.md still names .pi/agent" >&2; exit 1; fi
+       ''
+     }
++    # (M6.16) infiniteContext: the extension pi loads, and the rendered file
++    # accepted by the extension's own parser (an invalid file is rejected whole).
++    ic=${pe.extensions.infinite-context.path}
++    for f in index.ts settings.ts; do
++      [ -f $ic/$f ] || { echo "FAIL ${dir}: infinite-context lacks $f" >&2; exit 1; }
++    done
++    node --experimental-strip-types --input-type=module -e "
++      import { readFileSync } from 'node:fs';
++      import { parseSettingsWithError } from '$ic/settings.ts';
++      const r = parseSettingsWithError(readFileSync(process.argv[1], 'utf8'));
++      if (r.error !== undefined) { console.error(r.error); process.exit(1); }
++    " ${c.home.file."${dir}/infinite-context/settings.json".source} || { echo "FAIL ${dir}: infinite-context rejects its settings.json" >&2; exit 1; }
++    # retry: the repository, whose package.json names the entry point; the
++    # stale package entries go.
++    rt=${pe.extensions.pi-retry.path}
++    jq -e '.pi.extensions == ["./retry.ts"]' $rt/package.json >/dev/null && [ -f $rt/retry.ts ] || { echo "FAIL ${dir}: pi-retry entry point" >&2; exit 1; }
++    printf '{"packages":["https://github.com/monotykamary/pi-retry","git:github.com/monotykamary/pi-retry","npm:x"]}\n' >"$TMPDIR/retry.json"
++    ${lib.getExe pe.piSettings.package} "$TMPDIR/retry.json" 2>/dev/null
++    jq -e '.packages == ["npm:x"]' "$TMPDIR/retry.json" >/dev/null || { echo "FAIL ${dir}: settings.json after ops.retry: $(cat "$TMPDIR/retry.json")" >&2; exit 1; }
+     echo "ok ${dir}"
+   '';
+ in
+-  pkgs.runCommand "home-files" {nativeBuildInputs = [pkgs.gnugrep pkgs.diffutils];} ''
++  pkgs.runCommand "home-files" {nativeBuildInputs = [pkgs.gnugrep pkgs.diffutils pkgs.jq pkgs.nodejs];} ''
+     set -euo pipefail
+     ${lib.concatMapStrings case dirs}
+     touch $out
+```
+
+Order inside S1: the inputs and `packages` lines land in M6.4/M6.6; the two `homeModules.default` lines only with their modules (M6.8, M6.11). Setting `infiniteContext.src` before `modules/infinite-context.nix` exists breaks every check that evaluates Home Manager (seen: `The option 'programs.piEconomics.infiniteContext' does not exist` in `module-eval`, `home-files`, `pi-settings-migrate`).
+
+### S12 — `docs/pi-economics.md` (M6.18)
+
+- `## infiniteContext`: what it links (`extensions/infinite-context`, children too), the always-written `infinite-context/settings.json`, the `reminders` options with the resolution order (exact model, provider, `default`, 75 % / 5 % of the window), `settings` merged with `recursiveUpdate`, the strict parser (an unknown key rejects the file), the soft dependencies (experiments' `foldHint` flag; cacheLifecycle's `context_peek` guard), the two patches.
+- `## retry`: the link (whole repository), no file, `piSettings.ops.retry` (the removals, the child rule only with actorSubagents, `settings` as `piRetry` leaves at order 500, applied only while `piSettings.enable`), the free-cap patch.
+- `## bench`: the `extensions` default and how a host adds or replaces names (`lib.mkForce {}` for none).
+- `## Checks`: `infinite-context`, `retry`, `typecheck-{infinite-context,retry}` and what each copy leaves out (D7, D8); `home-files`' parser and op probes.
+- `## Resync (M6.0)`: the npm lock at pi 1.3.0; the patches upstream made unnecessary (actor-subagents first-turn: pi 1.2.0; infinite-context foreign-messages: upstream `e6ff6803`; pi-retry print-mode: upstream 0.11.0) — the spec's §2 and §9 rows still name them (Q4); D5's line.
+
+### S13 — The doc move's scrub (M6.D)
+
+| In the host's text | Becomes |
+|---|---|
+| `programs.pi.{tokenMeter,taskRouter,cacheLifecycle,experiments}.{…, linkExtension}` (line 54) | `programs.piEconomics.<component>.{enable, package, settings}`; `linkExtension` gone (registry, §5.1) |
+| `my.hm.features.ai.piContextReminders.*` | `programs.piEconomics.infiniteContext.reminders.*` |
+| `"http://earth:11545"` (line 62) | `"http://<host>:11545"` |
+| `modules/home-manager/features/ai/extensions/<c>/` | `packages/<c>/` |
+| `ai/pi-{actor-subagents,infinite-context,retry}.nix` and their patches | `packages/<c>/package.nix`, `patches/pi-<input>/` |
+| `pkgs/pi-bench` | `packages/bench` |
+| `ai/pi-settings-migrate.nix` | `modules/common.nix` (`piSettings`) |
+| the host's `docs/specs/2026-10-02-…`, `docs/plans/2026-10-02-…`, `~/.pi/agent/notes/…` | dropped (§2), or this repository's spec where the fact is there |
+| a user name | `<user>` |
+
+Every section keeps its content; the M5 router section, if M5 has not landed, is the reason this task waits (D17).
+
+## Open questions (each with the proposed decision)
+
+- **Q1 (D5):** the flake's spawn-policy patch differs from the host's by one type-only test line, so actorSubagents' derivation is no longer the host's until W. *Proposal:* keep D5 and ask the owner to take the same line into the host's patch at its next rebase (bytes converge again); the alternative is to leave `spawn-policy.test.ts` out of the type-check copy and keep the host's bytes.
+- **Q2 (D8):** pi-retry's tests stay out of `tsc`. *Proposal:* keep D8 (the code pi loads is checked, vitest runs the tests); the alternative edits the free-cap patch's own test (two `errorMessage` accesses) and still has to leave upstream's `child-retry.test.ts` out.
+- **Q3 (D11):** the bench default as per-name `mkDefault` definitions (a host definition adds names) rather than the option's `default` (a host definition replaces all). *Proposal:* per-name; M5 adds `task-router` the same way; W adds `claude-auth`, `web-search`.
+- **Q4:** spec §2 (`actorSubagents`: "first-turn"; `retry`: "print-mode") and §9 (M2 "3 patches", M6 "print-mode and free-cap patches") name patches that `4c714f0` dropped. *Proposal:* M6.18 adds a dated "Amendment (M6)" line under §2, as §4 carries "Amendment (M2)", and the Execution Record names the deviation.
+
+---
+
+# Execution Record
