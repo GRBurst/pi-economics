@@ -129,6 +129,21 @@ in {
         '';
       };
     };
+
+    # (M6.10)
+    settings = lib.mkOption {
+      type = lib.types.attrsOf (pkgs.formats.json {}).type;
+      default = {};
+      example = {nudgeAtPercent = 60;};
+      description = ''
+        Merged into `<agentDir>/infinite-context/settings.json` with
+        `lib.recursiveUpdate`, on the right of what `reminders` renders: a
+        nested key replaces only its own leaf. The extension accepts
+        `nudgeAtTokens`, `nudgeAtPercent`, `reminders`, `prices`,
+        `cacheTtlMinutes` and `foldHint`; an unknown key or an invalid value
+        rejects the whole file with a warning at session start.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -144,6 +159,6 @@ in {
     # Home Manager-owned instead of a file the agent could create. Literal
     # text (spec §4).
     home.file."${pe.agentDir}/infinite-context/settings.json".text =
-      builtins.toJSON rendered;
+      builtins.toJSON (lib.recursiveUpdate rendered cfg.settings);
   };
 }

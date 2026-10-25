@@ -113,4 +113,33 @@ in {
       cacheTtlMinutes = 60;
       foldHint = "fixed";
     };
+
+  # (M6.10) settings merge with lib.recursiveUpdate, the user's on the right:
+  # a nested key replaces its own leaf, the rendered siblings survive.
+  infinite-context-settings = lib.concatMap (dir: let
+    got = builtins.fromJSON (settingsOf dir {
+      reminders = hostReminders;
+      settings = {
+        nudgeAtPercent = 60;
+        reminders.default.everyTokens = 5000;
+        reminders.overrides."anthropic/claude-opus-5-5".startTokens = 300000;
+      };
+    });
+  in
+    eq "merged (${dir})" got {
+      nudgeAtPercent = 60;
+      reminders = {
+        default.everyTokens = 5000;
+        overrides =
+          hostReminders.overrides
+          // {
+            "anthropic/claude-opus-5-5" = {
+              startTokens = 300000;
+              everyTokens = 100000;
+            };
+          };
+      };
+      inherit (hostReminders) prices;
+    })
+  dirs;
 }
