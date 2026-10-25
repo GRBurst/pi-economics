@@ -26,6 +26,9 @@ export const defaultArms = (): Record<string, Arm> => ({
 	...orchArms(),
 });
 
+/** The pairwise judge's default arms (`judge TASK JUDGE`, `judge-all`): the local Qwen against Sonnet (spec §7, step Q). */
+export const DEFAULT_PAIR = { x: "qwenl", y: "sonnet" } as const;
+
 /** Defaults overlaid with `<data>/arms.json` (same shape) when present. */
 export function loadArms(dataDir: string): Record<string, Arm> {
 	const f = join(dataDir, "arms.json");

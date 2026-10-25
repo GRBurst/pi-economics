@@ -3,7 +3,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolvePaths, timeoutSec } from "./config.ts";
+import { DEFAULT_PAIR, resolvePaths, timeoutSec } from "./config.ts";
 import { runJudge, runSingleJudge } from "./judge.ts";
 import { sessionMetrics } from "./metrics.ts";
 import { makeRefs } from "./refs.ts";
@@ -14,7 +14,7 @@ import type { Task } from "./types.ts";
 const USAGE = `usage: pi-bench <command>
   run TASK ARM [REP]              one run (ARM: qwen | qwenl | sonnet | orch | orch-<signs> | arms.json); prints result.json
   sched ARM PARALLEL TASK...      each task once, PARALLEL at a time; log in <work>/sched.ARM.log
-  judge TASK JUDGE [X Y]          blind pairwise judge (opus | gpt) of runs TASK.X.1 vs TASK.Y.1 (default qwen sonnet)
+  judge TASK JUDGE [X Y]          blind pairwise judge (opus | gpt) of runs TASK.X.1 vs TASK.Y.1 (default ${DEFAULT_PAIR.x} ${DEFAULT_PAIR.y})
   judge --all [--judges opus,gpt] [--parallel N] [--min-runs M]
                                   absolute rubric verdict for every run of every task with ≥M runs (default 2);
                                   per-run file judge/TASK/RUN/JUDGE.json, idempotent (skips judged runs)
@@ -96,22 +96,22 @@ export async function main(argv: string[], env: Record<string, string | undefine
 				return 0;
 			}
 			if (a.length < 2) break;
-			const r = await runJudge({ id: a[0], judge: a[1], x: a[2] ?? "qwen", y: a[3] ?? "sonnet", paths, piBin, env });
+			const r = await runJudge({ id: a[0], judge: a[1], x: a[2] ?? DEFAULT_PAIR.x, y: a[3] ?? DEFAULT_PAIR.y, paths, piBin, env });
 			console.log(JSON.stringify({ id: a[0], judge: a[1], preference: r.preference, map: r.map, verdicts: Object.fromEntries(Object.entries(r.arms).map(([k, v]) => [k, v.verdict])) }));
 			return 0;
 		}
 		case "judge-all": {
 			const once = a.includes("--once");
-			const x = a.find((s) => !s.startsWith("--")) ?? "qwen";
+			const x = a.find((s) => !s.startsWith("--")) ?? DEFAULT_PAIR.x;
 			for (;;) {
 				let left = 0;
 				for (const id of Object.keys(tasks())) {
 					const todo = ["opus", "gpt"].filter((j) => !existsSync(join(paths.data, "judge", id, `${j}.json`)));
 					if (!todo.length) continue;
 					left++;
-					if (!existsSync(join(paths.data, "runs", `${id}.${x}.1/result.json`)) || !existsSync(join(paths.data, "runs", `${id}.sonnet.1/result.json`))) continue;
+					if (!existsSync(join(paths.data, "runs", `${id}.${x}.1/result.json`)) || !existsSync(join(paths.data, "runs", `${id}.${DEFAULT_PAIR.y}.1/result.json`))) continue;
 					for (const judge of todo) {
-						try { await runJudge({ id, judge, x, y: "sonnet", paths, piBin, env }); console.log(`${stamp()} judged ${id} ${judge}`); }
+						try { await runJudge({ id, judge, x, y: DEFAULT_PAIR.y, paths, piBin, env }); console.log(`${stamp()} judged ${id} ${judge}`); }
 						catch (e) { console.error(`${id}/${judge}: ${(e as Error).message}`); }
 					}
 				}
