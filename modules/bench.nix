@@ -48,8 +48,11 @@ in {
         The extensions a bench arm loads, by the name the arm uses. Data, not
         the registry: the arms load extensions the registry does not hold, and
         leave out some it does. Exported as a directory of links
-        (`PI_BENCH_EXT_DIR`); `{}` exports nothing, and the bench looks the
-        names up in `~/.pi/agent/extensions`.
+        (`PI_BENCH_EXT_DIR`). Defined by default, one `mkDefault` each, for the
+        flake's packages the bench loads by name: `actor-subagents`,
+        `infinite-context`, `pi-retry`, `token-meter`. A definition adds names
+        or replaces one; `lib.mkForce {}` exports nothing, and the bench then
+        looks the names up in `~/.pi/agent/extensions`.
       '';
     };
 
@@ -81,6 +84,15 @@ in {
 
   config = lib.mkIf cfg.enable {
     home.packages = [cfg.package];
+    # (M6.14) The flake's packages that the bench loads by name (spec §7), one
+    # mkDefault definition each: a host adds its own extensions beside them
+    # (claude-auth, web-search) and may replace one by name.
+    programs.piEconomics.bench.extensions = lib.mapAttrs (_: lib.mkDefault) {
+      actor-subagents = "${pe.actorSubagents.package}/extensions/actor-subagents";
+      infinite-context = "${pe.infiniteContext.package}/extensions/infinite-context";
+      pi-retry = "${pe.retry.package}";
+      token-meter = "${pe.tokenMeter.package}";
+    };
     home.sessionVariables =
       {
         PI_BENCH_DATA = cfg.dataDir;

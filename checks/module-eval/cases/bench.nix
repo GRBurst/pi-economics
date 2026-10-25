@@ -34,6 +34,8 @@ in {
     eq "PI_BENCH_ variables (${dir})" (benchVars c) {
       PI_BENCH_DATA = "${src}/bench";
       PI_BENCH_AGENT_SRC = src;
+      # (M6.14) The default extensions (bench-extensions-default).
+      PI_BENCH_EXT_DIR = "${pkgs.linkFarm "pi-bench-extensions" (pe c).bench.extensions}";
     }
     ++ holds "home.packages holds the bench (${dir})" (lib.elem (toString (pe c).bench.package) (map toString c.home.packages))
     ++ eq "home.file names (${dir})" (lib.attrNames c.home.file) (lib.attrNames (hm.evalBare {}).home.file)
@@ -70,7 +72,22 @@ in {
     };
     v = (on {extensions = exts;}).home.sessionVariables;
   in
-    eq "PI_BENCH_EXT_DIR" v.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" exts}";
+    # (M6.14) Definitions add to the defaults.
+    eq "PI_BENCH_EXT_DIR" v.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" ((pe (on {})).bench.extensions // exts)}";
+
+  # (M6.14) The default: the flake's packages the bench loads by name (spec
+  # §7), each the path its registry entry links; mkForce {} exports nothing.
+  bench-extensions-default = let
+    c = on {};
+    p = pe c;
+  in
+    eq "extensions" p.bench.extensions {
+      actor-subagents = "${p.actorSubagents.package}/extensions/actor-subagents";
+      infinite-context = "${p.infiniteContext.package}/extensions/infinite-context";
+      pi-retry = "${p.retry.package}";
+      token-meter = "${p.tokenMeter.package}";
+    }
+    ++ holds "mkForce {} exports nothing" (!((on {extensions = lib.mkForce {};}).home.sessionVariables ? PI_BENCH_EXT_DIR));
 
   # (M1.8) The router base as a JSON file, read back without building.
   bench-router = let
