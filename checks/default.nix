@@ -44,6 +44,8 @@
     file = "core/api.ts";
     type = "ExperimentsApiV1";
   };
+  # (M6.4) The patched pi-infinite-context.
+  infiniteContext = self.packages.${pkgs.stdenv.hostPlatform.system}.infinite-context;
 in {
   leak = leakLib.check leakSrc;
   leak-selftest = leakLib.selftest;
@@ -135,5 +137,7 @@ in {
       type = "ExperimentsApi";
     };
   };
+  # The patched upstreams' suites, with the host's checks (spec §8.1).
+  infinite-context = pkgs.callPackage ./infinite-context {src = infiniteContext;};
   home-files = import ./home-files {inherit lib pkgs hm;};
 }

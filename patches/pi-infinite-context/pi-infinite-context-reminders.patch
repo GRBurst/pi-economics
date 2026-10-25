@@ -1,0 +1,792 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 1bc6203..dd3f5c2 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -29,8 +29,8 @@ Use simple, accurate English and keep both documents very concise.
+ - `extensions/infinite-context/overlay.ts`: request-copy context overlay.
+ - `extensions/infinite-context/search.ts`: pure archive regex search.
+ - `extensions/infinite-context/output.ts`: line windows, token formatting, and global output limits.
+-- `extensions/infinite-context/nudge.ts`: proactive folding threshold and reminder-step policy.
+-- `extensions/infinite-context/settings.ts`: parser for `<agent dir>/infinite-context/settings.json` (nudge limits) and the session entry that records them.
++- `extensions/infinite-context/nudge.ts`: proactive folding threshold and reminder-step policy, per model.
++- `extensions/infinite-context/settings.ts`: parser for `<agent dir>/infinite-context/settings.json` (nudge limits and per-model reminder thresholds) and the session entry that records them.
+ - `extensions/infinite-context/*.test.ts`: unit, property, and integration tests.
+ - `e2e/`: end-to-end test driving the real `pi` binary with a scripted fake provider.
+ 
+diff --git a/README.md b/README.md
+index c6952b2..7c3a3fe 100644
+--- a/README.md
++++ b/README.md
+@@ -29,15 +29,25 @@ Map and search results provide the IDs to read next.
+ 
+ ## Context reminders
+ 
+-When Pi estimates that context holds at least **150k tokens or 75% of the model's window** (whichever comes first), the extension reminds the agent during tool work to fold completed work while keeping the current task, open questions, errors, and useful evidence. It reminds again every 15k tokens as usage rises (closer together when little room remains).
++When Pi estimates that context holds at least **75% of the model's window**, the extension reminds the agent during tool work to fold completed work while keeping the current task, open questions, errors, and useful evidence. It reminds again every 5% of the window as usage rises.
+ 
+-Optional file `~/.pi/agent/infinite-context/settings.json` (inside Pi's configured agent directory) changes the limits; missing or invalid values use the defaults, and changes apply after restarting Pi:
++Optional file `~/.pi/agent/infinite-context/settings.json` (inside Pi's configured agent directory) changes the limits, and changes apply after restarting Pi. `nudgeAtTokens` adds an absolute start (default: none), `nudgeAtPercent` is the window share by which the reminders start at the latest (default 75); an invalid value of either uses its default. `reminders` sets absolute thresholds per provider or model:
+ 
+ ```json
+-{ "nudgeAtTokens": 150000, "nudgeAtPercent": 75 }
++{
++  "reminders": {
++    "default": {},
++    "overrides": {
++      "anthropic": { "startTokens": 150000, "everyTokens": 20000 },
++      "anthropic/claude-opus-5-5": { "startTokens": 120000 }
++    }
++  }
++}
+ ```
+ 
+-The session records the effective limits as a `custom` entry of type `infinite-context:settings` whenever they change, and each reminder carries its token count, window, threshold and step in `details`.
++Each field resolves on its own: the exact `provider/modelId` entry, then the provider entry, then `default`, then `nudgeAtTokens` (start only), then the built-in 75% / 5% of the model window. A start above `nudgeAtPercent` of the window is lowered to it. The `reminders` block is strict: an invalid one, or an unknown key anywhere in the file, rejects the whole file with a warning at session start, and the defaults apply.
++
++The session records the effective settings as a `custom` entry of type `infinite-context:settings` whenever they change, and each reminder carries its token count, window, threshold and step in `details`.
+ 
+ The agent chooses what to fold and writes the summaries. Reminders do not fold anything themselves.
+ 
+diff --git a/extensions/infinite-context/index.test.ts b/extensions/infinite-context/index.test.ts
+index 356c8f6..e359c31 100644
+--- a/extensions/infinite-context/index.test.ts
++++ b/extensions/infinite-context/index.test.ts
+@@ -121,8 +121,8 @@ test("each branch records the effective settings once, again after switching to
+   assert.equal(settingsEntries(h).length, 1);
+   const recorded = settingsEntries(h)[0];
+   assert.deepEqual(recorded.type === "custom" && recorded.data, {
+-    nudgeAtTokens: 150_000,
+     nudgeAtPercent: 75,
++    reminders: { default: {}, overrides: {} },
+   });
+ 
+   h.setEntries(source);
+diff --git a/extensions/infinite-context/index.ts b/extensions/infinite-context/index.ts
+index edb2709..4392413 100644
+--- a/extensions/infinite-context/index.ts
++++ b/extensions/infinite-context/index.ts
+@@ -27,8 +27,14 @@ import { ProjectionMismatchError, buildOverlay } from "./overlay.ts";
+ import { planRootRanges } from "./plan-root-ranges.ts";
+ import { serializeMessage } from "./serialize-message.ts";
+ import { validateToolUnitOwnership } from "./tool-units.ts";
+-import { nudgeSchedule, planNudge } from "./nudge.ts";
+-import { SETTINGS_ENTRY, type Settings, parseSettings, settingsChanged } from "./settings.ts";
++import { nudgeSchedule, planNudge, reminderText } from "./nudge.ts";
++import {
++  DEFAULT_SETTINGS,
++  SETTINGS_ENTRY,
++  type Settings,
++  parseSettingsWithError,
++  settingsChanged,
++} from "./settings.ts";
+ import { renderMap } from "./render-map.ts";
+ import {
+   DEFAULT_PAGE_LIMIT,
+@@ -81,20 +87,28 @@ function previewText(text: string): string {
+ 
+ /**
+  * Read this extension's settings next to pi's own agent config (getAgentDir() honors pi's
+- * agent-dir override). A missing or unreadable file is the same as an empty one; parseSettings
+- * decides what that means per field. Read once per load: changes apply after restart or /reload.
++ * agent-dir override). A missing file is the same as an empty one; parseSettingsWithError decides
++ * what an invalid one means. An unreadable file or invalid settings come back as the defaults plus
++ * the reason, which session start reports. Read once per extension instance: changes apply after
++ * restart or /reload.
+  */
+-function readSettings(): Settings {
+-  const file = path.join(getAgentDir(), "infinite-context", "settings.json");
++function readSettings(file: string): { settings: Settings; error?: string } {
++  let text: string | undefined;
+   try {
+-    return parseSettings(fs.readFileSync(file, "utf8"));
+-  } catch {
+-    return parseSettings("");
++    text = fs.readFileSync(file, "utf8");
++  } catch (error) {
++    if ((error as NodeJS.ErrnoException).code !== "ENOENT")
++      return {
++        settings: DEFAULT_SETTINGS,
++        error: error instanceof Error ? error.message : String(error),
++      };
+   }
++  return parseSettingsWithError(text);
+ }
+ 
+ export default function infiniteContext(pi: ExtensionAPI) {
+-  const settings = readSettings();
++  const settingsFile = path.join(getAgentDir(), "infinite-context", "settings.json");
++  const { settings, error: settingsError } = readSettings(settingsFile);
+   let roots: Forest = [];
+   let stateError: Error | undefined;
+   let loaded = false;
+@@ -161,7 +175,14 @@ export default function infiniteContext(pi: ExtensionAPI) {
+     pi.appendEntry(INFINITE_CONTEXT_ENTRY, snapshot(roots));
+   };
+ 
+-  pi.on("session_start", async (_event, ctx) => load(ctx));
++  pi.on("session_start", async (_event, ctx) => {
++    load(ctx);
++    if (settingsError)
++      ctx.ui.notify(
++        `infinite-context: ignoring ${settingsFile}: ${settingsError}; using the built-in reminder thresholds`,
++        "warning",
++      );
++  });
+   pi.on("session_tree", async (_event, ctx) => load(ctx));
+ 
+   pi.on("context", async (event, ctx) => {
+@@ -196,22 +217,22 @@ export default function infiniteContext(pi: ExtensionAPI) {
+     const window = usage?.contextWindow ?? 0;
+     const tokens = usage?.tokens ?? null;
+     if (window <= 0 || tokens == null) return;
+-    const percent = (tokens / window) * 100;
+     const message = event.message as { stopReason?: string };
+     const continuing = message.stopReason === "toolUse" && event.toolResults.length > 0;
+-    const planned = planNudge(tokens, window, settings, lastNudgedBand, continuing);
++    const planned = planNudge(tokens, window, settings, lastNudgedBand, continuing, ctx.model);
+     lastNudgedBand = planned.band;
+     if (!planned.nudge) return;
++    const schedule = nudgeSchedule(window, settings, ctx.model);
+     pi.sendMessage(
+       {
+         customType: "infinite-context/nudge",
+         content:
+-          `<context-maintenance>\nContext is ~${Math.round(percent)}% full. ` +
++          `<context-maintenance>\n${reminderText(tokens, window, schedule)} ` +
+           "Use context_map, then context_fold completed or superseded roots in one call that frees at least ~15k tokens. " +
+           "Keep the active request, open loops, unresolved errors, and evidence needed soon. " +
+           "Native compaction is blocked, so an actual overflow will remain visible.\n</context-maintenance>",
+         display: true,
+-        details: { band: planned.band, tokens, window, ...nudgeSchedule(window, settings) },
++        details: { band: planned.band, tokens, window, ...schedule },
+       },
+       { deliverAs: "steer" },
+     );
+diff --git a/extensions/infinite-context/nudge.test.ts b/extensions/infinite-context/nudge.test.ts
+index 5440fc4..eb43033 100644
+--- a/extensions/infinite-context/nudge.test.ts
++++ b/extensions/infinite-context/nudge.test.ts
+@@ -1,58 +1,105 @@
+ import assert from "node:assert/strict";
+ import test from "node:test";
+-import fc from "fast-check";
+-import { NUDGES_BEFORE_OVERFLOW, nudgeSchedule, planNudge } from "./nudge.ts";
+-import { DEFAULT_SETTINGS, type Settings } from "./settings.ts";
++import { nudgeSchedule, planNudge, reminderText } from "./nudge.ts";
++import { DEFAULT_SETTINGS, parseSettingsWithError, type Settings } from "./settings.ts";
+ 
+-const settings = (nudgeAtTokens: number, nudgeAtPercent: number): Settings => ({
+-  nudgeAtTokens,
+-  nudgeAtPercent,
++const MILLION = 1_000_000;
++const anthropic = { provider: "anthropic", id: "claude-opus-5-5" };
++
++const settings = (json: unknown): Settings => {
++  const parsed = parseSettingsWithError(JSON.stringify(json));
++  assert.equal(parsed.error, undefined);
++  return parsed.settings;
++};
++
++const configured = settings({
++  reminders: {
++    default: {},
++    overrides: {
++      anthropic: { startTokens: 150_000, everyTokens: 20_000 },
++      "anthropic/claude-opus-5-5": { startTokens: 120_000 },
++      openai: { startTokens: 300_000, everyTokens: 50_000 },
++    },
++  },
+ });
+ 
+-test("the schedule per window size with the defaults", () => {
+-  assert.deepEqual(nudgeSchedule(200_000, DEFAULT_SETTINGS), { threshold: 150_000, step: 15_000 });
+-  assert.deepEqual(nudgeSchedule(1_000_000, DEFAULT_SETTINGS), { threshold: 150_000, step: 15_000 });
+-  assert.deepEqual(nudgeSchedule(32_000, DEFAULT_SETTINGS), { threshold: 24_000, step: 8_000 / 3 });
++test("without settings the window-relative policy applies (75%, then every 5%)", () => {
++  assert.deepEqual(nudgeSchedule(100_000, DEFAULT_SETTINGS, anthropic), { threshold: 75_000, step: 5_000 });
++  assert.deepEqual(nudgeSchedule(MILLION, DEFAULT_SETTINGS), { threshold: 750_000, step: 50_000 });
++  assert.deepEqual(nudgeSchedule(200_000, DEFAULT_SETTINGS), { threshold: 150_000, step: 10_000 });
++  assert.deepEqual(nudgeSchedule(32_001, DEFAULT_SETTINGS), { threshold: 24_000, step: 1_600 });
+ });
+ 
+-test("a 200k window with the defaults nudges from 150k, as 75% did before", () => {
+-  assert.equal(planNudge(149_999, 200_000, DEFAULT_SETTINGS, 0, true).nudge, false);
+-  assert.deepEqual(planNudge(150_000, 200_000, DEFAULT_SETTINGS, 0, true), {
++test("fields resolve independently: exact provider/model, then provider, then default, then built-in", () => {
++  assert.deepEqual(nudgeSchedule(MILLION, configured, anthropic), { threshold: 120_000, step: 20_000 });
++  assert.deepEqual(nudgeSchedule(MILLION, configured, { provider: "anthropic", id: "claude-haiku" }), {
++    threshold: 150_000,
++    step: 20_000,
++  });
++  assert.deepEqual(nudgeSchedule(MILLION, configured, { provider: "google", id: "gemini" }), {
++    threshold: 750_000,
++    step: 50_000,
++  });
++  const withDefault = settings({ reminders: { default: { everyTokens: 30_000 }, overrides: {} } });
++  assert.deepEqual(nudgeSchedule(MILLION, withDefault, { provider: "google", id: "gemini" }), {
++    threshold: 750_000,
++    step: 30_000,
++  });
++  assert.deepEqual(nudgeSchedule(MILLION, withDefault, undefined), { threshold: 750_000, step: 30_000 });
++});
++
++test("a start beyond 75% of a small window never defers the reminder past the window-relative one", () => {
++  assert.deepEqual(nudgeSchedule(200_000, configured, { provider: "openai", id: "gpt" }), {
++    threshold: 150_000,
++    step: 50_000,
++  });
++});
++
++test("the window share is nudgeAtPercent, and nudgeAtTokens is the start of a model without a rule", () => {
++  const file = settings({ nudgeAtTokens: 100_000, nudgeAtPercent: 50 });
++  assert.deepEqual(nudgeSchedule(MILLION, file), { threshold: 100_000, step: 50_000 });
++  assert.deepEqual(nudgeSchedule(120_000, file), { threshold: 60_000, step: 6_000 });
++  const rule = settings({ nudgeAtTokens: 100_000, reminders: { overrides: { openai: { startTokens: 200_000 } } } });
++  assert.deepEqual(nudgeSchedule(MILLION, rule, { provider: "openai", id: "gpt" }), {
++    threshold: 200_000,
++    step: 50_000,
++  });
++});
++
++test("reminders fire at the start and at every step above it, once per threshold", () => {
++  const s = settings({ reminders: { default: { startTokens: 150_000, everyTokens: 20_000 } } });
++  assert.deepEqual(planNudge(149_999, MILLION, s, 0, true), { nudge: false, band: 0 });
++  assert.deepEqual(planNudge(150_000, MILLION, s, 0, true), { nudge: true, band: 150_000 });
++  assert.deepEqual(planNudge(169_999, MILLION, s, 150_000, true), { nudge: false, band: 150_000 });
++  assert.deepEqual(planNudge(171_000, MILLION, s, 150_000, true), { nudge: true, band: 170_000 });
++  assert.deepEqual(planNudge(215_000, MILLION, s, 170_000, true), { nudge: true, band: 210_000 });
++});
++
++test("folding below the start re-arms the reminder", () => {
++  const s = settings({ reminders: { default: { startTokens: 150_000, everyTokens: 20_000 } } });
++  assert.deepEqual(planNudge(90_000, MILLION, s, 170_000, true), { nudge: false, band: 0 });
++  assert.deepEqual(planNudge(152_000, MILLION, s, 0, true), { nudge: true, band: 150_000 });
++});
++
++test("a turn that is not continuing records nothing new, so the reminder comes on the next continuing turn", () => {
++  const s = settings({ reminders: { default: { startTokens: 150_000, everyTokens: 20_000 } } });
++  assert.deepEqual(planNudge(155_000, MILLION, s, 0, false), { nudge: false, band: 0 });
++  assert.deepEqual(planNudge(156_000, MILLION, s, 0, true), { nudge: true, band: 150_000 });
++});
++
++test("switching from the window-relative policy to an absolute rule still reminds", () => {
++  const first = planNudge(160_000, 200_000, DEFAULT_SETTINGS, 0, true, anthropic);
++  assert.deepEqual(first, { nudge: true, band: 160_000 });
++  const absolute = settings({ reminders: { default: { startTokens: 150_000, everyTokens: 20_000 } } });
++  assert.deepEqual(planNudge(175_000, 200_000, absolute, first.band, true, anthropic), {
+     nudge: true,
+-    band: 150_000,
++    band: 170_000,
+   });
+ });
+ 
+-test("the token limit wins on a large window", () => {
+-  assert.equal(planNudge(150_000, 1_000_000, DEFAULT_SETTINGS, 0, true).nudge, true);
+-});
+-
+-test("the percentage wins on a small window", () => {
+-  assert.equal(planNudge(59_999, 100_000, DEFAULT_SETTINGS, 0, true).nudge, false);
+-  assert.equal(planNudge(75_000, 100_000, DEFAULT_SETTINGS, 0, true).nudge, true);
+-});
+-
+-test("a reminder repeats only at the next 15k step", () => {
+-  const first = planNudge(150_000, 200_000, DEFAULT_SETTINGS, 0, true);
+-  assert.equal(planNudge(164_999, 200_000, DEFAULT_SETTINGS, first.band, true).nudge, false);
+-  assert.deepEqual(planNudge(165_000, 200_000, DEFAULT_SETTINGS, first.band, true), {
+-    nudge: true,
+-    band: 165_000,
+-  });
+-});
+-
+-test("no reminder when the agent is not continuing, and the band is kept", () => {
+-  assert.deepEqual(planNudge(180_000, 200_000, DEFAULT_SETTINGS, 150_000, false), {
+-    nudge: false,
+-    band: 150_000,
+-  });
+-});
+-
+-test("dropping below the threshold resets the band", () => {
+-  assert.deepEqual(planNudge(10_000, 200_000, DEFAULT_SETTINGS, 170_000, true), {
+-    nudge: false,
+-    band: 0,
+-  });
++test("the model decides the rule: the same context reminds on one model and not on another", () => {
++  assert.equal(planNudge(130_000, MILLION, configured, 0, true, anthropic).nudge, true);
++  assert.equal(planNudge(130_000, MILLION, configured, 0, true, { provider: "openai", id: "gpt" }).nudge, false);
+ });
+ 
+ test("unknown usage or window never nudges", () => {
+@@ -60,70 +107,60 @@ test("unknown usage or window never nudges", () => {
+   assert.equal(planNudge(100_000, 0, DEFAULT_SETTINGS, 0, true).nudge, false);
+ });
+ 
+-/** Replays a context growing in 1k-token turns and counts the reminders fired before it overflows. */
+-function remindersUntilFull(window: number, s: Settings): number {
+-  let band = 0;
+-  let count = 0;
+-  for (let tokens = 0; tokens < window; tokens += 1_000) {
+-    const planned = planNudge(tokens, window, s, band, true);
+-    band = planned.band;
+-    if (planned.nudge) count++;
+-  }
+-  return count;
+-}
+-
+-test("reminder counts per window size with the defaults", () => {
+-  const counts = new Map([
+-    [32_000, 3],
+-    [128_000, 3],
+-    [200_000, 4],
+-    [400_000, 17],
+-  ]);
+-  for (const [window, expected] of counts) {
+-    assert.equal(remindersUntilFull(window, DEFAULT_SETTINGS), expected, String(window));
+-  }
+-});
+-
+-test("a threshold equal to the window still yields a finite, positive step", () => {
+-  const planned = planNudge(200_000, 200_000, settings(1_000_000, 100), 0, true);
+-  assert.deepEqual(planned, { nudge: true, band: 200_000 });
+-});
+-
+-test("property: reminders never fire below the earlier limit and bands increase", () => {
+-  fc.assert(
+-    fc.property(
+-      fc.integer({ min: 1, max: 5_000_000 }),
+-      fc.integer({ min: 1_000, max: 2_000_000 }),
+-      fc.integer({ min: 1, max: 5_000_000 }),
+-      fc.double({ min: 0.1, max: 100, noNaN: true }),
+-      fc.integer({ min: 0, max: 5_000_000 }),
+-      (tokens, window, limitTokens, limitPercent, lastBand) => {
+-        const threshold = Math.min(limitTokens, (limitPercent / 100) * window);
+-        const planned = planNudge(tokens, window, settings(limitTokens, limitPercent), lastBand, true);
+-        if (tokens < threshold) assert.equal(planned.nudge, false);
+-        if (planned.nudge) {
+-          assert.ok(planned.band > lastBand);
+-          assert.ok(planned.band <= tokens + 1e-6); // float slack of threshold + step * k
+-        }
+-      },
+-    ),
+-  );
+-});
+-
+-test("property: at least NUDGES_BEFORE_OVERFLOW reminders fit between threshold and window", () => {
+-  fc.assert(
+-    fc.property(
+-      fc.integer({ min: 64, max: 2_000 }), // window in k tokens
+-      fc.integer({ min: 1, max: 5_000 }), // token limit in k
+-      fc.integer({ min: 1, max: 99 }), // percent limit
+-      (windowK, limitK, limitPercent) => {
++test("property (grid): reminders never fire below the start, and the bands of one climb increase", () => {
++  for (const windowK of [32, 128, 200, 400, 1_000])
++    for (const s of [DEFAULT_SETTINGS, configured])
++      for (const model of [anthropic, { provider: "openai", id: "gpt" }, undefined]) {
+         const window = windowK * 1_000;
+-        const s = settings(limitK * 1_000, limitPercent);
+-        const threshold = Math.min(s.nudgeAtTokens, (limitPercent / 100) * window);
+-        // Needs room for the reminders on the 1k replay grid.
+-        fc.pre(window - threshold >= NUDGES_BEFORE_OVERFLOW * 1_000);
+-        assert.ok(remindersUntilFull(window, s) >= NUDGES_BEFORE_OVERFLOW);
++        const { threshold, step } = nudgeSchedule(window, s, model);
++        assert.ok(threshold <= Math.floor(window * 0.75), `${windowK}k start within 75%`);
++        let band = 0;
++        for (let tokens = 0; tokens < window; tokens += 1_000) {
++          const planned = planNudge(tokens, window, s, band, true, model);
++          if (tokens < threshold) assert.deepEqual(planned, { nudge: false, band: 0 });
++          if (planned.nudge) {
++            assert.ok(planned.band > band);
++            assert.ok(planned.band <= tokens && planned.band >= threshold);
++            assert.equal((planned.band - threshold) % step, 0);
++          }
++          band = planned.band;
++        }
++      }
++});
++
++test("the reminder states absolute tokens and the thresholds it follows", () => {
++  const text = reminderText(152_400, MILLION, { threshold: 150_000, step: 20_000 });
++  assert.match(text, /~152k tokens/);
++  assert.match(text, /15% of the 1000k-token window/);
++  assert.match(text, /start at 150k tokens and repeat every 20k/);
++});
++
++// Golden values of the settings file the Home Manager module renders for the owner (homes/pallon):
++// exact overrides for the two 1M-window anthropic models, nothing for the rest. They are what the
++// per-model thresholds were first measured with: the schedule must not move with an upstream sync.
++test("golden: the rendered owner settings", () => {
++  const owner = settings({
++    reminders: {
++      default: {},
++      overrides: {
++        "anthropic/claude-opus-5-5": { startTokens: 400_000, everyTokens: 100_000 },
++        "anthropic/claude-sonnet-5-5": { startTokens: 400_000, everyTokens: 100_000 },
+       },
+-    ),
+-  );
++    },
++  });
++  const sonnet = { provider: "anthropic", id: "claude-sonnet-5-5" };
++  const haiku = { provider: "anthropic", id: "claude-haiku-5" };
++  assert.deepEqual(nudgeSchedule(MILLION, owner, anthropic), { threshold: 400_000, step: 100_000 });
++  assert.deepEqual(nudgeSchedule(MILLION, owner, sonnet), { threshold: 400_000, step: 100_000 });
++  assert.deepEqual(nudgeSchedule(200_000, owner, haiku), { threshold: 150_000, step: 10_000 });
++  assert.deepEqual(nudgeSchedule(MILLION, owner, { provider: "google", id: "gemini" }), {
++    threshold: 750_000,
++    step: 50_000,
++  });
++  assert.deepEqual(planNudge(399_999, MILLION, owner, 0, true, anthropic), { nudge: false, band: 0 });
++  assert.deepEqual(planNudge(400_000, MILLION, owner, 0, true, anthropic), { nudge: true, band: 400_000 });
++  assert.deepEqual(planNudge(499_999, MILLION, owner, 400_000, true, anthropic), { nudge: false, band: 400_000 });
++  assert.deepEqual(planNudge(500_000, MILLION, owner, 400_000, true, anthropic), { nudge: true, band: 500_000 });
++  assert.deepEqual(planNudge(149_999, 200_000, owner, 0, true, haiku), { nudge: false, band: 0 });
++  assert.deepEqual(planNudge(150_000, 200_000, owner, 0, true, haiku), { nudge: true, band: 150_000 });
+ });
+diff --git a/extensions/infinite-context/nudge.ts b/extensions/infinite-context/nudge.ts
+index 4ea35c5..2361b7c 100644
+--- a/extensions/infinite-context/nudge.ts
++++ b/extensions/infinite-context/nudge.ts
+@@ -1,37 +1,38 @@
+-import type { Settings } from "./settings.ts";
++import { modelEntries, type ModelRef, type ReminderRule, type Settings } from "./settings.ts";
+ 
+ /**
+- * Upper bound for the distance between two reminders. It exceeds the context growth of one
+- * fold cycle (map, peeks, summaries: ~10k tokens), so the agent is not nagged while it folds,
+- * and it is small enough that a missed reminder is repeated while folding still helps.
+- * A fixed token count (not a window share) because quality loss follows tokens.
++ * Tokens between two reminders when no rule sets it: this share of the model's window. A share
++ * rather than upstream's fixed token step keeps the unconfigured policy what the per-model rules
++ * were measured against (75% of the window, then every 5%).
+  */
+-export const NUDGE_STEP_TOKENS = 15_000;
+-
+-/** Reminders that must fit between the threshold and the window's end. */
+-export const NUDGES_BEFORE_OVERFLOW = 3;
++export const NUDGE_STEP_PERCENT = 5;
+ 
+ /**
+- * Where reminders start and how far apart they are for one window size.
+- * The threshold is the earlier of the two limits (Margin of Safety): the token limit catches
+- * degraded quality on large windows, the percentage catches overflow on small ones.
+- * The step shrinks when little room remains, so at least NUDGES_BEFORE_OVERFLOW reminders fit
+- * before the window ends; native compaction is blocked, so there is no net below them.
++ * Where reminders start and how far apart they are for one window size and model.
++ * Each field resolves on its own: the exact "provider/modelId" rule, then the provider's, then
++ * `reminders.default`; the start then falls back to `nudgeAtTokens`, the step to NUDGE_STEP_PERCENT
++ * of the window. The start is never later than `nudgeAtPercent` of the window, so a threshold
++ * written for a large window cannot silence the reminders on a small one.
+  */
+ export function nudgeSchedule(
+   window: number,
+   settings: Settings,
++  model?: ModelRef,
+ ): { threshold: number; step: number } {
+-  const threshold = Math.min(settings.nudgeAtTokens, (settings.nudgeAtPercent / 100) * window);
+-  // max(1, …) keeps the step positive when the threshold equals the window (100%).
+-  const step = Math.max(1, Math.min(NUDGE_STEP_TOKENS, (window - threshold) / NUDGES_BEFORE_OVERFLOW));
++  const rules = [...modelEntries(settings.reminders.overrides, model), settings.reminders.default];
++  const pick = (key: keyof ReminderRule) => rules.find((rule) => rule[key] !== undefined)?.[key];
++  const limit = Math.floor((window * settings.nudgeAtPercent) / 100);
++  const threshold = Math.min(pick("startTokens") ?? settings.nudgeAtTokens ?? limit, limit);
++  // max(1, …) keeps the step positive on a window below 20 tokens.
++  const step = pick("everyTokens") ?? Math.max(1, Math.floor((window * NUDGE_STEP_PERCENT) / 100));
+   return { threshold, step };
+ }
+ 
+ /**
+  * Decides whether this turn should remind the agent to fold, following nudgeSchedule().
+  * `band` is the token level of the last reminder step reached; a reminder fires only when a
+- * higher band is reached while the agent keeps working (`continuing`).
++ * higher band is reached while the agent keeps working (`continuing`), and folding below the
++ * threshold re-arms it.
+  */
+ export function planNudge(
+   tokens: number,
+@@ -39,11 +40,27 @@ export function planNudge(
+   settings: Settings,
+   lastBand: number,
+   continuing: boolean,
++  model?: ModelRef,
+ ): { nudge: boolean; band: number } {
+   if (!Number.isFinite(tokens) || !(window > 0)) return { nudge: false, band: 0 };
+-  const { threshold, step } = nudgeSchedule(window, settings);
++  const { threshold, step } = nudgeSchedule(window, settings, model);
+   if (tokens < threshold) return { nudge: false, band: 0 };
+   const band = threshold + step * Math.floor((tokens - threshold) / step);
+   if (continuing && band > lastBand) return { nudge: true, band };
+   return { nudge: false, band: lastBand };
+ }
++
++const k = (tokens: number) => `${Math.round(tokens / 1000)}k`;
++
++/** The reminder's opening sentences: absolute tokens, and the schedule they follow. */
++export function reminderText(
++  tokens: number,
++  window: number,
++  schedule: { threshold: number; step: number },
++): string {
++  const percent = Math.round((tokens / window) * 100);
++  return (
++    `Context is ~${k(tokens)} tokens (${percent}% of the ${k(window)}-token window). ` +
++    `Reminders start at ${k(schedule.threshold)} tokens and repeat every ${k(schedule.step)}.`
++  );
++}
+diff --git a/extensions/infinite-context/settings.test.ts b/extensions/infinite-context/settings.test.ts
+index 2beaa50..2a15f35 100644
+--- a/extensions/infinite-context/settings.test.ts
++++ b/extensions/infinite-context/settings.test.ts
+@@ -1,6 +1,11 @@
+ import assert from "node:assert/strict";
+ import test from "node:test";
+-import { DEFAULT_SETTINGS, parseSettings, settingsChanged } from "./settings.ts";
++import {
++  DEFAULT_SETTINGS,
++  parseSettings,
++  parseSettingsWithError,
++  settingsChanged,
++} from "./settings.ts";
+ 
+ test("an empty or unreadable file yields the defaults", () => {
+   for (const input of ["", "not json", "null", "[]", "42", "{}"]) {
+@@ -49,3 +54,55 @@ test("only a record that matches the current settings counts as unchanged", () =
+     assert.equal(settingsChanged(recorded, DEFAULT_SETTINGS), true, String(recorded));
+   }
+ });
++
++test("a missing file is not an error, and an empty block is the defaults", () => {
++  assert.deepEqual(parseSettingsWithError(undefined), { settings: DEFAULT_SETTINGS });
++  assert.deepEqual(parseSettingsWithError("{}"), { settings: DEFAULT_SETTINGS });
++  assert.deepEqual(parseSettingsWithError('{"reminders":{}}'), { settings: DEFAULT_SETTINGS });
++  assert.deepEqual(parseSettingsWithError('{"reminders":{"default":{},"overrides":{}}}'), {
++    settings: DEFAULT_SETTINGS,
++  });
++});
++
++test("the reminders block is read as written, next to the upstream fields", () => {
++  const reminders = {
++    default: { everyTokens: 30_000 },
++    overrides: {
++      anthropic: { startTokens: 150_000, everyTokens: 20_000 },
++      "anthropic/claude-opus-5-5": { startTokens: 120_000 },
++    },
++  };
++  assert.deepEqual(parseSettingsWithError(JSON.stringify({ nudgeAtTokens: 90_000, reminders })), {
++    settings: { ...DEFAULT_SETTINGS, nudgeAtTokens: 90_000, reminders },
++  });
++});
++
++test("invalid reminders, or an unknown key, reject the whole file with a reason, and nothing from it is used", () => {
++  const invalid: unknown[] = [
++    "not json",
++    [],
++    { reminders: [] },
++    { reminders: { default: { startTokens: 0 } } },
++    { reminders: { default: { startTokens: 1.5 } } },
++    { reminders: { default: { everyTokens: "20000" } } },
++    { reminders: { default: { budgetTokens: 200_000 } } },
++    { reminders: { overrides: { anthropic: null } } },
++    { reminders: { overrides: [] } },
++    { reminders: {}, extra: true },
++    { nudgeAtPercent: 60, reminders: { default: { startTokens: -1 } } },
++    { nudgeAtPercent: 60, remnders: {} },
++  ];
++  for (const value of invalid) {
++    const text = typeof value === "string" ? value : JSON.stringify(value);
++    const parsed = parseSettingsWithError(text);
++    assert.deepEqual(parsed.settings, DEFAULT_SETTINGS, text);
++    assert.equal(typeof parsed.error, "string", text);
++  }
++});
++
++test("a recorded reminders block counts as unchanged only when it is the same", () => {
++  const current = parseSettings(JSON.stringify({ reminders: { overrides: { anthropic: { startTokens: 9 } } } }));
++  assert.equal(settingsChanged(JSON.parse(JSON.stringify(current)), current), false);
++  assert.equal(settingsChanged(DEFAULT_SETTINGS, current), true);
++  assert.equal(settingsChanged({ ...current, reminders: { default: {}, overrides: {} } }, current), true);
++});
+diff --git a/extensions/infinite-context/settings.ts b/extensions/infinite-context/settings.ts
+index 6178bef..32bb27a 100644
+--- a/extensions/infinite-context/settings.ts
++++ b/extensions/infinite-context/settings.ts
+@@ -1,9 +1,17 @@
++import { isDeepStrictEqual } from "node:util";
++
+ /**
+  * Parse the extension's optional settings file (location: see index.ts).
+  *
+- * Both fields only tune when a reminder appears, so each one is fail-open on its own:
+- * a missing or nonsensical value falls back to its default and a partial file still works
+- * (KISS — refusing to run over a typo'd number helps nobody). Nothing here grants authority.
++ * `nudgeAtTokens` and `nudgeAtPercent` only tune when a reminder appears, so each one is
++ * fail-open on its own: a missing or nonsensical value falls back to its default and a partial
++ * file still works (KISS — refusing to run over a typo'd number helps nobody). Nothing here
++ * grants authority.
++ *
++ * The per-model `reminders` block is different: its numbers are measured (what a reminder costs
++ * or saves depends on them), so a typo must not silently change them. Anything wrong in it, or
++ * an unknown key anywhere, rejects the whole file: parseSettingsWithError() then returns the
++ * defaults plus the reason, never a partly applied file.
+  */
+ 
+ /**
+@@ -13,24 +21,52 @@
+  */
+ export const SETTINGS_ENTRY = "infinite-context:settings";
+ 
++/** Absolute reminder thresholds of one provider or model; a missing field inherits. */
++export interface ReminderRule {
++  /** First reminder at this many tokens. Never later than `nudgeAtPercent` of the window. */
++  readonly startTokens?: number;
++  /** Tokens between the reminders above the start. */
++  readonly everyTokens?: number;
++}
++
+ export interface Settings {
+-  /** Remind once the context holds at least this many tokens. */
+-  readonly nudgeAtTokens: number;
+-  /** Remind once the context fills at least this percentage of the model's window. */
++  /** Remind once the context holds at least this many tokens. Unset: only the window share decides. */
++  readonly nudgeAtTokens?: number;
++  /** Remind at the latest once the context fills this percentage of the model's window. */
+   readonly nudgeAtPercent: number;
++  /** Per-model thresholds, field by field: exact "provider/modelId", then the provider, then `default`. */
++  readonly reminders: {
++    readonly default: ReminderRule;
++    readonly overrides: Readonly<Record<string, ReminderRule>>;
++  };
+ }
+ 
+ /**
+- * 150k tokens is where long contexts degrade on large-window models; 75% of a 200k window
+- * is the same number, so small-window behavior is unchanged.
++ * Without a rule for the model, reminders start at 75% of its window and repeat every 5% of it
++ * (nudge.ts). Upstream defaults to 150k tokens and steps of at most 15k; this build keeps the
++ * window-relative policy its per-model thresholds were measured against, so there is no default
++ * token limit.
+  */
+ export const DEFAULT_SETTINGS: Settings = {
+-  nudgeAtTokens: 150_000,
+   nudgeAtPercent: 75,
++  reminders: { default: {}, overrides: {} },
+ };
+ 
++/** The provider and id of a model, as pi names them. */
++export interface ModelRef {
++  readonly provider?: string;
++  readonly id?: string;
++}
++
++/** What a table keyed by provider or exact "provider/modelId" holds for `model`, most specific first. */
++export function modelEntries<T>(table: Readonly<Record<string, T>>, model: ModelRef | undefined): T[] {
++  const exact = model?.provider && model.id ? table[`${model.provider}/${model.id}`] : undefined;
++  const provider = model?.provider ? table[model.provider] : undefined;
++  return [exact, provider].filter((entry): entry is T => entry !== undefined);
++}
++
+ /** A token count is a whole, positive number. */
+-function positiveInt(value: unknown, fallback: number): number {
++function positiveInt<F>(value: unknown, fallback: F): number | F {
+   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
+ }
+ 
+@@ -41,19 +77,77 @@ function percent(value: unknown, fallback: number): number {
+     : fallback;
+ }
+ 
++const isObject = (value: unknown): value is Record<string, unknown> =>
++  typeof value === "object" && value !== null && !Array.isArray(value);
++
++function onlyKeys(value: Record<string, unknown>, allowed: readonly string[], where: string) {
++  for (const key of Object.keys(value))
++    if (!allowed.includes(key)) throw new Error(`${where}: unknown key "${key}"`);
++}
++
++function parseRule(value: unknown, where: string): ReminderRule {
++  if (!isObject(value)) throw new Error(`${where}: must be an object`);
++  onlyKeys(value, ["startTokens", "everyTokens"], where);
++  const rule: { startTokens?: number; everyTokens?: number } = {};
++  for (const key of ["startTokens", "everyTokens"] as const) {
++    const field = value[key];
++    if (field === undefined) continue;
++    if (!Number.isSafeInteger(field) || (field as number) <= 0)
++      throw new Error(`${where}.${key}: must be a positive integer`);
++    rule[key] = field as number;
++  }
++  return rule;
++}
++
++function parseReminders(value: unknown): Settings["reminders"] {
++  const reminders = value ?? {};
++  if (!isObject(reminders)) throw new Error("reminders: must be an object");
++  onlyKeys(reminders, ["default", "overrides"], "reminders");
++  const overrides = reminders.overrides ?? {};
++  if (!isObject(overrides)) throw new Error("reminders.overrides: must be an object");
++  return {
++    default: parseRule(reminders.default ?? {}, "reminders.default"),
++    overrides: Object.fromEntries(
++      Object.entries(overrides).map(([key, rule]) => [
++        key,
++        parseRule(rule, `reminders.overrides["${key}"]`),
++      ]),
++    ),
++  };
++}
++
++/**
++ * Parses the settings file's contents; `undefined` is a missing file. Settings that are not
++ * valid as a whole come back as the defaults with the reason in `error`.
++ */
++export function parseSettingsWithError(json: string | undefined): {
++  settings: Settings;
++  error?: string;
++} {
++  if (json === undefined) return { settings: DEFAULT_SETTINGS };
++  try {
++    const value: unknown = JSON.parse(json);
++    if (!isObject(value)) throw new Error("settings: must be an object");
++    onlyKeys(value, ["nudgeAtTokens", "nudgeAtPercent", "reminders"], "settings");
++    const nudgeAtTokens = positiveInt(value.nudgeAtTokens, undefined);
++    return {
++      settings: {
++        ...(nudgeAtTokens === undefined ? {} : { nudgeAtTokens }),
++        nudgeAtPercent: percent(value.nudgeAtPercent, DEFAULT_SETTINGS.nudgeAtPercent),
++        reminders: parseReminders(value.reminders),
++      },
++    };
++  } catch (error) {
++    return {
++      settings: DEFAULT_SETTINGS,
++      error: error instanceof Error ? error.message : String(error),
++    };
++  }
++}
++
+ /** Parses the settings file's contents; unparseable text is treated as an empty file. */
+ export function parseSettings(json: string): Settings {
+-  let value: Record<string, unknown> | undefined;
+-  try {
+-    const parsed: unknown = JSON.parse(json);
+-    if (typeof parsed === "object" && parsed !== null) value = parsed as Record<string, unknown>;
+-  } catch {
+-    // Fall through to defaults; the file is the user's, not a contract we can repair.
+-  }
+-  return {
+-    nudgeAtTokens: positiveInt(value?.nudgeAtTokens, DEFAULT_SETTINGS.nudgeAtTokens),
+-    nudgeAtPercent: percent(value?.nudgeAtPercent, DEFAULT_SETTINGS.nudgeAtPercent),
+-  };
++  return parseSettingsWithError(json).settings;
+ }
+ 
+ /**
+@@ -61,10 +155,5 @@ export function parseSettings(json: string): Settings {
+  * describe `current`. Untrusted session data, so anything unexpected counts as changed.
+  */
+ export function settingsChanged(recorded: unknown, current: Settings): boolean {
+-  if (typeof recorded !== "object" || recorded === null) return true;
+-  const data = recorded as Record<string, unknown>;
+-  return (
+-    data.nudgeAtTokens !== current.nudgeAtTokens ||
+-    data.nudgeAtPercent !== current.nudgeAtPercent
+-  );
++  return !isDeepStrictEqual(recorded, current);
+ }

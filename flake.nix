@@ -12,10 +12,14 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # A patched upstream (spec §3), locked to the host's revision; the host
-    # makes it follow its own input.
+    # The patched upstreams (spec §3), locked to the host's revisions; the host
+    # makes them follow its own inputs.
     pi-actor-subagents = {
       url = "github:fdietze/pi-actor-subagents";
+      flake = false;
+    };
+    pi-infinite-context = {
+      url = "github:fdietze/pi-infinite-context";
       flake = false;
     };
   };
@@ -25,6 +29,7 @@
     nixpkgs,
     home-manager,
     pi-actor-subagents,
+    pi-infinite-context,
   }: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
@@ -46,6 +51,7 @@
       token-meter = pkgs.callPackage ./packages/token-meter/package.nix {};
       cache-lifecycle = pkgs.callPackage ./packages/cache-lifecycle/package.nix {};
       experiments = pkgs.callPackage ./packages/experiments/package.nix {};
+      infinite-context = pkgs.callPackage ./packages/infinite-context/package.nix {src = pi-infinite-context;};
     };
 
     formatter.${system} = pkgs.alejandra;

@@ -52,11 +52,28 @@
         "type": "github"
       }
     },
+    "pi-infinite-context": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792786773,
+        "narHash": "sha256-DKsN3sQAfD5EK7mZO2+pZYjUbhggBiRojSoUZnJgaq4=",
+        "owner": "fdietze",
+        "repo": "pi-infinite-context",
+        "rev": "4c66601b71e629210cf1606f12526e6af5a8a8bf",
+        "type": "github"
+      },
+      "original": {
+        "owner": "fdietze",
+        "repo": "pi-infinite-context",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "home-manager": "home-manager",
         "nixpkgs": "nixpkgs",
-        "pi-actor-subagents": "pi-actor-subagents"
+        "pi-actor-subagents": "pi-actor-subagents",
+        "pi-infinite-context": "pi-infinite-context"
       }
     }
   },

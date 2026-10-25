@@ -1,0 +1,807 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index dd3f5c2..f0dac0f 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -30,7 +30,9 @@ Use simple, accurate English and keep both documents very concise.
+ - `extensions/infinite-context/search.ts`: pure archive regex search.
+ - `extensions/infinite-context/output.ts`: line windows, token formatting, and global output limits.
+ - `extensions/infinite-context/nudge.ts`: proactive folding threshold and reminder-step policy, per model.
+-- `extensions/infinite-context/settings.ts`: parser for `<agent dir>/infinite-context/settings.json` (nudge limits and per-model reminder thresholds) and the session entry that records them.
++- `extensions/infinite-context/settings.ts`: parser for `<agent dir>/infinite-context/settings.json` (nudge limits, per-model reminder thresholds, cache prices, fold-hint mode) and the session entry that records them.
++- `extensions/infinite-context/fold-hint.ts`: the cost-aware fold hint of a reminder and the `fold_timing` prompt section.
++- `extensions/infinite-context/robust.ts`: the handoff notice that replaces a request whose saved folds cannot be applied.
+ - `extensions/infinite-context/*.test.ts`: unit, property, and integration tests.
+ - `e2e/`: end-to-end test driving the real `pi` binary with a scripted fake provider.
+ 
+diff --git a/README.md b/README.md
+index 7c3a3fe..bbe0b61 100644
+--- a/README.md
++++ b/README.md
+@@ -47,6 +47,8 @@ Optional file `~/.pi/agent/infinite-context/settings.json` (inside Pi's configur
+ 
+ Each field resolves on its own: the exact `provider/modelId` entry, then the provider entry, then `default`, then `nudgeAtTokens` (start only), then the built-in 75% / 5% of the model window. A start above `nudgeAtPercent` of the window is lowered to it. The `reminders` block is strict: an invalid one, or an unknown key anywhere in the file, rejects the whole file with a warning at session start, and the defaults apply.
+ 
++A reminder can carry a cost hint: with `prices` (cache write `w` and read `r`, per exact `provider/modelId` or provider; any unit), a warm prompt cache gets the number of turns after which a fold pays off, and a cold one (older than `cacheTtlMinutes`, default 5) "folding is free now". `foldHint` is `"cache-aware"` (default; also adds a short fold-timing paragraph to the system prompt) or `"fixed"` (no hint, no paragraph). `prices`, `cacheTtlMinutes` and `foldHint` are strict like `reminders`.
++
+ The session records the effective settings as a `custom` entry of type `infinite-context:settings` whenever they change, and each reminder carries its token count, window, threshold and step in `details`.
+ 
+ The agent chooses what to fold and writes the summaries. Reminders do not fold anything themselves.
+diff --git a/extensions/infinite-context/fold-hint.test.ts b/extensions/infinite-context/fold-hint.test.ts
+new file mode 100644
+index 0000000..2ff7e7a
+--- /dev/null
++++ b/extensions/infinite-context/fold-hint.test.ts
+@@ -0,0 +1,130 @@
++import assert from "node:assert/strict";
++import { test } from "node:test";
++import {
++  FOLD_TIMING_TEXT,
++  createFoldTiming,
++  foldHint,
++  foldHintMode,
++  payoffTurns,
++} from "./fold-hint.ts";
++import { planNudge, reminderText } from "./nudge.ts";
++import { DEFAULT_SETTINGS, type FoldHintMode } from "./settings.ts";
++
++// --- cost-aware fold hint (spec 5.3, P-fold) ---
++// Prices are $/MTok: cache write w and cache read r. (w - r) / r is 24 for Opus 5.5 and 11.5 for Sonnet 5.5.
++const OPUS = { w: 5, r: 0.2 };
++const SONNET = { w: 2.5, r: 0.2 };
++const MIN = 60_000;
++const MILLION = 1_000_000;
++
++test("P-fold payoffTurns = ((w - r) / r) * K / R, with the Opus and Sonnet factors of the spec", () => {
++  const near = (actual: number, expected: number) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} vs ${expected}`);
++  near(payoffTurns(100_000, 100_000, OPUS), 24);
++  near(payoffTurns(100_000, 100_000, SONNET), 11.5);
++  near(payoffTurns(50_000, 200_000, OPUS), 6);
++});
++
++test("P-fold payoffTurns grows with K (tokens kept after the fold) and shrinks with R (tokens removed)", () => {
++  for (const price of [OPUS, SONNET])
++    for (let k = 10_000; k <= 400_000; k += 30_000)
++      for (let r = 10_000; r <= 400_000; r += 30_000) {
++        assert.ok(payoffTurns(k + 1_000, r, price) > payoffTurns(k, r, price), `K ${k} R ${r}`);
++        assert.ok(payoffTurns(k, r + 1_000, price) < payoffTurns(k, r, price), `K ${k} R ${r}`);
++      }
++});
++
++test("payoffTurns with nothing removed never pays off", () => {
++  assert.equal(payoffTurns(10_000, 0, OPUS), Infinity);
++});
++
++const when = { lastRequestAt: 1_000 * MIN, ttlMs: 5 * MIN };
++
++test("warm: the hint names the payoff in turns and the general rule", () => {
++  const hint = foldHint({ tokens: 400_000, price: OPUS, now: 1_001 * MIN, ...when })!;
++  assert.match(hint, /pays off after ≈ 8 more turns/);
++  assert.match(hint, /24 × K\/R/);
++  const sonnet = foldHint({ tokens: 400_000, price: SONNET, now: 1_001 * MIN, ...when })!;
++  assert.match(sonnet, /pays off after ≈ 4 more turns/);
++  assert.match(sonnet, /11\.5 × K\/R/);
++});
++
++test("cold (now - lastRequestAt >= ttl, boundary included): folding is free now", () => {
++  assert.match(foldHint({ tokens: 400_000, price: OPUS, now: 1_005 * MIN, ...when })!, /cache is cold: folding is free now/);
++  assert.match(foldHint({ tokens: 400_000, price: undefined, now: 1_010 * MIN, ...when })!, /cache is cold: folding is free now/);
++  assert.doesNotMatch(foldHint({ tokens: 400_000, price: OPUS, now: 1_005 * MIN - 1, ...when })!, /cold/);
++});
++
++test("warm without a price for the model: no hint, the fixed marks stay as they are", () => {
++  assert.equal(foldHint({ tokens: 400_000, price: undefined, now: 1_001 * MIN, ...when }), undefined);
++});
++
++test("a session with no request yet counts as cold (resumed session)", () => {
++  assert.match(foldHint({ tokens: 400_000, price: OPUS, lastRequestAt: undefined, ttlMs: 5 * MIN, now: 1 })!, /cache is cold/);
++});
++
++test("the fixed marks still fire and the reminder text keeps its thresholds sentence when a hint is appended", () => {
++  assert.deepEqual(planNudge(150_000, 200_000, DEFAULT_SETTINGS, 0, true), { nudge: true, band: 150_000 });
++  const schedule = { threshold: 150_000, step: 20_000 };
++  const plain = reminderText(152_400, MILLION, schedule);
++  assert.equal(reminderText(152_400, MILLION, schedule, undefined), plain);
++  const text = reminderText(152_400, MILLION, schedule, "HINT");
++  assert.ok(text.startsWith(plain));
++  assert.ok(text.endsWith("HINT"));
++});
++
++// T8.5: the experiments factor `foldHint` (fixed | cache-aware).
++test("mode fixed: no hint, warm or cold; cache-aware (or no mode) unchanged", () => {
++  const base = { tokens: 400_000, price: OPUS, ...when };
++  assert.equal(foldHint({ ...base, now: 1_001 * MIN, mode: "fixed" }), undefined);
++  assert.equal(foldHint({ ...base, now: 1_010 * MIN, mode: "fixed" }), undefined);
++  assert.equal(foldHint({ ...base, now: 1_001 * MIN, mode: "cache-aware" }), foldHint({ ...base, now: 1_001 * MIN }));
++});
++
++test("foldHintMode: a valid experiment flag wins over the own setting, anything else falls back to it", () => {
++  assert.equal(foldHintMode("cache-aware", "fixed"), "fixed");
++  assert.equal(foldHintMode("fixed", "cache-aware"), "cache-aware");
++  assert.equal(foldHintMode("fixed", undefined), "fixed");
++  assert.equal(foldHintMode("cache-aware", "nonsense"), "cache-aware");
++});
++
++// T7.10: the cache-aware level also puts one paragraph in the system prompt, as the prompt section `fold_timing`
++// (before_agent_start mutates event.systemPromptOptions.sections, like task-router's task_cards; no systemPrompt return).
++const FOLD_TIMING =
++  "Fold timing: a fold re-writes the prompt cache from the fold point on. Fold a completed phase promptly, while it is still at the end of the context — that is cheap. Folding old ranges while the cache is warm is expensive; prefer it when the cache is cold or the range is large.";
++
++test("fold timing paragraph: pinned literal, because a model reads it", () => {
++  assert.equal(FOLD_TIMING_TEXT, FOLD_TIMING);
++});
++
++test("fold timing: cache-aware sets exactly the section, fixed removes it and leaves the others alone", () => {
++  const sections = (): Record<string, string> => ({ task_cards: "cards", fold_timing: "stale" });
++  const aware = sections();
++  createFoldTiming(() => "cache-aware")(aware);
++  assert.deepEqual(aware, { task_cards: "cards", fold_timing: FOLD_TIMING });
++  const fixed = sections();
++  createFoldTiming(() => "fixed")(fixed);
++  assert.deepEqual(fixed, { task_cards: "cards" });
++  assert.equal("fold_timing" in fixed, false);
++  const bare: Record<string, string> = {};
++  createFoldTiming(() => "fixed")(bare);
++  assert.deepEqual(bare, {});
++});
++
++test("fold timing: byte-stable across turns, the mode is resolved once per session", () => {
++  const modes: FoldHintMode[] = ["cache-aware", "fixed", "cache-aware", "fixed"];
++  let calls = 0;
++  const timing = createFoldTiming(() => modes[calls++ % modes.length]);
++  const turns = [0, 1, 2].map(() => {
++    const sections: Record<string, string> = { task_cards: "cards" };
++    timing(sections);
++    return JSON.stringify(sections);
++  });
++  assert.equal(turns[0], turns[1]);
++  assert.equal(turns[1], turns[2]);
++  assert.match(turns[0], /Fold timing:/);
++  assert.equal(calls, 1);
++  // a new session resolves again
++  timing.reset();
++  timing({});
++  assert.equal(calls, 2);
++});
+diff --git a/extensions/infinite-context/fold-hint.ts b/extensions/infinite-context/fold-hint.ts
+new file mode 100644
+index 0000000..d1397e5
+--- /dev/null
++++ b/extensions/infinite-context/fold-hint.ts
+@@ -0,0 +1,76 @@
++import type { FoldHintMode, Price } from "./settings.ts";
++
++/**
++ * The cost-aware part of a reminder, and the fold-timing paragraph of the system prompt. Both
++ * follow from what a fold costs: it rewrites the prompt cache from the fold point on.
++ *
++ * Pure: reading prices and the TTL (settings.ts) and the clock is index.ts's job.
++ */
++
++/**
++ * Turns after which a fold has paid for itself. Folding R tokens invalidates the cache of the
++ * K tokens kept after the fold point: rewriting them costs K (w - r) once, and every later turn
++ * saves R r. So payoff = ((w - r) / r) * K / R, about 24 K/R on Opus 5.5 and 11.5 K/R on Sonnet 5.5.
++ */
++export function payoffTurns(keptTokens: number, removedTokens: number, price: Price): number {
++  return removedTokens > 0 ? ((price.w - price.r) / price.r) * (keptTokens / removedTokens) : Infinity;
++}
++
++/** The part of the live context a typical fold removes: the oldest three quarters. */
++const FOLD_REMOVED_SHARE = 0.75;
++
++/**
++ * The cost-aware part of a reminder. Cold cache (`now - lastRequestAt >= ttl`, or no request
++ * yet): the next request rewrites everything anyway, so folding is free. Warm: the payoff of
++ * folding the oldest 75%, plus the general rule so the agent can adapt it. No price for the
++ * model: no hint.
++ */
++export function foldHint(a: {
++  tokens: number;
++  price: Price | undefined;
++  lastRequestAt: number | undefined;
++  now: number;
++  ttlMs: number;
++  mode?: FoldHintMode;
++}): string | undefined {
++  if (a.mode === "fixed") return undefined;
++  if (a.lastRequestAt === undefined || a.now - a.lastRequestAt >= a.ttlMs)
++    return "Fold hint: cache is cold: folding is free now.";
++  if (!a.price) return undefined;
++  const turns = payoffTurns(a.tokens * (1 - FOLD_REMOVED_SHARE), a.tokens * FOLD_REMOVED_SHARE, a.price);
++  const factor = +((a.price.w - a.price.r) / a.price.r).toFixed(1);
++  return (
++    `Fold hint: the cache is warm; folding the oldest ${FOLD_REMOVED_SHARE * 100}% pays off after ≈ ${Math.round(turns)} more turns ` +
++    `(general rule ≈ ${factor} × K/R turns, K = tokens kept after the fold point, R = tokens removed).`
++  );
++}
++
++/** The experiments flag `foldHint` when it names a mode, else the own setting. */
++export function foldHintMode(own: FoldHintMode, flag: string | undefined): FoldHintMode {
++  return flag === "fixed" || flag === "cache-aware" ? flag : own;
++}
++
++/** The `fold_timing` prompt section when the fold hint is cache-aware (before_agent_start). A model reads it: the test pins the literal. */
++export const FOLD_TIMING_TEXT =
++  "Fold timing: a fold re-writes the prompt cache from the fold point on. Fold a completed phase promptly, while it is still at the end of the context — that is cheap. Folding old ranges while the cache is warm is expensive; prefer it when the cache is cold or the range is large.";
++
++/**
++ * The system-prompt side of the cache-aware level: the prompt section `fold_timing`, set on
++ * `event.systemPromptOptions.sections` in before_agent_start (the mechanism task-router uses for
++ * task_cards; pi then appends a transcript delta and other extensions' sections survive).
++ * The mode is resolved on the first turn of a session and kept until `reset()` (session start),
++ * and the text is constant, so the prompt is byte-identical on every turn (a change would rewrite
++ * the prompt cache). `fixed`: the section is removed.
++ */
++export function createFoldTiming(resolveMode: () => FoldHintMode) {
++  let mode: FoldHintMode | undefined;
++  const timing = (sections: Record<string, string>): void => {
++    mode ??= resolveMode();
++    if (mode === "cache-aware") sections.fold_timing = FOLD_TIMING_TEXT;
++    else delete sections.fold_timing;
++  };
++  timing.reset = () => {
++    mode = undefined;
++  };
++  return timing;
++}
+diff --git a/extensions/infinite-context/forest.test.ts b/extensions/infinite-context/forest.test.ts
+index a66102f..68becfe 100644
+--- a/extensions/infinite-context/forest.test.ts
++++ b/extensions/infinite-context/forest.test.ts
+@@ -93,7 +93,7 @@ test("sync appends only a current-branch suffix and rejects branch mismatch", ()
+   assert.throws(() => syncOriginals(roots, ["m0", "other"]), /current branch/);
+   assert.throws(
+     () => syncOriginals(roots, ["m0"]),
+-    /message m1 at position 1, but the current branch has only 1 messages/,
++    /message m1, which is missing from the current branch/,
+   );
+   assert.throws(
+     () => syncOriginals([messageItem("m0"), messageItem("m0")], ["m0", "m0"]),
+diff --git a/extensions/infinite-context/forest.ts b/extensions/infinite-context/forest.ts
+index d8d7af3..05f34a9 100644
+--- a/extensions/infinite-context/forest.ts
++++ b/extensions/infinite-context/forest.ts
+@@ -93,7 +93,12 @@ export function wrapRootRanges(
+   return result;
+ }
+ 
+-/** Append new branch messages while proving every archived original still exists once and in order. */
++/**
++ * Re-sync the snapshot with the branch: every archived original must still exist once and in
++ * order, and entries the snapshot has never seen (appended ones, or inserted mid-history, e.g.
++ * a recovered tool result) become visible message roots after the root of the entry before them.
++ * A root is never split, so an unknown entry inside a fold's range follows that fold.
++ */
+ export function syncOriginals(roots: Forest, currentOriginalIds: readonly string[]): Forest {
+   const archived = originalIds(roots);
+   const seen = new Set<string>();
+@@ -101,20 +106,30 @@ export function syncOriginals(roots: Forest, currentOriginalIds: readonly string
+     if (seen.has(id)) throw new Error(`Snapshot lists message ${id} twice`);
+     seen.add(id);
+   }
+-  // One positional walk names the first divergence, whether the branch is shorter or different.
+-  for (let i = 0; i < archived.length; ++i) {
+-    if (archived[i] !== currentOriginalIds[i])
++  const position = new Map(currentOriginalIds.map((id, i) => [id, i] as const));
++  let previous = -1;
++  let previousId = "";
++  for (const id of archived) {
++    const at = position.get(id);
++    if (at === undefined)
++      throw new Error(`Snapshot lists message ${id}, which is missing from the current branch`);
++    if (at < previous)
+       throw new Error(
+-        `Snapshot lists message ${archived[i]} at position ${i}, but the current branch has ` +
+-          (i < currentOriginalIds.length
+-            ? `${currentOriginalIds[i]} there`
+-            : `only ${currentOriginalIds.length} messages`),
++        `Snapshot lists message ${id} after ${previousId}, but the current branch has them in the other order`,
+       );
++    previous = at;
++    previousId = id;
+   }
+-  return [
+-    ...roots,
+-    ...currentOriginalIds.slice(archived.length).map(messageItem),
+-  ];
++  const owner = new Map(roots.flatMap((root, i) => originalIds([root]).map((id) => [id, i] as const)));
++  const head: Item[] = [];
++  const after: Item[][] = roots.map(() => []);
++  let last = -1;
++  for (const id of currentOriginalIds) {
++    const root = owner.get(id);
++    if (root !== undefined) last = root;
++    else (last < 0 ? head : after[last]).push(messageItem(id));
++  }
++  return [...head, ...roots.flatMap((root, i) => [root, ...after[i]])];
+ }
+ 
+ interface MutableFold {
+diff --git a/extensions/infinite-context/index.test.ts b/extensions/infinite-context/index.test.ts
+index e359c31..31ade5a 100644
+--- a/extensions/infinite-context/index.test.ts
++++ b/extensions/infinite-context/index.test.ts
+@@ -123,6 +123,9 @@ test("each branch records the effective settings once, again after switching to
+   assert.deepEqual(recorded.type === "custom" && recorded.data, {
+     nudgeAtPercent: 75,
+     reminders: { default: {}, overrides: {} },
++    prices: {},
++    cacheTtlMinutes: 5,
++    foldHint: "cache-aware",
+   });
+ 
+   h.setEntries(source);
+diff --git a/extensions/infinite-context/index.ts b/extensions/infinite-context/index.ts
+index 4392413..eba279e 100644
+--- a/extensions/infinite-context/index.ts
++++ b/extensions/infinite-context/index.ts
+@@ -25,14 +25,17 @@ import { assertSupportedBranch } from "./assert-supported-branch.ts";
+ import { branchOriginals, projectedPositions } from "./originals.ts";
+ import { ProjectionMismatchError, buildOverlay } from "./overlay.ts";
+ import { planRootRanges } from "./plan-root-ranges.ts";
++import { abortedRequest, handoffNotice, snapshotHasFolds } from "./robust.ts";
+ import { serializeMessage } from "./serialize-message.ts";
+ import { validateToolUnitOwnership } from "./tool-units.ts";
++import { createFoldTiming, foldHint, foldHintMode } from "./fold-hint.ts";
+ import { nudgeSchedule, planNudge, reminderText } from "./nudge.ts";
+ import {
+   DEFAULT_SETTINGS,
+   SETTINGS_ENTRY,
+   type Settings,
+   parseSettingsWithError,
++  resolvePrice,
+   settingsChanged,
+ } from "./settings.ts";
+ import { renderMap } from "./render-map.ts";
+@@ -112,7 +115,25 @@ export default function infiniteContext(pi: ExtensionAPI) {
+   let roots: Forest = [];
+   let stateError: Error | undefined;
+   let loaded = false;
++  // Saved folds exist on the branch (even when the snapshot failed to load): the raw transcript must not replace them.
++  let foldsSaved = false;
+   let lastNudgedBand = 0;
++  // Time of the last successful provider response (warm pings included): the prompt cache dates from it.
++  let lastRequestAt: number | undefined;
++
++  // The experiments package is optional: its process-global API when loaded, else the own setting.
++  const effectiveFoldHintMode = (ctx: ExtensionContext) =>
++    foldHintMode(
++      settings.foldHint,
++      (globalThis as { __piExperimentsApi_v1?: { flag(n: string, d: string, s?: string): string } }).__piExperimentsApi_v1?.flag(
++        "foldHint",
++        settings.foldHint,
++        ctx.sessionManager.getSessionId(),
++      ),
++    );
++  // cache-aware: one fold-timing prompt section, byte-identical on every turn of the session.
++  let currentCtx: ExtensionContext | undefined;
++  const foldTiming = createFoldTiming(() => effectiveFoldHintMode(currentCtx!));
+ 
+   const branch = (ctx: ExtensionContext): SessionEntry[] =>
+     ctx.sessionManager.getBranch();
+@@ -122,12 +143,14 @@ export default function infiniteContext(pi: ExtensionAPI) {
+     loaded = true;
+     try {
+       const entries = branch(ctx);
+-      assertSupportedBranch(entries);
+-      const originals = branchOriginals(entries, ctx.sessionManager.buildSessionProjection());
+       let saved: Extract<SessionEntry, { type: "custom" }> | undefined;
+       for (const entry of entries)
+         if (entry.type === "custom" && entry.customType === INFINITE_CONTEXT_ENTRY)
+           saved = entry;
++      // Before the branch check: a branch the archive cannot represent still holds its folds.
++      foldsSaved = snapshotHasFolds(saved?.data);
++      assertSupportedBranch(entries);
++      const originals = branchOriginals(entries, ctx.sessionManager.buildSessionProjection());
+       roots = saved
+         ? parseSnapshot(saved.data).roots
+         : originals.map(({ id }) => messageItem(id));
+@@ -176,6 +199,8 @@ export default function infiniteContext(pi: ExtensionAPI) {
+   };
+ 
+   pi.on("session_start", async (_event, ctx) => {
++    lastRequestAt = undefined;
++    foldTiming.reset();
+     load(ctx);
+     if (settingsError)
+       ctx.ui.notify(
+@@ -183,23 +208,43 @@ export default function infiniteContext(pi: ExtensionAPI) {
+         "warning",
+       );
+   });
++  pi.on("before_agent_start", async (event, ctx) => {
++    currentCtx = ctx;
++    // A prompt section, not a returned systemPrompt: that would replace the whole prompt and drop other sections.
++    const sections = event.systemPromptOptions?.sections;
++    if (sections) foldTiming(sections);
++  });
+   pi.on("session_tree", async (_event, ctx) => load(ctx));
++  pi.on("after_provider_response", async (event) => {
++    if (event.status >= 200 && event.status < 300) lastRequestAt = Date.now();
++  });
+ 
+   pi.on("context", async (event, ctx) => {
+-    if (stateError) return;
+-    const state = current(ctx);
++    // Folds that cannot be applied must never fall back to the raw transcript (several times
++    // larger): replace the request with the handoff notice and abort the run.
++    const foldsExist = () => foldsSaved || roots.some((root) => root.kind === "fold");
++    const abortRequest = (reason: string) => {
++      ctx.ui.notify(handoffNotice(reason), "error");
++      ctx.abort();
++      return { messages: abortedRequest(reason, Date.now()) };
++    };
++    if (stateError) return foldsExist() ? abortRequest(stateError.message) : undefined;
++    let state: ReturnType<typeof current>;
++    try {
++      state = current(ctx);
++    } catch (error) {
++      return foldsExist() ? abortRequest((error as Error).message) : undefined;
++    }
+     try {
+       return {
+         messages: buildOverlay(event.messages, state.positions, state.originals, state.roots),
+       };
+     } catch (error) {
+       // Without a trustworthy position mapping, folding the request could drop a
+-      // tool result and break the turn: leave the request untouched and say so.
++      // tool result and break the turn. With no folds the untouched request is what
++      // would have been sent anyway; with folds it would be the raw transcript.
+       if (!(error instanceof ProjectionMismatchError)) throw error;
+-      ctx.ui.notify(
+-        `infinite-context: folds are not applied to this request. ${error.message}`,
+-        "error",
+-      );
++      if (state.roots.some((root) => root.kind === "fold")) return abortRequest(error.message);
+       return;
+     }
+   });
+@@ -223,11 +268,19 @@ export default function infiniteContext(pi: ExtensionAPI) {
+     lastNudgedBand = planned.band;
+     if (!planned.nudge) return;
+     const schedule = nudgeSchedule(window, settings, ctx.model);
++    const hint = foldHint({
++      tokens,
++      price: resolvePrice(settings, ctx.model),
++      lastRequestAt,
++      now: Date.now(),
++      ttlMs: settings.cacheTtlMinutes * 60_000,
++      mode: effectiveFoldHintMode(ctx),
++    });
+     pi.sendMessage(
+       {
+         customType: "infinite-context/nudge",
+         content:
+-          `<context-maintenance>\n${reminderText(tokens, window, schedule)} ` +
++          `<context-maintenance>\n${reminderText(tokens, window, schedule, hint)} ` +
+           "Use context_map, then context_fold completed or superseded roots in one call that frees at least ~15k tokens. " +
+           "Keep the active request, open loops, unresolved errors, and evidence needed soon. " +
+           "Native compaction is blocked, so an actual overflow will remain visible.\n</context-maintenance>",
+diff --git a/extensions/infinite-context/nudge.ts b/extensions/infinite-context/nudge.ts
+index 2361b7c..eb909da 100644
+--- a/extensions/infinite-context/nudge.ts
++++ b/extensions/infinite-context/nudge.ts
+@@ -52,15 +52,17 @@ export function planNudge(
+ 
+ const k = (tokens: number) => `${Math.round(tokens / 1000)}k`;
+ 
+-/** The reminder's opening sentences: absolute tokens, and the schedule they follow. */
++/** The reminder's opening sentences: absolute tokens, the schedule they follow, and the fold hint (fold-hint.ts) when there is one. */
+ export function reminderText(
+   tokens: number,
+   window: number,
+   schedule: { threshold: number; step: number },
++  hint?: string,
+ ): string {
+   const percent = Math.round((tokens / window) * 100);
+   return (
+     `Context is ~${k(tokens)} tokens (${percent}% of the ${k(window)}-token window). ` +
+-    `Reminders start at ${k(schedule.threshold)} tokens and repeat every ${k(schedule.step)}.`
++    `Reminders start at ${k(schedule.threshold)} tokens and repeat every ${k(schedule.step)}.` +
++    (hint ? ` ${hint}` : "")
+   );
+ }
+diff --git a/extensions/infinite-context/resync.test.ts b/extensions/infinite-context/resync.test.ts
+new file mode 100644
+index 0000000..fbdfe21
+--- /dev/null
++++ b/extensions/infinite-context/resync.test.ts
+@@ -0,0 +1,86 @@
++import assert from "node:assert/strict";
++import { test } from "node:test";
++import { messageItem, originalIds, syncOriginals, wrapRootRanges, type Forest } from "./forest.ts";
++import { abortedRequest, handoffNotice, snapshotHasFolds } from "./robust.ts";
++import { validateToolUnitOwnership } from "./tool-units.ts";
++
++// The shape of the real session that lost its folds (01a0f89b…, entry edeb495e): the question
++// extension recovered a lost answer and the session file got a toolResult in the middle of the
++// history, after the snapshot had been written. Ids and texts are minimal stand-ins.
++const user = (id: string, text: string) => ({ id, type: "message", message: { role: "user", content: text } });
++const call = (id: string, name: string, callId: string) => ({ id, type: "message", message: { role: "assistant", content: [{ type: "toolCall", id: callId, name }] } });
++const result = (id: string, name: string, callId: string, text: string) => ({ id, type: "message", message: { role: "toolResult", toolCallId: callId, toolName: name, content: [{ type: "text", text }] } });
++const other = (id: string, type: string) => ({ id, type });
++
++/** Branch as pi stores it after the recovery: toolResult edeb495e sits between 28d9c3d9 and c4d19b1d. */
++const branch = [
++  user("u1", "task"), call("a1", "bash", "c1"), result("r1", "bash", "c1", "out"),
++  other("snap", "custom"),
++  call("28d9c3d9", "question", "Q"),
++  result("edeb495e", "question", "Q", "No result provided"),
++  other("usage1", "usage"), other("recovery", "custom"),
++  user("c4d19b1d", "recovered answer"), call("3f3532b8", "bash", "c2"), result("r2", "bash", "c2", "ok"),
++];
++const originals = branch.filter((e) => e.type === "message").map((e: any) => ({ id: e.id, message: e.message, live: e.message }));
++const ids = originals.map((o) => o.id);
++/** The snapshot written before the recovery: one fold over the first three entries, no edeb495e. */
++const saved: Forest = wrapRootRanges(
++  ["u1", "a1", "r1", "28d9c3d9", "c4d19b1d", "3f3532b8", "r2"].map(messageItem),
++  [{ first: 0, last: 2, id: "fold-1", summary: "early work" }],
++);
++
++test("unknown-entries: a toolResult in the middle becomes a visible root and the fold is kept", () => {
++  const synced = syncOriginals(saved, ids);
++  assert.deepEqual(synced.map((r) => r.id), ["fold-1", "28d9c3d9", "edeb495e", "c4d19b1d", "3f3532b8", "r2"]);
++  assert.equal(synced[0], saved[0], "the fold is kept as it was");
++  assert.equal(synced[2].kind, "message");
++  assert.deepEqual(originalIds(synced), ids);
++  validateToolUnitOwnership(synced, originals);
++});
++
++test("unknown-entries: several unknown entries keep their order; one before every archived entry goes first", () => {
++  const synced = syncOriginals(saved, ["x1", ...ids.slice(0, 4), "x2", "x3", ...ids.slice(4)]);
++  assert.deepEqual(synced.map((r) => r.id), ["x1", "fold-1", "28d9c3d9", "x2", "x3", "edeb495e", "c4d19b1d", "3f3532b8", "r2"]);
++});
++
++test("unknown-entries: an unknown entry inside a fold's range becomes a root after the fold", () => {
++  const synced = syncOriginals(saved, ["u1", "a1", "new", "r1", ...ids.slice(3)]);
++  assert.deepEqual(synced.slice(0, 2).map((r) => r.id), ["fold-1", "new"]);
++  assert.equal(synced[0], saved[0]);
++});
++
++test("unknown-entries: appended entries still work, and a snapshot without folds resyncs too", () => {
++  assert.deepEqual(syncOriginals(saved, [...originalIds(saved), "tail"]).at(-1)?.id, "tail");
++  assert.deepEqual(syncOriginals([], ids).map((r) => r.id), ids);
++});
++
++test("archived entries missing, repeated or reordered are still rejected", () => {
++  assert.throws(() => syncOriginals(saved, ids.filter((id) => id !== "a1")), /missing from the current branch/);
++  assert.throws(() => syncOriginals(saved, ["u1", "a1", "r1", "c4d19b1d", "28d9c3d9", "edeb495e", "3f3532b8", "r2"]), /in the other order/);
++  assert.throws(() => syncOriginals([messageItem("m"), messageItem("m")], ["m"]), /twice/);
++});
++
++test("a recovered result whose call sits inside a fold cannot be applied: tool unit validation rejects it", () => {
++  const folded = wrapRootRanges(["u1", "a1", "r1", "28d9c3d9", "c4d19b1d", "3f3532b8", "r2"].map(messageItem), [{ first: 3, last: 3, id: "fold-q", summary: "asked" }]);
++  const synced = syncOriginals(folded, ids);
++  assert.throws(() => validateToolUnitOwnership(synced, originals), /splits the tool call/);
++});
++
++test("handoff: an unappliable fold never sends the transcript, only the handoff notice", () => {
++  const sent = abortedRequest("Snapshot does not match the current branch", 42);
++  assert.equal(sent.length, 1);
++  assert.equal(sent[0].role, "user");
++  assert.equal(sent[0].timestamp, 42);
++  assert.match(sent[0].content, /folds could not be applied/);
++  assert.match(sent[0].content, /start a handoff session/);
++  assert.match(sent[0].content, /does not match the current branch/);
++  assert.equal(handoffNotice("x"), sent[0].content.replace("Snapshot does not match the current branch", "x"));
++});
++
++test("snapshotHasFolds: only a saved fold makes the raw transcript unsafe to send", () => {
++  assert.equal(snapshotHasFolds(undefined), false);
++  assert.equal(snapshotHasFolds({ version: 2, roots: [{ kind: "message", id: "a" }] }), false);
++  assert.equal(snapshotHasFolds({ version: 2, roots: [{ kind: "message", id: "a" }, { kind: "fold", id: "f", children: [] }] }), true);
++  assert.equal(snapshotHasFolds({ version: 99, roots: "garbage" }), false);
++  assert.equal(snapshotHasFolds({ version: 2, roots: saved }), true);
++});
+diff --git a/extensions/infinite-context/robust.ts b/extensions/infinite-context/robust.ts
+new file mode 100644
+index 0000000..4efef83
+--- /dev/null
++++ b/extensions/infinite-context/robust.ts
+@@ -0,0 +1,25 @@
++/**
++ * When saved folds cannot be applied, the raw transcript must not go out in their place:
++ * it is several times larger than the folded one (a 150-200k request became 438k). The
++ * request is replaced by a short notice instead and the user hands over to a new session.
++ */
++
++/** True when saved state holds a fold; tolerant of garbage, since this runs on a failed load. */
++export function snapshotHasFolds(data: unknown): boolean {
++  const roots = (data as { roots?: unknown } | undefined)?.roots;
++  if (!Array.isArray(roots)) return false;
++  const pending: unknown[] = [...roots];
++  while (pending.length) {
++    const item = pending.pop() as { kind?: unknown; children?: unknown } | null;
++    if (item?.kind === "fold") return true;
++  }
++  return false;
++}
++
++export const handoffNotice = (reason: string): string =>
++  `infinite-context: folds could not be applied (${reason}). The request carries this notice instead of the raw transcript: start a handoff session.`;
++
++/** The only messages a request carries when its folds cannot be applied. */
++export const abortedRequest = (reason: string, timestamp: number) => [
++  { role: "user" as const, content: handoffNotice(reason), timestamp },
++];
+diff --git a/extensions/infinite-context/settings.test.ts b/extensions/infinite-context/settings.test.ts
+index 2a15f35..b50892b 100644
+--- a/extensions/infinite-context/settings.test.ts
++++ b/extensions/infinite-context/settings.test.ts
+@@ -4,6 +4,7 @@ import {
+   DEFAULT_SETTINGS,
+   parseSettings,
+   parseSettingsWithError,
++  resolvePrice,
+   settingsChanged,
+ } from "./settings.ts";
+ 
+@@ -106,3 +107,49 @@ test("a recorded reminders block counts as unchanged only when it is the same",
+   assert.equal(settingsChanged(DEFAULT_SETTINGS, current), true);
+   assert.equal(settingsChanged({ ...current, reminders: { default: {}, overrides: {} } }, current), true);
+ });
++
++const OPUS = { w: 5, r: 0.2 };
++const SONNET = { w: 2.5, r: 0.2 };
++const anthropic = { provider: "anthropic", id: "claude-opus-5-5" };
++
++test("prices and the cache TTL come from the settings file, per exact model then provider", () => {
++  const parsed = parseSettings(
++    JSON.stringify({
++      reminders: {},
++      prices: { "anthropic/claude-opus-5-5": OPUS, anthropic: SONNET },
++      cacheTtlMinutes: 60,
++    }),
++  );
++  assert.deepEqual(resolvePrice(parsed, anthropic), OPUS);
++  assert.deepEqual(resolvePrice(parsed, { provider: "anthropic", id: "claude-sonnet-5-5" }), SONNET);
++  assert.equal(resolvePrice(parsed, { provider: "openai", id: "gpt" }), undefined);
++  assert.equal(parsed.cacheTtlMinutes, 60);
++  assert.equal(resolvePrice(DEFAULT_SETTINGS, anthropic), undefined);
++  assert.equal(DEFAULT_SETTINGS.cacheTtlMinutes, 5);
++});
++
++test("invalid prices or TTL reject the whole file", () => {
++  for (const value of [
++    { prices: { m: { w: 5 } } },
++    { prices: { m: { w: 5, r: 0 } } },
++    { prices: { m: { w: 1, r: 2 } } },
++    { prices: { m: { w: 5, r: 0.2, x: 1 } } },
++    { prices: [] },
++    { cacheTtlMinutes: 0 },
++    { cacheTtlMinutes: "5" },
++    { nudgeAtPercent: 60, cacheTtlMinutes: 0 },
++  ]) {
++    const parsed = parseSettingsWithError(JSON.stringify(value));
++    assert.deepEqual(parsed.settings, DEFAULT_SETTINGS, JSON.stringify(value));
++    assert.equal(typeof parsed.error, "string", JSON.stringify(value));
++  }
++});
++
++test("foldHint setting: cache-aware by default, fixed accepted, anything else rejects the whole file", () => {
++  assert.equal(DEFAULT_SETTINGS.foldHint, "cache-aware");
++  assert.equal(parseSettings(JSON.stringify({ foldHint: "fixed" })).foldHint, "fixed");
++  assert.equal(parseSettings(JSON.stringify({ foldHint: "cache-aware" })).foldHint, "cache-aware");
++  const parsed = parseSettingsWithError(JSON.stringify({ foldHint: "always" }));
++  assert.deepEqual(parsed.settings, DEFAULT_SETTINGS);
++  assert.equal(typeof parsed.error, "string");
++});
+diff --git a/extensions/infinite-context/settings.ts b/extensions/infinite-context/settings.ts
+index 32bb27a..d6d3a95 100644
+--- a/extensions/infinite-context/settings.ts
++++ b/extensions/infinite-context/settings.ts
+@@ -8,10 +8,11 @@ import { isDeepStrictEqual } from "node:util";
+  * file still works (KISS — refusing to run over a typo'd number helps nobody). Nothing here
+  * grants authority.
+  *
+- * The per-model `reminders` block is different: its numbers are measured (what a reminder costs
+- * or saves depends on them), so a typo must not silently change them. Anything wrong in it, or
+- * an unknown key anywhere, rejects the whole file: parseSettingsWithError() then returns the
+- * defaults plus the reason, never a partly applied file.
++ * The per-model `reminders` block and the fold-hint keys (`prices`, `cacheTtlMinutes`, `foldHint`)
++ * are different: their numbers are measured (what a reminder costs or saves depends on them), so a
++ * typo must not silently change them. Anything wrong in them, or an unknown key anywhere, rejects
++ * the whole file: parseSettingsWithError() then returns the defaults plus the reason, never a
++ * partly applied file.
+  */
+ 
+ /**
+@@ -29,6 +30,15 @@ export interface ReminderRule {
+   readonly everyTokens?: number;
+ }
+ 
++/** Prompt-cache prices of a model, any common unit (only the ratio matters): write w, read r. */
++export interface Price {
++  readonly w: number;
++  readonly r: number;
++}
++
++/** fixed: reminders carry no cost hint; cache-aware: they carry the fold hint (fold-hint.ts). */
++export type FoldHintMode = "fixed" | "cache-aware";
++
+ export interface Settings {
+   /** Remind once the context holds at least this many tokens. Unset: only the window share decides. */
+   readonly nudgeAtTokens?: number;
+@@ -39,6 +49,12 @@ export interface Settings {
+     readonly default: ReminderRule;
+     readonly overrides: Readonly<Record<string, ReminderRule>>;
+   };
++  /** Cache prices per exact "provider/modelId" or provider, for the cost-aware fold hint. */
++  readonly prices: Readonly<Record<string, Price>>;
++  /** How long a prompt cache lives after a request. */
++  readonly cacheTtlMinutes: number;
++  /** Whether reminders carry the fold hint (the experiments factor of the same name overrides it per session). */
++  readonly foldHint: FoldHintMode;
+ }
+ 
+ /**
+@@ -50,6 +66,9 @@ export interface Settings {
+ export const DEFAULT_SETTINGS: Settings = {
+   nudgeAtPercent: 75,
+   reminders: { default: {}, overrides: {} },
++  prices: {},
++  cacheTtlMinutes: 5,
++  foldHint: "cache-aware",
+ };
+ 
+ /** The provider and id of a model, as pi names them. */
+@@ -65,6 +84,11 @@ export function modelEntries<T>(table: Readonly<Record<string, T>>, model: Model
+   return [exact, provider].filter((entry): entry is T => entry !== undefined);
+ }
+ 
++/** The price of a model: its exact "provider/modelId" entry, else its provider's. */
++export function resolvePrice(settings: Settings, model: ModelRef | undefined): Price | undefined {
++  return modelEntries(settings.prices, model)[0];
++}
++
+ /** A token count is a whole, positive number. */
+ function positiveInt<F>(value: unknown, fallback: F): number | F {
+   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
+@@ -99,6 +123,15 @@ function parseRule(value: unknown, where: string): ReminderRule {
+   return rule;
+ }
+ 
++function parsePrice(value: unknown, where: string): Price {
++  if (!isObject(value)) throw new Error(`${where}: must be an object`);
++  onlyKeys(value, ["w", "r"], where);
++  const { w, r } = value;
++  if (typeof w !== "number" || typeof r !== "number" || !Number.isFinite(w) || !(r > 0) || w < r)
++    throw new Error(`${where}: w and r must be numbers with 0 < r <= w`);
++  return { w, r };
++}
++
+ function parseReminders(value: unknown): Settings["reminders"] {
+   const reminders = value ?? {};
+   if (!isObject(reminders)) throw new Error("reminders: must be an object");
+@@ -128,13 +161,30 @@ export function parseSettingsWithError(json: string | undefined): {
+   try {
+     const value: unknown = JSON.parse(json);
+     if (!isObject(value)) throw new Error("settings: must be an object");
+-    onlyKeys(value, ["nudgeAtTokens", "nudgeAtPercent", "reminders"], "settings");
++    onlyKeys(
++      value,
++      ["nudgeAtTokens", "nudgeAtPercent", "reminders", "prices", "cacheTtlMinutes", "foldHint"],
++      "settings",
++    );
++    const prices = value.prices ?? {};
++    if (!isObject(prices)) throw new Error("prices: must be an object");
++    const ttl = value.cacheTtlMinutes ?? DEFAULT_SETTINGS.cacheTtlMinutes;
++    if (!Number.isSafeInteger(ttl) || (ttl as number) <= 0)
++      throw new Error("cacheTtlMinutes: must be a positive integer");
++    const foldHint = value.foldHint ?? DEFAULT_SETTINGS.foldHint;
++    if (foldHint !== "fixed" && foldHint !== "cache-aware")
++      throw new Error('foldHint: must be "fixed" or "cache-aware"');
+     const nudgeAtTokens = positiveInt(value.nudgeAtTokens, undefined);
+     return {
+       settings: {
+         ...(nudgeAtTokens === undefined ? {} : { nudgeAtTokens }),
+         nudgeAtPercent: percent(value.nudgeAtPercent, DEFAULT_SETTINGS.nudgeAtPercent),
+         reminders: parseReminders(value.reminders),
++        prices: Object.fromEntries(
++          Object.entries(prices).map(([key, price]) => [key, parsePrice(price, `prices["${key}"]`)]),
++        ),
++        cacheTtlMinutes: ttl as number,
++        foldHint,
+       },
+     };
+   } catch (error) {
