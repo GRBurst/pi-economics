@@ -16,7 +16,12 @@ in {
   options.programs.piEconomics.cacheLifecycle = {
     enable = lib.mkEnableOption ''
       the pi cache-lifecycle extension (elides stale context after cache
-      expiry, 1 h TTL for the main session, orchestrator-aware warming)'';
+      expiry, 1 h TTL for the main session, orchestrator-aware warming). It
+      also sets cacheWarming = "idle" in pi's settings.json through the
+      piSettings activation entry: its warm policy fires only in that mode,
+      and pi's default is "streaming". Standalone, pi keeps its default while
+      there is no settings.json (the entry edits an existing file only) and
+      while piSettings.enable is false'';
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -54,5 +59,17 @@ in {
     # (M4.10) Literal text (spec §4): checks read it with builtins.fromJSON.
     home.file."${pe.agentDir}/cache-lifecycle/settings.json" =
       lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
+
+    # (M4.11) Replaces the host's positional `idle` flag (spec §5.4). Order
+    # 1500: after the removals and the child rule (1000), as today's script
+    # edits, so a file that lacks both keys gets today's bytes.
+    programs.piEconomics.piSettings.ops.cacheLifecycle = [
+      {
+        op = "set";
+        path = ["cacheWarming"];
+        value = "idle";
+        order = 1500;
+      }
+    ];
   };
 }

@@ -79,4 +79,22 @@ in {
     )
     s)
   dirs;
+
+  # (M4.11) The op is today's (checks/pi-settings-migrate/today-ops.nix): with
+  # today's other ops the program is the one pi-settings-migrate compares with
+  # the legacy script's `idle` run. Rendered only while piSettings.enable; the
+  # option's description states the standalone caveat (spec §4.1).
+  cache-lifecycle-pisettings = let
+    c = eval ".pi/agent" {} {};
+    withToday = eval ".pi/agent" {} {piSettings.ops = today.withoutWarming;};
+    todays = hm.eval {programs.piEconomics.piSettings.ops = today.withWarming;};
+    disabled = eval ".pi/agent" {} {piSettings.enable = false;};
+    description = (hm.options {}).programs.piEconomics.cacheLifecycle.enable.description;
+  in
+    eq "ops" (pe c).piSettings.ops {inherit (today.withWarming) cacheLifecycle;}
+    ++ eq "program with today's other ops" (pe withToday).piSettings.program (pe todays).piSettings.program
+    ++ holds "activation entry piSettingsMigrate" (c.home.activation ? piSettingsMigrate)
+    ++ holds "no entry while piSettings.enable = false" (!(disabled.home.activation ? piSettingsMigrate))
+    ++ holds "the description states the standalone caveat"
+    (lib.all (w: lib.hasInfix w description) ["cacheWarming" "settings.json" "piSettings.enable"]);
 }
