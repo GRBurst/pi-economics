@@ -463,7 +463,31 @@ After the "Step Q" bullet of §7:
 
 # Execution Record
 
-(To be filled by Q.6: per task commit, red seen, deviations; gate table; open questions as decided.)
+Executed 2026-10-25 by impl-q in the worktree `~/.cache/pi/q-wt`, branch `q-retire-qwen` (base a5fdf18). N0 = 76 tests; final 83.
+
+| Task | Commit | Red seen | Deviation |
+|---|---|---|---|
+| Q.0 | – | – | baseline 76 tests green (`node --test`); preconditions met (grep sites as listed) |
+| Q.1 | 6afa10b | planted factors stub: `✖ report: an arm without factors …` | – |
+| Q.2 | 164ef9b | three plants (`a[3]`, `const x = "qwenl"`, `if (false && …)`) all red as stated | – |
+| Q.3 | f568cfd | natural: both default tests red | – |
+| Q.4 | 4998975 | natural (`qwen` listed, no rejection); planted `free:` arm: `actual: [ 'free' ]` | – |
+| Q.5 | 8682dd3 | – | spec §7 amendment added (OQ1 = yes, main) |
+| Q.6 | this commit | – | gate run as the per-check loop over the flake's own 31 checks + 8 packages (this flake has no host outputs), via `git+file://…q-wt?ref=q-retire-qwen`; `bench` also via `path:` |
+
+Quick loop was `node --test`; `nb bench`/`nb typecheck-bench` run at Q.1, Q.3, Q.4 (green) and in the gate.
+
+## Gate (Q.6)
+
+31 checks OK, 8 packages OK, 0 FAILED (`bench`: tests 83, pass 83, fail 0; `typecheck-bench`, `leak`, `module-eval`, `router-golden`, `iface-subagents-bench-probe` OK). Package list unchanged (8). Logs: `~/.cache/pi/impl-q/gate/`.
+
+## Open questions as decided
+
+OQ1–OQ5 as recommended (main, 2026-10-25).
+
+## Inventory for P
+
+Not re-run; I-1 is done (config.ts arm line, cli.ts usage/defaults, README). `git grep -F qwen3.8-27b:free -- packages/bench` is empty. I-2..I-7 unchanged.
 
 # Main's decisions on the open questions (2026-10-25)
 
