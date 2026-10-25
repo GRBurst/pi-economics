@@ -93,11 +93,11 @@ Common: `v` (int), `ts` (ISO), `event`, `taskId` (subagent name) — all require
 
 | event | fields (required **bold**) | meaning |
 | --- | --- | --- |
-| `spawn` | **`kind`**, **`workerTier`** (`qwen` \| `T1` \| `T2` \| …), **`workerEffort`**, `reviewTier`, `reviewEffort`, `cardHash`, `base`, `importance`, `reasons` (string[]), `arm`*, **`sessionId`** (child), **`parentSessionId`**, `attemptOf`, `assigned`† (`router` \| `random`), `routeBase`† (tier), `unresolved`† (`true`), `reviewOf`† | a routed (or unrouted) spawn |
-| `reroute` | **`from`**, **`to`**, `reason` | provider fallback (rate limit, outage) |
+| `spawn` | **`kind`**, **`workerTier`** (`qwen` \| `haiku` \| `T1` \| `T2` \| …), **`workerEffort`**, `reviewTier`, `reviewEffort`, `cardHash`, `base`, `importance`, `reasons` (string[]), `arm`*, **`sessionId`** (child), **`parentSessionId`**, `attemptOf`, `assigned`† (`router` \| `random`), `routeBase`† (tier), `unresolved`† (`true`), `reviewOf`†, `ability`†, `level`† (int ≥ 0), `draft`† (`true`), `workerLevel`†, `reviewLevel`† (int ≥ 0), `workerMember`†, `workerModel`†, `startEffort`†, `waitMs`† (≥ 0) | a routed (or unrouted) spawn |
+| `reroute` | **`from`**, **`to`**, `reason`, `fromModel`†, `toModel`† | provider fallback (rate limit, outage) |
 | `check` | **`exit`**, `durationMs` | the card's check ran after the child reported |
 | `corrective` | — | one corrective message to the child |
-| `escalate` | **`from`**, **`to`**, `attemptOf` | re-spawn one tier up |
+| `escalate` | **`from`**, **`to`**, `attemptOf`, `fromModel`†, `toModel`†, `ability`†, `fromLevel`†, `toLevel`† (int ≥ 0) | re-spawn one tier up |
 | `verdict` | **`verdict`** (`accepted` \| `partial` \| `rejected` \| `unjudged`), `note`, `reviewOf`† | the parent's judgement; `unjudged` when killed without one |
 | `spotcheck` | `requested` (`true`) | an accepted verdict was drawn for a spot-check review (`spotCheck.share`); the parent was told to spawn a `review` card with `reviewOf` |
 
@@ -109,6 +109,42 @@ unrouted spawns. `unresolved` (T5.20): a relative card file's directory was miss
 else the parent's), so `bounded` was lowered without evidence the task is unbounded — exclude these spawns from
 t0-verification statistics. `reviewOf` (T5.22): on a spot-check review child's spawn and verdict, the reviewed
 task's `taskId`; agreement = that task's `accepted` vs this verdict.
+
+† Also optional, added 2026-10-17 with the router's members and levels (no `v` bump); absent on unrouted
+spawns and on older lines. On `spawn`: `ability` and `level` are the card's requirement (after the floor or a
+profile's pin), `draft` marks a draft requirement, `workerLevel`/`reviewLevel` are the plan's legs on that
+ability's scale; `workerMember`, `workerModel` and `startEffort` are the member, model and effort the child
+**started on** (an accepted explicit model or effort included), `waitMs` the time it waited for a slot.
+`workerTier` and **`workerEffort` keep their meaning: the planned worker leg** (after randomization and
+escalation); `startEffort` is the effort the child started at. They differ for a fallback member (a write-0 plan
+whose Qwen is busy logs `workerTier: qwen`, `workerEffort: xhigh`, and e.g. `workerMember: sonnet`,
+`startEffort: high`) and for an accepted explicit effort. The randomized comparison keeps reading `assigned`
+(intention to treat); the model a task ran on is `workerModel`, updated by its last `reroute.toModel`. On
+`reroute` and `escalate`: `fromModel`/`toModel`, the models on both routes; `escalate` adds the re-spawn's
+`ability` and `fromLevel`/`toLevel`. `escalate.from` is the route the failed attempt ran on last (after its
+reroutes); older lines may carry `"?"` there.
+
+### Older lines: the old → new mapping
+
+Lines from before 2026-10-17 carry tiers and route labels only. Readers map them with `levelsOfLine`
+(`core/levels.ts`), which returns a line with the fields above as written:
+
+| old `spawn` | `ability` | `level` (from `base`) | `workerLevel` | `workerModel` |
+| --- | --- | --- | --- | --- |
+| kind `scout`/`review` | `read` | `qwen`/`qwen-draft` → 0, `T1` → 2, `T2` → 3 | same map on `workerTier` | below |
+| any other routed kind | `write` | `qwen` → 0, `qwen-draft` → 0 + `draft`, `T1` → 1, `T2` → 2 | same map | below |
+| `unrouted` | – | – | – | the reason `model …` |
+
+`workerModel` of an old spawn: `T1`/`T2` → `anthropic/claude-sonnet-5-5`/`anthropic/claude-opus-5-5`; `qwen` →
+by its chain reason: `qwen chain: local` → `llama/qwen3.8`, `qwen chain: cloud` →
+`openrouter/qwen/qwen3.8-27b:free`, `qwen chain → Sonnet: …` → Sonnet; a v0 line without a chain reason →
+unknown. `startEffort`: `workerEffort`, except `qwen chain → Sonnet: …` → `high`. `levelsOfLine` also returns
+`ranModel`: the model after the task's last `reroute` (its `to` mapped as below), else `workerModel`.
+
+| old line | `ability` | `fromLevel`, `toLevel` | `fromModel`, `toModel` |
+| --- | --- | --- | --- |
+| `escalate` | that of the spawn named by `attemptOf` | `local`/`cloud` → 0, `T1` → 1 (read 2), `T2` → 2 (read 3); `"?"` → the failed spawn's `workerTier` on the same map | `local` → `llama/qwen3.8`, `cloud` → the free model, `T1`/`T2` → Sonnet/Opus; `"?"` → unknown |
+| `reroute` | – | – | same map |
 
 ## experiments/assignments.jsonl
 
