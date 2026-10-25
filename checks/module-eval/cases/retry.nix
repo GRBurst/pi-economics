@@ -21,6 +21,8 @@
         // more;
     };
   targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
+  # (order, key, op, path) of every op, in the order the program runs them.
+  sequence = cfg: map (o: "${toString o.order}:${o.key}:${o.op}:${lib.concatStringsSep "." o.path}") (pe cfg).piSettings.sortedOps;
   bare = hm.evalBare {};
   asOn = {actorSubagents.enable = true;};
 in {
@@ -75,4 +77,29 @@ in {
     eq "ops" (pe c).piSettings.ops {retry = withOrder (lib.take 2 today.withoutWarming.retry);}
     ++ eq "warnings" c.warnings bare.warnings
     ++ eq "failed assertions" (failed "" c) [];
+
+  # (M6.13) settings: one set per leaf under piRetry at order 500, before
+  # every order-1000 op (the host's and the child rule); a list is one leaf.
+  retry-settings = let
+    c = eval ".pi/agent" {
+      settings = {
+        maxDelayMs = 60000;
+        subagents = {
+          enabled = true;
+          match.systemPromptRegex = [{pattern = "x";}];
+        };
+      };
+    } (asOn // {piSettings.ops.host = today.withoutWarming.host;});
+    sets = lib.filter (o: o.op == "set") (pe c).piSettings.ops.retry;
+  in
+    eq "sequence" (sequence c) [
+      "500:retry:set:piRetry.maxDelayMs"
+      "500:retry:set:piRetry.subagents.enabled"
+      "500:retry:set:piRetry.subagents.match.systemPromptRegex"
+      "1000:host:removeWhere:packages"
+      "1000:retry:removeWhere:packages"
+      "1000:retry:removeWhere:packages"
+      "1000:retry:ensureContains:piRetry.subagents.match.systemPromptRegex"
+    ]
+    ++ eq "values" (map (o: o.value) sets) [60000 true [{pattern = "x";}]];
 }
