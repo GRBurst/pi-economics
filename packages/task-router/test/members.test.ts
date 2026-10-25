@@ -58,7 +58,7 @@ test("stepOf: the highest ladder index whose effort is at most e", () => {
 
 test("providerOf: the model's prefix, or the override", () => {
   assert.equal(providerOf(M({ model: "openrouter/qwen/qwen3.8-27b:free" })), "openrouter");
-  assert.equal(providerOf(M({ model: "llama/qwen3.8", provider: "earth" })), "earth");
+  assert.equal(providerOf(M({ model: "llama/qwen3.8", provider: "lan" })), "lan");
 });
 
 test("sameLadder compares the efforts", () => {
