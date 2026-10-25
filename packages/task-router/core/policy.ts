@@ -53,21 +53,26 @@ export function memberState(d: PolicyDeps, m: Named, listed: Map<string, string>
 
 /** The selection of one leg (spec §4.5): probe the candidates with a `health` URL, pick (`pickMember`), else poll every
  *  POLL_MS until `queueMaxSec`. The effort: a pinned start keeps its own; else the requested effort when the member shares the
- *  planned member's ladder, else the member's effort at the leg's step. */
+ *  planned member's ladder, else the member's effort at the leg's step. From the listing to the reservation the step is
+ *  synchronous (AC3, RD5): the pick writes the child's entry before any other spawn or move can look, and it sweeps the
+ *  ghosts, entries pi does not list whose reservation has ended (mi11; only with an API, whose listing is the evidence). */
 export type Selected = { member: Named; effort: ThinkingLevel; waitMs: number; why: string };
 export async function resolveLeg(d: PolicyDeps, x: {
-  cands: Named[]; planned: Named; step: number; effort?: ThinkingLevel; pinned: boolean;
+  name: string; cands: Named[]; planned: Named; step: number; effort?: ThinkingLevel; pinned: boolean; failover: string[]; entry: ChildBase;
 }): Promise<Result<Selected>> {
   const t0 = d.now(), deadline = t0 + d.settings.queueMaxSec * 1000;
   for (;;) {
     const health = await Promise.all(x.cands.map((m) => (m.health ? d.probe(m.health) : Promise.resolve(undefined))));
-    const now = d.now();
-    const listed = new Map((d.api()?.list() ?? []).map((a) => [a.name, a.state]));
+    // ---- one synchronous step from here to the reservation: no await (AC3, RD5) ----
+    const now = d.now(), api = d.api();
+    const listed = new Map((api?.list() ?? []).map((a) => [a.name, a.state]));
+    if (api) for (const [n, c] of d.children) if (!listed.has(n) && c.reservedUntil <= now) d.children.delete(n);
     const p = pickMember(x.cands.map((m, i) => memberState(d, m, listed, now, health[i])), now >= deadline);
     if ("pick" in p) {
       const m = x.cands.find((c) => c.name === p.pick)!;
       const effort = x.pinned ? x.effort! : x.effort !== undefined && sameLadder(m, x.planned) ? x.effort : effortAt(m, x.step);
       const waitMs = now - t0;
+      d.children.set(x.name, { ...x.entry, member: m.name, route: m.route, model: m.model, effort, at: now, reservedUntil: now + PENDING_MS, failover: x.failover });
       const why = `selection: ${m.name}${waitMs ? ` after ${Math.round(waitMs / 1000)} s` : ""}${m.name !== x.planned.name ? ` (planned ${x.planned.name})` : ""}`;
       return { ok: true, value: { member: m, effort, waitMs, why } };
     }
@@ -99,20 +104,18 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     const blocks = names.length ? skillBlocks(names, d.skills() ?? { find: () => undefined, read: () => "" }) : { ok: true as const, value: "" };
     if (!blocks.ok) return reject(blocks.errors);
     // The selection runs on the plan's candidates (D12); a pinned start (an explicit model) runs on its member alone.
+    // The entry is written at the pick, inside resolveLeg; its plan gets the selection's reason after.
     const st = sp.value.start, leg = sp.value.cands.map((n) => named(s.models, n)!);
+    const plan: Plan = { ...sp.value.plan, reasons: [...sp.value.plan.reasons] };
     const to = await resolveLeg(d, {
-      cands: st.pinned ? [named(s.models, st.member)!] : leg, planned: leg[0], step: sp.value.plan.worker.step,
-      effort: st.pinned ? st.effort : args.thinkingLevel, pinned: st.pinned,
+      name: args.name, cands: st.pinned ? [named(s.models, st.member)!] : leg, planned: leg[0], step: plan.worker.step,
+      effort: st.pinned ? st.effort : args.thinkingLevel, pinned: st.pinned, failover: leg.map((c) => c.name),
+      entry: { parent: caller.name, parentSession: caller.sessionId, card, plan, cwd, importance, ...(v.unresolved ? { unresolved: true as const } : {}) },
     });
     if (!to.ok) return reject(to.errors);
-    const m = to.value.member, plan: Plan = { ...sp.value.plan, reasons: [...sp.value.plan.reasons, to.value.why] };
-    const at = d.now();
-    d.children.set(args.name, {
-      parent: caller.name, parentSession: caller.sessionId, card, plan, cwd, importance, ...(v.unresolved ? { unresolved: true as const } : {}),
-      member: m.name, route: m.route, model: m.model, effort: to.value.effort, at, reservedUntil: at + PENDING_MS, failover: leg.map((c) => c.name),
-    });
+    plan.reasons.push(to.value.why);
     return {
-      model: m.model, thinkingLevel: to.value.effort, briefAppend: briefAppend(card, plan, v.t0.specified, prof.value, blocks.value, s.delegation.nudge !== "off"),
+      model: to.value.member.model, thinkingLevel: to.value.effort, briefAppend: briefAppend(card, plan, v.t0.specified, prof.value, blocks.value, s.delegation.nudge !== "off"),
       ...toolsFor(prof.value, card, cwd, caller.cwd), meta: { taskId: args.name, importance },
     };
   };

@@ -301,3 +301,63 @@ test("short custom table: selection over the plan's candidates", async () => {
   assert.ok(cands.includes(started), `${started} ∉ ${cands}`);
   assert.equal(started, cands[0]);
 });
+
+// --- reservation at the pick; ghost sweep (HP T3.5: AC3, RD5, mi11) -------------------------------------------------------
+const warnings = async (fn: () => Promise<void>) => {
+  const warned: string[] = [], orig = console.warn;
+  console.warn = (...a: unknown[]) => void warned.push(a.join(" "));
+  try { await fn(); } finally { console.warn = orig; }
+  return warned;
+};
+const settle = () => new Promise((r) => setImmediate(r));
+const PILOT =
+  '429: {"message":"Rate limit exceeded: free-models-per-day-high-balance. ","code":429,"metadata":{"headers":{"X-RateLimit-Limit":"1000","X-RateLimit-Remaining":"0","X-RateLimit-Reset":"1790985600000"},"limit_source":"openrouter_free_tier_daily"}}';
+
+test("concurrent spawns: exactly one takes the local slot, the other waits queueMaxSec, then Sonnet", async () => {
+  const h = harness({ base: "today", settings: { ...BLANK_CLOUD, queueMaxSec: 10 } });
+  const rs = await Promise.all(["q1", "q2"].map((n) => h.a.spawn({ name: n, task: card() })));
+  const models = rs.map((r) => (accepted(r) as any).model);
+  assert.deepEqual(models.filter((m) => m === LOCAL).length, 1, models.join());
+  assert.deepEqual([...models].sort(), [LOCAL, SONNET].sort());
+  assert.ok(h.sleeps.reduce((a, b) => a + b, 0) >= 10_000);
+});
+
+test("P-slots: five concurrent spawns never put more children on a member than its slots", async () => {
+  const h = harness({ settings: { queueMaxSec: 0 } });
+  const rs = await Promise.all(["q1", "q2", "q3", "q4", "q5"].map((n) => h.a.spawn({ name: n, task: card() })));
+  const models = rs.map((r) => (accepted(r) as any).model);
+  const on = (m: string) => models.filter((x) => x === m).length;
+  assert.ok(on(CLOUD) <= 2 && on(LOCAL) <= 1, models.join());
+  assert.deepEqual([...models].sort(), [CLOUD, CLOUD, LOCAL, SONNET, SONNET].sort());
+});
+
+test("a ghost reservation (never listed) holds its slot 60 s; then the next spawn sweeps it and takes the slot, and a later free cap moves no ghost", async () => {
+  const h = harness({ settings: { queueMaxSec: 0 } });
+  assert.equal((accepted(await h.a.spawn({ name: "g1", task: card() })) as any).model, CLOUD); // never listed: a ghost
+  assert.equal((accepted(await h.a.spawn({ name: "c1", task: card() })) as any).model, CLOUD);
+  listAs(h, { c1: "running" });
+  h.clock.t += 30_000;
+  assert.equal((accepted(await h.a.spawn({ name: "x1", task: card() })) as any).model, LOCAL); // the ghost still holds a cloud slot
+  listAs(h, { x1: "idle" }); // listed: x1 keeps the local slot until its own reservation ends
+  h.clock.t += 31_000;
+  assert.equal((accepted(await h.a.spawn({ name: "n1", task: card() })) as any).model, CLOUD); // the ghost's slot
+  listAs(h, { n1: "running" });
+  const warned = await warnings(async () => { h.a.emit({ type: "error", name: "c1", reason: PILOT, ts: 1 }); await settle(); });
+  const moved = h.a.retunes.map((r) => r.name).sort();
+  assert.deepEqual(moved, ["c1", "n1"]); // the cloud's live children; the swept ghost is gone
+  assert.ok(!warned.some((w) => w.includes("g1")), warned.join("\n"));
+});
+
+test("no API → no sweep: the router keeps its entries", async () => {
+  const h = harness({ settings: { queueMaxSec: 0 } });
+  accepted(await h.a.spawn({ name: "g1", task: card() }));
+  h.clock.t += 61_000;
+  const api = h.a.api;
+  (h.a as any).api = undefined; // the router sees no API: nothing is listed, so nothing is swept
+  try {
+    accepted(await h.a.spawn({ name: "q2", task: card() }));
+  } finally { (h.a as any).api = api; }
+  h.a.emit({ type: "error", name: "g1", reason: PILOT, ts: 1 });
+  await settle();
+  assert.ok(h.a.retunes.some((r) => r.name === "g1")); // g1's entry survived the spawn without an API
+});

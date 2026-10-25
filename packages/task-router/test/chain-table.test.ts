@@ -61,9 +61,10 @@ async function sutPick(local: Local, cloudRunning: number, cloud: Cloud, expired
   } as unknown as PolicyDeps;
   const cands = candidates(settings, "write", 0, 0).cands;
   try {
-    const r = await resolveLeg(d, { cands, planned: cands[0], step: 0, pinned: false });
+    const r = await resolveLeg(d, { name: "x", cands, planned: cands[0], step: 0, pinned: false, failover: [], entry: { parent: "p", parentSession: "s" } as any });
     assert.ok(r.ok, JSON.stringify(r));
-    const m = r.value.member, running = [...children.values()].filter((c) => c.member === m.name).length;
+    const m = r.value.member, running = [...children].filter(([n, c]) => n !== "x" && c.member === m.name).length;
+    assert.equal(children.get("x")?.member, m.name); // the pick reserved its slot (T3.5)
     assert.ok(m.slots === undefined || running < m.slots, `P-slots: ${m.name} has ${running} of ${m.slots}`);
     assert.ok(r.value.effort !== "max" && m.efforts.includes(r.value.effort) && EFFORTS.includes(r.value.effort), `P-nomax: ${m.name} ${r.value.effort}`);
     return m.name;
