@@ -204,6 +204,25 @@ test("slow retune: a spawn during the await retune sees the target taken", async
   assert.deepEqual(reroutes(h).map((r) => [r.taskId, r.from, r.to]), [["q1", "cloud", "local"]]);
 });
 
+// RG2 (review-g3 Medium 2): an errored child is listed `idle`, so only the move's reservation (not the listing) holds the
+// target's slot while the retune is in flight (RD5, AC3 for moves).
+test("slow retune of an idle-listed child: its reservation holds the target; a spawn during the await does not take it", async () => {
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
+  await spawnAll(h, ["q0", "q1"]); // cloud, cloud: its two slots
+  h.clock.t += 61_000; // the spawn reservations have ended
+  listAs(h, { q0: "running", q1: "idle" });
+  const g = gate();
+  h.a.control.gate = g.p;
+  h.a.emit(err("q1", "retries exhausted")); // target: the free local slot
+  await settle();
+  const q2 = accepted(await h.a.spawn({ name: "q2", task: card() })) as any; // the cloud slot q1 left
+  const q3 = accepted(await h.a.spawn({ name: "q3", task: card() })) as any; // local is q1's: neither Qwen slot
+  g.open();
+  await settle();
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", LOCAL]]);
+  assert.deepEqual([q2.model, q3.model], [CLOUD, SONNET]);
+});
+
 test("retune throws → entry restored, the target's slot free at once, one warning, no reroute line", async () => {
   const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
   await spawnAll(h, ["q0", "q1"]); // cloud, cloud: its two slots
