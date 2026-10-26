@@ -3,6 +3,7 @@
 # F3.1: re-recorded 2026-10-25
 # T3.4: re-recorded 2026-10-25
 # F5.1: re-recorded 2026-10-26
+# T5.2: re-recorded 2026-10-26
 count defaults plan 146880 explicit 470016
 plan defaults v1 scout none normal 0000000000000000000000000000000000000000000000000000000000000000
 plan defaults v1 scout none high 1111111111111111111111111111111111111111111111111111111111111111
@@ -15,7 +16,7 @@ plan defaults v1 scout force high 4444444444444444444444444444444444444444444444
 plan defaults v1 scout force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan defaults v1 mechanical none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan defaults v1 mechanical none high 8911111111111111911111111111111111111111111111111111111111111111
-plan defaults v1 mechanical none critical ab22222222222222b22222222222222222222222222222222222222222222222
+plan defaults v1 mechanical none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
 plan defaults v1 mechanical t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v1 mechanical t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v1 mechanical t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -24,7 +25,7 @@ plan defaults v1 mechanical force high 44444444444444444444444444444444444444444
 plan defaults v1 mechanical force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan defaults v1 implement none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan defaults v1 implement none high 8911111111111111911111111111111111111111111111111111111111111111
-plan defaults v1 implement none critical ab22222222222222b22222222222222222222222222222222222222222222222
+plan defaults v1 implement none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
 plan defaults v1 implement t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v1 implement t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v1 implement t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -33,7 +34,7 @@ plan defaults v1 implement force high 444444444444444444444444444444444444444444
 plan defaults v1 implement force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan defaults v1 debug-design none normal 0000000000000000000000000000000000000000000000000000000000000000
 plan defaults v1 debug-design none high 1111111111111111111111111111111111111111111111111111111111111111
-plan defaults v1 debug-design none critical 2222222222222222222222222222222222222222222222222222222222222222
+plan defaults v1 debug-design none critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 plan defaults v1 debug-design t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v1 debug-design t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v1 debug-design t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -42,7 +43,7 @@ plan defaults v1 debug-design force high 444444444444444444444444444444444444444
 plan defaults v1 debug-design force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan defaults v1 review none normal 0000000000000000000000000000000000000000000000000000000000000000
 plan defaults v1 review none high 1111111111111111111111111111111111111111111111111111111111111111
-plan defaults v1 review none critical 2222222222222222222222222222222222222222222222222222222222222222
+plan defaults v1 review none critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 plan defaults v1 review t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v1 review t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v1 review t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -60,31 +61,31 @@ plan defaults v1 plan force high 44444444444444444444444444444444444444444444444
 plan defaults v1 plan force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan defaults v1 ro none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan defaults v1 ro none high 8911111111111111911111111111111111111111111111111111111111111111
-plan defaults v1 ro none critical ab22222222222222b22222222222222222222222222222222222222222222222
+plan defaults v1 ro none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
 plan defaults v1 ro t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v1 ro t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v1 ro t2 critical 5555555555555555555555555555555555555555555555555555555555555555
 plan defaults v1 ro force normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v1 ro force high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v1 ro force critical 5555555555555555555555555555555555555555555555555555555555555555
-plan defaults v1 pq none normal cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v1 pq none high cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v1 pq none critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v1 pq t2 normal cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v1 pq t2 high cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v1 pq t2 critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v1 pq force normal cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v1 pq force high cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v1 pq force critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v1 p1 none normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan defaults v1 p1 none high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan defaults v1 p1 none critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v1 p1 t2 normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan defaults v1 p1 t2 high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan defaults v1 p1 t2 critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v1 p1 force normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan defaults v1 p1 force high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan defaults v1 p1 force critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan defaults v1 pq none normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v1 pq none high dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v1 pq none critical dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v1 pq t2 normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v1 pq t2 high dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v1 pq t2 critical dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v1 pq force normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v1 pq force high dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v1 pq force critical dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v1 p1 none normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan defaults v1 p1 none high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan defaults v1 p1 none critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+plan defaults v1 p1 t2 normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan defaults v1 p1 t2 high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan defaults v1 p1 t2 critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+plan defaults v1 p1 force normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan defaults v1 p1 force high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan defaults v1 p1 force critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
 plan defaults v1 p2 none normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v1 p2 none high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v1 p2 none critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -96,25 +97,25 @@ plan defaults v1 p2 force high 4444444444444444444444444444444444444444444444444
 plan defaults v1 p2 force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan defaults v1 m1 none normal 0000000000000000000000000000000000000000000000000000000000000000
 plan defaults v1 m1 none high 1111111111111111111111111111111111111111111111111111111111111111
-plan defaults v1 m1 none critical 2222222222222222222222222222222222222222222222222222222222222222
+plan defaults v1 m1 none critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 plan defaults v1 m1 t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v1 m1 t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v1 m1 t2 critical 5555555555555555555555555555555555555555555555555555555555555555
 plan defaults v1 m1 force normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v1 m1 force high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v1 m1 force critical 5555555555555555555555555555555555555555555555555555555555555555
-plan defaults v2 scout none normal cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v2 scout none high cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v2 scout none critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v2 scout t2 normal cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v2 scout t2 high cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v2 scout t2 critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v2 scout force normal cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v2 scout force high cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan defaults v2 scout force critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+plan defaults v2 scout none normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v2 scout none high dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v2 scout none critical dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v2 scout t2 normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v2 scout t2 high dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v2 scout t2 critical dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v2 scout force normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v2 scout force high dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan defaults v2 scout force critical dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
 plan defaults v2 mechanical none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan defaults v2 mechanical none high 8911111111111111911111111111111111111111111111111111111111111111
-plan defaults v2 mechanical none critical ab22222222222222b22222222222222222222222222222222222222222222222
+plan defaults v2 mechanical none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
 plan defaults v2 mechanical t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v2 mechanical t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v2 mechanical t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -123,7 +124,7 @@ plan defaults v2 mechanical force high 44444444444444444444444444444444444444444
 plan defaults v2 mechanical force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan defaults v2 implement none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan defaults v2 implement none high 8911111111111111911111111111111111111111111111111111111111111111
-plan defaults v2 implement none critical ab22222222222222b22222222222222222222222222222222222222222222222
+plan defaults v2 implement none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
 plan defaults v2 implement t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v2 implement t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v2 implement t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -139,15 +140,15 @@ plan defaults v2 debug-design t2 critical 55555555555555555555555555555555555555
 plan defaults v2 debug-design force normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v2 debug-design force high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v2 debug-design force critical 5555555555555555555555555555555555555555555555555555555555555555
-plan defaults v2 review none normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan defaults v2 review none high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan defaults v2 review none critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v2 review t2 normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan defaults v2 review t2 high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan defaults v2 review t2 critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v2 review force normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan defaults v2 review force high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan defaults v2 review force critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan defaults v2 review none normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan defaults v2 review none high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan defaults v2 review none critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+plan defaults v2 review t2 normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan defaults v2 review t2 high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan defaults v2 review t2 critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+plan defaults v2 review force normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan defaults v2 review force high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan defaults v2 review force critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
 plan defaults v2 plan none normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v2 plan none high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v2 plan none critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -159,7 +160,7 @@ plan defaults v2 plan force high 44444444444444444444444444444444444444444444444
 plan defaults v2 plan force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan-row 0 T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T2/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T2/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T2/T2/high//
 plan-row 1 T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high//
-plan-row 2 T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh ; T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh ; T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh
+plan-row 2 T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high/T2/xhigh ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high/T2/xhigh ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high/T2/xhigh
 plan-row 3 T2/T2/high// ; T2/T2/high// | T2/T2/high// ; T2/T2/high// | T2/T2/high// | REJECT ; T2/T2/high// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/high// | T2/T2/high// ; T2/T2/high// ; T2/T2/high// | T2/T2/high// ; T2/T2/high// | T2/T2/high// | REJECT ; T2/T2/high// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/high// | T2/T2/high// ; T2/T2/high// ; T2/T2/high// | T2/T2/high// ; T2/T2/high// | T2/T2/high// | REJECT ; T2/T2/high// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/high// | T2/T2/high//
 plan-row 4 T2/T2/xhigh// ; T2/T2/xhigh// | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high// | REJECT ; T2/T2/xhigh// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high// ; T2/T2/xhigh// ; T2/T2/xhigh// | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high// | REJECT ; T2/T2/xhigh// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high// ; T2/T2/xhigh// ; T2/T2/xhigh// | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high// | REJECT ; T2/T2/xhigh// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high//
 plan-row 5 T2/T2/xhigh/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh
@@ -169,73 +170,74 @@ plan-row 8 qwen/qwen/xhigh/T1/high ; qwen/qwen/xhigh/T1/high | qwen/T1/high/T1/h
 plan-row 9 qwen-draft/qwen/xhigh/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | T2/T2/xhigh// ; qwen-draft/T1/high/T1/high ; qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high | qwen-draft/T2/high/T1/high | REJECT ; qwen-draft/T1/high/T1/high | T2/T2/high// ; qwen-draft/qwen/xhigh/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | T2/T2/xhigh//
 plan-row a qwen/T1/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high | REJECT ; qwen/T1/high/T2/high | T2/T2/high/T2/xhigh ; qwen/T1/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high | REJECT ; qwen/T1/high/T2/high | T2/T2/high/T2/xhigh ; qwen/T1/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high | REJECT ; qwen/T1/high/T2/high | T2/T2/high/T2/xhigh
 plan-row b qwen-draft/T1/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high | REJECT ; qwen-draft/T1/high/T2/high | T2/T2/high/T2/xhigh ; qwen-draft/T1/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high | REJECT ; qwen-draft/T1/high/T2/high | T2/T2/high/T2/xhigh ; qwen-draft/T1/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high | REJECT ; qwen-draft/T1/high/T2/high | T2/T2/high/T2/xhigh
-plan-row c qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high//
-plan-row d T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high//
-plan-row e T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high//
-plan-row f T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high
+plan-row c T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh ; T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh ; T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh
+plan-row d qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high//
+plan-row e T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high//
+plan-row f T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high//
+plan-row g T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high
 explicit defaults v1 scout none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit defaults v1 scout none high 1111111111111111111111111111111111111111111111111111111111111111
-explicit defaults v1 scout none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 scout t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 scout t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 scout t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 scout force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 scout force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 scout force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 scout none critical 1111111111111111111111111111111111111111111111111111111111111111
+explicit defaults v1 scout t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 scout t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 scout t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 scout force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 scout force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 scout force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v1 mechanical none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit defaults v1 mechanical none high 4411111111111111411111111111111111111111111111111111111111111111
-explicit defaults v1 mechanical none critical 0022222222222222022222222222222222222222222222222222222222222222
-explicit defaults v1 mechanical t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 mechanical t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 mechanical t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 mechanical force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 mechanical force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 mechanical force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 mechanical none critical 0033333333333333033333333333333333333333333333333333333333333333
+explicit defaults v1 mechanical t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 mechanical t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 mechanical t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 mechanical force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 mechanical force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 mechanical force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v1 implement none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit defaults v1 implement none high 4411111111111111411111111111111111111111111111111111111111111111
-explicit defaults v1 implement none critical 0022222222222222022222222222222222222222222222222222222222222222
-explicit defaults v1 implement t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 implement t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 implement t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 implement force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 implement force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 implement force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 implement none critical 0033333333333333033333333333333333333333333333333333333333333333
+explicit defaults v1 implement t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 implement t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 implement t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 implement force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 implement force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 implement force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v1 debug-design none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit defaults v1 debug-design none high 1111111111111111111111111111111111111111111111111111111111111111
-explicit defaults v1 debug-design none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 debug-design t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 debug-design t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 debug-design t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 debug-design force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 debug-design force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 debug-design force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 debug-design none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 debug-design t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 debug-design t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 debug-design t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 debug-design force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 debug-design force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 debug-design force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v1 review none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit defaults v1 review none high 1111111111111111111111111111111111111111111111111111111111111111
-explicit defaults v1 review none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 review t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 review t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 review t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 review force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 review force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 review force critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 plan none normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 plan none high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 plan none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 plan t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 plan t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 plan t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 plan force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 plan force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 plan force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 review none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 review t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 review t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 review t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 review force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 review force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 review force critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 plan none normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 plan none high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 plan none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 plan t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 plan t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 plan t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 plan force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 plan force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 plan force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v1 ro none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit defaults v1 ro none high 4411111111111111411111111111111111111111111111111111111111111111
-explicit defaults v1 ro none critical 0022222222222222022222222222222222222222222222222222222222222222
-explicit defaults v1 ro t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 ro t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 ro t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 ro force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 ro force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 ro force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 ro none critical 0033333333333333033333333333333333333333333333333333333333333333
+explicit defaults v1 ro t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 ro t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 ro t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 ro force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 ro force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 ro force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v1 pq none normal 4444444444444444444444444444444444444444444444444444444444444444
 explicit defaults v1 pq none high 4444444444444444444444444444444444444444444444444444444444444444
 explicit defaults v1 pq none critical 4444444444444444444444444444444444444444444444444444444444444444
@@ -254,24 +256,24 @@ explicit defaults v1 p1 t2 critical 11111111111111111111111111111111111111111111
 explicit defaults v1 p1 force normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit defaults v1 p1 force high 1111111111111111111111111111111111111111111111111111111111111111
 explicit defaults v1 p1 force critical 1111111111111111111111111111111111111111111111111111111111111111
-explicit defaults v1 p2 none normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 p2 none high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 p2 none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 p2 t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 p2 t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 p2 t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 p2 force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 p2 force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 p2 force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 p2 none normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 p2 none high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 p2 none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 p2 t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 p2 t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 p2 t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 p2 force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 p2 force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 p2 force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v1 m1 none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit defaults v1 m1 none high 1111111111111111111111111111111111111111111111111111111111111111
-explicit defaults v1 m1 none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 m1 t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 m1 t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 m1 t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 m1 force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v1 m1 force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v1 m1 force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 m1 none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 m1 t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 m1 t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 m1 t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 m1 force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v1 m1 force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v1 m1 force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v2 scout none normal 4444444444444444444444444444444444444444444444444444444444444444
 explicit defaults v2 scout none high 4444444444444444444444444444444444444444444444444444444444444444
 explicit defaults v2 scout none critical 4444444444444444444444444444444444444444444444444444444444444444
@@ -283,31 +285,31 @@ explicit defaults v2 scout force high 444444444444444444444444444444444444444444
 explicit defaults v2 scout force critical 4444444444444444444444444444444444444444444444444444444444444444
 explicit defaults v2 mechanical none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit defaults v2 mechanical none high 4411111111111111411111111111111111111111111111111111111111111111
-explicit defaults v2 mechanical none critical 0022222222222222022222222222222222222222222222222222222222222222
-explicit defaults v2 mechanical t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 mechanical t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 mechanical t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 mechanical force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 mechanical force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 mechanical force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 mechanical none critical 0033333333333333033333333333333333333333333333333333333333333333
+explicit defaults v2 mechanical t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 mechanical t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 mechanical t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 mechanical force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 mechanical force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 mechanical force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v2 implement none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit defaults v2 implement none high 4411111111111111411111111111111111111111111111111111111111111111
-explicit defaults v2 implement none critical 0022222222222222022222222222222222222222222222222222222222222222
-explicit defaults v2 implement t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 implement t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 implement t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 implement force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 implement force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 implement force critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 debug-design none normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 debug-design none high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 debug-design none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 debug-design t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 debug-design t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 debug-design t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 debug-design force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 debug-design force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 debug-design force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 implement none critical 0033333333333333033333333333333333333333333333333333333333333333
+explicit defaults v2 implement t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 implement t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 implement t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 implement force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 implement force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 implement force critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 debug-design none normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 debug-design none high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 debug-design none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 debug-design t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 debug-design t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 debug-design t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 debug-design force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 debug-design force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 debug-design force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v2 review none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit defaults v2 review none high 1111111111111111111111111111111111111111111111111111111111111111
 explicit defaults v2 review none critical 1111111111111111111111111111111111111111111111111111111111111111
@@ -317,19 +319,19 @@ explicit defaults v2 review t2 critical 1111111111111111111111111111111111111111
 explicit defaults v2 review force normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit defaults v2 review force high 1111111111111111111111111111111111111111111111111111111111111111
 explicit defaults v2 review force critical 1111111111111111111111111111111111111111111111111111111111111111
-explicit defaults v2 plan none normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 plan none high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 plan none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 plan t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 plan t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 plan t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 plan force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 plan force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit defaults v2 plan force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 plan none normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 plan none high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 plan none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 plan t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 plan t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 plan t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 plan force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit defaults v2 plan force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit defaults v2 plan force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit-row 0 T1/high REJECT REJECT REJECT REJECT T1/high T1/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T1/high REJECT REJECT REJECT REJECT T1/high T1/xhigh REJECT T2/high T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
 explicit-row 1 T1/xhigh REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
-explicit-row 2 T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT
-explicit-row 3 T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT
+explicit-row 2 T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT
+explicit-row 3 T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT
 explicit-row 4 qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T1/xhigh T1/off T1/minimal T1/low T1/medium T1/high T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
 select defaults local=up cloudRunning=0 cloud=open qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh
 select defaults local=up cloudRunning=0 cloud=blocked qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
@@ -391,7 +393,7 @@ plan empty-slot v1 scout force high 44444444444444444444444444444444444444444444
 plan empty-slot v1 scout force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan empty-slot v1 mechanical none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan empty-slot v1 mechanical none high 8911111111111111911111111111111111111111111111111111111111111111
-plan empty-slot v1 mechanical none critical ab22222222222222b22222222222222222222222222222222222222222222222
+plan empty-slot v1 mechanical none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
 plan empty-slot v1 mechanical t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v1 mechanical t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v1 mechanical t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -400,7 +402,7 @@ plan empty-slot v1 mechanical force high 444444444444444444444444444444444444444
 plan empty-slot v1 mechanical force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan empty-slot v1 implement none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan empty-slot v1 implement none high 8911111111111111911111111111111111111111111111111111111111111111
-plan empty-slot v1 implement none critical ab22222222222222b22222222222222222222222222222222222222222222222
+plan empty-slot v1 implement none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
 plan empty-slot v1 implement t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v1 implement t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v1 implement t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -409,7 +411,7 @@ plan empty-slot v1 implement force high 4444444444444444444444444444444444444444
 plan empty-slot v1 implement force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan empty-slot v1 debug-design none normal 0000000000000000000000000000000000000000000000000000000000000000
 plan empty-slot v1 debug-design none high 1111111111111111111111111111111111111111111111111111111111111111
-plan empty-slot v1 debug-design none critical 2222222222222222222222222222222222222222222222222222222222222222
+plan empty-slot v1 debug-design none critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 plan empty-slot v1 debug-design t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v1 debug-design t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v1 debug-design t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -418,7 +420,7 @@ plan empty-slot v1 debug-design force high 4444444444444444444444444444444444444
 plan empty-slot v1 debug-design force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan empty-slot v1 review none normal 0000000000000000000000000000000000000000000000000000000000000000
 plan empty-slot v1 review none high 1111111111111111111111111111111111111111111111111111111111111111
-plan empty-slot v1 review none critical 2222222222222222222222222222222222222222222222222222222222222222
+plan empty-slot v1 review none critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 plan empty-slot v1 review t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v1 review t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v1 review t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -436,31 +438,31 @@ plan empty-slot v1 plan force high 444444444444444444444444444444444444444444444
 plan empty-slot v1 plan force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan empty-slot v1 ro none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan empty-slot v1 ro none high 8911111111111111911111111111111111111111111111111111111111111111
-plan empty-slot v1 ro none critical ab22222222222222b22222222222222222222222222222222222222222222222
+plan empty-slot v1 ro none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
 plan empty-slot v1 ro t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v1 ro t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v1 ro t2 critical 5555555555555555555555555555555555555555555555555555555555555555
 plan empty-slot v1 ro force normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v1 ro force high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v1 ro force critical 5555555555555555555555555555555555555555555555555555555555555555
-plan empty-slot v1 pq none normal cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan empty-slot v1 pq none high cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan empty-slot v1 pq none critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan empty-slot v1 pq t2 normal cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan empty-slot v1 pq t2 high cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan empty-slot v1 pq t2 critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan empty-slot v1 pq force normal cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan empty-slot v1 pq force high cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan empty-slot v1 pq force critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-plan empty-slot v1 p1 none normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan empty-slot v1 p1 none high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan empty-slot v1 p1 none critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan empty-slot v1 p1 t2 normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan empty-slot v1 p1 t2 high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan empty-slot v1 p1 t2 critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan empty-slot v1 p1 force normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan empty-slot v1 p1 force high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan empty-slot v1 p1 force critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan empty-slot v1 pq none normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan empty-slot v1 pq none high dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan empty-slot v1 pq none critical dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan empty-slot v1 pq t2 normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan empty-slot v1 pq t2 high dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan empty-slot v1 pq t2 critical dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan empty-slot v1 pq force normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan empty-slot v1 pq force high dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan empty-slot v1 pq force critical dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+plan empty-slot v1 p1 none normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan empty-slot v1 p1 none high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan empty-slot v1 p1 none critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+plan empty-slot v1 p1 t2 normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan empty-slot v1 p1 t2 high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan empty-slot v1 p1 t2 critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+plan empty-slot v1 p1 force normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan empty-slot v1 p1 force high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan empty-slot v1 p1 force critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
 plan empty-slot v1 p2 none normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v1 p2 none high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v1 p2 none critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -472,25 +474,25 @@ plan empty-slot v1 p2 force high 44444444444444444444444444444444444444444444444
 plan empty-slot v1 p2 force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan empty-slot v1 m1 none normal 0000000000000000000000000000000000000000000000000000000000000000
 plan empty-slot v1 m1 none high 1111111111111111111111111111111111111111111111111111111111111111
-plan empty-slot v1 m1 none critical 2222222222222222222222222222222222222222222222222222222222222222
+plan empty-slot v1 m1 none critical cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 plan empty-slot v1 m1 t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v1 m1 t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v1 m1 t2 critical 5555555555555555555555555555555555555555555555555555555555555555
 plan empty-slot v1 m1 force normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v1 m1 force high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v1 m1 force critical 5555555555555555555555555555555555555555555555555555555555555555
-plan empty-slot v2 scout none normal gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
-plan empty-slot v2 scout none high gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
-plan empty-slot v2 scout none critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
-plan empty-slot v2 scout t2 normal gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
-plan empty-slot v2 scout t2 high gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
-plan empty-slot v2 scout t2 critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
-plan empty-slot v2 scout force normal gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
-plan empty-slot v2 scout force high gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
-plan empty-slot v2 scout force critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+plan empty-slot v2 scout none normal hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+plan empty-slot v2 scout none high hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+plan empty-slot v2 scout none critical hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+plan empty-slot v2 scout t2 normal hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+plan empty-slot v2 scout t2 high hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+plan empty-slot v2 scout t2 critical hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+plan empty-slot v2 scout force normal hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+plan empty-slot v2 scout force high hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+plan empty-slot v2 scout force critical hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
 plan empty-slot v2 mechanical none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan empty-slot v2 mechanical none high 8911111111111111911111111111111111111111111111111111111111111111
-plan empty-slot v2 mechanical none critical ab22222222222222b22222222222222222222222222222222222222222222222
+plan empty-slot v2 mechanical none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
 plan empty-slot v2 mechanical t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v2 mechanical t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v2 mechanical t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -499,7 +501,7 @@ plan empty-slot v2 mechanical force high 444444444444444444444444444444444444444
 plan empty-slot v2 mechanical force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan empty-slot v2 implement none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan empty-slot v2 implement none high 8911111111111111911111111111111111111111111111111111111111111111
-plan empty-slot v2 implement none critical ab22222222222222b22222222222222222222222222222222222222222222222
+plan empty-slot v2 implement none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
 plan empty-slot v2 implement t2 normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v2 implement t2 high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v2 implement t2 critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -515,15 +517,15 @@ plan empty-slot v2 debug-design t2 critical 555555555555555555555555555555555555
 plan empty-slot v2 debug-design force normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v2 debug-design force high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v2 debug-design force critical 5555555555555555555555555555555555555555555555555555555555555555
-plan empty-slot v2 review none normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan empty-slot v2 review none high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan empty-slot v2 review none critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan empty-slot v2 review t2 normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan empty-slot v2 review t2 high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan empty-slot v2 review t2 critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan empty-slot v2 review force normal dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-plan empty-slot v2 review force high eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-plan empty-slot v2 review force critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan empty-slot v2 review none normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan empty-slot v2 review none high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan empty-slot v2 review none critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+plan empty-slot v2 review t2 normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan empty-slot v2 review t2 high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan empty-slot v2 review t2 critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+plan empty-slot v2 review force normal eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+plan empty-slot v2 review force high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan empty-slot v2 review force critical gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
 plan empty-slot v2 plan none normal 3333333333333333333333333333333333333333333333333333333333333333
 plan empty-slot v2 plan none high 4444444444444444444444444444444444444444444444444444444444444444
 plan empty-slot v2 plan none critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -535,7 +537,7 @@ plan empty-slot v2 plan force high 444444444444444444444444444444444444444444444
 plan empty-slot v2 plan force critical 5555555555555555555555555555555555555555555555555555555555555555
 plan-row 0 T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T2/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T2/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T2/T2/high//
 plan-row 1 T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high//
-plan-row 2 T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh ; T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh ; T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh
+plan-row 2 T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high/T2/xhigh ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high/T2/xhigh ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T2/T2/high/T2/xhigh
 plan-row 3 T2/T2/high// ; T2/T2/high// | T2/T2/high// ; T2/T2/high// | T2/T2/high// | REJECT ; T2/T2/high// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/high// | T2/T2/high// ; T2/T2/high// ; T2/T2/high// | T2/T2/high// ; T2/T2/high// | T2/T2/high// | REJECT ; T2/T2/high// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/high// | T2/T2/high// ; T2/T2/high// ; T2/T2/high// | T2/T2/high// ; T2/T2/high// | T2/T2/high// | REJECT ; T2/T2/high// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/high// | T2/T2/high//
 plan-row 4 T2/T2/xhigh// ; T2/T2/xhigh// | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high// | REJECT ; T2/T2/xhigh// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high// ; T2/T2/xhigh// ; T2/T2/xhigh// | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high// | REJECT ; T2/T2/xhigh// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high// ; T2/T2/xhigh// ; T2/T2/xhigh// | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high// | REJECT ; T2/T2/xhigh// | T2/T2/high// | REJECT | T2/T2/high// ; T2/T2/xhigh// | T2/T2/high//
 plan-row 5 T2/T2/xhigh/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh | REJECT | T2/T2/high/T2/xhigh ; T2/T2/xhigh/T2/xhigh | T2/T2/high/T2/xhigh
@@ -545,74 +547,75 @@ plan-row 8 qwen/qwen/xhigh/T1/high ; qwen/qwen/xhigh/T1/high | qwen/T1/high/T1/h
 plan-row 9 qwen-draft/qwen/xhigh/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | T2/T2/xhigh// ; qwen-draft/T1/high/T1/high ; qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high | qwen-draft/T2/high/T1/high | REJECT ; qwen-draft/T1/high/T1/high | T2/T2/high// ; qwen-draft/qwen/xhigh/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | qwen-draft/T1/high/T1/high | qwen-draft/T2/high/T1/high | qwen-draft/T2/high/T1/high ; qwen-draft/qwen/xhigh/T1/high | T2/T2/xhigh//
 plan-row a qwen/T1/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high | REJECT ; qwen/T1/high/T2/high | T2/T2/high/T2/xhigh ; qwen/T1/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high | REJECT ; qwen/T1/high/T2/high | T2/T2/high/T2/xhigh ; qwen/T1/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high ; qwen/T1/high/T2/high | qwen/T2/high/T2/high | qwen/T2/high/T2/high | REJECT ; qwen/T1/high/T2/high | T2/T2/high/T2/xhigh
 plan-row b qwen-draft/T1/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high | REJECT ; qwen-draft/T1/high/T2/high | T2/T2/high/T2/xhigh ; qwen-draft/T1/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high | REJECT ; qwen-draft/T1/high/T2/high | T2/T2/high/T2/xhigh ; qwen-draft/T1/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high ; qwen-draft/T1/high/T2/high | qwen-draft/T2/high/T2/high | qwen-draft/T2/high/T2/high | REJECT ; qwen-draft/T1/high/T2/high | T2/T2/high/T2/xhigh
-plan-row c qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high//
-plan-row d T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high//
-plan-row e T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high//
-plan-row f T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high
-plan-row g qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/haiku/medium//
+plan-row c T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh ; T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh ; T1/T2/xhigh// ; T1/T2/xhigh// | T1/T2/high// ; T1/T2/xhigh// | T1/T2/high// | REJECT ; T1/T2/xhigh// | T1/T2/high// | REJECT | T1/T2/high// ; T1/T2/xhigh// | T2/T2/high/T2/xhigh
+plan-row d qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high// | qwen/T2/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/T1/high//
+plan-row e T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high//
+plan-row f T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high//
+plan-row g T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high
+plan-row h qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/haiku/medium//
 explicit empty-slot v1 scout none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit empty-slot v1 scout none high 1111111111111111111111111111111111111111111111111111111111111111
-explicit empty-slot v1 scout none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 scout t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 scout t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 scout t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 scout force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 scout force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 scout force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 scout none critical 1111111111111111111111111111111111111111111111111111111111111111
+explicit empty-slot v1 scout t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 scout t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 scout t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 scout force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 scout force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 scout force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit empty-slot v1 mechanical none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit empty-slot v1 mechanical none high 4411111111111111411111111111111111111111111111111111111111111111
-explicit empty-slot v1 mechanical none critical 0022222222222222022222222222222222222222222222222222222222222222
-explicit empty-slot v1 mechanical t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 mechanical t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 mechanical t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 mechanical force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 mechanical force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 mechanical force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 mechanical none critical 0033333333333333033333333333333333333333333333333333333333333333
+explicit empty-slot v1 mechanical t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 mechanical t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 mechanical t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 mechanical force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 mechanical force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 mechanical force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit empty-slot v1 implement none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit empty-slot v1 implement none high 4411111111111111411111111111111111111111111111111111111111111111
-explicit empty-slot v1 implement none critical 0022222222222222022222222222222222222222222222222222222222222222
-explicit empty-slot v1 implement t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 implement t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 implement t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 implement force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 implement force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 implement force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 implement none critical 0033333333333333033333333333333333333333333333333333333333333333
+explicit empty-slot v1 implement t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 implement t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 implement t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 implement force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 implement force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 implement force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit empty-slot v1 debug-design none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit empty-slot v1 debug-design none high 1111111111111111111111111111111111111111111111111111111111111111
-explicit empty-slot v1 debug-design none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 debug-design t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 debug-design t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 debug-design t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 debug-design force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 debug-design force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 debug-design force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 debug-design none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 debug-design t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 debug-design t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 debug-design t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 debug-design force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 debug-design force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 debug-design force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit empty-slot v1 review none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit empty-slot v1 review none high 1111111111111111111111111111111111111111111111111111111111111111
-explicit empty-slot v1 review none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 review t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 review t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 review t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 review force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 review force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 review force critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 plan none normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 plan none high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 plan none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 plan t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 plan t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 plan t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 plan force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 plan force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 plan force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 review none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 review t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 review t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 review t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 review force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 review force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 review force critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 plan none normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 plan none high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 plan none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 plan t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 plan t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 plan t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 plan force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 plan force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 plan force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit empty-slot v1 ro none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit empty-slot v1 ro none high 4411111111111111411111111111111111111111111111111111111111111111
-explicit empty-slot v1 ro none critical 0022222222222222022222222222222222222222222222222222222222222222
-explicit empty-slot v1 ro t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 ro t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 ro t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 ro force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 ro force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 ro force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 ro none critical 0033333333333333033333333333333333333333333333333333333333333333
+explicit empty-slot v1 ro t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 ro t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 ro t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 ro force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 ro force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 ro force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit empty-slot v1 pq none normal 4444444444444444444444444444444444444444444444444444444444444444
 explicit empty-slot v1 pq none high 4444444444444444444444444444444444444444444444444444444444444444
 explicit empty-slot v1 pq none critical 4444444444444444444444444444444444444444444444444444444444444444
@@ -631,24 +634,24 @@ explicit empty-slot v1 p1 t2 critical 111111111111111111111111111111111111111111
 explicit empty-slot v1 p1 force normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit empty-slot v1 p1 force high 1111111111111111111111111111111111111111111111111111111111111111
 explicit empty-slot v1 p1 force critical 1111111111111111111111111111111111111111111111111111111111111111
-explicit empty-slot v1 p2 none normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 p2 none high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 p2 none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 p2 t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 p2 t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 p2 t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 p2 force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 p2 force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 p2 force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 p2 none normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 p2 none high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 p2 none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 p2 t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 p2 t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 p2 t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 p2 force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 p2 force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 p2 force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit empty-slot v1 m1 none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit empty-slot v1 m1 none high 1111111111111111111111111111111111111111111111111111111111111111
-explicit empty-slot v1 m1 none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 m1 t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 m1 t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 m1 t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 m1 force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v1 m1 force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v1 m1 force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 m1 none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 m1 t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 m1 t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 m1 t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 m1 force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v1 m1 force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v1 m1 force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit empty-slot v2 scout none normal 5555555555555555555555555555555555555555555555555555555555555555
 explicit empty-slot v2 scout none high 5555555555555555555555555555555555555555555555555555555555555555
 explicit empty-slot v2 scout none critical 5555555555555555555555555555555555555555555555555555555555555555
@@ -660,31 +663,31 @@ explicit empty-slot v2 scout force high 5555555555555555555555555555555555555555
 explicit empty-slot v2 scout force critical 5555555555555555555555555555555555555555555555555555555555555555
 explicit empty-slot v2 mechanical none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit empty-slot v2 mechanical none high 4411111111111111411111111111111111111111111111111111111111111111
-explicit empty-slot v2 mechanical none critical 0022222222222222022222222222222222222222222222222222222222222222
-explicit empty-slot v2 mechanical t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v2 mechanical t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 mechanical t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 mechanical force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v2 mechanical force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 mechanical force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 mechanical none critical 0033333333333333033333333333333333333333333333333333333333333333
+explicit empty-slot v2 mechanical t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 mechanical t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 mechanical t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 mechanical force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 mechanical force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 mechanical force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit empty-slot v2 implement none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit empty-slot v2 implement none high 4411111111111111411111111111111111111111111111111111111111111111
-explicit empty-slot v2 implement none critical 0022222222222222022222222222222222222222222222222222222222222222
-explicit empty-slot v2 implement t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v2 implement t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 implement t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 implement force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v2 implement force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 implement force critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 debug-design none normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v2 debug-design none high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 debug-design none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 debug-design t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v2 debug-design t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 debug-design t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 debug-design force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v2 debug-design force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 debug-design force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 implement none critical 0033333333333333033333333333333333333333333333333333333333333333
+explicit empty-slot v2 implement t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 implement t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 implement t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 implement force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 implement force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 implement force critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 debug-design none normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 debug-design none high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 debug-design none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 debug-design t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 debug-design t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 debug-design t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 debug-design force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 debug-design force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 debug-design force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit empty-slot v2 review none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit empty-slot v2 review none high 1111111111111111111111111111111111111111111111111111111111111111
 explicit empty-slot v2 review none critical 1111111111111111111111111111111111111111111111111111111111111111
@@ -694,19 +697,19 @@ explicit empty-slot v2 review t2 critical 11111111111111111111111111111111111111
 explicit empty-slot v2 review force normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit empty-slot v2 review force high 1111111111111111111111111111111111111111111111111111111111111111
 explicit empty-slot v2 review force critical 1111111111111111111111111111111111111111111111111111111111111111
-explicit empty-slot v2 plan none normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v2 plan none high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 plan none critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 plan t2 normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v2 plan t2 high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 plan t2 critical 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 plan force normal 3333333333333333333333333333333333333333333333333333333333333333
-explicit empty-slot v2 plan force high 2222222222222222222222222222222222222222222222222222222222222222
-explicit empty-slot v2 plan force critical 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 plan none normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 plan none high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 plan none critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 plan t2 normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 plan t2 high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 plan t2 critical 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 plan force normal 2222222222222222222222222222222222222222222222222222222222222222
+explicit empty-slot v2 plan force high 3333333333333333333333333333333333333333333333333333333333333333
+explicit empty-slot v2 plan force critical 3333333333333333333333333333333333333333333333333333333333333333
 explicit-row 0 T1/high REJECT REJECT REJECT REJECT T1/high T1/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T1/high REJECT REJECT REJECT REJECT T1/high T1/xhigh REJECT T2/high T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
 explicit-row 1 T1/xhigh REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
-explicit-row 2 T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT
-explicit-row 3 T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT
+explicit-row 2 T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT
+explicit-row 3 T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT
 explicit-row 4 qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT haiku/medium REJECT REJECT REJECT haiku/medium haiku/high haiku/xhigh REJECT T1/xhigh T1/off T1/minimal T1/low T1/medium T1/high T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
 explicit-row 5 qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT haiku/medium haiku/off haiku/minimal haiku/low haiku/medium haiku/high haiku/xhigh REJECT T1/xhigh T1/off T1/minimal T1/low T1/medium T1/high T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
 select empty-slot local=up cloudRunning=0 cloud=open qwen-local:local/qwen:xhigh qwen-local:local/qwen:xhigh

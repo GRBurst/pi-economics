@@ -43,8 +43,8 @@ export function defaults(): Settings {
         "1": row(C(1, 0), C(1, 1), C(2, 1)),
         "2": row(C(2, 0), C(2, 1), C(2, 1, 2, 1)),
       },
-      read: readRows(C(3, 1)),
-      review: readRows(C(3, 1)),
+      read: readRows(C(2, 1)), // D12 (OD13): a critical read-2 task runs at W2
+      review: readRows(C(3, 1)), // a review keeps today's row 2 critical (spec §4.4)
     },
     readOnlyReview: "review",
     contextFit: 0,

@@ -41,8 +41,10 @@ test("M1: no spawn throws when a leg or a floor lies above top(a): opus blank, s
 test("M1: opus blank at critical — a review above top(write) is lowered (Sonnet routes, as base did); a worker above it rejects cleanly", async () => {
   assert.equal(await spawnT(OPUS_BLANK, "implement", "critical"), `${SONNET} high`);
   assert.match(await spawnT(OPUS_BLANK, "implement", "critical", ["security"]), /^REJECT no enabled member reaches write level 2 \(the top of write is 1/);
-  assert.match(await spawnT(OPUS_BLANK, "scout", "critical"), /^REJECT no enabled member reaches read level 3 \(the top of read is 2/);
-  assert.match(await spawnT(OPUS_BLANK, "review", "critical", ["security"]), /^REJECT no enabled member reaches read level 3/);
+  // T5.2: with Opus blank the fixture's tables have legs above the top, so the loader uses the defaults' tables ("default
+  // used"); since D12 their read row 2 critical is W2·1, so scout critical routes to Sonnet instead of rejecting at W3.
+  assert.equal(await spawnT(OPUS_BLANK, "scout", "critical"), `${SONNET} xhigh`);
+  assert.match(await spawnT(OPUS_BLANK, "review", "critical", ["security"]), /^REJECT no enabled member reaches read level 3 \(the top of read is 2/);
 });
 
 test("M1: sonnet+opus blank — Qwen routes with its review lowered; a raised worker and the read floors reject cleanly", async () => {
