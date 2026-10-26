@@ -101,7 +101,7 @@ test("respawn: write 0 → 1 → 2 → 2 → reject, the rejection text unchange
   const st: AttemptState = new Map();
   assert.deepEqual(rsT(st, "t0", undefined, L(0)), { ok: true, value: { worker: L(0), reasons: [] } });
   assert.deepEqual(st.get("t0"), { member: "qwen-cloud", ranMember: "qwen-cloud", retries: 0 });
-  assert.deepEqual(rsT(st, "t1", "t0", L(0)), { ok: true, value: { worker: L(1), reasons: ["escalated qwen → T1 after failure of t0"], esc: { ranMember: "qwen-cloud", fromLevel: 0, toLevel: 1 } } });
+  assert.deepEqual(rsT(st, "t1", "t0", L(0)), { ok: true, value: { worker: L(1), reasons: ["escalated qwen → T1 after failure of t0"], esc: { ranMember: "qwen-cloud", fromLevel: 0, toLevel: 1, known: true } } });
   assert.deepEqual(st.get("t1"), { member: "sonnet", ranMember: "sonnet", retries: 0 });
   const t2 = rsT(st, "t2", "t1", L(0));
   assert.ok(t2.ok && t2.value.worker.level === 2 && t2.value.reasons[0] === "escalated T1 → T2 after failure of t1");
@@ -115,30 +115,31 @@ test("respawn: write 0 → 1 → 2 → 2 → reject, the rejection text unchange
 test("respawn: a plan above the target stands, recording its own member with retries 0 (mi2)", () => {
   const st: AttemptState = new Map();
   rsT(st, "t0", undefined, L(0));
-  assert.deepEqual(rsT(st, "t1", "t0", L(2, 1)), { ok: true, value: { worker: L(2, 1), reasons: [], esc: { ranMember: "qwen-cloud", fromLevel: 0, toLevel: 2 } } });
+  assert.deepEqual(rsT(st, "t1", "t0", L(2, 1)), { ok: true, value: { worker: L(2, 1), reasons: [], esc: { ranMember: "qwen-cloud", fromLevel: 0, toLevel: 2, known: true } } });
   assert.deepEqual(st.get("t1"), { member: "opus", ranMember: "opus", retries: 0 });
 });
 
 test("respawn: an unknown attemptOf is a failure at the planned member", () => {
   const r = rsT(new Map(), "t2", "gone", L(0));
   assert.ok(r.ok && r.value.worker.level === 1 && r.value.esc?.fromLevel === 0 && r.value.esc.ranMember === "qwen-cloud");
+  assert.equal(r.ok && r.value.esc?.known, false); // RG6: the stand-in is not where the attempt ran
 });
 
 test("respawn: another kind is compared on the new card's scale (scout after implement: read(qwen) = 0 → 2)", () => {
   const st: AttemptState = new Map();
   rsT(st, "t0", undefined, L(0));
   const r = rsT(st, "t1", "t0", L(2), "read");
-  assert.deepEqual(r, { ok: true, value: { worker: L(2), reasons: ["escalated qwen → T1 after failure of t0"], esc: { ranMember: "qwen-cloud", fromLevel: 0, toLevel: 2 } } });
+  assert.deepEqual(r, { ok: true, value: { worker: L(2), reasons: ["escalated qwen → T1 after failure of t0"], esc: { ranMember: "qwen-cloud", fromLevel: 0, toLevel: 2, known: true } } });
 });
 
 test("respawn: esc carries the member the task ran on; fromRan raises from to it (D7)", () => {
   const st: AttemptState = new Map([["t0", { member: "qwen-cloud", ranMember: "sonnet", retries: 0 }]]);
   const plain = rs(st, "t1", "t0", L(0));
   assert.ok(plain.ok && plain.value.worker.level === 1);
-  assert.deepEqual(plain.ok && plain.value.esc, { ranMember: "sonnet", fromLevel: 0, toLevel: 1 });
+  assert.deepEqual(plain.ok && plain.value.esc, { ranMember: "sonnet", fromLevel: 0, toLevel: 1, known: true });
   const ran = rs(st, "t2", "t0", L(0), "write", true);
   assert.ok(ran.ok && ran.value.worker.level === 2);
-  assert.deepEqual(ran.ok && ran.value.esc, { ranMember: "sonnet", fromLevel: 1, toLevel: 2 });
+  assert.deepEqual(ran.ok && ran.value.esc, { ranMember: "sonnet", fromLevel: 1, toLevel: 2, known: true });
 });
 
 test("P-att (members): over every re-spawn sequence of length ≤ 4 on both scales, retries per lineage and level ≤ 1", () => {

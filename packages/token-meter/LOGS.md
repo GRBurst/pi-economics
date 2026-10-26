@@ -122,7 +122,8 @@ whose Qwen is busy logs `workerTier: qwen`, `workerEffort: xhigh`, and e.g. `wor
 (intention to treat); the model a task ran on is `workerModel`, updated by its last `reroute.toModel`. On
 `reroute` and `escalate`: `fromModel`/`toModel`, the models on both routes; `escalate` adds the re-spawn's
 `ability` and `fromLevel`/`toLevel`. `escalate.from` is the route the failed attempt ran on last (after its
-reroutes); older lines may carry `"?"` there.
+reroutes). It is `"?"` on older lines, and on a re-spawn whose failed task the router does not know (its attempt state
+is in memory: a restart, a hand-off, a mistyped `attemptOf`); such a line has no `fromModel` and no `fromLevel`.
 
 ### Older lines: the old → new mapping
 

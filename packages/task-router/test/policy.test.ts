@@ -492,6 +492,21 @@ test("T4.2 escalate fields: a killed cloud child's re-spawn logs from cloud (not
   });
 });
 
+// RG6 (review-g4 Medium 2; main's decision, spec \u00a74.6 erratum): the attempt state lives in memory, so after a restart or a typo
+// the failed task is unknown. Step 1's stand-in (the new plan's member) still sets the escalation level, but the line does not
+// claim it as the route the attempt ran on: `from` "?", no `fromModel`, no `fromLevel`; the new child's side as written.
+test("RG6: a re-spawn of a task this process never saw logs from \"?\" without fromModel and fromLevel", async () => {
+  const h = harness({ base: "today" });
+  accepted(await h.a.spawn({ name: "w2b", task: card({ attemptOf: "typo" }) }));
+  emitSpawn(h, "w2b");
+  assert.deepEqual(escalateLine(h, "w2b"), { from: "?", to: "T1", toModel: SONNET, ability: "write", toLevel: 1, attemptOf: "typo" });
+  accepted(await h.a.spawn({ name: "w1b", task: card({ t2: ["security"], attemptOf: "w1-from-yesterday" }) }));
+  emitSpawn(h, "w1b");
+  assert.deepEqual(escalateLine(h, "w1b"), {
+    from: "?", to: "T2", toModel: "anthropic/claude-opus-5-5", ability: "write", toLevel: 2, attemptOf: "w1-from-yesterday",
+  });
+});
+
 test("T4.2 escalate fields: after a failover to Sonnet the re-spawn logs from T1 (the member it ran on)", async () => {
   const h = harness({ base: "today", health: { health: 503, slots: 200 } }); // local down: the move goes to Sonnet
   assert.equal((accepted(await h.a.spawn({ name: "q1", task: card() })) as any).model, CLOUD);

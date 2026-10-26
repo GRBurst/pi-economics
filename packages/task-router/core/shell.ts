@@ -101,9 +101,11 @@ export function install(pi: PiLike, deps: Deps) {
     if (e.type === "spawn" && c) {
       log.spawn({ taskId: e.name, card: c.card, plan: c.plan, start: c.start, arm: armOf(c.parentSession), sessionId: e.childSessionId, parentSessionId: c.parentSession, unresolved: c.unresolved });
       if (c.esc) { // from the attempt state (D9): the failed attempt's entry may be gone (killed), its ranMember is not
-        const ran = settings.models[c.esc.ranMember], to = settings.models[c.start.member];
+        // An unknown attempt (RG6): its stand-in member is the new plan's, not where it ran, so the line names no `from` side.
+        const ran = c.esc.known ? settings.models[c.esc.ranMember] : undefined, to = settings.models[c.start.member];
         log.escalate(e.name, ran?.route ?? "?", to?.route ?? "?", c.card.attemptOf, {
-          fromModel: ran?.model, toModel: c.start.model, ability: c.plan.ability, fromLevel: c.esc.fromLevel, toLevel: c.esc.toLevel,
+          fromModel: ran?.model, toModel: c.start.model, ability: c.plan.ability, ...(c.esc.known ? { fromLevel: c.esc.fromLevel } : {}),
+          toLevel: c.esc.toLevel,
         });
       }
     }
