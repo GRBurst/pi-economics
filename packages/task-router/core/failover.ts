@@ -13,10 +13,12 @@ export function createFailover(d: PolicyDeps & {
   /** The first of the child's candidates (`Child.failover`) that is enabled, on another provider than the failed member, and free
    *  now; none → the child stays. The effort: the target's at the leg's step. The entry moves to the target in the pick's
    *  synchronous step, before `retune` (RD5, AC3): a spawn during the await sees the target taken; a throw restores it.
-   *  `prev` is the pending marker: while a move is in flight, a further error is the old provider's and starts none. */
+   *  `prev` is the pending marker: while a move is in flight, a further error is the old provider's and starts none. It is read
+   *  twice: before the candidates are taken from the entry (a later move would compute them from the target), and after the
+   *  probes (a move that started while another was probing). */
   const move = async (name: string, c: Child, reason: string): Promise<void> => {
     const api = d.api();
-    if (!api) return;
+    if (!api || c.prev) return;
     const failed = d.settings.models[c.member];
     const cands = c.failover.map((n) => named(d.settings.models, n)).filter((m): m is Named =>
       !!m && m.model !== "" && m.name !== c.member && providerOf(m) !== providerOf(failed));

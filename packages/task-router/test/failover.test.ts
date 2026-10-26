@@ -243,6 +243,52 @@ test("a second error during an in-flight retune starts no second move (no move b
   assert.deepEqual(reroutes(h).map((r) => [r.taskId, r.from, r.to]), [["q1", "cloud", "local"]]);
 });
 
+// RG5 (review-g4 Medium 1): the pending marker is read twice, at the start of a move (before its candidates are taken from the
+// entry) and after its probes (an error that arrives while the first move probes). Probes here are gated through `fetch`.
+const slowFetch = () => {
+  const ctl: { gate?: Promise<void> } = {};
+  return { ctl, fetch: async (_url: string) => { await ctl.gate; return { status: 200 }; } };
+};
+
+test("RG5: a duplicate error whose probe outlasts the first move's retune starts no second move (the check before the probes)", async () => {
+  const f = slowFetch();
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 }, extra: { fetch: f.fetch } as never });
+  await spawnAll(h, ["q0", "q1", "q2"]); // cloud, cloud, local
+  listAs(h, { q0: "running", q1: "running", q2: "running" });
+  h.clock.t += 61_000; // the spawn reservations and the probe cache have expired
+  listAs(h, { q0: "idle" }); // a cloud slot is free
+  const rg = gate();
+  h.a.control.gate = rg.p;
+  h.a.emit(err("q2", "retries exhausted")); // q2: local → cloud (no probe: the cloud has no health URL)
+  await settle(); await settle();
+  const fg = gate();
+  f.ctl.gate = fg.p; // the next probe is slow
+  h.a.emit(err("q2", "retries exhausted")); // the same failure again: without the early check it would probe local
+  await settle();
+  rg.open(); await settle(); await settle(); // the first move completes: its marker is gone
+  fg.open(); await settle(); await settle(); await settle();
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q2", CLOUD]]);
+  assert.deepEqual(reroutes(h).map((r) => [r.taskId, r.from, r.to]), [["q2", "local", "cloud"]]);
+});
+
+test("RG5: a duplicate error during the first move's probes starts no second move (the check after the probes)", async () => {
+  const f = slowFetch();
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 }, extra: { fetch: f.fetch } as never });
+  await spawnAll(h, ["q0", "q1"]); // cloud, cloud
+  listAs(h, { q0: "running", q1: "running" });
+  h.clock.t += 31_000; // the probe cache has expired
+  const fg = gate(), rg = gate();
+  f.ctl.gate = fg.p;
+  h.a.control.gate = rg.p;
+  h.a.emit(err("q1", "retries exhausted")); // the first move probes local
+  await settle();
+  h.a.emit(err("q1", "retries exhausted")); // during those probes: neither move has written its marker yet
+  await settle();
+  fg.open(); await settle(); await settle(); await settle();
+  rg.open(); await settle(); await settle(); await settle();
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", LOCAL]]);
+});
+
 test("retune throws → entry restored, the target's slot free at once, one warning, no reroute line", async () => {
   const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
   await spawnAll(h, ["q0", "q1"]); // cloud, cloud: its two slots
