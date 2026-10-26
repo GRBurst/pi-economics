@@ -13,7 +13,7 @@ Paths are relative to this repository's root, unless noted.
 | Component | What it is | Loaded in |
 |---|---|---|
 | `packages/token-meter/` (`pi-token-meter`) | One JSONL line per provider request (tokens, cost, quota headers, retries) into `<agentDir>/meter/YYYY-MM.jsonl`; no prompt/response text. Also the `meter-report` and `pi-analyse` binaries and the log manual `LOGS.md` (linked to `~/.pi/agent/LOGS.md`). | main + children |
-| `packages/task-router/` (`pi-task-router`) | Routes `spawn_subagent` calls by task card: tier/effort by deterministic rule, Qwen chain, attempts, verify gate, runaway/context/effort guards, delegation nudge, fresh-on-cold, outcome log, `task_verdict` tool, system-prompt card section. | main only |
+| `packages/task-router/` (`pi-task-router`) | Routes `spawn_subagent` calls by task card: a required ability and level by rule, legs from the importance tables, the cheapest free member that meets a leg (cost order, slots, health probes, daily caps, a queue wait), failover of an erroring child to another provider, attempts (a re-spawn goes one level above the member the failed task ran on), verify gate, runaway/context/effort guards, delegation nudge, fresh-on-cold, outcome log, `task_verdict` tool, system-prompt card section. | main only |
 | `packages/cache-lifecycle/` (`pi-cache-lifecycle`) | Warming decision (main with running children, child awaiting a reply → warm; capped), elision of stale tool results/thinking after cache expiry, optional 1 h cache TTL for main, the pi-1.0.0 message-identity shim that keeps cache warming alive past custom messages, `peek-after-mask` guard log. | main + children |
 | `packages/experiments/` (`pi-experiments`) | One fractional-factorial arm per main session (explore/exploit/off); children inherit; other extensions read factor flags through `__piExperimentsApi_v1.flag(name, default)`; correction guard log and `/rate 1-5`. | main only |
 | `packages/retry/package.nix` + `patches/pi-retry/pi-retry-free-cap.patch` | Pinned input `inputs.pi-retry` (rev `60a3b08`, 0.11.3) with a local patch: the OpenRouter free-tier daily cap is not retried (it lasts until 00:00 UTC). Print/json mode retries inline upstream since 0.11.0 (it was the local `pi-retry-print-mode.patch` until the 2026-10-25 lock update), so `pi -p` retries 429s. Upstream vitest suite on the patched source = flake check `pi-retry`. | main + children (linked child extension) |
@@ -38,8 +38,8 @@ version, integer, 1 since 2026-10-03; absent = 0, legacy).
 | Path | Contents |
 |---|---|
 | `meter/YYYY-MM.jsonl` | Meter lines: `ts, sessionId, parentSessionId, arm, provider, model, effort, kind (turn\|warming), input, cacheRead, cacheWrite, output, reasoning, costUsd, status (code or "error"), retries, retryWaitMs, q5h, q5hReset, q7d, q7dReset, overage, claim, fallback, rawRatelimit?`. OpenRouter 429s surface only in `message_end`, so errors are logged there as `status:"error"` with `errorClass`. |
-| `task-router/outcomes/YYYY-MM.jsonl` | `spawn` (taskId, card hash, route + reasons, importance, arm, child sessionId), `reroute`, `check` (exit, duration), `corrective`, `escalate`, `verdict`; kill without verdict → `unjudged`. Unrouted spawns (routing off) are logged too. |
-| `task-router/cloud-count.json` | Cloud-Qwen requests per UTC day (the account cap is shared with the user's own free sessions, so this is a lower bound; the 429 `limit_source` is authoritative). |
+| `task-router/outcomes/YYYY-MM.jsonl` | `spawn` (taskId, card hash, route + reasons, the plan's ability, level and legs, the member and model it started on with its effort and wait, importance, arm, child sessionId), `reroute` (with both models), `check` (exit, duration), `corrective`, `escalate` (from the member the failed task ran on, with models and levels), `verdict`; kill without verdict → `unjudged`. Unrouted spawns (routing off) are logged too. |
+| `task-router/member-count.json` | Requests per UTC day of each member with a `dailyCap` (`{"<day>": {"<member>": n}}`; an account cap is shared with the user's own sessions, so this is a lower bound; the provider's cap error is authoritative). |
 | `guards/events.jsonl` | Guard events, shared one-line format `{ts, sessionId, arm, event, value?}`: `peek-after-mask` (cache-lifecycle), `correction` and `rating` (experiments). Never prompt text, never tool arguments. |
 | `experiments/assignments.jsonl` | One row per main session `{ts, sessionId, arm, design, mode, flags}`; `design` is `"v2"` (six factors, 6-char arm ids); a line without it is v1 (five factors, 5-char ids). Sticky (a session keeps its arm, a resumed v1 session too). |
 | `experiments/state.json` | `posterior` (per-arm reward ± sd) and `disabled` arms with reasons; written atomically by `meter-report --posterior`, run by hand (no timer). |
@@ -57,20 +57,60 @@ Code defaults (a settings file only overrides; unknown keys are ignored):
 
 - **token-meter** — `enabled: true`, `dir: "meter"`, `rawRatelimit: true`.
 - **task-router** — `t0Limits {files: 10, tokens: 150000}` (pilot-derived);
-  `models` (qwenLocal `llama/qwen3.8`, qwenCloud
-  `openrouter/qwen/qwen3.8-27b:free`, T1 Sonnet 5.5, T2 Opus 5.5);
-  `localHealthUrl: "http://<host>:11545"`; `cloudDailyCap: 950`; `queueMaxSec: 120`;
+  `models`, five members, each with its model, a tier label, a route, its
+  `abilities` (a level per ability, `write` and `read`), an effort ladder, a
+  context window, a cost and an order (cheapest first, then order), and
+  `slots`, `health` and `dailyCap` where they apply: `qwen-local`
+  (`llama/qwen3.8`, write 0, read 0, `xhigh`, 262144 tokens, cost 0, 1 slot,
+  health `http://<host>:11545`), `qwen-cloud` (the free cloud slot, empty: a
+  file that sets its model makes it an ordinary member after local, `order: 1`,
+  2 slots, `dailyCap: 950`), `haiku` (Haiku 5.5, write 0, read 1,
+  `medium`/`high`, 1M, cost 1), `sonnet` (Sonnet 5.5, write 1, read 2,
+  `high`/`xhigh`, 1M, cost 3), `opus` (Opus 5.5, write 2, read 3,
+  `high`/`xhigh`, 1M, cost 5); `models.<member>` merges field by field over
+  the default member, `model: ""` removes it;
+  `importanceTable {write, read, review}`: per level of the ability a cell per
+  importance (normal, high, critical), a worker leg (level, effort step) and
+  an optional review leg; read row 2 at critical is Sonnet xhigh without a
+  review (`scout`, `lookup`), the `review` table keeps Opus xhigh there; a
+  cell that is given replaces the default cell;
+  `readOnlyReview: "effort-step"` (a read-only profile at critical raises its
+  worker one effort step on the same model, else to the next member up,
+  instead of a review leg; where nothing can rise the review stays;
+  `"review"` keeps the review leg); `contextFit: 1` (a member whose window
+  cannot hold the card's files is no candidate; when no member that meets the
+  level holds them, the largest windows, with a context reason; never a
+  rejection; `0` turns the filter off); `queueMaxSec: 120` (a busy cheapest
+  pool is waited for this long before the next member; an explicit model
+  waits for its own member, then the spawn is rejected);
   `checkTimeoutSec: 900`; `runaway {requests: 150, usd: 10}`; `contextGuard: 0.5`;
-  `contextWindow {qwen: 262144, T1: 1000000, T2: 1000000}`;
   `freshOnCold {mode: "advise", minTokens: 150000}`; `maxBurstTurns: 1`;
   risk globs/keywords and per-category `t2Keywords` (defaults conservative);
-  `profiles {}` over the built-ins (scout `minTier T1` read-only answer;
-  mechanical/implement all-tools; debug-design minTier T1 +
-  systematic-debugging; review minTier T1 read-only + code-reviewer; plan T2
-  read-only+files + tdd-implementation-planner);
+  `profiles {}` over the built-ins (scout read 2, read-only, answer; lookup,
+  the narrow scout, read 2 like scout until the scout gate sets its level;
+  mechanical/implement all-tools; debug-design `minLevel 1` +
+  systematic-debugging; review read 2 on the `review` table, read-only +
+  code-reviewer; plan the top level, read-only+files +
+  tdd-implementation-planner); `randomize` and `spotCheck`
+  `enabled: false`;
   `delegation {nudge: "on", afterCalls: 6, tools: [edit, write, bash, grep, find, read], rule: "off"}`
   (`rule: "on"` opens the main session's Task cards section with the orchestrator rule; flag `delegationRule`);
   flags `routing / verifyGate / autoEscalate: true`.
+  **Rollback:** `packages/task-router/test/fixtures/today-config.json` as the
+  settings restores the routing before these defaults (the free cloud model
+  at `order: -1`, Haiku removed, read row 2 critical on Opus,
+  `readOnlyReview: "review"`, `contextFit: 0`); `router-golden` records its
+  decisions as the fixture `today`. **Legacy keys** are mapped, each with a
+  problem: `models.{qwenLocal,qwenCloud,T1,T2}` to `models.<member>.model`,
+  `localHealthUrl` to `models.qwen-local.health`, `cloudDailyCap` to
+  `models.qwen-cloud.dailyCap`, `contextWindow.{qwen,T1,T2}` to the members'
+  `contextWindow`, a profile's `tier`/`minTier` to `level`/`minLevel` (the
+  lowest level of the members with that tier label; dropped when no enabled
+  member has it). Where the new key is set too it wins (`legacy key …
+  ignored: … is set`). Settings problems (legacy keys, invalid members,
+  tables or profiles, each falling back to its default or dropped) go to the
+  console and, once per process, to a `ui.notify` (`task-router settings: …`)
+  in the main session.
 - **cache-lifecycle** — `warmPolicy: "orchestrator-aware"` (vs `native`),
   `mainCacheTtl: "5m"` (vs `"1h"`), `maskOnCold: "off"` (vs `"tools"`,
   `"tools+thinking"`), `protectedTailTokens: 20000`, `identityShim: true`.
@@ -185,11 +225,24 @@ skipped). Afterwards: `pi-bench judge --all`, then
   the user's return).
 - **Experiments**: only main sessions get assignment rows; children inherit.
   `explore` balances over all-time counts; in `exploit` an arm with < 2 units
-  is treated as mean 0 (optimistic, tried first). The cloud-daily-cap counter
-  is a lower bound and `cloudBlockedUntil` is in memory only (re-learned from
-  the next 429 after a restart). Children inherit only on the spawn event: a
+  is treated as mean 0 (optimistic, tried first). The router's daily-cap
+  counter (`member-count.json`) is a lower bound and a provider's block is in
+  memory only (re-learned from the next cap error after a restart). Children inherit only on the spawn event: a
   **resumed child** session has no arm (seen live 2026-10-03; `pi-analyse
   --check` names its lines).
+- **Router defaults rest on hypotheses**: Haiku's abilities (write 0, read 1)
+  are unmeasured until the scout gate (the bench's Haiku arm against local
+  Qwen and Sonnet); until then `lookup` routes like `scout` (read 2).
+- **The context estimate counts whole files**: the card's `files`, their
+  bytes / 3.6 per token, a new file 0; a task that reads a part of a large
+  file is over-estimated (the context reason says to list only the files the
+  task reads, or to split it), and files it reads without listing them are
+  not counted.
+- **Slots are per process**: reservations, waits and the attempt state live in
+  the main session's memory. Another pi session or client on the same server
+  is seen only through the member's health and `/slots` probe, two sessions
+  can each pick a member's last free slot, and a re-spawn after a restart
+  escalates from the new plan's member (`escalate.from` `"?"`).
 - **Masking is request-local**: it rewrites the outgoing wire, not the stored
   transcript — `context_map` still lists originals and previews; recovery is
   `context_peek`.

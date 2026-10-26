@@ -226,26 +226,48 @@ order 500, so they run first. The ops run only while `piSettings.enable` is
 
 ### `taskRouter` (`modules/task-router.nix`)
 
-The task-router, as it stands after the router redesign's Group 2 and its
-review fixes (source: the owner's host at commit `566fd0d`, "R'"; abilities
-and levels per member, `planSpawn` on the importance table), with the
-redesign's Group 3 selection in this repository: a leg runs on the cheapest
-free member among its candidates (cost order, slots, health probes, daily caps,
-the free tier's block; a busy cheapest pool is waited for up to
-`queueMaxSec`), and a provider error moves a child to a free member of its leg
-on another provider. The pick or the move reserves the slot at once (60 s, and
-while pi lists the child running), so concurrent spawns and moves never share
-one; an explicit `model` runs on its member alone (it waits `queueMaxSec`, then
-the spawn is rejected) and fails over only at or above it. It routes subagent spawns by task card through
-actor-subagents' spawn policy: level and effort by rule, the member selection,
-attempts and an outcome log (`<agentDir>/task-router/outcomes/YYYY-MM.jsonl`),
-and the `task_verdict` tool. Main session only: children do not route.
+The task-router, as it stands after the router redesign's Group 5 (the new
+defaults; Groups 1–2 came from the owner's host at commit `566fd0d`, "R'";
+Groups 3–5 were made in this repository). It routes subagent spawns by task
+card through actor-subagents' spawn policy: the card gives a required ability
+and level (abilities and levels per member), the importance table gives the
+legs (worker, and a review where the cell has one), and a leg runs on the
+cheapest free member among its candidates (cost order, slots, health probes,
+daily caps, a provider's block; a busy cheapest pool is waited for up to
+`queueMaxSec`, then the next member). There is no Qwen chain: under the
+defaults the local Qwen comes first and Haiku after it; the free-cloud slot
+(`models.qwen-cloud`) is empty, and a settings file that names its model makes
+it an ordinary member after local. A provider error moves a child to a free
+member of its leg on another provider. The pick or the move reserves the slot
+at once (60 s, and while pi lists the child running), so concurrent spawns and
+moves never share one; an explicit `model` runs on its member alone (it waits
+`queueMaxSec`, then the spawn is rejected) and fails over only at or above it.
+A re-spawn (`attemptOf`) goes one level above the member the failed task ran
+on. Spawns, moves, escalations and verdicts go to the outcome log
+(`<agentDir>/task-router/outcomes/YYYY-MM.jsonl`); the router registers the
+`task_verdict` tool. Main session only: children do not route.
 
 | Option | Default | Effect |
 |---|---|---|
 | `enable` | `false` | registry entry `task-router` (link `<agentDir>/extensions/task-router` → the package; `forChildren = false`) |
 | `package` | the flake's `packages/task-router` | the extension (`package.json`, `index.ts`, `core/`); its tests run when it builds |
-| `settings` | `{}` | written to `<agentDir>/task-router/settings.json` when non-empty; free-form, the schema and defaults are `packages/task-router/core/settings.ts` (`models.<member>.model` names a member's model, `""` removes the member) |
+| `settings` | `{}` | written to `<agentDir>/task-router/settings.json` when non-empty; free-form, the schema and defaults are `packages/task-router/core/settings.ts` (`models` and `importanceTable` merge over the defaults: `models.<member>` field by field, `model = ""` removes the member; a given table cell replaces the default cell); the rollback to the routing before the new defaults is `lib.importJSON` of `packages/task-router/test/fixtures/today-config.json` |
+
+Models are configured through `settings.models`, as in the option's example:
+
+```nix
+programs.piEconomics.taskRouter.settings = {
+  models = {
+    qwen-local.health = "http://localhost:11545"; # where the local server answers
+    haiku.model = ""; # no Haiku: write 0 falls back to Sonnet
+  };
+  queueMaxSec = 60;
+};
+```
+
+`packages/task-router/test/fixtures/models-example.json` (every member written
+out) is read by the package's settings test and by the `module-eval` case
+`task-router-models`.
 
 Hard dependency: `taskRouter` needs `actorSubagents` with `passthru.spawnPolicyApi >= 1`
 (the router registers through `registerSpawnPolicy`, and its shell swallows the
@@ -265,13 +287,17 @@ replaces that name only.
 **Golden test.** `checks/router-golden/golden.txt` records every decision of
 `planSpawn` over the router's own golden grid (`test/golden/grid.ts`: 146,880
 plan cases, 470,016 explicit-model cases) and of `resolveLeg` over the
-selection's 96 states (`select` lines, picks named by member), under the
-defaults and under a fixture with every member's model set and the free-cloud
-slot empty. `generate.ts <router dir>` prints it; the check `router-golden`
+selection's 96 states (`select` lines, picks named by member), under three
+settings: the defaults (`defaults`), a fixture with every member's model set
+and the free-cloud slot empty (`empty-slot`), and the rollback fixture
+`test/fixtures/today-config.json` (`today`, the routing before the new
+defaults, with the free cloud configured: the only recorded witness of that
+code). `generate.ts <router dir>` prints it; the check `router-golden`
 runs it on `packages/task-router`, diffs against the file (comment lines aside)
-and asserts P2 as an invariance: with the free-cloud slot empty, no selection
-picks it and the cloud's state (its running count, open, capped or blocked)
-changes no decision; a wait for the local slot is allowed. After a deliberate
+and asserts P2 as an invariance over the `empty-slot` and `defaults` lines:
+with the free-cloud slot empty, no selection picks it and the cloud's state
+(its running count, open, capped or blocked) changes no decision; a wait for
+the local slot is allowed. After a deliberate
 change of a decision, a group of the redesign re-records the file by hand
 (`node --experimental-strip-types checks/router-golden/generate.ts packages/task-router`,
 header `# R' = <source>, <date>`) and puts the diff of old and new file in its
@@ -317,7 +343,7 @@ points into `src`.
 | `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's two `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
 | `retry` | the patched pi-retry's vitest suite (300 tests) on the shared npm lock, and the greps that pin the free-cap patch and the inline print/json route |
 | `typecheck-retry` | `tsc --strict` over `retry.ts` and `src/`; the tests stay out (one upstream test and the free-cap patch's own test do not type-check; vitest runs them) |
-| `task-router` | the router's own tests (`node --test`, 402), run when it builds; includes the redesign's golden grid against its frozen oracle |
+| `task-router` | the router's own tests (`node --test`, 442), run when it builds; includes the redesign's golden grid against its frozen oracle, under the today fixture and under the defaults (the oracle with the default deltas) |
 | `typecheck-task-router` | `tsc --strict` over `index.ts`, `core/` and `test/` |
 | `iface-subagents-task-router`, `iface-experiments-task-router` | the router's copies of `__subagentsApi_v1` and `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`) are satisfied by the providers' types |
 | `router-golden` | every decision of the router on the golden grid and the selection, equal to the recorded ones; P2 (the invariance) over the empty-slot `select` lines |

@@ -24,7 +24,7 @@ export function defaults(): Settings {
     // long-horizon cross-module work (peak ≥ 200k), not on file count.
     t0Limits: { files: 10, tokens: 150000 },
     // Members (spec §4.2); `model: ""` = the member does not exist. Windows in tokens (Qwen 262K; Sonnet/Opus assumed 1M).
-    // Cloud `order: -1`: the free cloud sorts before local at equal cost (today's chain, spec §5.3).
+    // `order` breaks cost ties (lower first).
     models: {
       "qwen-local": {
         model: "llama/qwen3.8", tier: "qwen", route: "local", abilities: { write: 0, read: 0 }, efforts: ["xhigh"],
