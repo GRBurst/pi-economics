@@ -27,7 +27,7 @@ export function respawn(st: AttemptState, s: RouterSettings, i: { taskId: string
   const target = next(M, a, from);
   const tierAt = (l: number) => firstMeeting(M, a, l)?.tier ?? "?";
   if (target === from && prev.retries >= 1)
-    return { ok: false, errors: [`task ${i.attemptOf} already retried at ${tierAt(from)}; report the failure to the user instead of a third attempt`] };
+    return { ok: false, errors: [`task ${i.attemptOf} already retried at ${a} level ${from} (${tierAt(from)}); report the failure to the user instead of a third attempt`] };
   const esc = (toLevel: number): Escalation => ({ ranMember: prev.ranMember, fromLevel: from, toLevel, known });
   if (lvl(M[W.member], a) > target) {
     st.set(i.taskId, { member: W.member, ranMember: W.member, retries: 0 });

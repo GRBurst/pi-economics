@@ -52,7 +52,7 @@ test("explicit lower model is rejected with the routed reasons", async () => {
   const h = harness();
   const r = await h.a.spawn({ name: "o1", model: "anthropic/claude-sonnet-5-5", task: card({ t2: ["security"] }) });
   assert.ok("reject" in r);
-  assert.match(r.reject, /below the routed T2/);
+  assert.match(r.reject, /is below the routed level \(write 2, T2\): /); // T5.9 wording
 });
 
 const listAs = (h: ReturnType<typeof harness>, states: Record<string, "running" | "idle">) => {
@@ -143,7 +143,7 @@ test("meta carries the importance for the child's own spawns", async () => {
   assert.equal(child.meta.importance, "high"); // parent importance propagates (P-imp: max of sources)
 });
 
-test("respawn with attemptOf escalates one tier; a second retry at the same tier is rejected", async () => {
+test("respawn with attemptOf escalates one level; a second retry at the same level is rejected", async () => {
   const h = harness();
   await h.a.spawn({ name: "q1", task: card() });
   const r2 = accepted(await h.a.spawn({ name: "q1b", task: card({ attemptOf: "q1" }) })) as any;
@@ -258,7 +258,7 @@ test("defaults: all-t0 card → LOCAL xhigh; the free model explicit → rejecte
   assert.equal(existsSync(join(h.agentDir, "task-router", "member-count.json")), false);
   const x = await h.a.spawn({ name: "q2", model: CLOUD, task: card() });
   assert.ok("reject" in x);
-  assert.match(x.reject, /^model openrouter\/qwen\/qwen3\.8-27b:free is not in the routing table/);
+  assert.match(x.reject, /^model openrouter\/qwen\/qwen3\.8-27b:free is not an enabled member/);
 });
 
 test("a file that sets only the free cloud's model: an ordinary member after local (free, 2 slots, its cap counted)", async () => {
@@ -596,7 +596,7 @@ test("defaults (D11): an explicit Haiku on a write-0 plan starts at medium; with
   assert.deepEqual([r.model, r.thinkingLevel], [HAIKU, "medium"]);
   const x = await h.a.spawn({ name: "k2", model: HAIKU, thinkingLevel: "low", task: card() });
   assert.ok("reject" in x);
-  assert.match(x.reject, /^effort low is below the routed xhigh/);
+  assert.match(x.reject, /^effort low is below the routed medium on haiku's ladder \(medium, high\)$/);
 });
 
 // --- T5.6 (D6, OD17; spec §4.10 rows 4, 12–14): contextFit 1 by default — the files' tokens filter the candidates --------

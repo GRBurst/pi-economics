@@ -24,7 +24,7 @@ export function briefAppend(c: Card, p: Plan, complete: boolean, profile: Profil
   if (kind) lines.push(kind);
   if (p.review) {
     lines.push(
-      `Review required: a fresh ${p.review.tier} ${p.review.effort} agent reviews your diff and report before your parent accepts it. List the changed files, the check command and its result.`,
+      `Review required: a fresh ${p.review.tier} (${p.review.model}) ${p.review.effort} agent reviews your diff and report before your parent accepts it. List the changed files, the check command and its result.`,
     );
   }
   return [skills && `${skills}\n\n${GATE}`, lines.join("\n")].filter(Boolean).join("\n\n");

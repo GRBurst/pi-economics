@@ -18,10 +18,10 @@ const err = (r: ReturnType<typeof acceptModel>) => (r.ok ? "accepted" : r.errors
 
 test("rule 1: an unknown model is rejected listing the enabled models; a blank member's model is unknown", () => {
   const list = enabled(S.models).map((m) => m.model).join(", ");
-  assert.equal(err(acceptModel(QW, "no/such", "max", S)), `model no/such is not in the routing table (${list})`);
+  assert.equal(err(acceptModel(QW, "no/such", "max", S)), `model no/such is not an enabled member (${list})`);
   const b = parseSettings({ models: { opus: { model: "" } } }).settings;
   assert.equal(err(acceptModel(plan(b, "write", { level: 0, step: 0 }), OPUS, undefined, b)),
-    `model ${OPUS} is not in the routing table (${enabled(b.models).map((m) => m.model).join(", ")})`);
+    `model ${OPUS} is not an enabled member (${enabled(b.models).map((m) => m.model).join(", ")})`);
 });
 
 test("rule 2: max is rejected, also with a higher model", () => {
@@ -35,14 +35,14 @@ test("rule 3: a model without a level on the plan's ability", () => {
 });
 
 test("rule 5: a lower level is rejected with the plan's reasons", () => {
-  assert.equal(err(acceptModel(plan(S, "write", { level: 2, step: 0 }), SONNET, undefined, S)), `model ${SONNET} (T1) is below the routed T2: r1; r2`);
+  assert.equal(err(acceptModel(plan(S, "write", { level: 2, step: 0 }), SONNET, undefined, S)), `model ${SONNET} (T1) is below the routed level (write 2, T2): r1; r2`);
 });
 
 test("rule 6: at an equal level an effort below the plan's step on the model's own ladder is rejected", () => {
-  assert.equal(err(acceptModel(plan(S, "write", { level: 1, step: 1 }), SONNET, "high", S)), "effort high is below the routed xhigh for T1");
+  assert.equal(err(acceptModel(plan(S, "write", { level: 1, step: 1 }), SONNET, "high", S)), "effort high is below the routed xhigh on T1's ladder (high, xhigh)");
   assert.equal(err(acceptModel(plan(S, "write", { level: 1, step: 1 }), SONNET, "xhigh", S)), "accepted");
   // Haiku (write 0, ladder medium/high) on a Qwen write plan
-  assert.equal(err(acceptModel(QW, HAIKU, "low", S)), "effort low is below the routed xhigh for qwen");
+  assert.equal(err(acceptModel(QW, HAIKU, "low", S)), "effort low is below the routed medium on haiku's ladder (medium, high)");
   assert.deepEqual(acceptModel(QW, HAIKU, undefined, S), { ok: true, value: { member: "haiku", tier: "haiku", effort: "medium", pinned: true } });
   assert.deepEqual(acceptModel(QW, HAIKU, "high", S), { ok: true, value: { member: "haiku", tier: "haiku", effort: "high", pinned: true } });
 });
@@ -70,7 +70,7 @@ test("P-explicit: the first matching rule over every plan of planLegs × models 
           const want =
             !M ? "unknown" : e === "max" ? "max" : M.abilities[a] === undefined ? "nolevel" : lvl(M, a) < lvl(W, a) ? "below"
             : lvl(M, a) === lvl(W, a) && e !== undefined && stepOf(M, e) < Math.min(p.worker.step, M.efforts.length - 1) ? "effort" : "ok";
-          const got = r.ok ? "ok" : /not in the routing table/.test(r.errors[0]) ? "unknown" : /^effort max/.test(r.errors[0]) ? "max"
+          const got = r.ok ? "ok" : / is not an enabled member /.test(r.errors[0]) ? "unknown" : /^effort max/.test(r.errors[0]) ? "max"
             : / has no /.test(r.errors[0]) ? "nolevel" : /^effort .* is below/.test(r.errors[0]) ? "effort" : / is below the routed /.test(r.errors[0]) ? "below" : "?";
           assert.equal(got, want, `${a} ${level} ${i} ${JSON.stringify(o)} ${m} ${e}`);
           if (r.ok) {

@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { briefAppend } from "../core/brief.ts";
-import { planFor as tierPlanFor, type TierPlan } from "./tier-plan.ts";
+import { corePlanFor, type TierPlan } from "./tier-plan.ts";
 import { profileFor } from "../core/profile.ts";
 import { defaults } from "../core/settings.ts";
 import type { Card, Plan, Profile } from "../core/types.ts";
 
-// The fixtures are tier plans (test/tier-plan.ts); briefAppend reads only what both shapes share.
-const planFor = (...a: Parameters<typeof tierPlanFor>): Plan => tierPlanFor(...a) as unknown as Plan;
+// The fixtures are core plans under the today configuration (test/tier-plan.ts): the review leg names its model (T5.9).
+const planFor = corePlanFor;
 
 const T0 = { bounded: true, specified: true, verifiable: true, lowRisk: true, small: true, linear: true };
 const card = (o: Partial<Card> = {}): Card => ({ kind: "implement", files: ["a.ts", "b.md"], acceptance: ["x"], t0: T0, t2: [], ...o });
@@ -40,9 +40,9 @@ test("report limit is in every brief", () => {
 });
 
 test("review obligation iff plan.review", () => {
-  const OBL = "Review required: a fresh T1 high agent reviews your diff and report before your parent accepts it. List the changed files, the check command and its result.";
+  const OBL = "Review required: a fresh T1 (anthropic/claude-sonnet-5-5) high agent reviews your diff and report before your parent accepts it. List the changed files, the check command and its result.";
   assert.ok(briefAppend(card(), plan("qwen", "high"), true, prof("implement")).includes(OBL));
-  assert.ok(briefAppend(card(), plan("T2", "critical"), true, prof("implement")).includes(OBL.replace("T1 high", "T2 xhigh")));
+  assert.ok(briefAppend(card(), plan("T2", "critical"), true, prof("implement")).includes(OBL.replace("T1 (anthropic/claude-sonnet-5-5) high", "T2 (anthropic/claude-opus-5-5) xhigh")));
   assert.ok(!briefAppend(card(), plan("qwen", "normal"), true, prof("implement")).includes("Review required"));
   assert.ok(!briefAppend(card(), plan("T1", "high"), true, prof("implement")).includes("Review required"));
 });

@@ -53,3 +53,14 @@ test("the injected section and the rejection share one schema text (cannot drift
   const s = harness().router.settings;
   assert.ok(fire(harness()).task_cards.includes(cardSchema(s)));
 });
+
+// T5.9 (spec §9 M5): agent-facing text says "level", not "tier"; attemptOf escalates above the model the attempt ran on (D7);
+// an explicit model waits for its own slot and is never replaced (D14, OD19).
+test("T5.9 wording: the t2 and attemptOf lines and the section's last paragraph", () => {
+  const text = fire(harness()).task_cards;
+  const lines = text.split("\n");
+  assert.deepEqual(lines.filter((l: string) => l.startsWith("- t2: ")), [`- t2: triggers that force the top level: ${T2_VALUES.join(", ")}; [] if none`]);
+  assert.ok(text.includes("attemptOf: the name of a failed child (optional, escalates one level above the model it ran on)"));
+  assert.ok(text.endsWith("\n\nA rejected card comes back with the reason. Passing model/thinkingLevel is only accepted at or above the routed level; an explicit model waits for its own slot and is never replaced by another."));
+  assert.ok(!/\btier\b/.test(text), "no \"tier\" in the section");
+});

@@ -12,8 +12,8 @@ export function cardSchema(s: RouterSettings): string {
   return `- kind: ${kinds}
 - files: the files the task touches; check: command that proves it; acceptance: what must hold afterwards
 - t0: ${T0_KEYS.join(", ")}, each true only if you are sure; code verifies and can only lower them
-- t2: triggers that force the top tier: ${T2_VALUES.join(", ")}; [] if none
-- importance: "high" | "critical" (optional); attemptOf: the name of a failed child (optional, escalates one tier); skills: extra skill names (optional)
+- t2: triggers that force the top level: ${T2_VALUES.join(", ")}; [] if none
+- importance: "high" | "critical" (optional); attemptOf: the name of a failed child (optional, escalates one level above the model it ran on); skills: extra skill names (optional)
 - cwd: absolute or ~/ directory that files and check are relative to (optional, default your cwd); reviewOf: the task id a spot-check review card reviews (optional)`;
 }
 
@@ -41,5 +41,5 @@ ${cardSchema(s)}
 ${JSON.stringify(example, null, 2)}
 \`\`\`
 
-A rejected card comes back with the reason. Passing model/thinkingLevel is only accepted at or above the routed tier.`;
+A rejected card comes back with the reason. Passing model/thinkingLevel is only accepted at or above the routed level; an explicit model waits for its own slot and is never replaced by another.`;
 }

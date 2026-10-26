@@ -79,7 +79,7 @@ test("enabled=false never randomizes, even at share 1", async () => {
 
 test("draft randomized to T1 keeps its review line in the brief", async () => {
   const out = await run({ enabled: true, share: 1 }, () => 0);
-  assert.match(out.draft.r.briefAppend, /Review required: a fresh T1 high agent/);
+  assert.match(out.draft.r.briefAppend, /Review required: a fresh T1 \(anthropic\/claude-sonnet-5-5\) high agent/);
 });
 
 test("rng < share decides: 0.19 < 0.2 randomizes, 0.2 does not", () => {

@@ -218,7 +218,7 @@ test("acceptExplicit: rejections carry the reason; unknown model rejected", () =
 
 test("acceptExplicit: the unknown-model message lists the enabled members' models in selection order, blank ones left out (M1: cloud before local)", () => {
   const msg = (s = S) => { const r = acceptExplicit(planW(leg("T1", "high")), "openai/gpt-9", undefined, s); return r.ok ? "" : r.errors.join(); };
-  assert.equal(msg(), "model openai/gpt-9 is not in the routing table (openrouter/qwen/qwen3.8-27b:free, llama/qwen3.8, anthropic/claude-sonnet-5-5, anthropic/claude-opus-5-5)");
+  assert.equal(msg(), "model openai/gpt-9 is not an enabled member (openrouter/qwen/qwen3.8-27b:free, llama/qwen3.8, anthropic/claude-sonnet-5-5, anthropic/claude-opus-5-5)");
   const blanked = { ...S, models: { ...S.models, "qwen-cloud": { ...S.models["qwen-cloud"], model: "" } } };
-  assert.equal(msg(blanked), "model openai/gpt-9 is not in the routing table (llama/qwen3.8, anthropic/claude-sonnet-5-5, anthropic/claude-opus-5-5)");
+  assert.equal(msg(blanked), "model openai/gpt-9 is not an enabled member (llama/qwen3.8, anthropic/claude-sonnet-5-5, anthropic/claude-opus-5-5)");
 });

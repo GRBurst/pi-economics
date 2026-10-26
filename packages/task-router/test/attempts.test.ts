@@ -108,7 +108,7 @@ test("respawn: write 0 → 1 → 2 → 2 → reject, the rejection text unchange
   const t3 = rsT(st, "t3", "t2", L(0));
   assert.ok(t3.ok && t3.value.worker.level === 2 && t3.value.reasons[0] === "escalated T2 → T2 after failure of t2");
   assert.deepEqual(st.get("t3"), { member: "opus", ranMember: "opus", retries: 1 });
-  assert.deepEqual(rsT(st, "t4", "t3", L(0)), { ok: false, errors: ["task t3 already retried at T2; report the failure to the user instead of a third attempt"] });
+  assert.deepEqual(rsT(st, "t4", "t3", L(0)), { ok: false, errors: ["task t3 already retried at write level 2 (T2); report the failure to the user instead of a third attempt"] });
   assert.equal(st.has("t4"), false);
 });
 

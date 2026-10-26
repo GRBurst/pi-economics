@@ -39,12 +39,14 @@ const leg = (l: { tier: string; effort: ThinkingLevel }): TierLeg => ({ tier: l.
 const tierPlan = (p: Plan): TierPlan =>
   ({ worker: leg(p.worker), ...(p.review ? { review: leg(p.review) } : {}), base: p.base as Base, importance: p.importance, reasons: p.reasons });
 
-/** The plan of one first spawn through `planSpawn` under TODAY (no randomization draw). */
-export function planOf(c: Card, v: Verified, i: Importance, p = profileOf(c.kind)): TierPlan {
+/** The core plan of one first spawn through `planSpawn` under TODAY (no randomization draw): legs with member and model. */
+export function corePlanOf(c: Card, v: Verified, i: Importance, p = profileOf(c.kind)): Plan {
   const r = planSpawn({ settings: TODAY, attempts: new Map(), rng: () => 0.99 }, { taskId: "t", card: c, verified: v, profile: p, importance: i });
   if (!r.ok) throw new Error(r.errors.join("; "));
-  return tierPlan(r.value.plan);
+  return r.value.plan;
 }
+/** The same plan as a tier plan. */
+export const planOf = (c: Card, v: Verified, i: Importance, p = profileOf(c.kind)): TierPlan => tierPlan(corePlanOf(c, v, i, p));
 
 const ALL: T0 = { bounded: true, specified: true, verifiable: true, lowRisk: true, small: true, linear: true };
 /** A base is produced by its card: qwen all t0; qwen-draft small false; T1 linear + specified false; T2 t2: security. */
@@ -54,10 +56,11 @@ const CARD_OF: Record<Base, Pick<Card, "t0" | "t2">> = {
   T1: { t0: { ...ALL, linear: false, specified: false }, t2: [] },
   T2: { t0: ALL, t2: ["security"] },
 };
-export function planFor(base: Base, i: Importance, kind: string, p?: Profile): TierPlan {
+export function corePlanFor(base: Base, i: Importance, kind: string, p?: Profile): Plan {
   const c: Card = { kind, files: [], acceptance: [], ...CARD_OF[base] };
-  return planOf(c, { t0: c.t0, forceT2: false, reasons: [] }, i, p ?? profileOf(kind));
+  return corePlanOf(c, { t0: c.t0, forceT2: false, reasons: [] }, i, p ?? profileOf(kind));
 }
+export const planFor = (base: Base, i: Importance, kind: string, p?: Profile): TierPlan => tierPlan(corePlanFor(base, i, kind, p));
 
 /** The explicit check on a tier plan: the plan is rebuilt from its tier leg (level = the write level of the first enabled member
  *  with that tier, step = its ladder step of the effort), then `acceptModel` decides. */
