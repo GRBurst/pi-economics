@@ -569,3 +569,31 @@ test("T4.2 escalate fields: after a failover to Sonnet the re-spawn logs from T1
   const l = escalateLine(h, "q1b");
   assert.deepEqual([l.from, l.fromModel, l.to, l.toModel, l.fromLevel, l.toLevel], ["T1", SONNET, "T1", SONNET, 0, 1]);
 });
+
+// --- T5.5 (D2, D11; spec §4.10 rows 2, 3): Haiku is enabled by default -----------------------------------------------------
+const HAIKU = "anthropic/claude-haiku-5-5";
+
+test("defaults (§4.10 row 2): local busy → waits queueMaxSec, then Haiku medium; the line keeps the planned qwen xhigh", async () => {
+  const h = harness({ settings: { queueMaxSec: 10 }, health: { health: 200, slots: 503 } });
+  const r = accepted(await h.a.spawn({ name: "q1", task: card() })) as any;
+  assert.deepEqual([r.model, r.thinkingLevel], [HAIKU, "medium"]);
+  assert.ok(h.sleeps.reduce((a, b) => a + b, 0) >= 10_000, h.sleeps.join());
+  const l = spawnLine(h, "q1");
+  assert.deepEqual([l.workerTier, l.workerEffort, l.workerMember, l.workerModel, l.startEffort], ["qwen", "xhigh", "haiku", HAIKU, "medium"]);
+});
+
+test("defaults (§4.10 row 3): local down → Haiku medium at once, no sleep", async () => {
+  const h = harness({ settings: { queueMaxSec: 10 }, health: { health: 0, slots: 0 } });
+  const r = accepted(await h.a.spawn({ name: "q1", task: card() })) as any;
+  assert.deepEqual([r.model, r.thinkingLevel], [HAIKU, "medium"]);
+  assert.deepEqual(h.sleeps, []);
+});
+
+test("defaults (D11): an explicit Haiku on a write-0 plan starts at medium; with effort low it is rejected", async () => {
+  const h = harness();
+  const r = accepted(await h.a.spawn({ name: "k1", model: HAIKU, task: card() })) as any;
+  assert.deepEqual([r.model, r.thinkingLevel], [HAIKU, "medium"]);
+  const x = await h.a.spawn({ name: "k2", model: HAIKU, thinkingLevel: "low", task: card() });
+  assert.ok("reject" in x);
+  assert.match(x.reject, /^effort low is below the routed xhigh/);
+});

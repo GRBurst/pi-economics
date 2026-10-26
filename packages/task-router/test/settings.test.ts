@@ -84,11 +84,11 @@ test("parseSettings merges a partial file over the defaults and drops unknown ke
   assert.deepEqual(r.problems, []);
 });
 
-test("defaults: five members, haiku blank (RD1), the free cloud blank with order 1 (D3), local health", () => {
+test("defaults: five members, Haiku enabled (OD2; RD1's blank lives in the fixture), the free cloud blank with order 1 (D3), local health", () => {
   const m = defaults().models;
   assert.deepEqual(Object.keys(m), ["qwen-local", "qwen-cloud", "haiku", "sonnet", "opus"]);
-  assert.deepEqual(enabled(m).map((x) => x.name), ["qwen-local", "sonnet", "opus"]);
-  assert.equal(m.haiku.model, "");
+  assert.deepEqual(enabled(m).map((x) => x.name), ["qwen-local", "haiku", "sonnet", "opus"]);
+  assert.equal(m.haiku.model, "anthropic/claude-haiku-5-5");
   assert.equal(m["qwen-cloud"].model, "");
   assert.equal(m["qwen-cloud"].order, 1);
   assert.deepEqual(m["qwen-local"].abilities, { write: 0, read: 0 });
@@ -266,7 +266,7 @@ test("member validation: the defaults pass without a problem", () => {
 // --- the today fixture (spec §5.3, RD1): the owner's rollback ------------------------------
 
 /** The leaf paths where the fixture's settings and the defaults differ: the settings view of M5 (spec §5.2 vs §5.3). */
-const FLIPPED: string[] = ["importanceTable.read.2.critical.worker.level", "readOnlyReview", "models.qwen-cloud.model", "models.qwen-cloud.order"];
+const FLIPPED: string[] = ["importanceTable.read.2.critical.worker.level", "readOnlyReview", "models.qwen-cloud.model", "models.qwen-cloud.order", "models.haiku.model"];
 const isPlain = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
 const leaves = (v: unknown, path = ""): Record<string, string> =>
   isPlain(v) ? Object.assign({}, ...Object.entries(v).map(([k, x]) => leaves(x, path ? `${path}.${k}` : k))) : { [path]: JSON.stringify(v) };

@@ -181,6 +181,17 @@ test("a Haiku child whose files Qwen cannot hold does not move to LOCAL (P-ctx f
   assert.deepEqual(reroutes(h), []);
 });
 
+test("defaults (T5.5, D2): a local child's error moves it to Haiku medium (the free cloud is blank)", async () => {
+  const h = harness();
+  await spawnAll(h, ["q1"]);
+  assert.equal(h.a.retunes.length, 0);
+  h.a.emit(err("q1", "boom"));
+  await settle();
+  assert.deepEqual(h.a.retunes, [{ name: "q1", model: "anthropic/claude-haiku-5-5", thinkingLevel: "medium" }]);
+  const [r] = reroutes(h);
+  assert.deepEqual([r.taskId, r.from, r.fromModel, r.toModel], ["q1", "local", LOCAL, "anthropic/claude-haiku-5-5"]);
+});
+
 // --- failover reserves before retune (HP T3.7: spec §4.8, RD5, AC3) ------------------------------------------------------
 const warnings = async (fn: () => Promise<void>) => {
   const warned: string[] = [], orig = console.warn;

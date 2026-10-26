@@ -34,7 +34,8 @@ export function defaults(): Settings {
         model: "", tier: "qwen", route: "cloud", abilities: { write: 0, read: 0 }, efforts: ["xhigh"],
         contextWindow: 262144, cost: 0, order: 1, slots: 2, dailyCap: 950,
       },
-      haiku: { model: "", tier: "haiku", route: "haiku", abilities: { write: 0, read: 1 }, efforts: ["medium", "high"], contextWindow: 1000000, cost: 1, order: 0 },
+      // OD2 (T5.5): Haiku enabled; its abilities are hypotheses until the scout gate (M6). The rollback blanks it (RD1).
+      haiku: { model: "anthropic/claude-haiku-5-5", tier: "haiku", route: "haiku", abilities: { write: 0, read: 1 }, efforts: ["medium", "high"], contextWindow: 1000000, cost: 1, order: 0 },
       sonnet: { model: "anthropic/claude-sonnet-5-5", tier: "T1", route: "T1", abilities: { write: 1, read: 2 }, efforts: ["high", "xhigh"], contextWindow: 1000000, cost: 3, order: 0 },
       opus: { model: "anthropic/claude-opus-5-5", tier: "T2", route: "T2", abilities: { write: 2, read: 3 }, efforts: ["high", "xhigh"], contextWindow: 1000000, cost: 5, order: 0 },
     },

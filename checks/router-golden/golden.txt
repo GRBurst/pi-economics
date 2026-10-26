@@ -6,6 +6,7 @@
 # T5.2: re-recorded 2026-10-26
 # T5.3: re-recorded 2026-10-26
 # T5.4: re-recorded 2026-10-26
+# T5.5: re-recorded 2026-10-26
 count defaults plan 146880 explicit 470016
 plan defaults v1 scout none normal 0000000000000000000000000000000000000000000000000000000000000000
 plan defaults v1 scout none high 1111111111111111111111111111111111111111111111111111111111111111
@@ -106,15 +107,15 @@ plan defaults v1 m1 t2 critical 555555555555555555555555555555555555555555555555
 plan defaults v1 m1 force normal 3333333333333333333333333333333333333333333333333333333333333333
 plan defaults v1 m1 force high 4444444444444444444444444444444444444444444444444444444444444444
 plan defaults v1 m1 force critical 5555555555555555555555555555555555555555555555555555555555555555
-plan defaults v2 scout none normal ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v2 scout none high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v2 scout none critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v2 scout t2 normal ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v2 scout t2 high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v2 scout t2 critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v2 scout force normal ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v2 scout force high ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-plan defaults v2 scout force critical ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+plan defaults v2 scout none normal jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+plan defaults v2 scout none high jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+plan defaults v2 scout none critical jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+plan defaults v2 scout t2 normal jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+plan defaults v2 scout t2 high jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+plan defaults v2 scout t2 critical jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+plan defaults v2 scout force normal jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+plan defaults v2 scout force high jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+plan defaults v2 scout force critical jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
 plan defaults v2 mechanical none normal 6700000000000000700000000000000000000000000000000000000000000000
 plan defaults v2 mechanical none high 8911111111111111911111111111111111111111111111111111111111111111
 plan defaults v2 mechanical none critical abccccccccccccccbccccccccccccccccccccccccccccccccccccccccccccccc
@@ -179,6 +180,7 @@ plan-row f qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/T1/high// ; qwen/qwen/xh
 plan-row g T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high// ; T1/T1/high// ; T1/T1/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// ; T1/T1/high// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/high// | T1/T2/high//
 plan-row h T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// ; T1/T1/xhigh// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// ; T1/T1/xhigh// | T1/T2/high// | T1/T2/high// | REJECT ; T1/T1/xhigh// | T1/T2/high//
 plan-row i T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high | T1/T2/high/T2/high | REJECT ; T1/T1/xhigh/T2/high | T1/T2/high/T2/high
+plan-row j qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// ; qwen/qwen/xhigh// | qwen/haiku/medium// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// ; qwen/qwen/xhigh// | qwen/haiku/medium// | qwen/T1/high// | qwen/T2/high// ; qwen/qwen/xhigh// | qwen/haiku/medium//
 explicit defaults v1 scout none normal 0000000000000000000000000000000000000000000000000000000000000000
 explicit defaults v1 scout none high 1111111111111111111111111111111111111111111111111111111111111111
 explicit defaults v1 scout none critical 1111111111111111111111111111111111111111111111111111111111111111
@@ -278,15 +280,15 @@ explicit defaults v1 m1 t2 critical 33333333333333333333333333333333333333333333
 explicit defaults v1 m1 force normal 2222222222222222222222222222222222222222222222222222222222222222
 explicit defaults v1 m1 force high 3333333333333333333333333333333333333333333333333333333333333333
 explicit defaults v1 m1 force critical 3333333333333333333333333333333333333333333333333333333333333333
-explicit defaults v2 scout none normal 4444444444444444444444444444444444444444444444444444444444444444
-explicit defaults v2 scout none high 4444444444444444444444444444444444444444444444444444444444444444
-explicit defaults v2 scout none critical 4444444444444444444444444444444444444444444444444444444444444444
-explicit defaults v2 scout t2 normal 4444444444444444444444444444444444444444444444444444444444444444
-explicit defaults v2 scout t2 high 4444444444444444444444444444444444444444444444444444444444444444
-explicit defaults v2 scout t2 critical 4444444444444444444444444444444444444444444444444444444444444444
-explicit defaults v2 scout force normal 4444444444444444444444444444444444444444444444444444444444444444
-explicit defaults v2 scout force high 4444444444444444444444444444444444444444444444444444444444444444
-explicit defaults v2 scout force critical 4444444444444444444444444444444444444444444444444444444444444444
+explicit defaults v2 scout none normal 5555555555555555555555555555555555555555555555555555555555555555
+explicit defaults v2 scout none high 5555555555555555555555555555555555555555555555555555555555555555
+explicit defaults v2 scout none critical 5555555555555555555555555555555555555555555555555555555555555555
+explicit defaults v2 scout t2 normal 5555555555555555555555555555555555555555555555555555555555555555
+explicit defaults v2 scout t2 high 5555555555555555555555555555555555555555555555555555555555555555
+explicit defaults v2 scout t2 critical 5555555555555555555555555555555555555555555555555555555555555555
+explicit defaults v2 scout force normal 5555555555555555555555555555555555555555555555555555555555555555
+explicit defaults v2 scout force high 5555555555555555555555555555555555555555555555555555555555555555
+explicit defaults v2 scout force critical 5555555555555555555555555555555555555555555555555555555555555555
 explicit defaults v2 mechanical none normal 4400000000000000400000000000000000000000000000000000000000000000
 explicit defaults v2 mechanical none high 4411111111111111411111111111111111111111111111111111111111111111
 explicit defaults v2 mechanical none critical 0033333333333333033333333333333333333333333333333333333333333333
@@ -336,7 +338,8 @@ explicit-row 0 T1/high REJECT REJECT REJECT REJECT T1/high T1/xhigh REJECT REJEC
 explicit-row 1 T1/xhigh REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
 explicit-row 2 T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT
 explicit-row 3 T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT
-explicit-row 4 qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T1/xhigh T1/off T1/minimal T1/low T1/medium T1/high T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
+explicit-row 4 qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT haiku/medium REJECT REJECT REJECT haiku/medium haiku/high haiku/xhigh REJECT T1/xhigh T1/off T1/minimal T1/low T1/medium T1/high T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
+explicit-row 5 qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT haiku/medium haiku/off haiku/minimal haiku/low haiku/medium haiku/high haiku/xhigh REJECT T1/xhigh T1/off T1/minimal T1/low T1/medium T1/high T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
 select defaults local=up cloudRunning=0 cloud=open qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=0 cloud=blocked qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=0 cloud=capped qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
@@ -349,42 +352,42 @@ select defaults local=up cloudRunning=2 cloud=capped qwen-local:llama/qwen3.8:xh
 select defaults local=up cloudRunning=3 cloud=open qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=3 cloud=blocked qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=3 cloud=capped qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
-select defaults local=busy cloudRunning=0 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=0 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=0 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=1 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=1 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=1 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=2 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=2 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=2 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=3 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=3 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=3 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=0 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=0 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=0 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=1 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=1 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=1 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=2 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=2 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=2 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=3 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=3 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=3 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=0 cloud=open sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=0 cloud=blocked sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=0 cloud=capped sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=1 cloud=open sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=1 cloud=blocked sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=1 cloud=capped sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=2 cloud=open sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=2 cloud=blocked sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=2 cloud=capped sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=3 cloud=open sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=3 cloud=blocked sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=3 cloud=capped sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
+select defaults local=busy cloudRunning=0 cloud=open wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=0 cloud=blocked wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=0 cloud=capped wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=1 cloud=open wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=1 cloud=blocked wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=1 cloud=capped wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=2 cloud=open wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=2 cloud=blocked wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=2 cloud=capped wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=3 cloud=open wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=3 cloud=blocked wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=busy cloudRunning=3 cloud=capped wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=0 cloud=open wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=0 cloud=blocked wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=0 cloud=capped wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=1 cloud=open wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=1 cloud=blocked wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=1 cloud=capped wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=2 cloud=open wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=2 cloud=blocked wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=2 cloud=capped wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=3 cloud=open wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=3 cloud=blocked wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=own cloudRunning=3 cloud=capped wait haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=0 cloud=open haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=0 cloud=blocked haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=0 cloud=capped haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=1 cloud=open haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=1 cloud=blocked haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=1 cloud=capped haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=2 cloud=open haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=2 cloud=blocked haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=2 cloud=capped haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=3 cloud=open haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=3 cloud=blocked haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
+select defaults local=down cloudRunning=3 cloud=capped haiku:anthropic/claude-haiku-5-5:medium haiku:anthropic/claude-haiku-5-5:medium
 count empty-slot plan 146880 explicit 470016
 plan empty-slot v1 scout none normal 0000000000000000000000000000000000000000000000000000000000000000
 plan empty-slot v1 scout none high 1111111111111111111111111111111111111111111111111111111111111111
