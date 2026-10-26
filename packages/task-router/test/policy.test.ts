@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { accepted, card, harness } from "./harness.ts";
+import { accepted, card, harness, provideSkills } from "./harness.ts";
 
 const CLOUD = "openrouter/qwen/qwen3.8-27b:free";
 const LOCAL = "llama/qwen3.8";
@@ -658,4 +658,36 @@ test("defaults (§4.10 row 17): re-spawn of a write-0 task that ran on Haiku →
   assert.deepEqual([r.model, r.thinkingLevel], [HAIKU, "medium"]);
   const b = accepted(await h.a.spawn({ name: "w1b", task: card({ attemptOf: "w1" }) })) as any;
   assert.deepEqual([b.model, b.thinkingLevel], [SONNET, "high"]);
+});
+
+// --- T5.8 (AC5; D13, OD5, OD13, OD15; spec §4.10 rows 7–11): scouts, reviews and lookups per importance under the defaults.
+// The scout gate's pin (D16): `lookup` routes like `scout` (read 2) until H6.4 is recorded; T6.1 alone may lower it.
+/** One spawn of `kind` at `importance` on a fresh harness (the local slot free): the start, then the spawn line's review leg. */
+const routeOf = async (kind: string, importance: string, o: { t2?: string[]; settings?: Record<string, unknown> } = {}) => {
+  const h = harness({ settings: o.settings as never });
+  provideSkills(h, ["code-reviewer"]); // the built-in review's skill
+  const r = accepted(await h.a.spawn({ name: "r1", task: card({ kind, ...(importance === "normal" ? {} : { importance }), ...(o.t2 ? { t2: o.t2 } : {}) } as never) })) as any;
+  emitSpawn(h, "r1");
+  const l = h.lines().find((x) => x.event === "spawn" && x.taskId === "r1")!;
+  return [`${r.model} ${r.thinkingLevel}`, ...(l.reviewTier ? [`review ${l.reviewTier} ${l.reviewEffort}`] : [])];
+};
+const IMPORTANCE = ["normal", "high", "critical"];
+const routesOf = async (kind: string, o: Parameters<typeof routeOf>[2] = {}) =>
+  Object.fromEntries(await Promise.all(IMPORTANCE.map(async (i) => [i, await routeOf(kind, i, o)])));
+
+test("AC5 (defaults): scout and lookup → Sonnet high / xhigh / xhigh without a review; review → Sonnet high / xhigh, Opus xhigh at critical", async () => {
+  const scout = { normal: [`${SONNET} high`], high: [`${SONNET} xhigh`], critical: [`${SONNET} xhigh`] };
+  assert.deepEqual(await routesOf("scout"), scout);
+  assert.deepEqual(await routesOf("lookup"), scout); // the scout gate's pin (FP6)
+  assert.deepEqual(await routesOf("review"), { normal: [`${SONNET} high`], high: [`${SONNET} xhigh`], critical: [`${OPUS} xhigh`] });
+});
+
+test("AC5 (defaults, §4.10 row 11): a review with a t2 trigger at critical → Opus xhigh and an Opus-xhigh review (no step left)", async () => {
+  assert.deepEqual(await routeOf("review", "critical", { t2: ["security"] }), [`${OPUS} xhigh`, "review T2 xhigh"]);
+});
+
+test("AC5 (§4.10 rows 9, 10): profiles.lookup.minLevel 0 → LOCAL xhigh; at high with a Sonnet-high review; Sonnet xhigh at critical", async () => {
+  assert.deepEqual(await routesOf("lookup", { settings: { profiles: { lookup: { minLevel: 0 } } } }), {
+    normal: [`${LOCAL} xhigh`], high: [`${LOCAL} xhigh`, "review T1 high"], critical: [`${SONNET} xhigh`],
+  });
 });

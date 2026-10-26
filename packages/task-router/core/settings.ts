@@ -14,6 +14,8 @@ export const BUILTIN_PROFILES: Record<string, Profile> = {
   "debug-design": { minLevel: 1, tools: "all", skills: ["systematic-debugging"], report: "default" },
   review: { ability: "read", table: "review", minLevel: 2, tools: "read-only", skills: ["code-reviewer"], report: "review" },
   plan: { level: "top", tools: "read-only+files", skills: ["tdd-implementation-planner"], report: "plan" },
+  // D13 (OD15, T5.8): the narrow scout; read 2 like `scout` until the scout gate (D16): H6.4 decides, T6.1 alone lowers minLevel.
+  lookup: { ability: "read", minLevel: 2, tools: "read-only", skills: [], report: "answer" },
 };
 
 export function defaults(): Settings {

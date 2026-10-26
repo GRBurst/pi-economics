@@ -79,6 +79,8 @@ test("profileFor: built-ins", () => {
   assert.deepEqual(p("debug-design"), { minLevel: 1, tools: "all", skills: ["systematic-debugging"], report: "default" });
   assert.deepEqual(p("review"), { ability: "read", table: "review", minLevel: 2, tools: "read-only", skills: ["code-reviewer"], report: "review" });
   assert.deepEqual(p("plan"), { level: "top", tools: "read-only+files", skills: ["tdd-implementation-planner"], report: "plan" });
+  // T5.8 (D13, OD15): the narrow scout; routes like `scout` until the scout gate (M6) sets its level
+  assert.deepEqual(p("lookup"), { ability: "read", minLevel: 2, tools: "read-only", skills: [], report: "answer" });
 });
 
 test("profileFor: settings override fields of a built-in and add new kinds", () => {
@@ -99,7 +101,7 @@ test("profileFor: unknown kind → error listing the known kinds", () => {
   const r = profileFor("nope", defaults());
   assert.equal(r.ok, false);
   const msg = r.ok ? "" : r.errors.join("\n");
-  for (const k of ["nope", "scout", "mechanical", "implement", "debug-design", "review", "plan"]) assert.ok(msg.includes(k), k);
+  for (const k of ["nope", "scout", "mechanical", "implement", "debug-design", "review", "plan", "lookup"]) assert.ok(msg.includes(k), k);
 });
 
 const port: SkillPort = {

@@ -2,7 +2,7 @@
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type Result<T> = { ok: true; value: T } | { ok: false; errors: string[] };
 
-export type Kind = string; // a profile name; built-ins: scout mechanical implement debug-design review plan
+export type Kind = string; // a profile name; built-ins: scout mechanical implement debug-design review plan lookup
 export type Importance = "normal" | "high" | "critical";
 
 /** A profile's requirement (spec §4.3): `ability` (default write), `table` (default the ability's), a pin `level` or a floor `minLevel`. */
