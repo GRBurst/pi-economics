@@ -304,6 +304,21 @@ test("retune throws → entry restored, the target's slot free at once, one warn
   assert.equal((accepted(await h.a.spawn({ name: "q3", task: card() })) as any).model, SONNET);
 });
 
+// RG7 (review-g4 Low 2, plant MD): only a completed move changes where the attempt runs (`ranMember`, D9).
+test("RG7: retune throws \u2192 the attempt still ran on the cloud: its re-spawn escalates from cloud, not from the target", async () => {
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
+  await spawnAll(h, ["q0", "q1"]); // cloud, cloud
+  listAs(h, { q0: "running", q1: "running" });
+  h.a.control.fail = new Error("no such agent");
+  await warnings(async () => { h.a.emit(err("q1", "retries exhausted")); await settle(); await settle(); }); // target: local
+  delete h.a.control.fail;
+  h.a.emit({ type: "kill", name: "q1", ts: 2 });
+  accepted(await h.a.spawn({ name: "q1b", task: card({ attemptOf: "q1" }) }));
+  h.a.emit({ type: "spawn", name: "q1b", by: "main", parent: "main", childSessionId: "s-q1b", ts: 3 });
+  const l = h.lines().find((x) => x.event === "escalate")!;
+  assert.deepEqual([l.from, l.fromModel], ["cloud", CLOUD]);
+});
+
 test("P-slots with a move and two spawns in flight", async () => {
   const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
   await spawnAll(h, ["q1"]); // cloud

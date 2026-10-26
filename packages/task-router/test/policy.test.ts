@@ -470,6 +470,14 @@ test("T4.1 spawn line: an explicit effort logs workerEffort planned and startEff
   assert.deepEqual([o.workerTier, o.workerEffort, o.workerMember, o.workerModel, o.startEffort], ["T1", "high", "opus", "anthropic/claude-opus-5-5", "high"]);
 });
 
+// RG7 (review-g4 Low 2, plant MC): the requirement's level and the worker leg's level are two fields; at critical they differ.
+test("RG7 spawn line: a write-0 requirement at critical logs level 0 and the cell's workerLevel 1, reviewLevel 2", async () => {
+  const h = harness({ base: "today" });
+  accepted(await h.a.spawn({ name: "c1", task: card({ importance: "critical" }) }));
+  const l = spawnLine(h, "c1");
+  assert.deepEqual([l.ability, l.level, l.workerLevel, l.reviewLevel, l.workerMember], ["write", 0, 1, 2, "sonnet"]);
+});
+
 // T4.2 (HS §6.4, D9): the escalate line comes from the attempt state: `from` is the route the failed attempt ran on (its
 // `ranMember`, set at the pick and by a move), `to` the started member's; with the models, the ability and the levels.
 const ESC_KEYS = ["from", "to", "fromModel", "toModel", "ability", "fromLevel", "toLevel", "attemptOf"];
@@ -505,6 +513,19 @@ test("RG6: a re-spawn of a task this process never saw logs from \"?\" without f
   assert.deepEqual(escalateLine(h, "w1b"), {
     from: "?", to: "T2", toModel: "anthropic/claude-opus-5-5", ability: "write", toLevel: 2, attemptOf: "w1-from-yesterday",
   });
+});
+
+// RG7 (review-g4 Medium 3, plant MA): `ranMember` is set at the pick, so a fallback member is where the attempt ran.
+test("RG7: a Sonnet fallback's re-spawn escalates from T1, the member it was picked on, not the planned cloud", async () => {
+  const h = harness({ base: "today", settings: { queueMaxSec: 10 } });
+  for (const n of ["q1", "q2", "q3"]) accepted(await h.a.spawn({ name: n, task: card() })); // cloud, cloud, local
+  assert.equal((accepted(await h.a.spawn({ name: "q4", task: card() })) as any).model, SONNET); // after the wait
+  emitSpawn(h, "q4");
+  h.a.emit({ type: "kill", name: "q4", ts: 2 });
+  accepted(await h.a.spawn({ name: "q4b", task: card({ attemptOf: "q4" }) }));
+  emitSpawn(h, "q4b");
+  const l = escalateLine(h, "q4b");
+  assert.deepEqual([l.from, l.fromModel], ["T1", SONNET]);
 });
 
 test("T4.2 escalate fields: after a failover to Sonnet the re-spawn logs from T1 (the member it ran on)", async () => {
