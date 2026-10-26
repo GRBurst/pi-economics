@@ -19,6 +19,8 @@ const deepMerge = (a: any, b: any): any => {
   for (const [k, v] of Object.entries(b)) out[k] = k in a ? deepMerge(a[k], v) : v;
   return out;
 };
+/** A settings file `over` written over the today fixture (T5.1: the pure-function twin of `harness({ base: "today" })`). */
+export const todayWith = (over: Record<string, unknown> = {}): Record<string, any> => deepMerge(structuredClone(TODAY_RAW), over);
 
 export const T0_ALL = { bounded: true, specified: true, verifiable: true, lowRisk: true, small: true, linear: true };
 export const card = (o: Partial<Card> = {}): Card => ({ kind: "implement", files: ["src/a.ts"], check: "npm test", acceptance: ["tests pass"], t0: T0_ALL, t2: [], ...o });
@@ -41,7 +43,7 @@ export function harness(o: { settings?: Partial<RouterSettings>; base?: "default
   const hooks: { onSleep?: () => void } = {};
   const router = install(f.pi, {
     agentDir,
-    settings: parseSettings(o.base === "today" ? deepMerge(structuredClone(TODAY_RAW), o.settings ?? {}) : (o.settings ?? {})).settings,
+    settings: parseSettings(o.base === "today" ? todayWith(o.settings ?? {}) : (o.settings ?? {})).settings,
     now: () => new Date(clock.t),
     api: () => a.api,
     fetch: fetchStub,

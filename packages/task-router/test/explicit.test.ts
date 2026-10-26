@@ -5,11 +5,13 @@ import { EFFORTS, effortAt, enabled, levels, lvl, named, stepOf } from "../core/
 import { labelLeg } from "../core/select.ts";
 import { parseSettings } from "../core/settings.ts";
 import { planLegs } from "../core/table.ts";
+import { todayWith } from "./harness.ts";
 import type { Importance, Leg, RouterSettings, ThinkingLevel } from "../core/types.ts";
 
 const HAIKU = "anthropic/claude-haiku-5-5", SONNET = "anthropic/claude-sonnet-5-5", OPUS = "anthropic/claude-opus-5-5";
 const X = { model: "x/ro", tier: "X", route: "T1", abilities: { write: 1 }, efforts: ["high"], contextWindow: 1000, cost: 9 }; // never a planned member
-const S = parseSettings({ models: { haiku: { model: HAIKU }, x: X } }).settings;
+// T5.1: on the today fixture (the planned write-0 member is the free cloud there), with Haiku enabled.
+const S = parseSettings(todayWith({ models: { haiku: { model: HAIKU }, x: X } })).settings;
 const plan = (s: RouterSettings, ability: string, worker: Leg, reasons = ["r1", "r2"]) => ({ ability, worker: labelLeg(s, ability, worker, 0).leg, reasons });
 const QW = plan(S, "write", { level: 0, step: 0 });
 const err = (r: ReturnType<typeof acceptModel>) => (r.ok ? "accepted" : r.errors.join("; "));

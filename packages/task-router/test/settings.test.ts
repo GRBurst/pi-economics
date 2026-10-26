@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { effortAt, enabled, firstMeeting } from "../core/members.ts";
-import { TODAY_RAW } from "./harness.ts";
+import { TODAY_RAW, todayWith } from "./harness.ts";
 import { planFor as legacyPlanFor } from "./oracle/legacy-plan.ts";
 import { BUILTIN_PROFILES, defaults, loadSettings, loadSettingsReport, parseSettings } from "../core/settings.ts";
 import { capToTable } from "../core/table.ts";
@@ -409,13 +409,13 @@ test("M1: a configured table replaced by its default is validated again as the d
 });
 
 test("M1: a built-in floor above top(a) is reported; its spawns are rejected (sonnet+opus blank: scout, debug-design, review)", () => {
-  const r = parseSettings({ models: { sonnet: { model: "" }, opus: { model: "" } } });
+  const r = parseSettings(todayWith({ models: { sonnet: { model: "" }, opus: { model: "" } } })); // T5.1: today (no Haiku: top read 0)
   assert.deepEqual(r.problems.filter((l) => l.startsWith("profiles.")), [
     "profiles.scout.minLevel: built-in 2 above the top 0 of read; its spawns are rejected",
     "profiles.debug-design.minLevel: built-in 1 above the top 0 of write; its spawns are rejected",
     "profiles.review.minLevel: built-in 2 above the top 0 of read; its spawns are rejected",
   ]);
-  const s = parseSettings({ models: { "qwen-local": { model: "" }, "qwen-cloud": { model: "" }, sonnet: { model: "" }, opus: { model: "" } } });
+  const s = parseSettings(todayWith({ models: { "qwen-local": { model: "" }, "qwen-cloud": { model: "" }, sonnet: { model: "" }, opus: { model: "" } } }));
   assert.ok(s.problems.includes("profiles.implement: no enabled member has ability write; its spawns are rejected"), s.problems.join("\n"));
 });
 

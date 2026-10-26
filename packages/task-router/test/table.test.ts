@@ -6,8 +6,11 @@ import { profileFor } from "../core/profile.ts";
 import { capToTable, planLegs } from "../core/table.ts";
 import { defaults, parseSettings } from "../core/settings.ts";
 import type { Card, Importance, Leg, Plan, Profile, Requirement, RouterSettings, T0 } from "../core/types.ts";
+import { TODAY_RAW } from "./harness.ts";
 
 const S = defaults();
+/** T5.1: the cells of today's tables (read row 2 critical W3·1, readOnlyReview review, no Haiku) are read off the today fixture. */
+const T = parseSettings(TODAY_RAW).settings;
 const IMPS: Importance[] = ["normal", "high", "critical"];
 const P = (o: Partial<Profile> = {}): Profile => ({ tools: "all", skills: [], report: "default", ...o });
 const R = (ability: string, level: number, o: Partial<Requirement> = {}): Requirement => ({ ability, level, draft: false, pinned: false, reasons: [], ...o });
@@ -32,11 +35,11 @@ const READ: Record<number, Record<Importance, string[]>> = {
   3: { normal: ["T2 high", ""], high: ["T2 xhigh", ""], critical: ["T2 xhigh", "T2 xhigh"] },
 };
 
-test("every default cell of write (= today's TABLE) and read, labelled through firstMeeting + effortAt", () => {
+test("every today-fixture cell of write (= today's TABLE) and read, labelled through firstMeeting + effortAt", () => {
   for (const [a, want] of [["write", TODAY], ["read", READ]] as const)
     for (const [l, row] of Object.entries(want)) for (const i of IMPS) {
-      const r = planLegs(R(a, Number(l)), i, P({ ability: a }), S);
-      assert.deepEqual(show(r, a), row[i], `${a} ${l} ${i}`);
+      const r = planLegs(R(a, Number(l)), i, P({ ability: a }), T);
+      assert.deepEqual(show(r, a, T), row[i], `${a} ${l} ${i}`);
       assert.deepEqual(r.reasons, [`importance=${i}`]);
     }
 });
@@ -57,13 +60,13 @@ test("pin at the bottom: no review at every importance, reason 'stays on qwen'",
 });
 
 test("pin T1 at critical: worker lowered to the pin keeping its step, review one level up (W1·1 + R2·0, 'pinned tier T1')", () => {
-  const w = planLegs(R("write", 1, { pinned: true }), "critical", P(), S);
+  const w = planLegs(R("write", 1, { pinned: true }), "critical", P(), T);
   assert.deepEqual([w.worker, w.review], [{ level: 1, step: 1 }, { level: 2, step: 0 }]);
-  assert.deepEqual(show(w, "write"), ["T1 xhigh", "T2 high"]);
+  assert.deepEqual(show(w, "write", T), ["T1 xhigh", "T2 high"]);
   assert.deepEqual(w.reasons, ["importance=critical", "pinned tier T1"]);
-  const r = planLegs(R("read", 2, { pinned: true }), "critical", P({ ability: "read" }), S);
-  assert.deepEqual(show(r, "read"), ["T1 xhigh", "T2 high"]);
-  for (const i of ["normal", "high"] as const) assert.deepEqual(show(planLegs(R("write", 1, { pinned: true }), i, P(), S), "write"), TODAY[1][i]);
+  const r = planLegs(R("read", 2, { pinned: true }), "critical", P({ ability: "read" }), T);
+  assert.deepEqual(show(r, "read", T), ["T1 xhigh", "T2 high"]);
+  for (const i of ["normal", "high"] as const) assert.deepEqual(show(planLegs(R("write", 1, { pinned: true }), i, P(), T), "write", T), TODAY[1][i]);
 });
 
 test("plan (pin top) at critical keeps W2·1 + R2·1", () => {
@@ -113,8 +116,8 @@ const ES = parseSettings({ readOnlyReview: "effort-step" }).settings;
 const RO = P({ ability: "read", tools: "read-only" });
 
 test("read-only rule: off under readOnlyReview review", () => {
-  const r = planLegs(R("read", 0), "critical", RO, S);
-  assert.deepEqual(show(r, "read"), ["T1 high", "T2 high"]);
+  const r = planLegs(R("read", 0), "critical", RO, T);
+  assert.deepEqual(show(r, "read", T), ["T1 high", "T2 high"]);
   assert.deepEqual(r.reasons, ["importance=critical"]);
 });
 

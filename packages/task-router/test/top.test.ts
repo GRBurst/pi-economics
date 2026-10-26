@@ -16,12 +16,15 @@ const BOTH_BLANK = { models: { sonnet: { model: "" }, opus: { model: "" } } };
 /** The configuration of settings.test.ts "cap: … a custom read table to row 2": a custom read profile on a write-shaped table. */
 const SHORT = () => ({ importanceTable: { mine: structuredClone(defaults().importanceTable.write) }, profiles: { x: { ability: "read", table: "mine" } } });
 
-async function spawn(settings: object, kind: string, importance?: Importance, t2: string[] = []): Promise<string> {
-  const h = harness({ settings: settings as never });
+const on = (base: "defaults" | "today") => async (settings: object, kind: string, importance?: Importance, t2: string[] = []): Promise<string> => {
+  const h = harness({ base, settings: settings as never });
   provideSkills(h, SK);
   const r = await h.a.spawn({ name: "a", task: card({ kind, ...(importance ? { importance } : {}), t2 } as never) });
   return "reject" in r ? `REJECT ${r.reject}` : `${r.model} ${r.thinkingLevel}`;
-}
+};
+const spawn = on("defaults");
+/** T5.1: review G2's pinned outcomes were measured on today's configuration (free cloud, no Haiku, read row 2 critical W3·1). */
+const spawnT = on("today");
 
 test("M1: no spawn throws when a leg or a floor lies above top(a): opus blank, sonnet+opus blank, a short custom table, review on write", async () => {
   const configs: [string, object, string[]][] = [
@@ -36,29 +39,29 @@ test("M1: no spawn throws when a leg or a floor lies above top(a): opus blank, s
 });
 
 test("M1: opus blank at critical — a review above top(write) is lowered (Sonnet routes, as base did); a worker above it rejects cleanly", async () => {
-  assert.equal(await spawn(OPUS_BLANK, "implement", "critical"), `${SONNET} high`);
-  assert.match(await spawn(OPUS_BLANK, "implement", "critical", ["security"]), /^REJECT no enabled member reaches write level 2 \(the top of write is 1/);
-  assert.match(await spawn(OPUS_BLANK, "scout", "critical"), /^REJECT no enabled member reaches read level 3 \(the top of read is 2/);
-  assert.match(await spawn(OPUS_BLANK, "review", "critical", ["security"]), /^REJECT no enabled member reaches read level 3/);
+  assert.equal(await spawnT(OPUS_BLANK, "implement", "critical"), `${SONNET} high`);
+  assert.match(await spawnT(OPUS_BLANK, "implement", "critical", ["security"]), /^REJECT no enabled member reaches write level 2 \(the top of write is 1/);
+  assert.match(await spawnT(OPUS_BLANK, "scout", "critical"), /^REJECT no enabled member reaches read level 3 \(the top of read is 2/);
+  assert.match(await spawnT(OPUS_BLANK, "review", "critical", ["security"]), /^REJECT no enabled member reaches read level 3/);
 });
 
 test("M1: sonnet+opus blank — Qwen routes with its review lowered; a raised worker and the read floors reject cleanly", async () => {
-  assert.equal(await spawn(BOTH_BLANK, "implement", "high"), `${FREE} xhigh`);
-  assert.match(await spawn(BOTH_BLANK, "implement", "critical"), /^REJECT no enabled member reaches write level 1 \(the top of write is 0/);
+  assert.equal(await spawnT(BOTH_BLANK, "implement", "high"), `${FREE} xhigh`);
+  assert.match(await spawnT(BOTH_BLANK, "implement", "critical"), /^REJECT no enabled member reaches write level 1 \(the top of write is 0/);
   for (const kind of ["scout", "review"]) for (const imp of [undefined, "high", "critical"] as const)
-    assert.match(await spawn(BOTH_BLANK, kind, imp), /^REJECT no enabled member reaches read level 2 \(the top of read is 0/, `${kind} ${imp}`);
-  assert.match(await spawn(BOTH_BLANK, "debug-design", "high"), /^REJECT no enabled member reaches write level 1/);
+    assert.match(await spawnT(BOTH_BLANK, kind, imp), /^REJECT no enabled member reaches read level 2 \(the top of read is 0/, `${kind} ${imp}`);
+  assert.match(await spawnT(BOTH_BLANK, "debug-design", "high"), /^REJECT no enabled member reaches write level 1/);
 });
 
 test("M2 (b): a short custom table caps its own profile only — built-in scout/review with t2 stay on Opus, the custom profile on Sonnet", async () => {
   for (const kind of ["scout", "review"]) for (const imp of [undefined, "high", "critical"] as const) {
-    assert.equal(await spawn(SHORT(), kind, imp, ["security"]), `${OPUS} ${imp ? "xhigh" : "high"}`, `${kind} t2 ${imp}`);
+    assert.equal(await spawnT(SHORT(), kind, imp, ["security"]), `${OPUS} ${imp ? "xhigh" : "high"}`, `${kind} t2 ${imp}`);
   }
-  assert.equal(await spawn(SHORT(), "scout", "critical"), `${OPUS} xhigh`);
-  assert.equal(await spawn(SHORT(), "review", "critical"), `${OPUS} xhigh`);
+  assert.equal(await spawnT(SHORT(), "scout", "critical"), `${OPUS} xhigh`);
+  assert.equal(await spawnT(SHORT(), "review", "critical"), `${OPUS} xhigh`);
   // x: read on `mine` (rows 0..2): opus read 3 is clamped to 2 for x, so Sonnet (cheaper, read 2) meets the t2 level.
-  assert.equal(await spawn(SHORT(), "x", "high", ["security"]), `${SONNET} xhigh`);
-  assert.equal(await spawn(SHORT(), "x", "critical", ["security"]), `${SONNET} xhigh`);
+  assert.equal(await spawnT(SHORT(), "x", "high", ["security"]), `${SONNET} xhigh`);
+  assert.equal(await spawnT(SHORT(), "x", "critical", ["security"]), `${SONNET} xhigh`);
   assert.equal(parseSettings(SHORT()).settings.models.opus.abilities.read, 3, "the member's own level is not lowered");
 });
 

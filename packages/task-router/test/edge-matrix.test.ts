@@ -19,8 +19,8 @@ const SK = ["systematic-debugging", "code-reviewer", "tdd-implementation-planner
 const IMPS = [undefined, "high", "critical"] as const;
 const T2S: string[][] = [[], ["security"]];
 
-const spawnIn = async (raw: Record<string, any>, kind: string, imp: (typeof IMPS)[number], t2: string[]): Promise<any> => {
-  const h = harness({ settings: raw as never });
+const spawnIn = async (raw: Record<string, any>, kind: string, imp: (typeof IMPS)[number], t2: string[], base: "defaults" | "today" = "defaults"): Promise<any> => {
+  const h = harness({ base, settings: raw as never });
   provideSkills(h, SK);
   return h.a.spawn({ name: "a", task: card({ kind, ...(imp ? { importance: imp } : {}), t2: t2 as never }) });
 };
@@ -48,9 +48,10 @@ test("edge matrix cap381: x with t2 → Sonnet (high; xhigh at critical)", async
 
 // The requirement check (review G2 M1): a built-in floor above top(a) rejects the spawn at the requirement, naming it, in every
 // importance; without the check, planLegs' worker check would reject a critical card at its cell's level instead.
+// T5.1: on the today fixture (no Haiku), where the top of read is 0; from T5.5 the defaults' top of read is Haiku's 1.
 test("edge matrix both: scout and review (floor read 2, top read 0) are rejected at the requirement", async () => {
   for (const kind of ["scout", "review"]) for (const imp of IMPS) {
-    const r = await spawnIn(CONFIGS.both, kind, imp, []);
+    const r = await spawnIn(CONFIGS.both, kind, imp, [], "today");
     assert.match(r.reject ?? "", /^no enabled member reaches read level 2 \(the top of read is 0;/, `both ${kind} ${imp}`);
   }
 });

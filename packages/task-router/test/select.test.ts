@@ -4,31 +4,34 @@ import { candidates, labelLeg, pickMember } from "../core/select.ts";
 import type { MemberState } from "../core/select.ts";
 import { defaults, parseSettings } from "../core/settings.ts";
 import { named } from "../core/members.ts";
+import { TODAY_RAW, todayWith } from "./harness.ts";
 
 const S = defaults();
+/** T5.1: the tests that name today's members (the free cloud first at write 0, no Haiku) run on the today fixture. */
+const T = parseSettings(TODAY_RAW).settings;
 const names = (s: typeof S, a: string, l: number) => candidates(s, a, l, 0).cands.map((m) => m.name);
 
 test("candidates: the enabled members meeting the level, in (cost, order, name) order (cloud before local today)", () => {
-  assert.deepEqual(names(S, "write", 0), ["qwen-cloud", "qwen-local", "sonnet", "opus"]);
-  assert.deepEqual(names(S, "write", 1), ["sonnet", "opus"]);
-  assert.deepEqual(names(S, "read", 1), ["sonnet", "opus"]);
-  assert.deepEqual(names(S, "read", 3), ["opus"]);
-  const h = parseSettings({ models: { haiku: { model: "anthropic/claude-haiku-5-5" } } }).settings;
+  assert.deepEqual(names(T, "write", 0), ["qwen-cloud", "qwen-local", "sonnet", "opus"]);
+  assert.deepEqual(names(T, "write", 1), ["sonnet", "opus"]);
+  assert.deepEqual(names(T, "read", 1), ["sonnet", "opus"]);
+  assert.deepEqual(names(T, "read", 3), ["opus"]);
+  const h = parseSettings(todayWith({ models: { haiku: { model: "anthropic/claude-haiku-5-5" } } })).settings;
   assert.deepEqual(names(h, "read", 1), ["haiku", "sonnet", "opus"]);
-  assert.equal(candidates(S, "write", 0, 50_000).reason, undefined);
+  assert.equal(candidates(T, "write", 0, 50_000).reason, undefined);
 });
 
 test("candidates: a blank member is no candidate", () => {
-  const s = parseSettings({ models: { "qwen-cloud": { model: "" } } }).settings;
+  const s = parseSettings(todayWith({ models: { "qwen-cloud": { model: "" } } })).settings;
   assert.deepEqual(names(s, "write", 0), ["qwen-local", "sonnet", "opus"]);
 });
 
 test("labelLeg: the first candidate, its effort at the step clamped to its ladder", () => {
-  assert.deepEqual(labelLeg(S, "write", { level: 0, step: 3 }, 0), {
+  assert.deepEqual(labelLeg(T, "write", { level: 0, step: 3 }, 0), {
     leg: { level: 0, step: 3, member: "qwen-cloud", model: "openrouter/qwen/qwen3.8-27b:free", tier: "qwen", effort: "xhigh" },
   });
-  assert.deepEqual(labelLeg(S, "read", { level: 2, step: 1 }, 0).leg, { level: 2, step: 1, member: "sonnet", model: "anthropic/claude-sonnet-5-5", tier: "T1", effort: "xhigh" });
-  assert.deepEqual(labelLeg(S, "write", { level: 2, step: 0 }, 0).leg.effort, "high");
+  assert.deepEqual(labelLeg(T, "read", { level: 2, step: 1 }, 0).leg, { level: 2, step: 1, member: "sonnet", model: "anthropic/claude-sonnet-5-5", tier: "T1", effort: "xhigh" });
+  assert.deepEqual(labelLeg(T, "write", { level: 2, step: 0 }, 0).leg.effort, "high");
 });
 
 // P-ctx (OD17, plan T3.1; r4 `replay.mts select`): the soft context filter over 7 legs × 7 needs × Opus window {1M, 2M}, under the
@@ -101,7 +104,7 @@ test("candidates: contextFit 0 (or need 0) → no filter, no reason", () => {
   const off = ctx(1000000, 0);
   assert.deepEqual(candidates(off, "write", 0, 2500000), { cands: candidates(off, "write", 0, 0).cands });
   assert.deepEqual(candidates(ctx(1000000), "write", 0, 0).cands.map((m) => m.name), ["qwen-local", "haiku", "sonnet", "opus"]);
-  const half = parseSettings({ contextFit: 0.5, models: { "qwen-cloud": { model: "" } } }).settings;
+  const half = parseSettings(todayWith({ contextFit: 0.5, models: { "qwen-cloud": { model: "" } } })).settings; // T5.1: no Haiku
   assert.deepEqual(candidates(half, "write", 0, 200000).cands.map((m) => m.name), ["sonnet", "opus"]);
 });
 
@@ -137,9 +140,9 @@ test("pickMember: a down member is skipped at once; a busy cheapest pool waits b
 });
 
 test("P-empty: a blank member is no candidate, so no pick, even when it would be the cheapest and free", () => {
-  const s = parseSettings({ models: { "qwen-cloud": { model: "" } } }).settings;
-  const states = (ss: typeof S) => candidates(ss, "write", 0, 0).cands.map((m) => state(m.name, m.cost, "free"));
-  assert.deepEqual(pickMember(states(S), false), { pick: "qwen-cloud" });
+  const s = parseSettings(todayWith({ models: { "qwen-cloud": { model: "" } } })).settings;
+  const states = (ss: typeof T) => candidates(ss, "write", 0, 0).cands.map((m) => state(m.name, m.cost, "free"));
+  assert.deepEqual(pickMember(states(T), false), { pick: "qwen-cloud" });
   assert.deepEqual(pickMember(states(s), false), { pick: "qwen-local" });
 });
 

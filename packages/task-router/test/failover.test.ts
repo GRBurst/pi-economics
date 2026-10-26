@@ -1,3 +1,5 @@
+// T5.1: every test here runs on the today fixture (base today): failover is characterized on the free cloud, which the defaults
+// drop at T5.4 (D3); the defaults' failover (local error → Haiku) is T5.5's case.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { accepted, card, harness } from "./harness.ts";
@@ -24,7 +26,7 @@ const listAs = (h: ReturnType<typeof harness>, states: Record<string, "running" 
 };
 
 test("terminal error on a cloud Qwen child, local unavailable → Sonnet (xhigh→high), send continue, log reroute; attempts unchanged", async () => {
-  const h = harness({ health: { health: 503, slots: 200 } }); // local down: Sonnet stays the target (D8)
+  const h = harness({ base: "today", health: { health: 503, slots: 200 } }); // local down: Sonnet stays the target (D8)
   await spawnAll(h, ["q1"]);
   h.a.emit(err("q1", "retries exhausted"));
   await settle();
@@ -41,7 +43,7 @@ test("terminal error on a cloud Qwen child, local unavailable → Sonnet (xhigh�
 });
 
 test("local child → cloud next; Sonnet and Opus children → nothing (no jump to more quota on the same provider)", async () => {
-  const h = harness();
+  const h = harness({ base: "today" });
   await spawnAll(h, ["q1", "q2", "q3"]); // cloud, cloud, local
   listAs(h, { q1: "idle", q2: "running", q3: "running" });
   h.clock.t += 61_000; // the reservation of q1 ends: one cloud slot free
@@ -62,7 +64,7 @@ test("local child → cloud next; Sonnet and Opus children → nothing (no jump 
 });
 
 test("autoEscalate=false → no failover; unknown child ignored", async () => {
-  const h = harness({ settings: { autoEscalate: false } });
+  const h = harness({ base: "today", settings: { autoEscalate: false } });
   await spawnAll(h, ["q1"]);
   h.a.emit(err("q1", "x"));
   h.a.emit(err("nobody", "x"));
@@ -71,7 +73,7 @@ test("autoEscalate=false → no failover; unknown child ignored", async () => {
 });
 
 test("free cap: block the cloud at once, move every cloud child, log free-cap; new spawns wait for the busy local, then Sonnet, until reset", async () => {
-  const h = harness({ settings: { queueMaxSec: 10 } });
+  const h = harness({ base: "today", settings: { queueMaxSec: 10 } });
   await spawnAll(h, ["q1", "q2", "q3"]); // cloud, cloud, local
   listAs(h, { q3: "running" });
   h.a.emit(err("q1", PILOT));
@@ -96,7 +98,7 @@ test("free cap: block the cloud at once, move every cloud child, log free-cap; n
 });
 
 test("free cap with a free local slot: the erroring child goes local, the other cloud child to Sonnet", async () => {
-  const h = harness();
+  const h = harness({ base: "today" });
   await spawnAll(h, ["q1", "q2", "q3"]); // cloud, cloud, local
   listAs(h, { q1: "running", q2: "running", q3: "idle" });
   h.clock.t += 61_000; // the reservation of q3 ends: the local slot is free
@@ -106,7 +108,7 @@ test("free cap with a free local slot: the erroring child goes local, the other 
 });
 
 test("review m2: a free-cap move with only blank or down members left fails soft: no reroute, no unhandled rejection", async () => {
-  const h = harness({ settings: { models: { sonnet: { model: "" }, opus: { model: "" } } } as any, health: { health: 0, slots: 0 } });
+  const h = harness({ base: "today", settings: { models: { sonnet: { model: "" }, opus: { model: "" } } } as any, health: { health: 0, slots: 0 } });
   await spawnAll(h, ["q1", "q2"]); // cloud, cloud
   const lost: unknown[] = [];
   const onLost = (e: unknown) => void lost.push(e);
@@ -283,7 +285,7 @@ test("RG1 S8: an explicit Opus on a short custom read table fails over to a seco
     efforts: ["high", "xhigh"], contextWindow: 1000000, cost: 3, order: 1,
   };
   const mine = structuredClone(defaults().importanceTable.write); // rows 0–2: read is capped at 2
-  const h = harness({ settings: { importanceTable: { mine }, profiles: { x: { ability: "read", table: "mine" } }, models: { sonnet2 } } as any });
+  const h = harness({ base: "today", settings: { importanceTable: { mine }, profiles: { x: { ability: "read", table: "mine" } }, models: { sonnet2 } } as any });
   assert.equal((accepted(await h.a.spawn({ name: "x1", model: OPUS, task: card({ kind: "x", t2: ["security"] }) })) as any).model, OPUS);
   listAs(h, { x1: "running" });
   h.a.emit(err("x1", "overloaded"));

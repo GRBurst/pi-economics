@@ -32,7 +32,7 @@ test("invalid card and unknown kind → reject naming the problem", async () => 
 });
 
 test("all-T0 card → free cloud Qwen at xhigh, brief skips the handshake", async () => {
-  const h = harness();
+  const h = harness({ base: "today" });
   const r = accepted(await h.a.spawn({ name: "q1", task: card() }));
   assert.equal((r as any).model, CLOUD);
   assert.equal((r as any).thinkingLevel, "xhigh");
@@ -64,7 +64,7 @@ const listAs = (h: ReturnType<typeof harness>, states: Record<string, "running" 
 
 // D4 (HP T3.4): cost order, the free cloud's 2 slots, no interleave; a busy cheapest pool is waited for, then Sonnet at its step.
 test("selection: cloud, cloud (its 2 slots), then local; a fourth waits queueMaxSec, then Sonnet high", async () => {
-  const h = harness({ settings: { queueMaxSec: 10 } });
+  const h = harness({ base: "today", settings: { queueMaxSec: 10 } });
   const models: string[] = [];
   for (const n of ["q1", "q2", "q3"]) models.push((accepted(await h.a.spawn({ name: n, task: card() })) as any).model);
   assert.deepEqual(models, [CLOUD, CLOUD, LOCAL]);
@@ -77,7 +77,7 @@ test("selection: cloud, cloud (its 2 slots), then local; a fourth waits queueMax
 
 // mi11: a reservation holds 60 s whether the child is listed or not, so the idle local child frees its slot only then.
 test("a queued spawn proceeds when the local child goes idle and its reservation ends", async () => {
-  const h = harness();
+  const h = harness({ base: "today" });
   for (const n of ["q1", "q2", "q3"]) await h.a.spawn({ name: n, task: card() }); // cloud, cloud, local
   listAs(h, { q1: "running", q2: "running", q3: "running" });
   h.hooks.onSleep = () => listAs(h, { q3: "idle" });
@@ -87,7 +87,7 @@ test("a queued spawn proceeds when the local child goes idle and its reservation
 });
 
 test("health probe: local down → no local route; result cached 30 s", async () => {
-  const h = harness({ health: { health: 503, slots: 200 } });
+  const h = harness({ base: "today", health: { health: 503, slots: 200 } });
   const a = accepted(await h.a.spawn({ name: "q1", task: card() })) as any;
   const b = accepted(await h.a.spawn({ name: "q2", task: card() })) as any;
   assert.deepEqual([a.model, b.model], [CLOUD, CLOUD]);
@@ -100,7 +100,7 @@ test("health probe: local down → no local route; result cached 30 s", async ()
 
 test("health probe: busy slot (503) or unreachable host is not available; 404/501 is unknown = available", async () => {
   const first = async (health: any) => {
-    const h = harness({ settings: { models: { "qwen-cloud": { model: "" } }, queueMaxSec: 0 } as any, health });
+    const h = harness({ base: "today", settings: { models: { "qwen-cloud": { model: "" } }, queueMaxSec: 0 } as any, health });
     return (accepted(await h.a.spawn({ name: "q1", task: card() })) as any).model;
   };
   assert.equal(await first({ health: 200, slots: 503 }), SONNET);
@@ -110,7 +110,7 @@ test("health probe: busy slot (503) or unreachable host is not available; 404/50
 });
 
 test("our own running local child: with the slot busy, a free cloud slot is taken at once", async () => {
-  const h = harness({ health: { health: 200, slots: 200 } });
+  const h = harness({ base: "today", health: { health: 200, slots: 200 } });
   for (const n of ["q1", "q2", "q3"]) await h.a.spawn({ name: n, task: card() }); // cloud, cloud, local
   listAs(h, { q1: "idle", q2: "running", q3: "running" });
   h.clock.t += 61_000;
@@ -121,7 +121,7 @@ test("our own running local child: with the slot busy, a free cloud slot is take
 });
 
 test("spawn event logs the routed plan with reasons and the child's session id", async () => {
-  const h = harness();
+  const h = harness({ base: "today" });
   await h.a.spawn({ name: "q1", task: card() }, { policyMeta: undefined });
   h.a.emit({ type: "spawn", name: "q1", by: "main", parent: "main", childSessionId: "s-q1", ts: 1 });
   const [e] = h.lines();
@@ -323,7 +323,7 @@ test("concurrent spawns: exactly one takes the local slot, the other waits queue
 });
 
 test("P-slots: five concurrent spawns never put more children on a member than its slots", async () => {
-  const h = harness({ settings: { queueMaxSec: 0 } });
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
   const rs = await Promise.all(["q1", "q2", "q3", "q4", "q5"].map((n) => h.a.spawn({ name: n, task: card() })));
   const models = rs.map((r) => (accepted(r) as any).model);
   const on = (m: string) => models.filter((x) => x === m).length;
@@ -332,7 +332,7 @@ test("P-slots: five concurrent spawns never put more children on a member than i
 });
 
 test("a ghost reservation (never listed) holds its slot 60 s; then the next spawn sweeps it and takes the slot, and a later free cap moves no ghost", async () => {
-  const h = harness({ settings: { queueMaxSec: 0 } });
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
   assert.equal((accepted(await h.a.spawn({ name: "g1", task: card() })) as any).model, CLOUD); // never listed: a ghost
   assert.equal((accepted(await h.a.spawn({ name: "c1", task: card() })) as any).model, CLOUD);
   listAs(h, { c1: "running" });
@@ -349,7 +349,7 @@ test("a ghost reservation (never listed) holds its slot 60 s; then the next spaw
 });
 
 test("no API → no sweep: the router keeps its entries", async () => {
-  const h = harness({ settings: { queueMaxSec: 0 } });
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
   accepted(await h.a.spawn({ name: "g1", task: card() }));
   h.clock.t += 61_000;
   const api = h.a.api;
@@ -399,7 +399,7 @@ test("explicit Sonnet with the local slot busy → Sonnet at once", async () => 
 });
 
 test("an explicit model whose window is below the files' need is accepted, with the context reason (contextFit 1)", async () => {
-  const h = harness({ settings: { contextFit: 1, models: { "qwen-local": { contextWindow: 200 } } } as any });
+  const h = harness({ base: "today", settings: { contextFit: 1, models: { "qwen-local": { contextWindow: 200 } } } as any });
   assert.equal((accepted(await h.a.spawn({ name: "q1", model: LOCAL, task: card() })) as any).model, LOCAL);
   h.a.emit({ type: "spawn", name: "q1", by: "main", parent: "main", childSessionId: "s-q1", ts: 1 });
   const [e] = h.lines();

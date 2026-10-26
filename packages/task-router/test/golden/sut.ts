@@ -32,22 +32,24 @@ export function sutSpawn(ctx: { settings: RouterSettings; attempts: AttemptState
   return { label: fmt(r.value.plan), start: `${tier}/${st.effort}`, reasons: r.value.plan.reasons };
 }
 
-const cache = new Map<string, RouterSettings>(); // parsed once per (variant, randomize): the grid has 150k cases
-const settingsOf = (v: Variant, rnd: boolean): RouterSettings => {
+const cache = new WeakMap<object, Map<string, RouterSettings>>(); // parsed once per (raw, variant, randomize): the grid has 150k cases
+const settingsOf = (raw: Record<string, unknown>, v: Variant, rnd: boolean): RouterSettings => {
+  const byRaw = cache.get(raw) ?? cache.set(raw, new Map()).get(raw)!;
   const key = `${v.name} ${rnd}`;
-  if (!cache.has(key)) cache.set(key, parseSettings({ ...TODAY_RAW, profiles: v.profiles, randomize: { enabled: rnd, share: 0.5 } }).settings);
-  return cache.get(key)!;
+  if (!byRaw.has(key)) byRaw.set(key, parseSettings({ ...raw, profiles: v.profiles, randomize: { enabled: rnd, share: 0.5 } }).settings);
+  return byRaw.get(key)!;
 };
 
-export const sutRouter = (): Router => ({
+/** The production router under the settings file `raw`: the today fixture (AC1; the default) or `{}` (the defaults, T5.1). */
+export const sutRouter = (raw: Record<string, unknown> = TODAY_RAW): Router => ({
   seq(v: Variant, c: Case) {
-    const ctx = { settings: settingsOf(v, c.rnd !== "off"), attempts: new Map() as AttemptState };
+    const ctx = { settings: settingsOf(raw, v, c.rnd !== "off"), attempts: new Map() as AttemptState };
     return [...spawns(c)]
       .map((sp) => sutSpawn(ctx, { taskId: sp.id, kind: c.kind, t0: c.t0, t2: sp.t2, force: c.t2m === "force", need: 0, imp: c.imp, draw: c.rnd === "hit", ...(sp.attemptOf ? { attemptOf: sp.attemptOf } : {}) }).label)
       .join(" | ");
   },
   explicit(v: Variant, c: First, model?: string, effort?: ThinkingLevel) {
-    const ctx = { settings: settingsOf(v, false), attempts: new Map() as AttemptState };
+    const ctx = { settings: settingsOf(raw, v, false), attempts: new Map() as AttemptState };
     const r = sutSpawn(ctx, { taskId: "t0", kind: c.kind, t0: c.t0, t2: c.t2m === "t2", force: c.t2m === "force", need: 0, imp: c.imp, draw: false, ...(model !== undefined ? { model } : {}), ...(effort !== undefined ? { effort } : {}) });
     return r.start ?? "REJECT";
   },

@@ -7,7 +7,7 @@ import { harness } from "./harness.ts";
 const agent = (name: string, sessionId: string, model: string, thinkingLevel: any = "high") => ({ name, parent: "main", sessionId, model, thinkingLevel, state: "running" as const });
 
 function rig(settings: Record<string, unknown> = { routing: false }) {
-  const h = harness({ settings });
+  const h = harness({ base: "today", settings }); // T5.1: the free cloud model below is an enabled member only in the today fixture
   h.a.agents.push(agent("main", "s-main", "anthropic/claude-opus-5-5"), agent("kid", "s-kid", "anthropic/claude-sonnet-5-5"), agent("qk", "s-qk", "openrouter/qwen/qwen3.8-27b:free", "xhigh"));
   return h;
 }

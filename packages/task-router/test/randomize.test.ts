@@ -8,7 +8,7 @@ import { randomizeLeg } from "../core/randomize.ts";
 import { labelLeg } from "../core/select.ts";
 import type { RouterSettings } from "../core/types.ts";
 import { TODAY } from "./tier-plan.ts";
-import { accepted, card, harness, provideSkills } from "./harness.ts";
+import { accepted, card, harness, provideSkills, todayWith } from "./harness.ts";
 
 const SONNET = "anthropic/claude-sonnet-5-5";
 const T0 = card().t0;
@@ -113,7 +113,8 @@ test("a randomized task that fails escalates from where it ran (T1 → T2)", asy
 // --- randomizeLeg (spec §6.1; T2.7) -----------------------------------------------------------
 
 
-const RS = parseSettings({ randomize: { enabled: true, share: 0.2 } }).settings;
+// T5.1: on the today fixture (read: Qwen 0, then Sonnet 2; Haiku at read 1 from T5.5 would be the draw above Qwen).
+const RS = parseSettings(todayWith({ randomize: { enabled: true, share: 0.2 } })).settings;
 
 test("randomizeLeg: draws only at the bottom of the ability, enabled, rng() < share (0.19 yes, 0.2 no)", () => {
   assert.deepEqual(randomizeLeg(RS, "write", { level: 0, step: 0 }, 0, () => 0.19),
