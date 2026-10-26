@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { effortAt, enabled, firstMeeting } from "../core/members.ts";
 import { TODAY_RAW, todayWith } from "./harness.ts";
 import { planFor as legacyPlanFor } from "./oracle/legacy-plan.ts";
@@ -283,6 +284,18 @@ test("today fixture: haiku is blanked with exactly {model: \"\"}, no profiles ke
   assert.deepEqual(TODAY_RAW.models.haiku, { model: "" });
   assert.equal("profiles" in TODAY_RAW, false);
   assert.deepEqual(Object.keys(TODAY_RAW.models), ["qwen-local", "qwen-cloud", "haiku", "sonnet", "opus"]);
+});
+
+// F5.2 (plan router-g3-g7, D14): models are configured through programs.piEconomics.taskRouter.settings; the module-eval
+// case task-router-models writes this same file and reads it back (P-models).
+const MODELS_EXAMPLE = fileURLToPath(new URL("./fixtures/models-example.json", import.meta.url));
+test("models example: every member as written, 0 problems", () => {
+  const x = JSON.parse(readFileSync(MODELS_EXAMPLE, "utf8"));
+  const r = loadSettingsReport(MODELS_EXAMPLE);
+  assert.deepEqual(r.problems, []);
+  for (const [m, given] of Object.entries(x.models as Record<string, { model: string }>)) assert.equal(r.settings.models[m].model, given.model, m);
+  assert.equal(r.settings.queueMaxSec, 60);
+  assert.ok(!enabled(r.settings.models).some((m) => m.name === "qwen-cloud"));
 });
 
 // --- review fixes (G0/G1 review, 2026-10-25) -------------------------------------------------

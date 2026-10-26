@@ -1,0 +1,7 @@
+{ "models": {
+    "qwen-local": { "model": "local/qwen", "health": "http://local.invalid:11545" },
+    "qwen-cloud": { "model": "" },
+    "haiku": { "model": "anthropic/claude-haiku-5-5" },
+    "sonnet": { "model": "anthropic/claude-sonnet-5-5" },
+    "opus": { "model": "anthropic/claude-opus-5-5" } },
+  "queueMaxSec": 60 }

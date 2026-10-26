@@ -60,6 +60,14 @@ in {
     ++ eq "no file for {} (${dir})" (fileAt "${dir}/task-router/settings.json" (eval dir {} withActor)) null)
   dirs;
 
+  # (F5.2) Models are configured through taskRouter.settings (spec §6.2): the
+  # file holds them as written; the package's settings test reads the same fixture.
+  task-router-models = let
+    x = lib.importJSON ../../../packages/task-router/test/fixtures/models-example.json;
+    f = fileAt ".pi/agent/task-router/settings.json" (eval ".pi/agent" {settings = x;} withActor);
+  in
+    eq "settings file" (builtins.fromJSON f.text) x;
+
   # (M5.10) The hard dependency (spec §4.1), both halves.
   task-router-requires-actor-subagents =
     eq "assertions" (failed "pi-economics: taskRouter" (eval ".pi/agent" {} {})) [message];

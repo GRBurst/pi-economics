@@ -23,21 +23,19 @@ in {
       type = lib.types.attrsOf (pkgs.formats.json {}).type;
       default = {};
       example = {
-        randomize = {
-          enabled = true;
-          share = 0.2;
+        models = {
+          qwen-local.health = "http://localhost:11545";
+          haiku.model = "";
         };
-        spotCheck = {
-          enabled = true;
-          share = 0.1;
-        };
+        queueMaxSec = 60;
       };
       description = ''
         Written to `<agentDir>/task-router/settings.json` when non-empty.
         Free-form (spec §6.2): every key has a default in the package's
         core/settings.ts, which owns the schema, so `{}` writes no file.
-        `models.<member>.model` names a member's model (`""` removes the
-        member); `randomize` and `spotCheck` default to `enabled = false`.
+        `models.<member>` merges field by field over the default member;
+        `model = ""` removes it. `randomize` and `spotCheck` default to
+        `enabled = false`.
       '';
     };
   };
