@@ -223,6 +223,24 @@ test("slow retune of an idle-listed child: its reservation holds the target; a s
   assert.deepEqual([q2.model, q3.model], [CLOUD, SONNET]);
 });
 
+// RG4 (review-g3 Low 2): `prev` is the pending marker (spec §4.8). A second error while the retune is in flight comes from
+// the provider being left, not from the target the entry already names: it starts no second move.
+test("a second error during an in-flight retune starts no second move (no move back to the failed provider)", async () => {
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
+  await spawnAll(h, ["q0", "q1"]); // cloud, cloud: its two slots
+  listAs(h, { q0: "running", q1: "running" });
+  const g = gate();
+  h.a.control.gate = g.p;
+  h.a.emit(err("q1", "retries exhausted")); // q1 → local, retune in flight
+  await settle();
+  h.a.emit(err("q1", "retries exhausted")); // the same failure, seen again before the retune took effect
+  await settle();
+  g.open();
+  await settle(); await settle();
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", LOCAL]]);
+  assert.deepEqual(reroutes(h).map((r) => [r.taskId, r.from, r.to]), [["q1", "cloud", "local"]]);
+});
+
 test("retune throws → entry restored, the target's slot free at once, one warning, no reroute line", async () => {
   const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
   await spawnAll(h, ["q0", "q1"]); // cloud, cloud: its two slots
