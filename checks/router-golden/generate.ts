@@ -1,7 +1,9 @@
 // The router's golden decisions (spec §6.3): R''s planSpawn over the golden grid (test/golden/grid.ts) and the selection's
-// 96 states through resolveLeg (`select` lines, picks by member), under two settings: R''s defaults and EMPTY_SLOT (every
-// member's model set, the free cloud empty). Usage: node --experimental-strip-types generate.ts <task-router dir>  > decisions (stdout).
+// 96 states through resolveLeg (`select` lines, picks by member), under three settings: the defaults, EMPTY_SLOT (every
+// member's model set, the free cloud empty) and TODAY (test/fixtures/today-config.json, the rollback: R''s defaults, the
+// only recorded witness of a configured free-cloud slot; plan router-g3-g7, D8). Usage: node --experimental-strip-types generate.ts <task-router dir>  > decisions (stdout).
 // Run by hand once on a host checkout at R' (header added by the caller); checks/router-golden runs it on packages/task-router.
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const dir = resolve(process.argv[2] ?? ".");
@@ -21,7 +23,8 @@ export const EMPTY_SLOT = {
     opus: { model: "api/opus" },
   },
 };
-const FIXTURES: [string, Record<string, unknown>][] = [["defaults", {}], ["empty-slot", EMPTY_SLOT]];
+const TODAY = JSON.parse(readFileSync(join(dir, "test/fixtures/today-config.json"), "utf8"));
+const FIXTURES: [string, Record<string, unknown>][] = [["defaults", {}], ["empty-slot", EMPTY_SLOT], ["today", TODAY]];
 const out: string[] = [];
 const id = (n: number, w: number) => n.toString(36).padStart(w, "0");
 
@@ -41,7 +44,7 @@ for (const [fx, raw] of FIXTURES) {
     if (!cache.has(k)) cache.set(k, parseSettings({ ...structuredClone(raw), profiles: v.profiles, randomize: { enabled: rnd, share: 0.5 } }).settings);
     return cache.get(k);
   };
-  const model = (m: string | undefined) => (fx === "defaults" || m === undefined ? m : ({ [grid.MODELS.local]: "local/qwen", [grid.MODELS.haiku]: "api/haiku", [grid.MODELS.sonnet]: "api/sonnet", [grid.MODELS.opus]: "api/opus" } as Record<string, string>)[m] ?? m);
+  const model = (m: string | undefined) => (fx !== "empty-slot" || m === undefined ? m : ({ [grid.MODELS.local]: "local/qwen", [grid.MODELS.haiku]: "api/haiku", [grid.MODELS.sonnet]: "api/sonnet", [grid.MODELS.opus]: "api/opus" } as Record<string, string>)[m] ?? m);
   const plan: [string, string[]][] = [], expl: [string, string[]][] = [];
   let nPlan = 0, nExpl = 0;
   for (const v of grid.VARIANTS) {
