@@ -124,8 +124,9 @@ whose Qwen is busy logs `workerTier: qwen`, `workerEffort: xhigh`, and e.g. `wor
 `ability` and `fromLevel`/`toLevel`. `escalate.from` is the route the failed attempt ran on last (after its
 reroutes). It is `"?"` on older lines, and on a re-spawn whose failed task the router does not know (its attempt state
 is in memory: a restart, a hand-off, a mistyped `attemptOf`); `fromModel` and `fromLevel` are absent when the attempt is unknown.
-`fromLevel` is the level the escalation starts from, the failed attempt's planned member's level on `ability`, not
-necessarily the level of `from`/`fromModel` (a write-0 plan that fell back to Sonnet logs `from: "T1"`, `fromLevel: 0`).
+`fromLevel` is the level the escalation starts from: the higher of the failed attempt's planned and ran member's levels
+on `ability` (D7), so it exceeds the level of `from`/`fromModel` when the planned member rates higher on `ability`
+(a write-0 plan that fell back to Sonnet logs `from: "T1"`, `fromLevel: 1`).
 `pi-analyse` counts an escalation in its failed task's row (card kind × `workerTier`).
 
 ### Older lines: the old → new mapping
