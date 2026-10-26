@@ -8,6 +8,7 @@ import { accepted, card, harness } from "./harness.ts";
 const CLOUD = "openrouter/qwen/qwen3.8-27b:free";
 const LOCAL = "llama/qwen3.8";
 const SONNET = "anthropic/claude-sonnet-5-5";
+const OPUS = "anthropic/claude-opus-5-5";
 
 test("registers the spawn policy at install", () => {
   const h = harness();
@@ -557,7 +558,7 @@ test("RG7: a Sonnet fallback's re-spawn escalates from T1, the member it was pic
   assert.deepEqual([l.from, l.fromModel], ["T1", SONNET]);
 });
 
-test("T4.2 escalate fields: after a failover to Sonnet the re-spawn logs from T1 (the member it ran on)", async () => {
+test("T4.2 escalate fields: after a failover to Sonnet the re-spawn logs from T1 (the member it ran on), and goes above it (D7)", async () => {
   const h = harness({ base: "today", health: { health: 503, slots: 200 } }); // local down: the move goes to Sonnet
   assert.equal((accepted(await h.a.spawn({ name: "q1", task: card() })) as any).model, CLOUD);
   emitSpawn(h, "q1");
@@ -567,7 +568,7 @@ test("T4.2 escalate fields: after a failover to Sonnet the re-spawn logs from T1
   accepted(await h.a.spawn({ name: "q1b", task: card({ attemptOf: "q1" }) }));
   emitSpawn(h, "q1b");
   const l = escalateLine(h, "q1b");
-  assert.deepEqual([l.from, l.fromModel, l.to, l.toModel, l.fromLevel, l.toLevel], ["T1", SONNET, "T1", SONNET, 0, 1]);
+  assert.deepEqual([l.from, l.fromModel, l.to, l.toModel, l.fromLevel, l.toLevel], ["T1", SONNET, "T2", OPUS, 1, 2]); // T5.7: was T1, 0 → 1
 });
 
 // --- T5.5 (D2, D11; spec §4.10 rows 2, 3): Haiku is enabled by default -----------------------------------------------------
@@ -635,4 +636,26 @@ test("defaults (§4.10 row 14): a draft (small missed by ~1.2M tokens of files) 
   assert.equal(x.start, `${HAIKU} medium`);
   assert.deepEqual(x.review, ["T1", "high"]);
   assert.ok(x.reasons.includes(largest("haiku", "write", 0, 1_200_000)), x.reasons.join("\n"));
+});
+
+// --- T5.7 (D7; spec §4.10 rows 17, 18): a re-spawn escalates one level above the member the failed attempt ran on ----------
+const localDown = { health: 0, slots: 0 };
+
+test("defaults (§4.10 row 18, D7): re-spawn of a write-0 task that fell back to Sonnet → Opus high", async () => {
+  const h = harness({ settings: { models: { haiku: { model: "" } } } as never, health: localDown }); // the rollback's Haiku
+  const r = accepted(await h.a.spawn({ name: "w1", task: card() })) as any;
+  assert.deepEqual([r.model, r.thinkingLevel], [SONNET, "high"]);
+  const b = accepted(await h.a.spawn({ name: "w1b", task: card({ attemptOf: "w1" }) })) as any;
+  assert.deepEqual([b.model, b.thinkingLevel], [OPUS, "high"]);
+  emitSpawn(h, "w1b");
+  const l = escalateLine(h, "w1b");
+  assert.deepEqual([l.from, l.to, l.fromLevel, l.toLevel], ["T1", "T2", 1, 2]);
+});
+
+test("defaults (§4.10 row 17): re-spawn of a write-0 task that ran on Haiku → Sonnet high (Haiku's write level is the plan's)", async () => {
+  const h = harness({ health: localDown });
+  const r = accepted(await h.a.spawn({ name: "w1", task: card() })) as any;
+  assert.deepEqual([r.model, r.thinkingLevel], [HAIKU, "medium"]);
+  const b = accepted(await h.a.spawn({ name: "w1b", task: card({ attemptOf: "w1" }) })) as any;
+  assert.deepEqual([b.model, b.thinkingLevel], [SONNET, "high"]);
 });

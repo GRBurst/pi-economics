@@ -33,7 +33,7 @@ export function planSpawn(d: PlanDeps, i: SpawnIn): Result<SpawnPlan> {
     const r = randomizeLeg(s, a, worker, need, d.rng);
     if (r) { worker = r.worker; assigned = "random"; routeBase = r.from; reasons.push(r.reason); }
   }
-  const att = respawn(d.attempts, s, { taskId: i.taskId, attemptOf: i.card.attemptOf, a, worker, need });
+  const att = respawn(d.attempts, s, { taskId: i.taskId, attemptOf: i.card.attemptOf, a, worker, need, fromRan: true }); // D7 (T5.7)
   if (!att.ok) return att;
   worker = att.value.worker; reasons.push(...att.value.reasons);
   const W = labelLeg(s, a, worker, need);
