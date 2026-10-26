@@ -50,7 +50,7 @@ export function defaults(): Settings {
       review: readRows(C(3, 1)), // a review keeps today's row 2 critical (spec §4.4)
     },
     readOnlyReview: "effort-step", // D1 (RD4): a read-only profile at critical raises its worker instead of a review
-    contextFit: 0,
+    contextFit: 1, // D6 (OD17): a member whose window cannot hold the files is no candidate
     queueMaxSec: 120,
     checkTimeoutSec: 900,
     runaway: { requests: 150, usd: 10 },

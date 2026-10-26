@@ -597,3 +597,42 @@ test("defaults (D11): an explicit Haiku on a write-0 plan starts at medium; with
   assert.ok("reject" in x);
   assert.match(x.reject, /^effort low is below the routed xhigh/);
 });
+
+// --- T5.6 (D6, OD17; spec §4.10 rows 4, 12–14): contextFit 1 by default — the files' tokens filter the candidates --------
+/** The harness's fs with every file of 3.6 × tokens bytes (the estimate is 3.6 bytes per token): one file, `tokens` tokens. */
+const filesOf = (tokens: number) => ({ fs: { exists: (p: string) => p.startsWith("/work/src/"), size: () => 3.6 * tokens, isDir: (p: string) => p === "/work" || p.startsWith("/work/src") } });
+const ctxSpawn = async (tokens: number, c: Parameters<typeof card>[0]) => {
+  const h = harness({ extra: filesOf(tokens) as never });
+  const r = accepted(await h.a.spawn({ name: "c1", task: card(c) })) as any;
+  h.a.emit({ type: "spawn", name: "c1", by: "main", parent: "main", childSessionId: "s-c1", ts: 0 });
+  const l = h.lines().find((x) => x.event === "spawn" && x.taskId === "c1")!;
+  return { start: `${r.model} ${r.thinkingLevel}`, review: [l.reviewTier, l.reviewEffort], reasons: l.reasons as string[] };
+};
+const largest = (m: string, a: string, level: number, need: number) =>
+  `context: files need ~${need} tokens (whole files); no member meeting ${a} ${level} holds them; took the largest window (${m}, 1000000 tokens): list only the files the task reads, or split the task`;
+
+test("defaults (§4.10 row 4): a mechanical card whose files (~950k tokens) miss small → Haiku medium, a Sonnet-high review, Qwen excluded by context", async () => {
+  const x = await ctxSpawn(950_000, { kind: "mechanical" });
+  assert.equal(x.start, `${HAIKU} medium`);
+  assert.deepEqual(x.review, ["T1", "high"]);
+  assert.ok(x.reasons.includes("context: files need ~950000 tokens; excluded qwen-local (262144)"), x.reasons.join("\n"));
+});
+
+test("defaults (§4.10 row 12): implement with a t2 trigger at high, files ~1.1M tokens → Opus xhigh with the largest-window reason", async () => {
+  const x = await ctxSpawn(1_100_000, { t2: ["security"], importance: "high" } as never);
+  assert.equal(x.start, "anthropic/claude-opus-5-5 xhigh");
+  assert.ok(x.reasons.includes(largest("opus", "write", 2, 1_100_000)), x.reasons.join("\n"));
+});
+
+test("defaults (§4.10 row 13): implement with two misses at high, files ~1.04M tokens → Sonnet xhigh (the cheaper of the largest windows)", async () => {
+  const x = await ctxSpawn(1_040_000, { t0: { ...card().t0, linear: false }, importance: "high" } as never);
+  assert.equal(x.start, `${SONNET} xhigh`);
+  assert.ok(x.reasons.includes(largest("sonnet", "write", 1, 1_040_000)), x.reasons.join("\n"));
+});
+
+test("defaults (§4.10 row 14): a draft (small missed by ~1.2M tokens of files) → Haiku medium and its review, the largest-window reason", async () => {
+  const x = await ctxSpawn(1_200_000, {});
+  assert.equal(x.start, `${HAIKU} medium`);
+  assert.deepEqual(x.review, ["T1", "high"]);
+  assert.ok(x.reasons.includes(largest("haiku", "write", 0, 1_200_000)), x.reasons.join("\n"));
+});

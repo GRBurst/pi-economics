@@ -195,7 +195,7 @@ test("defaults: the write table is today's TABLE per level (spec §4.4)", () => 
   });
 });
 
-test("defaults: read row 2 critical = W2·1 (D12, OD13); the review table = the read table except row 2 critical, which stays W3·1; readOnlyReview effort-step (D1, RD4); contextFit 0", () => {
+test("defaults: read row 2 critical = W2·1 (D12, OD13); the review table = the read table except row 2 critical, which stays W3·1; readOnlyReview effort-step (D1, RD4); contextFit 1 (D6, OD17)", () => {
   const s = defaults();
   assert.deepEqual(s.importanceTable.read["2"].critical, { worker: { level: 2, step: 1 } });
   assert.deepEqual(s.importanceTable.review["2"].critical, { worker: { level: 3, step: 1 } });
@@ -204,7 +204,7 @@ test("defaults: read row 2 critical = W2·1 (D12, OD13); the review table = the 
   assert.deepEqual({ ...reviewRow2, critical: undefined }, { ...readRow2, critical: undefined });
   assert.deepEqual(Object.keys(s.importanceTable.read), ["0", "1", "2", "3"]);
   assert.equal(s.readOnlyReview, "effort-step");
-  assert.equal(s.contextFit, 0);
+  assert.equal(s.contextFit, 1);
 });
 
 test("a given cell replaces the default cell whole (a cell without review has none); a row merges per importance", () => {
@@ -267,7 +267,7 @@ test("member validation: the defaults pass without a problem", () => {
 // --- the today fixture (spec §5.3, RD1): the owner's rollback ------------------------------
 
 /** The leaf paths where the fixture's settings and the defaults differ: the settings view of M5 (spec §5.2 vs §5.3). */
-const FLIPPED: string[] = ["importanceTable.read.2.critical.worker.level", "readOnlyReview", "models.qwen-cloud.model", "models.qwen-cloud.order", "models.haiku.model"];
+const FLIPPED: string[] = ["importanceTable.read.2.critical.worker.level", "readOnlyReview", "models.qwen-cloud.model", "models.qwen-cloud.order", "models.haiku.model", "contextFit"];
 const isPlain = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
 const leaves = (v: unknown, path = ""): Record<string, string> =>
   isPlain(v) ? Object.assign({}, ...Object.entries(v).map(([k, x]) => leaves(x, path ? `${path}.${k}` : k))) : { [path]: JSON.stringify(v) };
