@@ -322,6 +322,25 @@ test("RG8: a retune that never settles: an error after the move's reservation ha
   assert.deepEqual(reroutes(h).map((r) => [r.taskId, r.from, r.to]), [["q1", "local", "cloud"]]);
 });
 
+// RF3 (review-g5 plant MP2): the boundary of RG8's window: pending just inside PENDING_MS after the move, moved at PENDING_MS.
+test("RG8 boundary: an error just inside the move's reservation starts no move; one at its end moves the child", async () => {
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
+  await spawnAll(h, ["q0", "q1"]); // cloud, cloud
+  listAs(h, { q0: "running", q1: "running" });
+  h.a.control.gate = new Promise(() => {}); // never resolves
+  h.a.emit(err("q1", "retries exhausted")); // q1 → local, stuck in retune
+  await settle(); await settle();
+  h.a.control.gate = undefined;
+  h.clock.t += PENDING_MS - 1; // just inside the reservation
+  h.a.emit(err("q1", "retries exhausted"));
+  await settle(); await settle(); await settle();
+  assert.equal(h.a.retunes.length, 0);
+  h.clock.t += 1; // the reservation has ended
+  h.a.emit(err("q1", "retries exhausted"));
+  await settle(); await settle(); await settle();
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", CLOUD]]);
+});
+
 // RF2 (review-g5 Low 1): RG8 lets a second move start once the first move's retune has hung past PENDING_MS. Each move owns its
 // marker (`prev`): a first move that settles after the second has taken the child over leaves the entry, the reroute log and
 // the attempt to the second; its late retune may have reached the engine last, so the engine is set back to the entry.

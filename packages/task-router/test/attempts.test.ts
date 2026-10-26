@@ -142,6 +142,16 @@ test("respawn: esc carries the member the task ran on; fromRan raises from to it
   assert.deepEqual(ran.ok && ran.value.esc, { ranMember: "sonnet", fromLevel: 1, toLevel: 2, known: true });
 });
 
+// RF3 (review-g5 plant MP1): D7 starts from the higher of the planned and the ran level, not from the ran one alone. The shipped
+// configs never leave the planned member above the ran one on the re-spawn's ability, so the state is constructed: a write-0
+// attempt planned on Haiku (read 1) that ran on Qwen local (read 0), re-spawned on the read scale.
+test("respawn (D7): the planned member above the ran one on the new ability → the escalation starts from the planned level", () => {
+  const st: AttemptState = new Map([["t0", { member: "haiku", ranMember: "qwen-local", retries: 0 }]]);
+  const r = rs(st, "t1", "t0", L(0), "read", true);
+  assert.ok(r.ok && r.value.worker.level === 2);
+  assert.deepEqual(r.ok && r.value.esc, { ranMember: "qwen-local", fromLevel: 1, toLevel: 2, known: true });
+});
+
 test("P-att (members): over every re-spawn sequence of length ≤ 4 on both scales, retries per lineage and level ≤ 1", () => {
   let n = 0;
   for (const a of ["write", "read"]) {

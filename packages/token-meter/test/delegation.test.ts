@@ -74,6 +74,18 @@ test("RG9: escalations count in the failed task's cell (kind × workerTier), not
   assert.deepEqual(d.profileTiers.map((c) => `${c.kind}/${c.tier}:${c.escalations}`), ["(unknown)/qwen:1", "(unknown)/?:1", "implement/qwen:2", "implement/T1:1"]);
 });
 
+// RF3 (review-g5 plant MP4): both Qwen routes map to the tier `qwen`, `cloud` as well as `local`.
+test("RF3: without its spawn, an escalation from cloud counts in (unknown)/qwen like one from local", () => {
+  const d = analyse(logsOf(
+    [{ id: "q1", verdict: "rejected" }],
+    [
+      ev("escalate", "x1b", 20, { from: "local", to: "T1", attemptOf: "gone" }),
+      ev("escalate", "x2b", 21, { from: "cloud", to: "T1", attemptOf: "gone2" }),
+    ],
+  )).delegation;
+  assert.deepEqual(d.profileTiers.map((c) => `${c.kind}/${c.tier}:${c.escalations}`), ["(unknown)/qwen:2", "implement/qwen:0"]);
+});
+
 test("unresolved cards are counted and kept out of every routing-quality statistic; spot-check reviews are counted apart", () => {
   const d = analyse(tierLogs()).delegation;
   assert.equal(d.unresolved, 1);
