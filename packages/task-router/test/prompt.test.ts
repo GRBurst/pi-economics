@@ -54,6 +54,13 @@ test("the injected section and the rejection share one schema text (cannot drift
   assert.ok(fire(harness()).task_cards.includes(cardSchema(s)));
 });
 
+// RF4 (review-g5 Low 3; spec §4.3, D13/OD15): the kinds line says what `lookup` is for, or orchestrators never pick it.
+test("RF4: the kinds line glosses lookup as the narrow scout", () => {
+  const lines = fire(harness()).task_cards.split("\n");
+  const kinds = Object.keys(BUILTIN_PROFILES).join(", ");
+  assert.deepEqual(lines.filter((l: string) => l.startsWith("- kind: ")), [`- kind: ${kinds}; lookup: the narrow scout, a question with a short, checkable answer`]);
+});
+
 // T5.9 (spec §9 M5): agent-facing text says "level", not "tier"; attemptOf escalates above the model the attempt ran on (D7);
 // an explicit model waits for its own slot and is never replaced (D14, OD19).
 test("T5.9 wording: the t2 and attemptOf lines and the section's last paragraph", () => {

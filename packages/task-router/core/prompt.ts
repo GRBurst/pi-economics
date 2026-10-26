@@ -6,10 +6,10 @@ import type { RouterSettings } from "./types.ts";
 
 export const CARD_FIELDS = ["kind", "files", "check", "acceptance", "t0", "t2", "importance", "attemptOf", "skills", "cwd", "reviewOf"];
 
-/** Compact card schema: kinds (built-in and settings profiles), fields, t0 keys, t2 values. */
+/** Compact card schema: kinds (built-in and settings profiles; `lookup` glossed, spec §4.3, D13), fields, t0 keys, t2 values. */
 export function cardSchema(s: RouterSettings): string {
   const kinds = [...new Set([...Object.keys(BUILTIN_PROFILES), ...Object.keys(s.profiles)])].join(", ");
-  return `- kind: ${kinds}
+  return `- kind: ${kinds}; lookup: the narrow scout, a question with a short, checkable answer
 - files: the files the task touches; check: command that proves it; acceptance: what must hold afterwards
 - t0: ${T0_KEYS.join(", ")}, each true only if you are sure; code verifies and can only lower them
 - t2: triggers that force the top level: ${T2_VALUES.join(", ")}; [] if none
