@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { accepted, card, harness } from "./harness.ts";
+import { defaults } from "../core/settings.ts";
 
 const SONNET = "anthropic/claude-sonnet-5-5";
 const LOCAL = "llama/qwen3.8";
@@ -233,4 +234,22 @@ test("P-slots with a move and two spawns in flight", async () => {
   const on = (m: string) => models.filter((x) => x === m).length;
   assert.ok(on(LOCAL) <= 1 && on(CLOUD) <= 2, models.join());
   assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", LOCAL]]);
+});
+
+// RG1 (review-g3 Medium 1, S8): the pinned failover filter compares levels on the plan's capped settings (capToTable), as
+// acceptModel and the selection do (G2 M2(b)): on a short custom table an explicit Opus is capped to the table's top, so a
+// second-provider member at that level is a failover target.
+test("RG1 S8: an explicit Opus on a short custom read table fails over to a second-provider member at the capped level", async () => {
+  const OPUS = "anthropic/claude-opus-5-5";
+  const sonnet2 = {
+    model: "openrouter/anthropic/claude-sonnet", tier: "T1", route: "T1b", abilities: { write: 1, read: 2 },
+    efforts: ["high", "xhigh"], contextWindow: 1000000, cost: 3, order: 1,
+  };
+  const mine = structuredClone(defaults().importanceTable.write); // rows 0–2: read is capped at 2
+  const h = harness({ settings: { importanceTable: { mine }, profiles: { x: { ability: "read", table: "mine" } }, models: { sonnet2 } } as any });
+  assert.equal((accepted(await h.a.spawn({ name: "x1", model: OPUS, task: card({ kind: "x", t2: ["security"] }) })) as any).model, OPUS);
+  listAs(h, { x1: "running" });
+  h.a.emit(err("x1", "overloaded"));
+  await settle(); await settle();
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["x1", sonnet2.model]]);
 });

@@ -11,6 +11,7 @@ import { importanceOf } from "./importance.ts";
 import { planSpawn } from "./pipeline.ts";
 import { profileFor, skillBlocks, skillNames } from "./profile.ts";
 import { pickMember } from "./select.ts";
+import { capToTable } from "./table.ts";
 import type { MemberState } from "./select.ts";
 import { cardRejection } from "./prompt.ts";
 import type { SkillPort } from "./profile.ts";
@@ -114,10 +115,12 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     if (!blocks.ok) return reject(blocks.errors);
     // The selection runs on the plan's candidates (D12); a pinned start (an explicit model) runs on its member alone.
     // A pinned start (an explicit model, D14) runs on its member alone, whose window never rejects (OD17: a reason instead),
-    // and fails over only at or above it. The entry is written at the pick, inside resolveLeg; its plan gets the selection's reason after.
+    // and fails over only at or above it, on the plan's capped levels (S8). The entry is written at the pick, inside resolveLeg;
+    // its plan gets the selection's reason after.
     const st = sp.value.start, leg = sp.value.cands.map((n) => named(s.models, n)!), M = named(s.models, st.member)!;
     const plan: Plan = { ...sp.value.plan, reasons: [...sp.value.plan.reasons] }, a = plan.ability, need = v.tokens ?? 0;
-    const failover = (st.pinned ? leg.filter((m) => lvl(m, a) >= lvl(M, a)) : leg).map((m) => m.name);
+    const capped = capToTable(s, prof.value).models, cappedLvl = (m: Named) => lvl(named(capped, m.name)!, a);
+    const failover = (st.pinned ? leg.filter((m) => cappedLvl(m) >= cappedLvl(M)) : leg).map((m) => m.name);
     if (st.pinned && s.contextFit > 0 && need > s.contextFit * M.contextWindow)
       plan.reasons.push(`context: files need ~${Math.round(need)} tokens; explicit ${M.name} holds ${M.contextWindow}`);
     const to = await resolveLeg(d, {
