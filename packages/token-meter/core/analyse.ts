@@ -228,6 +228,9 @@ export type DelegationSection = { spawns: number; unresolved: number; reviewSpaw
 
 const MIN_CI_N = 5; // judged tasks needed for a bootstrap CI of a group
 const TIER_RANK: Record<string, number> = { qwen: 0, haiku: 1, T1: 2, T2: 3 };
+/** The tier of an `escalate.from` route label (router 2026-10-17: the Qwen members' routes are `local` and `cloud`; `haiku`,
+ *  `T1`, `T2` are their own tiers); anything else, `"?"` included, as written. */
+const routeTier = (r: unknown): string => (r === "local" || r === "cloud" ? "qwen" : typeof r === "string" ? r : "?");
 const byTier = (a: string, b: string): number => (TIER_RANK[a] ?? 9) - (TIER_RANK[b] ?? 9) || (a < b ? -1 : a > b ? 1 : 0);
 const JUDGED = ["accepted", "partial", "rejected"];
 
@@ -301,7 +304,8 @@ function delegation(meter: any[], outcomes: any[], routerSettings: any): Delegat
       const named = typeof e.attemptOf === "string" ? e.attemptOf : e.taskId; // attemptOf names the task that failed
       const orig = spawnOf.get(named) ?? spawnOf.get(e.taskId);
       const left = !orig && allSpawns.some((x) => x.taskId === named || x.taskId === e.taskId); // an unresolved or review spawn: not routing quality
-      if (!left) cellOf(orig ? String(orig.kind) : "(unknown)", typeof e.from === "string" ? e.from : "?").escalations += 1;
+      // Keyed like the cells (RG9): the failed task's (kind, workerTier); without its spawn, `from`'s route mapped to a tier.
+      if (!left) (orig ? cellOf(String(orig.kind), tierOf(orig)) : cellOf("(unknown)", routeTier(e.from))).escalations += 1;
     } else if (e?.event === "check" && spawnOf.has(e.taskId)) {
       const c = cellOf(String(spawnOf.get(e.taskId).kind), tierOf(spawnOf.get(e.taskId)));
       c.checks += 1;

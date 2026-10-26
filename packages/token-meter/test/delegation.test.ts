@@ -57,6 +57,23 @@ test("profile × tier: tasks, accepted/partial/rejected/unjudged, $ per accepted
   assert.deepEqual(d.profileTiers.map((c) => `${c.kind}/${c.tier}`), ["implement/qwen", "implement/T2", "scout/qwen"]); // sorted; no review, no unresolved
 });
 
+// RG9 (review-g4 Low 4): since 2026-10-17 `escalate.from` is a route label (`local`, `cloud`, `haiku`, `T1`, `T2`; `"?"` when
+// unknown), while the cells are keyed by the spawn's `workerTier`. An escalation counts in its failed task's cell (kind ×
+// workerTier), whatever route it ran on; without the failed spawn, `from` is mapped to its tier (local, cloud → qwen).
+test("RG9: escalations count in the failed task's cell (kind × workerTier), not in a row named after the route", () => {
+  const d = analyse(logsOf(
+    [{ id: "q1", verdict: "rejected" }, { id: "q2", verdict: "rejected" }, { id: "t1", tier: "T1", verdict: "rejected" }],
+    [
+      ev("escalate", "q1b", 20, { from: "cloud", to: "T1", attemptOf: "q1", fromModel: "free", toModel: "sonnet" }),
+      ev("escalate", "q2b", 21, { from: "T1", to: "T2", attemptOf: "q2" }), // planned qwen, ran on a Sonnet fallback
+      ev("escalate", "t1b", 22, { from: "T1", to: "T2", attemptOf: "t1" }),
+      ev("escalate", "x1b", 23, { from: "local", to: "T1", attemptOf: "gone" }), // its spawn is not in the log
+      ev("escalate", "x2b", 24, { from: "?", to: "T1", attemptOf: "typo" }),
+    ],
+  )).delegation;
+  assert.deepEqual(d.profileTiers.map((c) => `${c.kind}/${c.tier}:${c.escalations}`), ["(unknown)/qwen:1", "(unknown)/?:1", "implement/qwen:2", "implement/T1:1"]);
+});
+
 test("unresolved cards are counted and kept out of every routing-quality statistic; spot-check reviews are counted apart", () => {
   const d = analyse(tierLogs()).delegation;
   assert.equal(d.unresolved, 1);
