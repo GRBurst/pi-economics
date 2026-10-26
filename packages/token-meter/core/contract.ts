@@ -41,8 +41,8 @@ const OUTCOMES: Rule[] = [
     ability: str, level: int0, draft: (v) => v === true, workerLevel: int0, reviewLevel: int0,
     workerMember: str, workerModel: str, startEffort: str, waitMs: (v) => numb(v) && v >= 0,
   }, "spawn: requirement, levels, started member, model, effort, wait (router 2026-10-17)", (l) => l.event === "spawn"),
-  ...optional({ fromModel: str, toModel: str }, "reroute/escalate: the models on both routes (router 2026-10-17)", (l) => l.event === "escalate" || l.event === "reroute"),
-  ...optional({ ability: str, fromLevel: int0, toLevel: int0 }, "escalate: ability and levels (router 2026-10-17)", (l) => l.event === "escalate"),
+  ...optional({ fromModel: str, toModel: str }, "reroute/escalate: the models on both routes (router 2026-10-17); escalate.fromModel absent when the attempt is unknown", (l) => l.event === "escalate" || l.event === "reroute"),
+  ...optional({ ability: str, fromLevel: int0, toLevel: int0 }, "escalate: ability and levels (router 2026-10-17); fromLevel absent when the attempt is unknown", (l) => l.event === "escalate"),
 ];
 const ASSIGNMENTS: Rule[] = [
   versioned,
