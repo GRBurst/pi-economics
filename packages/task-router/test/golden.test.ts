@@ -49,7 +49,7 @@ test("today-config: explicit grid == oracle", () => {
 // Default delta (spec §8.2, HS §9 M5; plan T5.1): under the defaults the production grid equals the oracle with the ACTIVE
 // deltas' wrappers, and that expectation differs from the plain oracle in exactly Σ COUNTS[ACTIVE] cases (r4 results.txt).
 // Each flip of T5.2–T5.5 adds its delta to ACTIVE.
-const ACTIVE = new Set<Delta>(["D12"]);
+const ACTIVE = new Set<Delta>(["D12", "D1"]);
 const COUNTS: Record<Delta, { plan: number; explicit: number }> = {
   D12: { plan: 960, explicit: 576 }, D1: { plan: 45, explicit: 15 }, D15: { plan: 6912, explicit: 0 },
   D11: { plan: 0, explicit: 6456 }, D3: { plan: 0, explicit: 2364 },

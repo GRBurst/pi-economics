@@ -78,7 +78,7 @@ export type RouterSettings = {
   models: Record<string, Member>;
   /** Importance table per name (a profile's `table`, else its ability): level → importance → cell (spec §4.4). */
   importanceTable: Record<string, Rows>;
-  /** Read-only profiles at critical: "effort-step" raises the worker instead of adding a review (T5.3 flips the default). */
+  /** Read-only profiles at critical: "effort-step" raises the worker instead of adding a review (the default since T5.3, D1). */
   readOnlyReview: "effort-step" | "review";
   /** Share of a member's window the files may fill; 0 = the context filter is off (T5.6). */
   contextFit: number;

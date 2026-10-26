@@ -46,7 +46,7 @@ export function defaults(): Settings {
       read: readRows(C(2, 1)), // D12 (OD13): a critical read-2 task runs at W2
       review: readRows(C(3, 1)), // a review keeps today's row 2 critical (spec §4.4)
     },
-    readOnlyReview: "review",
+    readOnlyReview: "effort-step", // D1 (RD4): a read-only profile at critical raises its worker instead of a review
     contextFit: 0,
     queueMaxSec: 120,
     checkTimeoutSec: 900,
