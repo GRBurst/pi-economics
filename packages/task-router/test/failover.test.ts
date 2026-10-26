@@ -289,6 +289,27 @@ test("RG5: a duplicate error during the first move's probes starts no second mov
   assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", LOCAL]]);
 });
 
+// RG8 (review-g4 Low 1): the marker counts as pending only while the move's reservation runs (PENDING_MS), so a retune that
+// never settles does not keep every later error from moving the child.
+test("RG8: a retune that never settles: an error after the move's reservation has ended moves the child again", async () => {
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
+  await spawnAll(h, ["q0", "q1"]); // cloud, cloud
+  listAs(h, { q0: "running", q1: "running" });
+  h.a.control.gate = new Promise(() => {}); // never resolves
+  h.a.emit(err("q1", "retries exhausted")); // q1 → local, stuck in retune
+  await settle(); await settle();
+  h.a.control.gate = undefined; // later retunes work
+  h.clock.t += 30_000; // within the move's reservation: still pending
+  h.a.emit(err("q1", "retries exhausted"));
+  await settle(); await settle();
+  assert.equal(h.a.retunes.length, 0); // (not deepEqual: it would narrow `retunes` to never[] below)
+  h.clock.t += 3_600_000; // an hour later, a real error
+  h.a.emit(err("q1", "retries exhausted"));
+  await settle(); await settle(); await settle();
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", CLOUD]]);
+  assert.deepEqual(reroutes(h).map((r) => [r.taskId, r.from, r.to]), [["q1", "local", "cloud"]]);
+});
+
 test("retune throws → entry restored, the target's slot free at once, one warning, no reroute line", async () => {
   const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
   await spawnAll(h, ["q0", "q1"]); // cloud, cloud: its two slots
@@ -305,7 +326,7 @@ test("retune throws → entry restored, the target's slot free at once, one warn
 });
 
 // RG7 (review-g4 Low 2, plant MD): only a completed move changes where the attempt runs (`ranMember`, D9).
-test("RG7: retune throws \u2192 the attempt still ran on the cloud: its re-spawn escalates from cloud, not from the target", async () => {
+test("RG7: retune throws → the attempt still ran on the cloud: its re-spawn escalates from cloud, not from the target", async () => {
   const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
   await spawnAll(h, ["q0", "q1"]); // cloud, cloud
   listAs(h, { q0: "running", q1: "running" });

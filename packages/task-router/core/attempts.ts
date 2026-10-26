@@ -7,7 +7,7 @@ import type { Ability, Leg, Result, RouterSettings } from "./types.ts";
 /** Per task: the member it was planned on, the member it ran on (after failovers), retries at the same level. */
 export type AttemptState = Map<string, { member: string; ranMember: string; retries: number }>;
 /** `known` false: `attemptOf` is not in this process's state (a restart, a typo); `ranMember` and `fromLevel` are then step 1's
- *  stand-in (the new plan's member), not where the attempt ran, and the `escalate` line logs `from: "?"` (RG6, spec \u00a74.6 erratum). */
+ *  stand-in (the new plan's member), not where the attempt ran, and the `escalate` line logs `from: "?"` (RG6, spec §4.6 erratum). */
 export type Escalation = { ranMember: string; fromLevel: number; toLevel: number; known: boolean };
 
 /** A re-spawn (`attemptOf`) goes one level above the failed member's level on the new card's ability; at the top one retry,

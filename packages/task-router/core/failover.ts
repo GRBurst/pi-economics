@@ -15,16 +15,18 @@ export function createFailover(d: PolicyDeps & {
    *  synchronous step, before `retune` (RD5, AC3): a spawn during the await sees the target taken; a throw restores it.
    *  `prev` is the pending marker: while a move is in flight, a further error is the old provider's and starts none. It is read
    *  twice: before the candidates are taken from the entry (a later move would compute them from the target), and after the
-   *  probes (a move that started while another was probing). */
+   *  probes (a move that started while another was probing). It is pending only while the move's reservation runs (RG8): a
+   *  retune that never settles does not hold the child for good. */
+  const pending = (c: Child): boolean => c.prev !== undefined && c.reservedUntil > d.now();
   const move = async (name: string, c: Child, reason: string): Promise<void> => {
     const api = d.api();
-    if (!api || c.prev) return;
+    if (!api || pending(c)) return;
     const failed = d.settings.models[c.member];
     const cands = c.failover.map((n) => named(d.settings.models, n)).filter((m): m is Named =>
       !!m && m.model !== "" && m.name !== c.member && providerOf(m) !== providerOf(failed));
     const health = await Promise.all(cands.map((m) => (m.health ? d.probe(m.health) : Promise.resolve(undefined))));
     // ---- synchronous: pick and rewrite the entry before any await (RD5) ----
-    if (c.prev) return;
+    if (pending(c)) return;
     const now = d.now(), listed = new Map(api.list().map((a) => [a.name, a.state]));
     const t = cands.find((m, i) => memberState(d, m, listed, now, health[i]).free); // no wait
     if (!t) return;

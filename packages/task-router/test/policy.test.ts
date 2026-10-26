@@ -500,7 +500,7 @@ test("T4.2 escalate fields: a killed cloud child's re-spawn logs from cloud (not
   });
 });
 
-// RG6 (review-g4 Medium 2; main's decision, spec \u00a74.6 erratum): the attempt state lives in memory, so after a restart or a typo
+// RG6 (review-g4 Medium 2; main's decision, spec §4.6 erratum): the attempt state lives in memory, so after a restart or a typo
 // the failed task is unknown. Step 1's stand-in (the new plan's member) still sets the escalation level, but the line does not
 // claim it as the route the attempt ran on: `from` "?", no `fromModel`, no `fromLevel`; the new child's side as written.
 test("RG6: a re-spawn of a task this process never saw logs from \"?\" without fromModel and fromLevel", async () => {
