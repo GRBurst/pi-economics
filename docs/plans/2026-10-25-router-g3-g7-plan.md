@@ -776,6 +776,26 @@ Option `example`: `{ models = { qwen-local.health = "http://localhost:11545"; ha
   - Not here (later tasks per HP): `Child.start`/`esc`, `attempts.ranMember` (T4.1, T4.2).
 - **Review (D18):** due on `git diff 5eff6ff HEAD -- packages checks modules docs` before G4; reported to main (this agent spawns no reviewer).
 
+## Group 4 — logs (impl-g4, 2026-10-26)
+
+- **Base** `7cadcbf` (G3 record `8a89a4f` + merge of milestone Q, bench-only). review-g3 accepted G3 (no blocker or high); main turned its four findings into RG1–RG4, done test-first inside this group.
+- **Commits:** `c225edb` T4.1, `bc2322e` T4.2, `e4d1e15` T4.3, `ec43503` T4.4, `6ec5dc5` T4.5, `b053297` T4.6, `8e10078` T4.7, `0fc7cfe` RG1, `ecd5567` RG2, `2adc4c1` RG4, `47efa38` RG3 (with RG1's correction of the Group 3 record), and this record.
+- **Gates.** `g4-preRG` (at `8e10078`, before main's RG message arrived): 66 checks ok over both refs, fmt ok, AC7 ok, failures 0. `g4` (at `47efa38`): the same 66 ok, fmt ok, AC7 ok, failures 0; PL replay `pass 2 fail 0`, stand-in today plan 146880/0, explicit 470016/0, matrix 186 cells / 0 throws / 22 free-cloud starts.
+- **Counts.** Router suite 402 → 409 T4.1 → 412 T4.2 → 413 T4.3 → 414 RG1 → 415 RG2 → 416 RG4. token-meter suite 154 → 170 T4.4 → 183 T4.5.
+- **Golden movements:** none (zero diff after T4.1, T4.2, T4.3, RG1, RG4; T4.4–T4.7 touch no router code).
+- **Plants seen red** (each reverted): P18 (`escalate.from` from `children` again: the killed-child case of "escalate fields" red; the after-failover case alone would not catch it, because the moved entry still exists), P19 (`workerLevel` as a string: `log-contract` FAILED, "outcomes: 6 line(s) miss workerLevel"), P20 (read `T1` → 1: 3 red in `levels.test.ts`), review-g3's M1 (the move without its reservation: the RG2 test red, 1 of 415).
+- **RG1 (review-g3 Medium 1, main's decision: implement S8).** The pinned failover filter compares levels on `capToTable(s, profile)`. RED: an explicit Opus on profile `x` (read, the short table `mine`) with a second-provider read-2 member `sonnet2`: after an error it stayed (`retunes = []`); now it moves to `sonnet2`. Defaults unchanged: golden zero diff, stand-in 0/0, replay 2/0. The Group 3 record's FP12 sentence is corrected in place (marked).
+- **RG2 (Medium 2).** `failover.test.ts` "slow retune of an idle-listed child": the errored child is listed `idle`, so only the move's reservation holds the target's slot.
+- **RG3 (Low 1).** P-cands amended in place (marked): a pinned start runs on `[M]`, and M may lie outside `p.cands` (OD17).
+- **RG4 (Low 2), reproduced and fixed.** A second error during an in-flight retune was blamed on the target (the entry already names it) and moved the child back to the provider that failed (`retunes = [[q1, local], [q1, cloud]]`). `failover.ts` now returns at the start of the synchronous step when `c.prev` is set (spec §4.8: the pending marker). The check comes after the probe await, so an error that arrives during the probes is covered too.
+- **Deviations** (none changes behaviour beyond the plan and main's RG decisions):
+  - T4.1: `Start` is declared in `core/types.ts` beside `LoggedPlan` (S9 puts it in `policy.ts`), so `outcome.ts` imports no policy. `outcome.test.ts`'s mirror of `KEYS` gains the 13 keys, and its `sample()` gains a routed spawn with `start`. Two cases beyond HP's list: an all-`t0` line with every field, and an explicit Opus logged as `workerMember: opus`.
+  - T4.2: the re-spawn's `Escalation` rides on the child entry (`ChildBase.esc`); `escalate.to` is the route of `c.start`'s member.
+  - T4.4: 11 invalid-field cases beyond the plan's 4.
+  - T4.5: choices within spec §6.4. The label map also maps the tier `qwen` → 0, which the `"?"` rule needs, and its model stays unknown. Unrouted lines get `startEffort` (= `workerEffort`) and `ranModel`. The ability of an old escalate is `levelsOfLine` of the failed spawn. Old lines get no `reviewLevel`, since the table has none. `draft` is set on write only (the read row maps `qwen-draft` → 0). HP's check `pi-token-meter` is `token-meter` here.
+  - T4.6: the new fields carry † with a dated paragraph of their own. `docs/pi-token-economics.md:41` is untouched (D19 assigns it to T5.11).
+- **Review (D18):** due on `git diff 7cadcbf HEAD -- packages checks docs`; reported to main.
+
 
 # Decisions on the open questions (main, 2026-10-25)
 
