@@ -245,6 +245,35 @@ test("blank `qwen-cloud`: never probed, counted or waited for (MP2)", async () =
   assert.ok(!existsSync(file) || !JSON.stringify(JSON.parse(readFileSync(file, "utf8"))).includes("qwen-cloud"));
 });
 
+// --- T5.4 (D3, MP2, spec §4.10 row 1): the free cloud is empty by default, local first --------------------------------------
+
+test("defaults: all-t0 card → LOCAL xhigh; the free model explicit → rejected; no member-count.json after turns of a local child", async () => {
+  const h = harness();
+  const r = accepted(await h.a.spawn({ name: "q1", task: card() })) as any;
+  assert.deepEqual([r.model, r.thinkingLevel], [LOCAL, "xhigh"]);
+  h.a.emit({ type: "turn", name: "q1", ts: 1 });
+  h.a.emit({ type: "turn", name: "q1", ts: 2 });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(existsSync(join(h.agentDir, "task-router", "member-count.json")), false);
+  const x = await h.a.spawn({ name: "q2", model: CLOUD, task: card() });
+  assert.ok("reject" in x);
+  assert.match(x.reject, /^model openrouter\/qwen\/qwen3\.8-27b:free is not in the routing table/);
+});
+
+test("a file that sets only the free cloud's model: an ordinary member after local (free, 2 slots, its cap counted)", async () => {
+  const only = { models: { "qwen-cloud": { model: CLOUD } } } as any;
+  const free = harness({ settings: only });
+  const r = accepted(await free.a.spawn({ name: "q1", task: card() })) as any;
+  assert.deepEqual([r.model, r.thinkingLevel], [LOCAL, "xhigh"]);
+  const busy = harness({ settings: only, health: { health: 200, slots: 503 } });
+  const c = accepted(await busy.a.spawn({ name: "c1", task: card() })) as any;
+  assert.deepEqual([c.model, c.thinkingLevel], [CLOUD, "xhigh"]);
+  assert.deepEqual(busy.sleeps, []);
+  busy.a.emit({ type: "turn", name: "c1", ts: 1 });
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(JSON.parse(readFileSync(join(busy.agentDir, "task-router", "member-count.json"), "utf8")), { "2026-10-02": { "qwen-cloud": 1 } });
+});
+
 test("the review leg is named statically: local down does not change it", async () => {
   const run = async (health: { health: number; slots: number }) => {
     const h = harness({ base: "today", settings: { ...BLANK_CLOUD, queueMaxSec: 0 }, health });

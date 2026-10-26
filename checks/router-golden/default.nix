@@ -10,7 +10,7 @@
   diffutils,
 }: let
   # The fixtures whose free-cloud slot is empty (plan router-g3-g7, D7).
-  fixtures = "empty-slot";
+  fixtures = "empty-slot defaults";
 in
   runCommand "check-router-golden" {nativeBuildInputs = [nodejs diffutils];} ''
     set -euo pipefail

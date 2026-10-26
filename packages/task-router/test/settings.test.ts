@@ -24,7 +24,7 @@ test("defaults pin the pilot (T0.3) t0Limits", () => {
   const d = defaults();
   assert.deepEqual(d.t0Limits, { files: 10, tokens: 150000 });
   assert.equal(d.models["qwen-local"].model, "llama/qwen3.8");
-  assert.equal(d.models["qwen-cloud"].model, "openrouter/qwen/qwen3.8-27b:free");
+  assert.equal(d.models["qwen-cloud"].model, ""); // D3 (T5.4): the free cloud slot is empty by default
   assert.equal(d.models.sonnet.model, "anthropic/claude-sonnet-5-5");
   assert.equal(d.models.opus.model, "anthropic/claude-opus-5-5");
   assert.equal(d.models["qwen-local"].health, "http://earth:11545");
@@ -84,12 +84,13 @@ test("parseSettings merges a partial file over the defaults and drops unknown ke
   assert.deepEqual(r.problems, []);
 });
 
-test("defaults: five members, haiku blank (RD1), cloud order −1, local health", () => {
+test("defaults: five members, haiku blank (RD1), the free cloud blank with order 1 (D3), local health", () => {
   const m = defaults().models;
   assert.deepEqual(Object.keys(m), ["qwen-local", "qwen-cloud", "haiku", "sonnet", "opus"]);
-  assert.deepEqual(enabled(m).map((x) => x.name), ["qwen-cloud", "qwen-local", "sonnet", "opus"]);
+  assert.deepEqual(enabled(m).map((x) => x.name), ["qwen-local", "sonnet", "opus"]);
   assert.equal(m.haiku.model, "");
-  assert.equal(m["qwen-cloud"].order, -1);
+  assert.equal(m["qwen-cloud"].model, "");
+  assert.equal(m["qwen-cloud"].order, 1);
   assert.deepEqual(m["qwen-local"].abilities, { write: 0, read: 0 });
   assert.deepEqual(m.sonnet.abilities, { write: 1, read: 2 });
   assert.deepEqual(m.opus.efforts, ["high", "xhigh"]);
@@ -265,7 +266,7 @@ test("member validation: the defaults pass without a problem", () => {
 // --- the today fixture (spec §5.3, RD1): the owner's rollback ------------------------------
 
 /** The leaf paths where the fixture's settings and the defaults differ: the settings view of M5 (spec §5.2 vs §5.3). */
-const FLIPPED: string[] = ["importanceTable.read.2.critical.worker.level", "readOnlyReview"];
+const FLIPPED: string[] = ["importanceTable.read.2.critical.worker.level", "readOnlyReview", "models.qwen-cloud.model", "models.qwen-cloud.order"];
 const isPlain = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
 const leaves = (v: unknown, path = ""): Record<string, string> =>
   isPlain(v) ? Object.assign({}, ...Object.entries(v).map(([k, x]) => leaves(x, path ? `${path}.${k}` : k))) : { [path]: JSON.stringify(v) };

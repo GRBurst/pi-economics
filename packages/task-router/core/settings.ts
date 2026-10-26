@@ -29,8 +29,10 @@ export function defaults(): Settings {
         contextWindow: 262144, cost: 0, order: 0, slots: 1, health: "http://earth:11545",
       },
       "qwen-cloud": {
-        model: "openrouter/qwen/qwen3.8-27b:free", tier: "qwen", route: "cloud", abilities: { write: 0, read: 0 }, efforts: ["xhigh"],
-        contextWindow: 262144, cost: 0, order: -1, slots: 2, dailyCap: 950,
+        // D3 (spec §4.9, MP2): the free cloud slot is empty by default; a file that sets its model makes it an ordinary
+        // member after local (order 1). The rollback (test/fixtures/today-config.json) names the free model, order −1.
+        model: "", tier: "qwen", route: "cloud", abilities: { write: 0, read: 0 }, efforts: ["xhigh"],
+        contextWindow: 262144, cost: 0, order: 1, slots: 2, dailyCap: 950,
       },
       haiku: { model: "", tier: "haiku", route: "haiku", abilities: { write: 0, read: 1 }, efforts: ["medium", "high"], contextWindow: 1000000, cost: 1, order: 0 },
       sonnet: { model: "anthropic/claude-sonnet-5-5", tier: "T1", route: "T1", abilities: { write: 1, read: 2 }, efforts: ["high", "xhigh"], contextWindow: 1000000, cost: 3, order: 0 },

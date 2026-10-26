@@ -5,6 +5,7 @@
 # F5.1: re-recorded 2026-10-26
 # T5.2: re-recorded 2026-10-26
 # T5.3: re-recorded 2026-10-26
+# T5.4: re-recorded 2026-10-26
 count defaults plan 146880 explicit 470016
 plan defaults v1 scout none normal 0000000000000000000000000000000000000000000000000000000000000000
 plan defaults v1 scout none high 1111111111111111111111111111111111111111111111111111111111111111
@@ -335,11 +336,11 @@ explicit-row 0 T1/high REJECT REJECT REJECT REJECT T1/high T1/xhigh REJECT REJEC
 explicit-row 1 T1/xhigh REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT REJECT REJECT REJECT REJECT T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
 explicit-row 2 T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/high REJECT REJECT REJECT REJECT T2/high T2/xhigh REJECT
 explicit-row 3 T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT REJECT REJECT REJECT REJECT T2/xhigh REJECT
-explicit-row 4 qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T1/xhigh T1/off T1/minimal T1/low T1/medium T1/high T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
-select defaults local=up cloudRunning=0 cloud=open qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh
+explicit-row 4 qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT qwen/xhigh REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT REJECT T1/xhigh T1/off T1/minimal T1/low T1/medium T1/high T1/xhigh REJECT T2/xhigh T2/off T2/minimal T2/low T2/medium T2/high T2/xhigh REJECT
+select defaults local=up cloudRunning=0 cloud=open qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=0 cloud=blocked qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=0 cloud=capped qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
-select defaults local=up cloudRunning=1 cloud=open qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh
+select defaults local=up cloudRunning=1 cloud=open qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=1 cloud=blocked qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=1 cloud=capped qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=2 cloud=open qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
@@ -348,10 +349,10 @@ select defaults local=up cloudRunning=2 cloud=capped qwen-local:llama/qwen3.8:xh
 select defaults local=up cloudRunning=3 cloud=open qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=3 cloud=blocked qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
 select defaults local=up cloudRunning=3 cloud=capped qwen-local:llama/qwen3.8:xhigh qwen-local:llama/qwen3.8:xhigh
-select defaults local=busy cloudRunning=0 cloud=open qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh
+select defaults local=busy cloudRunning=0 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=busy cloudRunning=0 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=busy cloudRunning=0 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=busy cloudRunning=1 cloud=open qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh
+select defaults local=busy cloudRunning=1 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=busy cloudRunning=1 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=busy cloudRunning=1 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=busy cloudRunning=2 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
@@ -360,10 +361,10 @@ select defaults local=busy cloudRunning=2 cloud=capped wait sonnet:anthropic/cla
 select defaults local=busy cloudRunning=3 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=busy cloudRunning=3 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=busy cloudRunning=3 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=0 cloud=open qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh
+select defaults local=own cloudRunning=0 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=own cloudRunning=0 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=own cloudRunning=0 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=own cloudRunning=1 cloud=open qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh
+select defaults local=own cloudRunning=1 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=own cloudRunning=1 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=own cloudRunning=1 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=own cloudRunning=2 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
@@ -372,16 +373,16 @@ select defaults local=own cloudRunning=2 cloud=capped wait sonnet:anthropic/clau
 select defaults local=own cloudRunning=3 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=own cloudRunning=3 cloud=blocked wait sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=own cloudRunning=3 cloud=capped wait sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=0 cloud=open qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh
+select defaults local=down cloudRunning=0 cloud=open sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=down cloudRunning=0 cloud=blocked sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=down cloudRunning=0 cloud=capped sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=1 cloud=open qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh qwen-cloud:openrouter/qwen/qwen3.8-27b:free:xhigh
+select defaults local=down cloudRunning=1 cloud=open sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=down cloudRunning=1 cloud=blocked sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=down cloudRunning=1 cloud=capped sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=2 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
+select defaults local=down cloudRunning=2 cloud=open sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=down cloudRunning=2 cloud=blocked sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=down cloudRunning=2 cloud=capped sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
-select defaults local=down cloudRunning=3 cloud=open wait sonnet:anthropic/claude-sonnet-5-5:high
+select defaults local=down cloudRunning=3 cloud=open sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=down cloudRunning=3 cloud=blocked sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
 select defaults local=down cloudRunning=3 cloud=capped sonnet:anthropic/claude-sonnet-5-5:high sonnet:anthropic/claude-sonnet-5-5:high
 count empty-slot plan 146880 explicit 470016
