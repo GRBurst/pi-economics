@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { accepted, card, harness } from "./harness.ts";
 import { defaults } from "../core/settings.ts";
+import { PENDING_MS } from "../core/policy.ts";
 
 const SONNET = "anthropic/claude-sonnet-5-5";
 const LOCAL = "llama/qwen3.8";
@@ -319,6 +320,49 @@ test("RG8: a retune that never settles: an error after the move's reservation ha
   await settle(); await settle(); await settle();
   assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", CLOUD]]);
   assert.deepEqual(reroutes(h).map((r) => [r.taskId, r.from, r.to]), [["q1", "local", "cloud"]]);
+});
+
+// RF2 (review-g5 Low 1): RG8 lets a second move start once the first move's retune has hung past PENDING_MS. Each move owns its
+// marker (`prev`): a first move that settles after the second has taken the child over leaves the entry, the reroute log and
+// the attempt to the second; its late retune may have reached the engine last, so the engine is set back to the entry.
+// Moves: cloud → local (hangs), then local → Sonnet (the cloud is full again; completes), then the first settles or throws.
+async function lateFirstMove(late: "settles" | "throws") {
+  const h = harness({ base: "today", settings: { queueMaxSec: 0 } });
+  await spawnAll(h, ["q0", "q1"]); // cloud, cloud
+  listAs(h, { q0: "running", q1: "running" });
+  const g = gate();
+  h.a.control.gate = g.p;
+  h.a.emit(err("q1", "retries exhausted")); // move 1: q1 cloud → local, its retune hangs
+  await settle(); await settle();
+  h.a.control.gate = undefined; // later retunes settle at once
+  await spawnAll(h, ["q2"]); // the cloud's freed slot: the cloud is full again
+  listAs(h, { q2: "running" });
+  h.clock.t += PENDING_MS + 1_000; // move 1's reservation has ended
+  h.a.emit(err("q1", "retries exhausted")); // move 2: local → Sonnet, completes
+  await settle(); await settle(); await settle();
+  if (late === "throws") h.a.control.fail = new Error("no such agent");
+  await warnings(async () => { g.open(); await settle(); await settle(); await settle(); });
+  delete h.a.control.fail;
+  return h;
+}
+
+test("RF2: a first move whose retune settles after a second move: the engine ends on the entry (Sonnet), one reroute line, the attempt ran on Sonnet", async () => {
+  const h = await lateFirstMove("settles");
+  assert.equal(h.a.retunes.filter((r) => r.name === "q1").at(-1)?.model, SONNET);
+  assert.deepEqual(reroutes(h).map((r) => [r.taskId, r.from, r.to]), [["q1", "local", "T1"]]);
+  accepted(await h.a.spawn({ name: "q1b", task: card({ attemptOf: "q1" }) }));
+  h.a.emit({ type: "spawn", name: "q1b", by: "main", parent: "main", childSessionId: "s-q1b", ts: 3 });
+  const l = h.lines().find((x) => x.event === "escalate")!;
+  assert.deepEqual([l.from, l.fromModel], ["T1", SONNET]);
+});
+
+test("RF2: a first move whose retune throws after a second move restores nothing: the entry stays on Sonnet", async () => {
+  const h = await lateFirstMove("throws");
+  assert.deepEqual(h.a.retunes.map((r) => [r.name, r.model]), [["q1", SONNET]]);
+  h.clock.t += PENDING_MS + 1_000;
+  h.a.emit(err("q1", "retries exhausted")); // a later error moves the child from where the router has it
+  await settle(); await settle(); await settle();
+  assert.deepEqual(reroutes(h).map((r) => [r.taskId, r.from, r.to]), [["q1", "local", "T1"], ["q1", "T1", "local"]]);
 });
 
 test("retune throws → entry restored, the target's slot free at once, one warning, no reroute line", async () => {
