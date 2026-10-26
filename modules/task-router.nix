@@ -33,9 +33,13 @@ in {
         Written to `<agentDir>/task-router/settings.json` when non-empty.
         Free-form (spec §6.2): every key has a default in the package's
         core/settings.ts, which owns the schema, so `{}` writes no file.
-        `models.<member>` merges field by field over the default member;
-        `model = ""` removes it. `randomize` and `spotCheck` default to
-        `enabled = false`.
+        `models` and `importanceTable` merge over the defaults:
+        `models.<member>` field by field over the default member, and
+        `model = ""` removes it; a table cell that is given replaces the
+        default cell. `randomize` and `spotCheck` default to
+        `enabled = false`. The rollback to the routing before the new
+        defaults: `lib.importJSON` of the package's
+        `test/fixtures/today-config.json` as the settings.
       '';
     };
   };
@@ -48,7 +52,7 @@ in {
       # import-from-derivation.
       checkPath = ../packages/task-router/index.ts;
       forChildren = false;
-      description = "Routes subagent spawns by task card: tier and effort by rule, Qwen chain, attempts and an outcome log (<agentDir>/task-router/outcomes/YYYY-MM.jsonl); registers the task_verdict tool.";
+      description = "Routes subagent spawns by task card: abilities and levels per model, cheapest-fit selection with a queue wait, attempts and an outcome log (<agentDir>/task-router/outcomes/YYYY-MM.jsonl); registers the task_verdict tool.";
     };
     # (M5.9) Literal text (spec §4): checks read it with builtins.fromJSON.
     home.file."${pe.agentDir}/task-router/settings.json" =

@@ -1,7 +1,7 @@
 {
   "name": "pi-task-router",
   "version": "0.1.0",
-  "description": "Routes subagent spawns by task card: tier and effort by rule, Qwen chain, attempts, outcome log.",
+  "description": "Routes subagent spawns by task card: abilities and levels per model, cheapest-fit selection with a queue wait, attempts, outcome log.",
   "type": "module",
   "keywords": ["pi-package"],
   "license": "MIT",

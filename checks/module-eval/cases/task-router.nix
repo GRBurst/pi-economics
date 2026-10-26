@@ -53,7 +53,7 @@ in {
   # (M5.9) settings: written as given under agentDir (the host's check value,
   # checks/pi-extensions.nix:64); {} writes nothing.
   task-router-settings = lib.concatMap (dir: let
-    s = {cloudDailyCap = 500;};
+    s = {queueMaxSec = 60;}; # T5.10: cloudDailyCap is a legacy key after M1 (HS §5.5)
     f = fileAt "${dir}/task-router/settings.json" (eval dir {settings = s;} withActor);
   in
     eq "settings file (${dir})" (builtins.fromJSON f.text) s
@@ -67,6 +67,13 @@ in {
     f = fileAt ".pi/agent/task-router/settings.json" (eval ".pi/agent" {settings = x;} withActor);
   in
     eq "settings file" (builtins.fromJSON f.text) x;
+
+  # (T5.10) The registry text agents read (HS §5.5, mi13).
+  task-router-description = let
+    c = eval ".pi/agent" {} withActor;
+  in
+    eq "registry description" (pe c).extensions.task-router.description
+    "Routes subagent spawns by task card: abilities and levels per model, cheapest-fit selection with a queue wait, attempts and an outcome log (<agentDir>/task-router/outcomes/YYYY-MM.jsonl); registers the task_verdict tool.";
 
   # (M5.10) The hard dependency (spec §4.1), both halves.
   task-router-requires-actor-subagents =
