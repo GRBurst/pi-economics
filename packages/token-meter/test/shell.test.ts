@@ -113,6 +113,84 @@ test("warming line's ts is the warm response time, not the flush time", () => {
   assert.equal(l.ts, new Date(T0).toISOString());
 });
 
+// pi 1.4 cache warming (CacheWarmer, cacheWarming "streaming"/"idle"): the warm
+// timer runs 270 s (5-min TTL) from the START of a turn's request, so a turn that
+// streams longer gets a warm request mid-stream, through the same
+// before_provider_request/after_provider_response. A turn's own response always
+// precedes its assistant message_start (the provider awaits onResponse before
+// "start"); its cache_warm usage entry lands after the warm's result.
+const warmUsage = { input: 0, output: 1, cacheRead: 359_332, cacheWrite: 0, totalTokens: 359_333,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.07 } };
+const respQ = (q5h: string) => ({ ...resp, headers: { [P + "unified-5h-utilization"]: q5h } });
+const streamingTurn = () => ({ type: "message_start", message: { role: "assistant", provider: "anthropic", model: "opus" } });
+
+test("warm answered during a streaming turn: the turn keeps its own response, the warm gets a warming line with its cache_warm usage", () => {
+  const { f, clock, lines } = setup();
+  const entries: unknown[] = [];
+  const ctx = fakeCtx("s1", { entries });
+  f.fire("session_start", {}, ctx);
+  const user = { message: { role: "user", content: "go" } }; // only assistant messages stream a response
+  f.fire("message_start", user, ctx); f.fire("message_end", user, ctx);
+  f.fire("before_provider_request", {}, ctx); // the turn's request
+  f.fire("after_provider_response", respQ("0.09"), ctx); // the turn's headers, at T0
+  f.fire("message_start", streamingTurn(), ctx);
+  clock.t = T0 + 270_000;
+  f.fire("before_provider_request", {}, ctx); // the warm's request, mid-stream
+  clock.t = T0 + 280_000;
+  f.fire("after_provider_response", respQ("0.13"), ctx); // the warm's headers
+  entries.push({ type: "usage", kind: "cache_warm", provider: "anthropic", model: "opus",
+    timestamp: new Date(T0 + 281_000).toISOString(), usage: warmUsage });
+  clock.t = T0 + 400_000;
+  f.fire("message_end", assistant(), ctx); // the turn ends
+  f.fire("before_provider_request", {}, ctx); // the next turn's request
+  const ls = lines();
+  assert.deepEqual(ls.map((l) => l.kind).sort(), ["turn", "warming"]);
+  const turn = ls.find((l) => l.kind === "turn"), warm = ls.find((l) => l.kind === "warming");
+  assert.equal(turn.q5h, 9); assert.equal(turn.cacheRead, 100); assert.equal(turn.costUsd, 0.25);
+  assert.equal(turn.ts, new Date(T0 + 400_000).toISOString());
+  assert.equal(warm.q5h, 13); assert.equal(warm.cacheRead, 359_332); assert.equal(warm.output, 1);
+  assert.equal(warm.costUsd, 0.07); assert.equal(warm.retries, 0);
+  assert.equal(warm.ts, new Date(T0 + 280_000).toISOString());
+});
+
+test("warm aborted during a streaming turn before its headers: only the turn's line, with the turn's quota", () => {
+  const { f, clock, lines } = setup();
+  const ctx = fakeCtx("s1");
+  f.fire("before_provider_request", {}, ctx);
+  f.fire("after_provider_response", respQ("0.09"), ctx);
+  f.fire("message_start", streamingTurn(), ctx);
+  clock.t = T0 + 270_000;
+  f.fire("before_provider_request", {}, ctx); // the warm's request; the next request aborts it
+  clock.t = T0 + 287_000;
+  f.fire("message_end", assistant(), ctx);
+  f.fire("before_provider_request", {}, ctx);
+  f.fire("agent_settled", {}, ctx);
+  const [l, ...rest] = lines();
+  assert.equal(rest.length, 0);
+  assert.equal(l.kind, "turn"); assert.equal(l.q5h, 9); assert.equal(l.cacheRead, 100);
+});
+
+test("warm sent during a streaming turn, answered after its end: a warming line at the next request, the turn keeps its quota", () => {
+  const { f, clock, lines } = setup();
+  const entries: unknown[] = [];
+  const ctx = fakeCtx("s1", { entries });
+  f.fire("before_provider_request", {}, ctx);
+  f.fire("after_provider_response", respQ("0.09"), ctx);
+  f.fire("message_start", streamingTurn(), ctx);
+  clock.t = T0 + 270_000;
+  f.fire("before_provider_request", {}, ctx); // the warm's request
+  clock.t = T0 + 271_000;
+  f.fire("message_end", assistant(), ctx);
+  clock.t = T0 + 275_000;
+  f.fire("after_provider_response", respQ("0.13"), ctx); // the warm's headers, after the turn
+  entries.push({ type: "usage", kind: "cache_warm", provider: "anthropic", model: "opus",
+    timestamp: new Date(T0 + 276_000).toISOString(), usage: warmUsage });
+  f.fire("before_provider_request", {}, ctx);
+  const ls = lines();
+  assert.deepEqual(ls.map((l) => [l.kind, l.q5h]), [["turn", 9], ["warming", 13]]);
+  assert.equal(ls[1].cacheRead, 359_332);
+});
+
 test("no pending snapshot → nothing flushed", () => {
   const { f, lines } = setup();
   const ctx = fakeCtx("s1");

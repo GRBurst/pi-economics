@@ -87,6 +87,15 @@ field does not bump it). `pi-analyse` reports the versions per log under *Data q
 | `overage`, `claim`, `fallback` | string | no | raw Anthropic unified-ratelimit headers |
 | `rawRatelimit` | object | no | all `anthropic-ratelimit-*` headers (dropped first when a line would exceed 4 KiB) |
 
+**Warming lines.** A response no assistant `message_end` claims is a warm: it becomes a
+`warming` line at the session's next request, `agent_settled` or shutdown, with the usage
+of pi's `cache_warm` entry at or after the response, or without usage when pi recorded
+none (the warm was aborted or failed after its headers). pi ≥ 1.4 may send a warm WHILE a
+long turn streams (its timer runs from the turn's request start, 270 s for a 5-minute
+TTL): a response between an assistant `message_start` and its `message_end` is always the
+warm's, never the turn's, so the turn line keeps its own headers (`q5h`, `status`) and
+the warm gets its own line. A warm aborted before its headers gets no line.
+
 ## task-router/outcomes/YYYY-MM.jsonl
 
 Common: `v` (int), `ts` (ISO), `event`, `taskId` (subagent name) — all required.
@@ -275,3 +284,6 @@ every report section has data.
 - Quota readings of parallel sessions interleave and are slightly stale; per-root and per-arm
   quota is an attribution of the account's rise (see *Analysis*), approximate.
 - Lines before 2026-10-03 have no `v` and partly no `arm`.
+- Until 2026-10-27, a warm sent while a turn streamed (pi ≥ 1.4) left a `warming` line
+  without usage carrying the TURN's headers and `ts`, and the turn line took the warm's
+  headers or none (no `q5h`); the warm's own `cache_warm` usage got no line.

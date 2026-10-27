@@ -49,6 +49,12 @@ export function install(pi: PiLike, deps: Deps): void {
   const now = deps.now ?? (() => new Date());
   const joiner = new Joiner();
   const pending = new Map<string, Snapshot>(); // mirrors the Joiner's snapshots, so flushing never steals retries
+  // pi 1.4's CacheWarmer can send a warm WHILE a long turn streams (its timer runs
+  // from the turn's request start). A turn's own response always precedes its
+  // assistant message_start, so between message_start and message_end every
+  // response is a warm's: it waits in `warms`, never in `pending` or the Joiner.
+  const streaming = new Set<string>();
+  const warms = new Map<string, Snapshot>();
   const lastModel = new Map<string, { provider: string; model: string }>();
   const madeDirs = new Set<string>();
   let warned = false;
@@ -83,12 +89,7 @@ export function install(pi: PiLike, deps: Deps): void {
 
   const sidOf = (ctx: any): string | undefined => safe(() => ctx.sessionManager.getSessionId());
 
-  const flushWarming = (ctx: any): void => {
-    const sid = sidOf(ctx);
-    const snap = sid === undefined ? undefined : pending.get(sid);
-    if (sid === undefined || !snap) return;
-    pending.delete(sid);
-    const taken = joiner.take(sid);
+  const writeWarming = (sid: string, ctx: any, snap: Snapshot, taken: { retries: number; retryWaitMs: number }): void => {
     const entries: any[] = safe(() => ctx.sessionManager.getEntries()) ?? [];
     const warm = [...entries].reverse().find((e) => e?.type === "usage" && e.kind === "cache_warm" && time(e.timestamp) >= snap.at);
     const who = (typeof warm?.provider === "string" && typeof warm?.model === "string" ? warm : undefined) ?? lastModel.get(sid) ?? { provider: "unknown", model: "unknown" };
@@ -100,6 +101,20 @@ export function install(pi: PiLike, deps: Deps): void {
     const usage = mapUsage(warm?.usage);
     if (usage) input.usage = usage;
     write(input);
+  };
+
+  const flushWarming = (ctx: any): void => {
+    const sid = sidOf(ctx);
+    if (sid === undefined) return;
+    const warmSnap = warms.get(sid);
+    if (warmSnap) {
+      warms.delete(sid);
+      writeWarming(sid, ctx, warmSnap, { retries: 0, retryWaitMs: 0 }); // retries belong to turns
+    }
+    const snap = pending.get(sid);
+    if (!snap || streaming.has(sid)) return; // a streaming turn's own response stays for its message_end
+    pending.delete(sid);
+    writeWarming(sid, ctx, snap, joiner.take(sid));
   };
 
   pi.on("session_start", (_e, ctx) => {
@@ -114,8 +129,18 @@ export function install(pi: PiLike, deps: Deps): void {
     if (sid === undefined) return;
     retrySession ??= sid;
     const snap: Snapshot = { status: e?.status, headers: e?.headers ?? {}, at: now().getTime() };
+    if (streaming.has(sid)) {
+      warms.set(sid, snap);
+      return;
+    }
     pending.set(sid, snap);
     joiner.onResponse(sid, snap);
+  });
+
+  pi.on("message_start", (e, ctx) => {
+    if (e?.message?.role !== "assistant") return;
+    const sid = sidOf(ctx);
+    if (sid !== undefined) streaming.add(sid);
   });
 
   pi.on("message_end", (e, ctx) => {
@@ -124,6 +149,7 @@ export function install(pi: PiLike, deps: Deps): void {
     const sid = sidOf(ctx);
     if (sid === undefined) return;
     retrySession ??= sid;
+    streaming.delete(sid);
     pending.delete(sid);
     // D8: pi-retry's `completed` lands AFTER the retried request's message_end,
     // so close the open episodes on this non-error end — the line that actually
