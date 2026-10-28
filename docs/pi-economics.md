@@ -226,9 +226,10 @@ order 500, so they run first. The ops run only while `piSettings.enable` is
 
 ### `taskRouter` (`modules/task-router.nix`)
 
-The task-router, as it stands after the router redesign's Group 5 (the new
-defaults; Groups 1–2 came from the owner's host at commit `566fd0d`, "R'";
-Groups 3–5 were made in this repository). It routes subagent spawns by task
+The task-router, as it stands after the router redesign's Group 7 (close-out).
+The new defaults are Group 5's (R5 at `833a88e`, after the RF1–RF5 follow-ups);
+Groups 1–2 came from the owner's host at commit `566fd0d`, "R'"; Groups 3–7
+were made in this repository. Group 6 (the scout gate) changed no default. It routes subagent spawns by task
 card through actor-subagents' spawn policy: the card gives a required ability
 and level (abilities and levels per member), the importance table gives the
 legs (worker, and a review where the cell has one), and a leg runs on the
@@ -269,6 +270,14 @@ programs.piEconomics.taskRouter.settings = {
 out) is read by the package's settings test and by the `module-eval` case
 `task-router-models`.
 
+**Scout gate (Group 6, 2026-10-28).** Haiku scored 0.625 against Sonnet's 0.875
+(threshold 0.7875, H6.4), so `lookup` keeps its floor: `profiles.lookup.minLevel`
+stays 2 (`packages/task-router/core/settings.ts`), and `scout` and `review` stay
+at read 2. Only the Haiku and Sonnet arms ran: the Qwen arm did not (earth was
+down), which cannot change the outcome. Caveats: one run per task and arm, six
+tasks, two judges with κ 0.29. Scores and the record: plan
+`docs/plans/2026-10-25-router-g3-g7-plan.md`, Execution Record, Group 6.
+
 Hard dependency: `taskRouter` needs `actorSubagents` with `passthru.spawnPolicyApi >= 1`
 (the router registers through `registerSpawnPolicy`, and its shell swallows the
 absence of the API, so without the patched build it would do nothing); an
@@ -282,7 +291,8 @@ is enabled, one `mkDefault` per leaf (a list is a leaf): the keys of
 `false`. A definition of one leaf (`bench.router.models.<m>.model`) replaces
 that leaf only; the member's other keys and the other members stay. The
 bench's `extensions` default holds `task-router` too. A definition of one name
-replaces that name only.
+replaces that name only. A host must also define `claude-auth` there: the
+judges load it (`judge --all`), and any arm that names it fails without it.
 
 **Golden test.** `checks/router-golden/golden.txt` records every decision of
 `planSpawn` over the router's own golden grid (`test/golden/grid.ts`: 146,880
@@ -301,7 +311,7 @@ the local slot is allowed. After a deliberate
 change of a decision, a group of the redesign re-records the file by hand
 (`node --experimental-strip-types checks/router-golden/generate.ts packages/task-router`,
 header `# R' = <source>, <date>`) and puts the diff of old and new file in its
-record. The redesign's Groups 3–7 continue in this repository.
+record. The redesign's Groups 3–7 are closed; Group 6 re-recorded nothing.
 
 **Log contract.** `log-contract` runs the real code path of every log writer
 (token-meter, task-router, cache-lifecycle, experiments) into one agent dir and
