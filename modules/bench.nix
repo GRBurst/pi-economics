@@ -64,6 +64,10 @@ in {
         `infinite-context`, `pi-retry`, `task-router`, `token-meter`. A definition adds names
         or replaces one; `lib.mkForce {}` exports nothing, and the bench then
         looks the names up in `~/.pi/agent/extensions`.
+        A name missing here fails its arm at run time (the link does not
+        exist), so a host that names `claude-auth` in an arm, or runs the
+        judges (`judge --all`, which loads `claude-auth` too), must define
+        `claude-auth` here as well (the host, e.g. pallon's home).
       '';
     };
 
