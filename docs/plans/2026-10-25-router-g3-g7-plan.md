@@ -841,6 +841,44 @@ Option `example`: `{ models = { qwen-local.health = "http://localhost:11545"; ha
 - **Review (D18):** `git diff f6393bc 833a88e -- packages docs`, if main wants one.
 
 
+## Group 6 — scout gate (rec-g67, 2026-10-28)
+
+- **Base** `50921fd` (R5 follow-ups record; R5' = `833a88e`). Since then, host-independent commits by the earlier aborted agent: `51444c7` (bench `judge --all --arms a,b`), `00af9da` (bench doc: a host defines `claude-auth` in `bench.extensions`), `172f57a` (`docs/pi-economics.md` § `taskRouter` final). No router code, golden or default changed in G6.
+- **H6.0 (live items): not verified by this agent, partly evidenced.** `~/.pi/agent/task-router/outcomes/2026-10.jsonl` has routed spawns since 2026-10-28 (kinds `scout`, `plan`, `implement`, `review`, `mechanical`, with `reasons` such as `selection: opus`, `t0 misses: bounded, small`, `selection: haiku after 5 s`). Not checked: one spawn per HS §4.10 row, a deliberate settings error giving one `ui.notify`, the owner's `~/.pi/agent/AGENTS.md` update.
+- **H6.1.** `~/.pi/agent/bench/arms.json` created (did not exist). Arms: `haiku` (`anthropic/claude-haiku-5-5`, medium, print driver, ext `infinite-context`, `claude-auth`); `sonnet` = bench default (Sonnet 5.5, high). Extra arms beyond the plan, added in the effort follow-up: `haiku-high`, `haiku-xhigh`, `sonnet-medium`. Env workaround: `PI_BENCH_EXT_DIR=$HOME/.pi/agent/extensions` (the store's `pi-bench-extensions` lacks `claude-auth`).
+- **H6.2.** Scouts X1–X6: `haiku` 2 reps, `sonnet` 2 reps, plus `haiku-high`, `haiku-xhigh`, `sonnet-medium` (2 reps each). All piexit 0, 0 files changed. **`qwenl` not run**: earth down (`curl -m 3 http://earth:11545/health` timed out). Moot: `read 0` needs Haiku to pass first.
+- **H6.3.** Judges opus (all runs) and gpt (partial). Scratch data dir `~/.pi/agent/bench-g6/` (symlinks to the X-runs; the live `bench/` judge dir is untouched). **15 gpt verdicts pending**: OpenRouter 402 (daily key limit, $2.17 left; the request asked for 128k max tokens). Reset 2026-10-29T00:00Z. Pending: `X6.sonnet.2`, `X6.sonnet-medium.1/.2` and the 12 rep-2 runs. Command: `cd ~/.pi/agent/bench-g6 && PI_BENCH_DATA=$PWD PI_BENCH_EXT_DIR=$HOME/.pi/agent/extensions pi-bench judge --all --judges gpt --parallel 3 && node g6c/analyze.mjs`. Reports: `~/.pi/agent/bench-g6/reports/2026-10-28T11-17-38-656Z.md`, `~/.pi/agent/bench-g6/g6c/analysis.txt`.
+- **H6.4 (HP rule, both judges, S = mean over X1–X6; threshold 0.9 × S(sonnet)):**
+
+  | arm | n | S both | S opus | S gpt | verdict |
+  |---|---|---|---|---|---|
+  | sonnet (ref, high) | 12 | 0.917 | 1.000 | 0.750 | thr 0.825 |
+  | haiku (medium) | 12 | 0.646 | 0.750 | 0.542 | **FAIL** |
+  | haiku-high | 12 | 0.854 | 0.917 | 0.667 | borderline (band 0.775–0.875) |
+  | haiku-xhigh | 12 | 0.917 | 0.958 | 0.833 (rep 1 only) | **PASS** |
+  | sonnet-medium | 12 | 0.729 | 0.875 | 0.600 | FAIL |
+
+  Per task (both judges), X1..X6: sonnet 1/1/1/1/.75/.75; haiku .63/.63/.75/1/.75/.13; haiku-xhigh 1/1/1/1/.88/.63. No task scored 0. The n=1 figures (haiku 0.625, sonnet 0.875) are in the note; they give the same verdict.
+- **Rule outcome:** Haiku at medium fails (0.646 < 0.825; also < 0.7875 with the n=1 reference) → `lookup` stays **read 2**. Qwen cannot change that (read 0 needs Haiku and Qwen to pass). `scout` and `review` stay read 2 (OD15). **T6.1 = no-op**: no code, no golden diff, no default changed. R6 = this record commit.
+- **Extra finding, outside the plan's rule (D16 limits the gate to `lookup`):** `haiku-xhigh` passes at n=2 (0.917 vs 0.825, clear of the band; rep-to-rep spread one X6 step). `haiku-high` is borderline in every view. Cost per scout (mean): haiku-xhigh $0.043, 25.5k output tokens, 151 s; sonnet-high $0.148, 4.7k, 45 s (≈0.3× the cost, ≈3.4× the wall time). Using xhigh needs a member config, e.g. a second Haiku member with efforts `["xhigh"]` at read 2. **Owner decision pending (main asks).** Not applied.
+- **Caveats:** n=2 per task per arm; judge agreement low (κ 0.29 opus/gpt at n=1); X6 mostly reflects the gpt judge; gpt verdicts missing for 15 runs (the table uses the available judges; the sensitivity views in the note do not change any verdict except sonnet-medium, FAIL or borderline). Bench-run costs are meter-priced session metrics, not a quota measurement: bench runs do not appear in the meter. Qwen arm not run (see H6.2).
+- **Bench findings:** (1) the flake's bench extension set lacks host-owned `claude-auth`: a host must add `programs.piEconomics.bench.extensions.claude-auth` (documented in `00af9da`). (2) `judge --all --arms` added in `51444c7`; the installed pi-bench predated it, so a scratch dir was used. (3) bench runs do not appear in the meter.
+
+## Group 7 — close-out (rec-g67, 2026-10-28)
+
+- **T7.1 gate line: gate pending.** Gate `g6` (`~/.cache/pi/router-g37/gate.sh g6`, pid 84118, elapsed 1 h 48 min at 14:10) is still in `flag`, waiting on `vm.lock` held by the pluto session (`MemAvailable` below 36 GiB). Result file: `~/.cache/pi/router-g37/g6/result.txt`. Done: 26 `ok` lines over the `git+file:` ref (through `typecheck-cache-lifecycle`), no `FAILED`. Not reached: the rest of the `git+file:` ref, the `path:` ref, `fmt`, `AC7`, `private.sh`. **Not killed.** The R6 gate result is not in hand.
+- **Plan records.** `docs/pi-economics.md` § `taskRouter` final: `172f57a` (by the aborted agent). This record: T6.1 no-op, R6 = this commit. Not checked by this agent: HP's Execution Record "deviations decided in the plan" against what landed (left to main), HS §6.6 hand-over items.
+- **Hand-over to main (host edits, not done here, list only):**
+  1. host spec §4.6 RG6 erratum (text in the G5 record, RG6 bullet);
+  2. `programs.piEconomics.bench.extensions.claude-auth` in the host;
+  3. host `docs/README.md` plan row pointing here;
+  4. settings path written twice (`pi-extensions.nix:152`, `default.nix:684`);
+  5. `checks/pluto` deploy-wrapper stubs listing `pi-bench`;
+  6. at W8: host `pi-economics-leaks` expected `NOTICE:felix`, skip=[] / expected={} per plan P.
+  Plus an owner decision: the `haiku-xhigh` member config (G6 extra finding).
+- **Not done:** spec §6.1's "Groups 3–7 landed at R5/R6" amendment (main's call); the 15 gpt verdicts (after 2026-10-29T00:00Z); the Qwen arm.
+- **Review (D18):** none for G6 (no code). Commits not reviewed since `833a88e`: `51444c7`, `00af9da`, `172f57a`; review on request.
+
 # Decisions on the open questions (main, 2026-10-25)
 
 Q1–Q9 accepted as recommended. Q4: the host's W4.2 pins only the local qwen
