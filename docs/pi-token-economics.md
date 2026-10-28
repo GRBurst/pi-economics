@@ -201,7 +201,7 @@ work dir `$XDG_RUNTIME_DIR/pi/tmp/bench` = `PI_BENCH_WORK`, tmpfs):
 pi-bench run TASK ARM [REP]            # checkout baseline → agent → harness check → runs/TASK.ARM.REP/
 pi-bench sched ARM N TASK…             # each task once, N in parallel
 pi-bench refs                          # refs/<id>.patch (accepted solution) / .md (scout reference answers)
-pi-bench judge --all [--judges opus,gpt] [--parallel N] [--min-runs M]
+pi-bench judge --all [--judges opus,gpt] [--arms a,b] [--parallel N] [--min-runs M]
                                        # multi-arm: blind absolute rubric verdict per run of each task with ≥ 2 runs; idempotent; failing check caps pass at partial
 pi-bench judge TASK opus|gpt [X Y]     # pairwise blind A/B of two runs (2-arm comparisons)
 pi-bench metrics                       # per-run session metrics (requests, retried 429s, cost, peak context, folds, children)

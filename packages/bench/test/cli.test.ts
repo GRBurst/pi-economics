@@ -68,6 +68,23 @@ test("judge --all: absolute verdict per run for tasks with ≥2 runs, skips sing
 	assert.equal(readFileSync(jlog, "utf8").trim().split("\n").length, 2, "no re-judging");
 });
 
+test("judge --all --arms: only the named arms are judged", () => {
+	const repo = sourceRepo();
+	const data = tmp();
+	const work = tmp();
+	const task = { kind: "small", gitdir: repo.gitdir, sub: "proj", base: repo.base, refs: [repo.next], prompt: "p", check: "true" };
+	writeFileSync(join(data, "tasks.json"), JSON.stringify({ JA: task }));
+	const envBase = { PI_BENCH_DATA: data, PI_BENCH_WORK: work, PI_BENCH_EXT_DIR: "/ext", HOME: tmp() };
+	const agentPi = fakePrintPi(join(tmp(), "alog"));
+	for (const arm of ["qwenl", "sonnet"]) run({ ...envBase, PI_BENCH_PI: agentPi }, "run", "JA", arm, "1");
+	run(envBase, "refs");
+	const verdict = "```json\n" + JSON.stringify({ correct: 3, scope: 2, quality: 3, verdict: "pass", requirements: [], notes: "" }) + "\n```";
+	const judgePi = script(`#!/bin/sh\ncat <<'EOF'\n${verdict}\nEOF\n`);
+	run({ ...envBase, PI_BENCH_PI: judgePi }, "judge", "--all", "--judges", "opus", "--arms", "sonnet");
+	assert.ok(existsSync(join(data, "judge/JA/JA.sonnet.1/opus.json")), "named arm judged");
+	assert.equal(existsSync(join(data, "judge/JA/JA.qwenl.1/opus.json")), false, "other arm not judged");
+});
+
 test("pi-bench with no or an unknown command prints usage and fails", () => {
 	assert.throws(() => run({ HOME: tmp() }, "bogus"), /usage: pi-bench/);
 });

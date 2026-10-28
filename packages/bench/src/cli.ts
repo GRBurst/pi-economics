@@ -15,8 +15,9 @@ const USAGE = `usage: pi-bench <command>
   run TASK ARM [REP]              one run (ARM: qwenl | sonnet | orch | orch-<signs> | arms.json); prints result.json
   sched ARM PARALLEL TASK...      each task once, PARALLEL at a time; log in <work>/sched.ARM.log
   judge TASK JUDGE [X Y]          blind pairwise judge (opus | gpt) of runs TASK.X.1 vs TASK.Y.1 (default ${DEFAULT_PAIR.x} ${DEFAULT_PAIR.y})
-  judge --all [--judges opus,gpt] [--parallel N] [--min-runs M]
-                                  absolute rubric verdict for every run of every task with ≥M runs (default 2);
+  judge --all [--judges opus,gpt] [--arms a,b] [--parallel N] [--min-runs M]
+                                  absolute rubric verdict for every run of every task with ≥M runs (default 2),
+                                  only of the named arms when --arms is given;
                                   per-run file judge/TASK/RUN/JUDGE.json, idempotent (skips judged runs)
   judge-all [--once] [X]          pairwise: judge every task whose runs are finished, until all are judged
   refs                            build refs/ (reference patches and answers) from tasks.json
@@ -70,12 +71,15 @@ export async function main(argv: string[], env: Record<string, string | undefine
 				const judges = (flag("--judges") ?? "opus,gpt").split(",").map((s) => s.trim()).filter(Boolean);
 				const par = Number(flag("--parallel") ?? 2);
 				const minRuns = Number(flag("--min-runs") ?? 2);
+				const arms = flag("--arms")?.split(",").map((s) => s.trim()).filter(Boolean);
 				const runsDir = join(paths.data, "runs");
 				const byTask = new Map<string, string[]>();
+				const armOf = new Map<string, string>();
 				for (const run of existsSync(runsDir) ? readdirSync(runsDir).sort() : []) {
 					const f = join(runsDir, run, "result.json");
 					if (!existsSync(f)) continue;
-					const id = JSON.parse(readFileSync(f, "utf8")).id;
+					const { id, arm } = JSON.parse(readFileSync(f, "utf8"));
+					armOf.set(run, arm);
 					if (!Object.keys(tasks()).includes(id)) continue;
 					byTask.set(id, [...(byTask.get(id) ?? []), run]);
 				}
@@ -84,7 +88,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
 					if (runs.length >= minRuns)
 						for (const run of runs)
 							for (const j of judges)
-								if (!existsSync(join(paths.data, "judge", id, run, `${j}.json`)))
+								if ((!arms || arms.includes(armOf.get(run) ?? "")) && !existsSync(join(paths.data, "judge", id, run, `${j}.json`)))
 									jobs.push({ id, run, judge: j });
 				if (!jobs.length) { console.log(`nothing to judge (${judges.join(", ")} verdicts on file)`); return 0; }
 				await pool(jobs, par, async (job) => {

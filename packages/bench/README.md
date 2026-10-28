@@ -18,7 +18,7 @@ node --test --experimental-strip-types test/*.test.ts     # from this directory
 | `pi-bench run TASK ARM [REP]` | `git archive` baseline → fresh dir + `git init` → agent → harness check → `runs/TASK.ARM.REP/` |
 | `pi-bench sched ARM N TASK…` | each task once, `N` in parallel |
 | `pi-bench refs` | `refs/<id>.patch` (accepted solution) or `refs/<id>.md` (scouts) from `tasks.json` |
-| `pi-bench judge --all [--judges opus,gpt] [--parallel N] [--min-runs M]` | multi-arm: blind absolute rubric verdict of every run of each task with ≥ 2 runs (`judge/<task>/<run>/<judge>.json`, failing check caps at partial); idempotent |
+| `pi-bench judge --all [--judges opus,gpt] [--arms a,b] [--parallel N] [--min-runs M]` | multi-arm: blind absolute rubric verdict of every run (of the named arms, with `--arms`) of each task with ≥ 2 runs (`judge/<task>/<run>/<judge>.json`, failing check caps at partial); idempotent |
 | `pi-bench judge TASK opus\|gpt [X Y]` | pairwise: blind A/B judge of `TASK.X.1` vs `TASK.Y.1` (default `qwenl` vs `sonnet`), for 2-arm comparisons |
 | `pi-bench judge-all [--once] [X]` | pairwise: judge everything that is finished (X default `qwenl`, against `sonnet`) |
 | `pi-bench metrics` | per-run session metrics (requests, retried 429s, cost, peak context, folds, children) |
