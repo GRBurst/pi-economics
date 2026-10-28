@@ -39,11 +39,11 @@
     "pi-actor-subagents": {
       "flake": false,
       "locked": {
-        "lastModified": 1792873432,
-        "narHash": "sha256-pMQOHnxHaFUrbIKXsTlVhWMG8F3f8ebIDLXgsxtjueo=",
+        "lastModified": 1793073635,
+        "narHash": "sha256-/NgrQvswfMIZRIl+FnWXmaEzt6Ipsyv5tjdiwFWZSbo=",
         "owner": "fdietze",
         "repo": "pi-actor-subagents",
-        "rev": "822a228e4d6e494c98a6946c9cf812fdd0c96a9d",
+        "rev": "e92099a7272e64105d5ab429d7856dc0f473b4e3",
         "type": "github"
       },
       "original": {
@@ -55,11 +55,11 @@
     "pi-infinite-context": {
       "flake": false,
       "locked": {
-        "lastModified": 1792786773,
-        "narHash": "sha256-DKsN3sQAfD5EK7mZO2+pZYjUbhggBiRojSoUZnJgaq4=",
+        "lastModified": 1792983282,
+        "narHash": "sha256-2O7arKDRdSVU2JCB8DijWxR8PkoVfUG8vOVmuOl9f/4=",
         "owner": "fdietze",
         "repo": "pi-infinite-context",
-        "rev": "4c66601b71e629210cf1606f12526e6af5a8a8bf",
+        "rev": "9918c401fd6a23a050db1ca38d5bf92c02f77d70",
         "type": "github"
       },
       "original": {

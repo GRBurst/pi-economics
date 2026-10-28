@@ -8,6 +8,8 @@
 #   starts at 75% of the model window and repeats every 5% of it. The
 #   `reminders` block and the cache patch's keys are strict: an invalid value
 #   or an unknown key rejects the whole file with a session-start warning.
+#   Upstream's `nudgeAtTokens` range (9918c40: one limit drawn per branch and
+#   recorded) is kept: resolveSettings() resolves it on top of these settings.
 # - cache: a cost-aware fold hint (payoff in turns while the prompt cache is
 #   warm, "folding is free" when cold; prices and TTL from the same file;
 #   `foldHint = "fixed"` turns it off; the experiments flag `foldHint`

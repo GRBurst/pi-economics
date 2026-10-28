@@ -7,14 +7,18 @@
 # runner is the whole toolchain. Upstream test files that import pi's peer
 # dependencies (@earendil-works/pi-{ai,tui,coding-agent}, which only exist
 # inside pi) are left out: agent-tools, panel and the pi-*.test.ts contract
-# tests against the installed pi.
+# tests against the installed pi. Upstream's own modules import pi-tui at run
+# time too since e92099a (panel-logic.ts: visibleWidth, reached from
+# engine.test.ts), so the shared lock's node_modules (../npm) is linked in.
 {
   pkgs,
   src,
+  nodeModules,
 }:
 pkgs.runCommand "pi-actor-subagents-tests" {nativeBuildInputs = [pkgs.nodejs];} ''
   cp -r ${src} work
   chmod -R u+w work
+  ln -s ${nodeModules}/node_modules work/node_modules
   cd work/extensions/actor-subagents
   export HOME=$TMPDIR/home
   mkdir -p "$HOME"

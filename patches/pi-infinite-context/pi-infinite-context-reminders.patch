@@ -1,5 +1,5 @@
 diff --git a/AGENTS.md b/AGENTS.md
-index 1bc6203..dd3f5c2 100644
+index d4f1b69..6a4281a 100644
 --- a/AGENTS.md
 +++ b/AGENTS.md
 @@ -29,8 +29,8 @@ Use simple, accurate English and keep both documents very concise.
@@ -7,17 +7,17 @@ index 1bc6203..dd3f5c2 100644
  - `extensions/infinite-context/search.ts`: pure archive regex search.
  - `extensions/infinite-context/output.ts`: line windows, token formatting, and global output limits.
 -- `extensions/infinite-context/nudge.ts`: proactive folding threshold and reminder-step policy.
--- `extensions/infinite-context/settings.ts`: parser for `<agent dir>/infinite-context/settings.json` (nudge limits) and the session entry that records them.
+-- `extensions/infinite-context/settings.ts`: parser for `<agent dir>/infinite-context/settings.json` (nudge limits), the per-branch limit (fixed or drawn from a range), and the session entry that records it.
 +- `extensions/infinite-context/nudge.ts`: proactive folding threshold and reminder-step policy, per model.
-+- `extensions/infinite-context/settings.ts`: parser for `<agent dir>/infinite-context/settings.json` (nudge limits and per-model reminder thresholds) and the session entry that records them.
++- `extensions/infinite-context/settings.ts`: parser for `<agent dir>/infinite-context/settings.json` (nudge limits and per-model reminder thresholds), the per-branch limit (fixed or drawn from a range), and the session entry that records it.
  - `extensions/infinite-context/*.test.ts`: unit, property, and integration tests.
  - `e2e/`: end-to-end test driving the real `pi` binary with a scripted fake provider.
  
 diff --git a/README.md b/README.md
-index c6952b2..7c3a3fe 100644
+index 0bd6a53..fe9fb19 100644
 --- a/README.md
 +++ b/README.md
-@@ -29,15 +29,25 @@ Map and search results provide the IDs to read next.
+@@ -29,17 +29,27 @@ Map and search results provide the IDs to read next.
  
  ## Context reminders
  
@@ -40,18 +40,20 @@ index c6952b2..7c3a3fe 100644
 +}
  ```
  
--The session records the effective limits as a `custom` entry of type `infinite-context:settings` whenever they change, and each reminder carries its token count, window, threshold and step in `details`.
 +Each field resolves on its own: the exact `provider/modelId` entry, then the provider entry, then `default`, then `nudgeAtTokens` (start only), then the built-in 75% / 5% of the model window. A start above `nudgeAtPercent` of the window is lowered to it. The `reminders` block is strict: an invalid one, or an unknown key anywhere in the file, rejects the whole file with a warning at session start, and the defaults apply.
 +
-+The session records the effective settings as a `custom` entry of type `infinite-context:settings` whenever they change, and each reminder carries its token count, window, threshold and step in `details`.
+ `nudgeAtTokens` can also be a range, `[100000, 300000]`, to measure how the limit affects cost: each session then draws one limit uniformly from the range and keeps it when resumed, reloaded or forked. A changed range draws anew.
+ 
+-The session records the effective limits as a `custom` entry of type `infinite-context:settings` whenever they change (with `nudgeAtTokensRange` when the limit was drawn), and each reminder carries its token count, window, threshold and step in `details`.
++The session records the effective settings as a `custom` entry of type `infinite-context:settings` whenever they change (with `nudgeAtTokensRange` when the limit was drawn), and each reminder carries its token count, window, threshold and step in `details`.
  
  The agent chooses what to fold and writes the summaries. Reminders do not fold anything themselves.
  
 diff --git a/extensions/infinite-context/index.test.ts b/extensions/infinite-context/index.test.ts
-index 356c8f6..e359c31 100644
+index 7f66fe7..4980a00 100644
 --- a/extensions/infinite-context/index.test.ts
 +++ b/extensions/infinite-context/index.test.ts
-@@ -121,8 +121,8 @@ test("each branch records the effective settings once, again after switching to
+@@ -122,8 +122,8 @@ test("each branch records the effective settings once, again after switching to
    assert.equal(settingsEntries(h).length, 1);
    const recorded = settingsEntries(h)[0];
    assert.deepEqual(recorded.type === "custom" && recorded.data, {
@@ -61,28 +63,38 @@ index 356c8f6..e359c31 100644
    });
  
    h.setEntries(source);
+@@ -147,7 +147,8 @@ test("a token range assigns each branch one recorded limit that survives reloads
+   assert.equal(recorded().length, 1);
+   const [first] = recorded();
+   assert.deepEqual(first.nudgeAtTokensRange, [100_000, 250_000]);
+-  assert.ok(first.nudgeAtTokens >= 100_000 && first.nudgeAtTokens <= 250_000);
++  const limit = first.nudgeAtTokens ?? 0;
++  assert.ok(limit >= 100_000 && limit <= 250_000);
+ 
+   // A branch without a record (e.g. a new session in the same process) gets its own draw.
+   h.setEntries(source);
 diff --git a/extensions/infinite-context/index.ts b/extensions/infinite-context/index.ts
-index edb2709..4392413 100644
+index c61ca9a..887f389 100644
 --- a/extensions/infinite-context/index.ts
 +++ b/extensions/infinite-context/index.ts
-@@ -27,8 +27,14 @@ import { ProjectionMismatchError, buildOverlay } from "./overlay.ts";
+@@ -27,13 +27,13 @@ import { ProjectionMismatchError, buildOverlay } from "./overlay.ts";
  import { planRootRanges } from "./plan-root-ranges.ts";
  import { serializeMessage } from "./serialize-message.ts";
  import { validateToolUnitOwnership } from "./tool-units.ts";
 -import { nudgeSchedule, planNudge } from "./nudge.ts";
--import { SETTINGS_ENTRY, type Settings, parseSettings, settingsChanged } from "./settings.ts";
 +import { nudgeSchedule, planNudge, reminderText } from "./nudge.ts";
-+import {
-+  DEFAULT_SETTINGS,
-+  SETTINGS_ENTRY,
-+  type Settings,
-+  parseSettingsWithError,
-+  settingsChanged,
-+} from "./settings.ts";
- import { renderMap } from "./render-map.ts";
  import {
-   DEFAULT_PAGE_LIMIT,
-@@ -81,20 +87,28 @@ function previewText(text: string): string {
+   DEFAULT_SETTINGS,
+-  type FileSettings,
+   SETTINGS_ENTRY,
++  type FileSettings,
+   type Settings,
+-  parseSettings,
++  parseSettingsWithError,
+   resolveSettings,
+   settingsChanged,
+ } from "./settings.ts";
+@@ -89,20 +89,28 @@ function previewText(text: string): string {
  
  /**
   * Read this extension's settings next to pi's own agent config (getAgentDir() honors pi's
@@ -93,9 +105,9 @@ index edb2709..4392413 100644
 + * the reason, which session start reports. Read once per extension instance: changes apply after
 + * restart or /reload.
   */
--function readSettings(): Settings {
+-function readSettings(): FileSettings {
 -  const file = path.join(getAgentDir(), "infinite-context", "settings.json");
-+function readSettings(file: string): { settings: Settings; error?: string } {
++function readSettings(file: string): { settings: FileSettings; error?: string } {
 +  let text: string | undefined;
    try {
 -    return parseSettings(fs.readFileSync(file, "utf8"));
@@ -113,13 +125,13 @@ index edb2709..4392413 100644
  }
  
  export default function infiniteContext(pi: ExtensionAPI) {
--  const settings = readSettings();
+-  const fileSettings = readSettings();
 +  const settingsFile = path.join(getAgentDir(), "infinite-context", "settings.json");
-+  const { settings, error: settingsError } = readSettings(settingsFile);
++  const { settings: fileSettings, error: settingsError } = readSettings(settingsFile);
    let roots: Forest = [];
    let stateError: Error | undefined;
    let loaded = false;
-@@ -161,7 +175,14 @@ export default function infiniteContext(pi: ExtensionAPI) {
+@@ -175,7 +183,14 @@ export default function infiniteContext(pi: ExtensionAPI) {
      pi.appendEntry(INFINITE_CONTEXT_ENTRY, snapshot(roots));
    };
  
@@ -135,7 +147,7 @@ index edb2709..4392413 100644
    pi.on("session_tree", async (_event, ctx) => load(ctx));
  
    pi.on("context", async (event, ctx) => {
-@@ -196,22 +217,22 @@ export default function infiniteContext(pi: ExtensionAPI) {
+@@ -212,22 +227,22 @@ export default function infiniteContext(pi: ExtensionAPI) {
      const window = usage?.contextWindow ?? 0;
      const tokens = usage?.tokens ?? null;
      if (window <= 0 || tokens == null) return;
@@ -163,7 +175,7 @@ index edb2709..4392413 100644
        { deliverAs: "steer" },
      );
 diff --git a/extensions/infinite-context/nudge.test.ts b/extensions/infinite-context/nudge.test.ts
-index 5440fc4..eb43033 100644
+index 5440fc4..b3bf817 100644
 --- a/extensions/infinite-context/nudge.test.ts
 +++ b/extensions/infinite-context/nudge.test.ts
 @@ -1,58 +1,105 @@
@@ -173,7 +185,7 @@ index 5440fc4..eb43033 100644
 -import { NUDGES_BEFORE_OVERFLOW, nudgeSchedule, planNudge } from "./nudge.ts";
 -import { DEFAULT_SETTINGS, type Settings } from "./settings.ts";
 +import { nudgeSchedule, planNudge, reminderText } from "./nudge.ts";
-+import { DEFAULT_SETTINGS, parseSettingsWithError, type Settings } from "./settings.ts";
++import { DEFAULT_SETTINGS, parseSettingsWithError, resolveSettings, type Settings } from "./settings.ts";
  
 -const settings = (nudgeAtTokens: number, nudgeAtPercent: number): Settings => ({
 -  nudgeAtTokens,
@@ -184,7 +196,7 @@ index 5440fc4..eb43033 100644
 +const settings = (json: unknown): Settings => {
 +  const parsed = parseSettingsWithError(JSON.stringify(json));
 +  assert.equal(parsed.error, undefined);
-+  return parsed.settings;
++  return resolveSettings(parsed.settings, undefined, Math.random);
 +};
 +
 +const configured = settings({
@@ -532,23 +544,46 @@ index 4ea35c5..2361b7c 100644
 +  );
 +}
 diff --git a/extensions/infinite-context/settings.test.ts b/extensions/infinite-context/settings.test.ts
-index 2beaa50..2a15f35 100644
+index 5925b8c..c11de08 100644
 --- a/extensions/infinite-context/settings.test.ts
 +++ b/extensions/infinite-context/settings.test.ts
-@@ -1,6 +1,11 @@
+@@ -1,6 +1,12 @@
  import assert from "node:assert/strict";
  import test from "node:test";
--import { DEFAULT_SETTINGS, parseSettings, settingsChanged } from "./settings.ts";
+-import { DEFAULT_SETTINGS, parseSettings, resolveSettings, settingsChanged } from "./settings.ts";
 +import {
 +  DEFAULT_SETTINGS,
 +  parseSettings,
 +  parseSettingsWithError,
++  resolveSettings,
 +  settingsChanged,
 +} from "./settings.ts";
  
  test("an empty or unreadable file yields the defaults", () => {
    for (const input of ["", "not json", "null", "[]", "42", "{}"]) {
-@@ -49,3 +54,55 @@ test("only a record that matches the current settings counts as unchanged", () =
+@@ -56,18 +62,18 @@ test("a fixed limit resolves to itself, with no range recorded", () => {
+ });
+ 
+ test("a range draws one limit uniformly and the branch keeps it", () => {
+-  const file = { nudgeAtTokens: [100, 103] as const, nudgeAtPercent: 75 };
++  const file = { ...DEFAULT_SETTINGS, nudgeAtTokens: [100, 103] as const };
+   const draw = (random: number) => resolveSettings(file, undefined, () => random).nudgeAtTokens;
+   assert.deepEqual([0, 0.25, 0.5, 0.999999].map(draw), [100, 101, 102, 103]);
+   const first = resolveSettings(file, undefined, () => 0.5);
+-  assert.deepEqual(first, { nudgeAtTokens: 102, nudgeAtPercent: 75, nudgeAtTokensRange: [100, 103] });
++  assert.deepEqual(first, { ...DEFAULT_SETTINGS, nudgeAtTokens: 102, nudgeAtTokensRange: [100, 103] });
+   // Reload or fork: the branch's record holds the arm, so no new draw.
+   assert.deepEqual(resolveSettings(file, first, () => 0), first);
+   assert.equal(settingsChanged(first, resolveSettings(file, first, () => 0)), false);
+ });
+ 
+ test("a changed range or an implausible record draws anew", () => {
+-  const file = { nudgeAtTokens: [100, 103] as const, nudgeAtPercent: 75 };
++  const file = { ...DEFAULT_SETTINGS, nudgeAtTokens: [100, 103] as const };
+   for (const recorded of [
+     { nudgeAtTokens: 102, nudgeAtPercent: 75, nudgeAtTokensRange: [100, 200] },
+     { nudgeAtTokens: 102, nudgeAtPercent: 75 },
+@@ -96,3 +102,59 @@ test("only a record that matches the current settings counts as unchanged", () =
      assert.equal(settingsChanged(recorded, DEFAULT_SETTINGS), true, String(recorded));
    }
  });
@@ -599,20 +634,25 @@ index 2beaa50..2a15f35 100644
 +});
 +
 +test("a recorded reminders block counts as unchanged only when it is the same", () => {
-+  const current = parseSettings(JSON.stringify({ reminders: { overrides: { anthropic: { startTokens: 9 } } } }));
++  const current = resolveSettings(
++    parseSettings(JSON.stringify({ reminders: { overrides: { anthropic: { startTokens: 9 } } } })),
++    undefined,
++    Math.random,
++  );
 +  assert.equal(settingsChanged(JSON.parse(JSON.stringify(current)), current), false);
 +  assert.equal(settingsChanged(DEFAULT_SETTINGS, current), true);
 +  assert.equal(settingsChanged({ ...current, reminders: { default: {}, overrides: {} } }, current), true);
 +});
 diff --git a/extensions/infinite-context/settings.ts b/extensions/infinite-context/settings.ts
-index 6178bef..32bb27a 100644
+index 7d58d54..4b8d98e 100644
 --- a/extensions/infinite-context/settings.ts
 +++ b/extensions/infinite-context/settings.ts
-@@ -1,9 +1,17 @@
+@@ -1,10 +1,18 @@
 +import { isDeepStrictEqual } from "node:util";
 +
  /**
-  * Parse the extension's optional settings file (location: see index.ts).
+  * Parse the extension's optional settings file (location: see index.ts) and resolve the
+  * settings one branch runs under.
   *
 - * Both fields only tune when a reminder appears, so each one is fail-open on its own:
 - * a missing or nonsensical value falls back to its default and a partial file still works
@@ -629,7 +669,7 @@ index 6178bef..32bb27a 100644
   */
  
  /**
-@@ -13,24 +21,52 @@
+@@ -14,40 +22,67 @@
   */
  export const SETTINGS_ENTRY = "infinite-context:settings";
  
@@ -641,14 +681,33 @@ index 6178bef..32bb27a 100644
 +  readonly everyTokens?: number;
 +}
 +
+ /** Inclusive token bounds [min, max] with min < max. */
+ export type TokenRange = readonly [number, number];
+ 
+ /** The settings file: a fixed token limit, or a range to draw one per branch from. */
+-export interface FileSettings {
+-  readonly nudgeAtTokens: number | TokenRange;
+-  readonly nudgeAtPercent: number;
++export interface FileSettings extends Omit<Settings, "nudgeAtTokens" | "nudgeAtTokensRange"> {
++  readonly nudgeAtTokens?: number | TokenRange;
+ }
+ 
+ /** The settings one branch runs under; recorded as the SETTINGS_ENTRY data. */
  export interface Settings {
 -  /** Remind once the context holds at least this many tokens. */
 -  readonly nudgeAtTokens: number;
 -  /** Remind once the context fills at least this percentage of the model's window. */
+-  readonly nudgeAtPercent: number;
 +  /** Remind once the context holds at least this many tokens. Unset: only the window share decides. */
 +  readonly nudgeAtTokens?: number;
+   /**
+    * Present only when nudgeAtTokens was drawn from this range: it marks the branch as part of
+    * a randomized experiment on the reminder limit, so analyses can tell assigned limits from
+    * chosen ones.
+    */
+   readonly nudgeAtTokensRange?: TokenRange;
 +  /** Remind at the latest once the context fills this percentage of the model's window. */
-   readonly nudgeAtPercent: number;
++  readonly nudgeAtPercent: number;
 +  /** Per-model thresholds, field by field: exact "provider/modelId", then the provider, then `default`. */
 +  readonly reminders: {
 +    readonly default: ReminderRule;
@@ -689,7 +748,7 @@ index 6178bef..32bb27a 100644
    return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
  }
  
-@@ -41,19 +77,77 @@ function percent(value: unknown, fallback: number): number {
+@@ -65,31 +100,88 @@ function percent(value: unknown, fallback: number): number {
      : fallback;
  }
  
@@ -737,7 +796,7 @@ index 6178bef..32bb27a 100644
 + * valid as a whole come back as the defaults with the reason in `error`.
 + */
 +export function parseSettingsWithError(json: string | undefined): {
-+  settings: Settings;
++  settings: FileSettings;
 +  error?: string;
 +} {
 +  if (json === undefined) return { settings: DEFAULT_SETTINGS };
@@ -745,7 +804,8 @@ index 6178bef..32bb27a 100644
 +    const value: unknown = JSON.parse(json);
 +    if (!isObject(value)) throw new Error("settings: must be an object");
 +    onlyKeys(value, ["nudgeAtTokens", "nudgeAtPercent", "reminders"], "settings");
-+    const nudgeAtTokens = positiveInt(value.nudgeAtTokens, undefined);
++    const nudgeAtTokens =
++      tokenRange(value.nudgeAtTokens) ?? positiveInt(value.nudgeAtTokens, undefined);
 +    return {
 +      settings: {
 +        ...(nudgeAtTokens === undefined ? {} : { nudgeAtTokens }),
@@ -762,7 +822,7 @@ index 6178bef..32bb27a 100644
 +}
 +
  /** Parses the settings file's contents; unparseable text is treated as an empty file. */
- export function parseSettings(json: string): Settings {
+ export function parseSettings(json: string): FileSettings {
 -  let value: Record<string, unknown> | undefined;
 -  try {
 -    const parsed: unknown = JSON.parse(json);
@@ -771,14 +831,56 @@ index 6178bef..32bb27a 100644
 -    // Fall through to defaults; the file is the user's, not a contract we can repair.
 -  }
 -  return {
--    nudgeAtTokens: positiveInt(value?.nudgeAtTokens, DEFAULT_SETTINGS.nudgeAtTokens),
+-    nudgeAtTokens:
+-      tokenRange(value?.nudgeAtTokens) ??
+-      positiveInt(value?.nudgeAtTokens, DEFAULT_SETTINGS.nudgeAtTokens),
 -    nudgeAtPercent: percent(value?.nudgeAtPercent, DEFAULT_SETTINGS.nudgeAtPercent),
 -  };
 +  return parseSettingsWithError(json).settings;
  }
  
+ const sameRange = (a: unknown, b: TokenRange | undefined): boolean =>
+   Array.isArray(a) && b !== undefined && a.length === 2 && a[0] === b[0] && a[1] === b[1];
+ 
  /**
-@@ -61,10 +155,5 @@ export function parseSettings(json: string): Settings {
+- * The settings a branch runs under. A fixed limit is used as is. A range assigns the branch
+- * one limit drawn uniformly from it (a randomized experiment, unit = branch): the branch keeps
+- * the limit its latest record (`recorded`, untrusted session data) holds for the same range,
+- * so resuming, reloading and forking stay in the same arm; otherwise `random` (in [0, 1))
++ * The settings a branch runs under. A fixed or unset limit is used as is. A range assigns the
++ * branch one limit drawn uniformly from it (a randomized experiment, unit = branch): the branch
++ * keeps the limit its latest record (`recorded`, untrusted session data) holds for the same
++ * range, so resuming, reloading and forking stay in the same arm; otherwise `random` (in [0, 1))
+  * draws a new one. A changed range starts a new draw, so edited settings still apply.
+  */
+ export function resolveSettings(
+@@ -97,20 +189,18 @@ export function resolveSettings(
+   recorded: unknown,
+   random: () => number,
+ ): Settings {
+-  const { nudgeAtTokens, nudgeAtPercent } = file;
+-  if (typeof nudgeAtTokens === "number") return { nudgeAtTokens, nudgeAtPercent };
++  const { nudgeAtTokens } = file;
++  if (nudgeAtTokens === undefined || typeof nudgeAtTokens === "number")
++    return file as Settings;
+   const [min, max] = nudgeAtTokens;
+-  const data = (typeof recorded === "object" && recorded !== null ? recorded : {}) as Record<
+-    string,
+-    unknown
+-  >;
++  const data: Record<string, unknown> = isObject(recorded) ? recorded : {};
+   const kept = data.nudgeAtTokens;
+   const drawn =
+     sameRange(data.nudgeAtTokensRange, nudgeAtTokens) &&
+     typeof kept === "number" && Number.isInteger(kept) && kept >= min && kept <= max
+       ? kept
+       : min + Math.floor(random() * (max - min + 1));
+-  return { nudgeAtTokens: drawn, nudgeAtPercent, nudgeAtTokensRange: nudgeAtTokens };
++  return { ...file, nudgeAtTokens: drawn, nudgeAtTokensRange: nudgeAtTokens };
+ }
+ 
+ /**
+@@ -118,13 +208,5 @@ export function resolveSettings(
   * describe `current`. Untrusted session data, so anything unexpected counts as changed.
   */
  export function settingsChanged(recorded: unknown, current: Settings): boolean {
@@ -786,7 +888,10 @@ index 6178bef..32bb27a 100644
 -  const data = recorded as Record<string, unknown>;
 -  return (
 -    data.nudgeAtTokens !== current.nudgeAtTokens ||
--    data.nudgeAtPercent !== current.nudgeAtPercent
+-    data.nudgeAtPercent !== current.nudgeAtPercent ||
+-    (current.nudgeAtTokensRange === undefined
+-      ? data.nudgeAtTokensRange !== undefined
+-      : !sameRange(data.nudgeAtTokensRange, current.nudgeAtTokensRange))
 -  );
 +  return !isDeepStrictEqual(recorded, current);
  }

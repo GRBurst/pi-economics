@@ -79,7 +79,10 @@ in {
   };
   # The upstream suite of the patched pi-actor-subagents (spec §8.1), with the
   # host's check (checks/actor-subagents/default.nix, copied).
-  actor-subagents = pkgs.callPackage ./actor-subagents {src = actorSubagents;};
+  actor-subagents = pkgs.callPackage ./actor-subagents {
+    src = actorSubagents;
+    inherit (npm) nodeModules;
+  };
   typecheck-actor-subagents = typecheck.typecheck {
     name = "actor-subagents";
     src = actorSubagentsTs;

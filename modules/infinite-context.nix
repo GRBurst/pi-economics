@@ -141,7 +141,9 @@ in {
         nested key replaces only its own leaf. The extension accepts
         `nudgeAtTokens`, `nudgeAtPercent`, `reminders`, `prices`,
         `cacheTtlMinutes` and `foldHint`; an unknown key or an invalid value
-        rejects the whole file with a warning at session start.
+        rejects the whole file with a warning at session start. `nudgeAtTokens`
+        is a token count or a range `[min, max]`, from which each session draws
+        one limit and records it (upstream since 9918c40).
       '';
     };
   };
