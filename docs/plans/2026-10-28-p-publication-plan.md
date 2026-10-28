@@ -636,6 +636,27 @@ rm -rf "$TMPDIR/pub" && git clone -q --single-branch --no-tags --branch publish 
 - **OQ15 Fold the analysis report legend and the attempts test title into the LOGS nit (P.3)?** *Recommend:* yes.
 - **OQ16 Keep `AGENTS.md` in the public repository (rewritten generic)?** *Recommend:* yes; it is useful to contributors' agents.
 
+# Main's decisions (2026-10-28)
+
+All open questions accepted as recommended.
+
+- OQ1 accepted: move spec and plans verbatim to the host's `docs/specs/` and `docs/plans/`.
+- OQ2 accepted: code-comment citations stay; one provenance paragraph.
+- OQ3 accepted: plans after P live in the host's `docs/plans/`.
+- OQ4 accepted: neutral health default `http://localhost:11545`.
+- OQ5 accepted: edit the frozen oracle's `localHealthUrl` literal, with a header note.
+- OQ6 accepted: add the generic LAN host URL pattern to the in-flake leak check.
+- OQ7 accepted: F kept where functional; §9 amended to "no default or arm names it".
+- OQ8 accepted: keep the bench's `agentsOff` default.
+- OQ9 accepted: an empty nested retry settings set is an assertion error.
+- OQ10 accepted: MIT, holder "GRBurst", NOTICE for the three upstreams.
+- OQ11 accepted: repo identity for the squash; keep tag `pre-squash`, branch `pre-squash-main` and the bundle indefinitely.
+- OQ12 accepted: Group A now in the worktree `~/.cache/pi/p-wt` (branch `p-publication`); B after T6.1; C after T7.1.
+- OQ13 accepted: private scan through the host check with `--override-input` at `p0`, `pB`, `p-final`.
+- OQ14 accepted: README example pinned by a module-eval case.
+- OQ15 accepted: the analysis report legend and attempts test title are folded into the LOGS nit (P.3).
+- OQ16 accepted: keep `AGENTS.md` in the public repository, rewritten generic.
+
 # Execution Record
 
 (empty — filled by the implementer; from P.12 on in the archived copy, see S12)
