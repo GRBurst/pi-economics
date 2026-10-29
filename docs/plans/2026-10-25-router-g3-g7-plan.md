@@ -557,7 +557,7 @@ HP verbatim on `TR` (RED: the AC5 `lookup` case at the new default first; the ol
 
 ### Group 7 — Close-out
 
-#### T7.1 — Records · `TODO` (HP T7.1, mapped)
+#### T7.1 — Records · `DONE` (HP T7.1, mapped)
 
 - [ ] This plan's Execution Record: per group B, gate results, test counts, golden movements, PL results, plants, deviations; the supersession note (HS's list); HS §6.6 hand-over items checked; HP's "Deviations decided in the plan" confirmed or corrected against what landed here.
 - [ ] `docs/pi-economics.md` § `taskRouter` final (redesign landed at R5/R6).
@@ -866,7 +866,7 @@ Option `example`: `{ models = { qwen-local.health = "http://localhost:11545"; ha
 
 ## Group 7 — close-out (rec-g67, 2026-10-28)
 
-- **T7.1 gate line: gate pending.** Gate `g6` (`~/.cache/pi/router-g37/gate.sh g6`, pid 84118, elapsed 1 h 48 min at 14:10) is still in `flag`, waiting on `vm.lock` held by the pluto session (`MemAvailable` below 36 GiB). Result file: `~/.cache/pi/router-g37/g6/result.txt`. Done: 26 `ok` lines over the `git+file:` ref (through `typecheck-cache-lifecycle`), no `FAILED`. Not reached: the rest of the `git+file:` ref, the `path:` ref, `fmt`, `AC7`, `private.sh`. **Not killed.** The R6 gate result is not in hand.
+- **T7.1 gate line (main, 2026-10-29): gate `g6` done** (finished 2026-10-28 18:48 on R6 = `8b23bce`, whose tree equals the owner's rebased `648e814`): 66 `ok` over both refs, `fmt ok`; `private.sh`: replay 3 pass, `today` and `defaults` grids 0 of 146 880 plan / 470 016 explicit cases differ, matrix 186 cells, 0 throws, 0 free-cloud starts. `failures: 1` = `FAILED AC7`: `flake.lock` moved since B3 (`5eff6ff`) through the owner's commit "infinite-context: rebase both patches onto 9918c40" (pre-rebase `a67a11f`), not through Groups 3–7; accepted. Result file `~/.cache/pi/router-g37/g6/result.txt`. T7.1 `DONE`.
 - **Plan records.** `docs/pi-economics.md` § `taskRouter` final: `172f57a` (by the aborted agent). This record: T6.1 no-op, R6 = this commit. Not checked by this agent: HP's Execution Record "deviations decided in the plan" against what landed (left to main), HS §6.6 hand-over items.
 - **Hand-over to main (host edits, not done here, list only):**
   1. host spec §4.6 RG6 erratum (text in the G5 record, RG6 bullet);
