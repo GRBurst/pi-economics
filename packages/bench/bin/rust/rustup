@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Bench shim: nixpkgs rustc stands in for the rustup toolchain (same version is asserted by the repo's own tests).
+if [[ "$*" == "show active-toolchain"* ]]; then v=$(rustc --version | awk '{print $2}'); echo "$v-x86_64-unknown-linux-gnu (overridden by '$PWD/rust-toolchain.toml')"; exit 0; fi
+echo "bench rustup shim: unsupported: rustup $*" >&2; exit 2

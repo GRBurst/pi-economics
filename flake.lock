@@ -1,0 +1,99 @@
+{
+  "nodes": {
+    "home-manager": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1792896866,
+        "narHash": "sha256-/0tELNnhdSnP+bHSdWiEe6KpfSwi6WrTnT9cm/jNkjA=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "c216bf5a1f173b0481bd5c8c489ebe5595ecc68c",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1792773339,
+        "narHash": "sha256-rZLrzrC6i+jnTAlvPZHogKDulY7WWDEv9hJeHieO7Zw=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "pi-actor-subagents": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793073635,
+        "narHash": "sha256-/NgrQvswfMIZRIl+FnWXmaEzt6Ipsyv5tjdiwFWZSbo=",
+        "owner": "fdietze",
+        "repo": "pi-actor-subagents",
+        "rev": "e92099a7272e64105d5ab429d7856dc0f473b4e3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "fdietze",
+        "repo": "pi-actor-subagents",
+        "type": "github"
+      }
+    },
+    "pi-infinite-context": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792983282,
+        "narHash": "sha256-2O7arKDRdSVU2JCB8DijWxR8PkoVfUG8vOVmuOl9f/4=",
+        "owner": "fdietze",
+        "repo": "pi-infinite-context",
+        "rev": "9918c401fd6a23a050db1ca38d5bf92c02f77d70",
+        "type": "github"
+      },
+      "original": {
+        "owner": "fdietze",
+        "repo": "pi-infinite-context",
+        "type": "github"
+      }
+    },
+    "pi-retry": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792738326,
+        "narHash": "sha256-YHpkOBXvoeyFr/50yMrYjGVOwZiceLogHnYrHiqW5+A=",
+        "owner": "monotykamary",
+        "repo": "pi-retry",
+        "rev": "60a3b088145cf92dc6885f9fd8c785ed59a2b198",
+        "type": "github"
+      },
+      "original": {
+        "owner": "monotykamary",
+        "repo": "pi-retry",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "home-manager": "home-manager",
+        "nixpkgs": "nixpkgs",
+        "pi-actor-subagents": "pi-actor-subagents",
+        "pi-infinite-context": "pi-infinite-context",
+        "pi-retry": "pi-retry"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

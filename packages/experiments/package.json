@@ -1,0 +1,11 @@
+{
+  "name": "pi-experiments",
+  "version": "0.1.0",
+  "description": "One fractional-factorial arm per pi main session (explore/exploit assignment); children inherit the arm, other extensions read the factor flags.",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "license": "MIT",
+  "pi": { "extensions": ["index.ts"] },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": ">=1.0.0" },
+  "scripts": { "test": "node --test --experimental-strip-types test/*.test.ts" }
+}

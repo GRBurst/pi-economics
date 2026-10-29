@@ -1,0 +1,1 @@
+{"packages":["a"],"piRetry":{"baseDelayMs":2000,"subagents":{"enabled":true,"match":{"systemPromptRegex":[{"pattern":"other"}]}}}}

@@ -1,0 +1,20 @@
+pi-economics is MIT-licensed (LICENSE). It builds three upstream extensions
+from their sources and applies the patches under patches/<input>/ to them.
+The patches are derived from those projects and are distributed under their
+licences; each upstream's licence text, with its permission notice, is kept
+next to its patches as patches/<input>/LICENSE.
+
+## pi-actor-subagents
+https://github.com/fdietze/pi-actor-subagents — MIT, Copyright (c) 2026 Felix Dietze
+Licence text: patches/pi-actor-subagents/LICENSE
+
+## pi-infinite-context
+https://github.com/fdietze/pi-infinite-context — MIT, Copyright (c) 2026 Felix Dietze
+Licence text: patches/pi-infinite-context/LICENSE
+
+## pi-retry
+https://github.com/monotykamary/pi-retry — MIT (package.json, README), author Tom X Nguyen
+Licence text: patches/pi-retry/LICENSE (the upstream ships no LICENSE file; the
+text is the standard MIT licence for its package.json declaration).
+checks/npm/package.json and its lockfile are pi-retry's own, used to build the
+extension's dependencies.

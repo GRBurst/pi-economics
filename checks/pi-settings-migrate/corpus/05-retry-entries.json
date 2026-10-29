@@ -1,0 +1,1 @@
+{"packages":["a","https://github.com/monotykamary/pi-retry",{"source":"/x"},"git:github.com/monotykamary/pi-retry","https://github.com/monotykamary/pi-retry-extra","b"],"piRetry":{"subagents":{"match":{"systemPromptRegex":[{"pattern":"^You were spawned by \"","flags":"m"}]}}}}

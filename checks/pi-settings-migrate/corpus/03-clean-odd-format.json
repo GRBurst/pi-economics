@@ -1,0 +1,1 @@
+{ "packages" : ["a"], "piRetry":{"subagents":{"match":{"systemPromptRegex":[{"pattern":"^You were spawned by \"","flags":"m"}]}}} }
