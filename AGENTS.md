@@ -70,3 +70,15 @@ Commits are unsigned: `git -c commit.gpgsign=false commit`.
   `patches/<input>/` holds the upstream's `LICENSE` (the `license` check);
   the patch lists in the package files are explicit, so it is not a patch.
 - `flake.lock` changes only when a task needs it.
+- The root `package.json` (the pi package manifest) is written only by
+  `nix run .#render` and compared by `render-package`; never edit it by hand.
+  Its `bin` files carry the pinned shebang and mode 755 (`pi-package-manifest`).
+- The four `packages/<c>/core/runtime-guard.ts` are identical copies of
+  task-router's (`runtime-guard-copies`): change one, `cp` it to the others.
+  Each `index.ts` wraps its body in `guardSingleCopy`; a component that needs
+  the actor's API decides at `session_start`, never at load.
+- The package checks (`checks/pi-package/`) run pi 1.4 offline and find loaded
+  extensions by its `PI_TIMING=1` factory lines (undocumented, pinned to the
+  locked pi); `pi -p` fires no `message_end`, so it writes no meter line.
+- README's "Without Nix" is checked by the module-eval case `readme-package`
+  (install line = manifest version, the subset block = `checks/pi-package/subset.json`).

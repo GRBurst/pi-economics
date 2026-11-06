@@ -344,6 +344,42 @@ requires `pi-analyse --check` to pass and every report section to have data.
 Checks: `task-router`, `typecheck-task-router`, `iface-subagents-task-router`,
 `iface-experiments-task-router`, `router-golden`, `log-contract`.
 
+## The pi package
+
+The repository root is a pi package (`package.json`, rendered; spec decision D1): the four own extensions
+(`packages/{cache-lifecycle,experiments,task-router,token-meter}/index.ts`), the analysis skill (`./skills`) and
+the two CLIs (`bin`). A user without Nix installs it with `pi install git:github.com/GRBurst/pi-economics@v<version>`
+(`README.md`, "Without Nix"); the Home Manager route is unchanged but for the deltas below.
+
+**Render rule.** Only `nix run .#render` writes `package.json`. `render/default.nix` evaluates the module for one
+fixture (every component on but `bench`), maps the registry's own names to `./packages/<n>/index.ts` (a name without a
+package directory is a render error; the prerequisites `actor-subagents`, `infinite-context`, `pi-retry` are skipped,
+the user installs them) and adds `bin` when `tokenMeter` is on. `render-package` compares the committed file with it;
+`pi-package-manifest` states the manifest's laws one by one (private, keyword, semver, peers = pi's five host
+packages, imported-is-peer, no dependencies, paths, bin shebang and mode, skill fallback paths). The version is the
+constant in `render/default.nix`; the tag is `v` + version.
+
+**Runtime contract** (`packages/<c>/core/runtime-guard.ts`, four identical copies, `runtime-guard-copies`):
+
+- `hasSubagentsApiV1`, checked at `session_start` (every factory has run by then, so the check does not depend on
+  load order). `task-router` without the API warns once and is off (no `task_verdict`, no `task_cards`, no nudge);
+  its effort guard and fresh-on-cold stay on. `cache-lifecycle` warns once and does not keep sessions waiting on
+  their children warm. `experiments` warns once (only with its settings file) and children do not inherit an arm.
+  The text is `actorMissing(...)`, printed through `warnOnce` (once per process; `ctx.ui.notify` with a UI,
+  `console.warn` without).
+- `guardSingleCopy`: each extension claims its component on `pi.events` at load; a second copy in the same runtime
+  registers nothing and warns once at `session_start` (`loadedTwice`). The first loaded copy wins.
+- `experiments` is opt-in on both routes: inert without `<agentDir>/experiments/settings.json` (no arm, no
+  `assignments.jsonl`, no warning). The Nix module writes the file whenever `experiments.enable` is set
+  (`{}` becomes `{"mode": "explore"}`, N4).
+- Nix route deltas: N1 `task_verdict` is registered at `session_start`; N2 the actor-missing warnings are runtime
+  warnings as well; N3 the single-copy guard; N4 the settings file; N5 the sources of the four packages.
+
+Without the actor the package prints the warnings and keeps working; with the patched actor next to it none appears
+(`pi-install-actor`). The package checks load pi 1.4 offline (`pi -p`); they find the loaded extensions by pi's
+`PI_TIMING=1` factory lines, an undocumented output pinned to the locked `pkgs.pi-coding-agent`: a pi that no longer
+prints the block fails them with one message ("pi printed no PI_TIMING block").
+
 ## Patched upstreams
 
 A component built from an upstream repository takes it as a `flake = false`
@@ -385,6 +421,16 @@ points into `src`.
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths (`/home/<name>`), `git+ssh` URLs, private (RFC 1918) or Tailscale addresses, LAN host URLs (`http://<one-label host>`, not `localhost`) or names under `.local`, `.lan`, `.home.arpa`, `.ts.net` in tracked files (a worktree's `.git` file is skipped) |
 | `license` | `LICENSE` is MIT, every package declares MIT, `NOTICE` has a section per patched upstream |
 | `boundary`, `boundary-selftest` | no file's content (binary files too), file name or directory name names an extension this repository does not ship, in the spellings `x-y`, `x_y`, `xy` and `xY` (case ignored); `NOTICE`, `LICENSE` and `patches/<input>/LICENSE` are skipped, the patches themselves are scanned; the selftest has a hit and a near miss for each kind of place |
+| `render-package` | the committed `package.json` is the render of the module (AC2) |
+| `pi-package-manifest` | the manifest's laws, each reported under its own name (AC3) |
+| `pi-install-smoke` | `pi install ./pkg` offline: settings entry, `pi list`, every manifest extension loads, the router warns once, experiments stays inert (AC1) |
+| `pi-git-route` | the npm step of a git install (`--omit=dev --legacy-peer-deps`) is a no-op offline (AC10) |
+| `pi-install-actor` | the package next to the patched actor: no warning, `task_verdict` registered and active (AC5) |
+| `pi-install-duplicate` | the package next to the Nix links: one `loaded twice` per component, no tool conflict, pi's skill loader reports the collision (AC7) |
+| `pi-install-subset` | the README's filter loads only the listed extensions (AC4) |
+| `bins-smoke` | `npm install -g <dir>` offline, both CLIs run through an explicit node, the shipped shebang, the `node_modules` failure the README states (AC9) |
+| `runtime-guard-copies`, `iface-subagents-runtime-guard` | the four `runtime-guard.ts` copies are identical (AC8); `SubagentsApiV1` satisfies their `SubagentsApiShape` |
+| `nix-route-smoke` | the Home Manager route's agent directory under real pi: every extension loads, no duplicate or missing-actor warning, `task_verdict` active, experiments' settings file (AC15) |
 
 How to run them: `AGENTS.md`, "Commands".
 
