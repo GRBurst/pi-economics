@@ -6,11 +6,12 @@ import { planMasks, type Include, type MaskSet } from "./mask.ts";
 import { applyMasks, entriesOf } from "./messages.ts";
 import { registerIdentityShim } from "./identity.ts";
 import type { SubagentsApiV1 } from "./api.ts";
+import { actorMissing, hasSubagentsApiV1, warnOnce } from "./runtime-guard.ts";
 import { applyTtl } from "./ttl.ts";
 import { decideWarm } from "./warm.ts";
 import type { Settings } from "./settings.ts";
 
-type Ctx = { sessionManager: { getSessionId(): string; getBranch(): unknown[] } };
+type Ctx = { sessionManager: { getSessionId(): string; getBranch(): unknown[] }; hasUI?: boolean; ui?: { notify?(text: string, level: "warning"): void } };
 export type PiLike = {
   on(name: string, handler: (event: any, ctx: Ctx) => unknown): void;
   appendEntry(customType: string, data: unknown): void;
@@ -61,7 +62,11 @@ export function install(pi: PiLike, deps: Deps) {
     return masks.get(ctx.sessionManager.getSessionId())!;
   };
 
-  pi.on("session_start", (_e, ctx) => void rebuild(ctx));
+  pi.on("session_start", (_e, ctx) => {
+    rebuild(ctx);
+    // spec D5: without the patched actor only the warming of sessions that wait on children is off (below).
+    if (!hasSubagentsApiV1(api())) warnOnce(ctx, "actor:cache-lifecycle", actorMissing("cache-lifecycle", "sessions waiting on their children are not kept warm"));
+  });
 
   // Warming pings are provider responses too: they refresh the cache, so they count.
   pi.on("after_provider_response", (e, ctx) => {
