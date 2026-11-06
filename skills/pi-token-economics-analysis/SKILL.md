@@ -21,6 +21,9 @@ without the user's explicit approval.
    Exit 0 prints `contract ok`. Exit 1 lists per log the missing required fields, the
    count and one example. Missing fields are a finding to report, not a reason to stop
    (legacy `v` 0 lines before 2026-10-03 are expected to lack `v` and partly `arm`).
+   Without `pi-analyse` on `PATH` (the package installed without Nix), run every `pi-analyse` command of
+   these steps as `node --experimental-strip-types --no-warnings ../../packages/token-meter/bin/pi-analyse.ts`,
+   a path relative to this skill's directory.
 3. **Run the analysis:**
 
        pi-analyse [--since D] [--until D]
@@ -29,7 +32,7 @@ without the user's explicit approval.
    (read this; date and time are UTC, so runs of one day keep their reports) and `.json`
    (the same tables, for follow-up computations).
 4. **Read `~/.pi/agent/LOGS.md`** for any field, join or version you are unsure about
-   before you interpret a number. Never guess what a field means.
+   before you interpret a number. Without Nix it is `../../packages/token-meter/LOGS.md`, relative to this skill's directory. Never guess what a field means.
 5. **Interpret** section by section (below), then answer the user's question with the
    numbers, their uncertainty and the caveats that apply.
 6. **Offer decisions** from the menu, each with its evidence and risk. Wait for approval.

@@ -68,6 +68,17 @@ in
       [ "$(head -n1 "$b")" = '#!/usr/bin/env -S node --experimental-strip-types --no-warnings' ] || bad bin-shebang "the first line of $b is not the pinned shebang"
       [ -x "$b" ] || bad bin-executable "the bin $b is not executable"
     done < <(jq -r '(.bin // {})[]' "$m")
+    # the skill's fallback paths (spec D9, E21): relative to the skill's directory, so they must resolve there,
+    # and the two the analysis needs must be named
+    while IFS= read -r f; do
+      s=$(dirname "$f")
+      for want in ../../packages/token-meter/bin/pi-analyse.ts ../../packages/token-meter/LOGS.md; do
+        grep -qF "$want" "$f" || bad skill-fallback "$f does not name $want"
+      done
+      while IFS= read -r r; do
+        [ -e "$s/$r" ] || bad skill-fallback "$f names $r, which does not exist relative to $s"
+      done < <(grep -o '\.\./\.\./[A-Za-z0-9_./-]*' "$f" | sort -u)
+    done < <(find $(jq -r '(.pi.skills // [])[]' "$m") -name SKILL.md)
     [ "$fail" = 0 ] || exit 1
     touch $out
   ''
