@@ -9,6 +9,7 @@ import { accepted, card, harness, provideSkills } from "./harness.ts";
 
 const rig = (spotCheck: { enabled: boolean; share: number }, rng = () => 0) => {
   const h = harness({ settings: { spotCheck }, extra: { rng } as never });
+  h.f.fire("session_start", {}, {}); // task_verdict is registered at the first session_start with the actor's API (plan T3.1)
   provideSkills(h, ["code-reviewer"]);
   return h;
 };

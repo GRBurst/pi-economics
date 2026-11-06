@@ -11,7 +11,8 @@ export type NudgePi = {
 
 export const NUDGE_TYPE = "task-router/delegation-nudge";
 
-export function installNudge(pi: NudgePi, d: { settings: RouterSettings; isChild: (ctx: any) => boolean }): void {
+/** `enabled`: whether the router is active (the actor's API loaded, shell.ts); default always. */
+export function installNudge(pi: NudgePi, d: { settings: RouterSettings; isChild: (ctx: any) => boolean; enabled?: () => boolean }): void {
   if (!pi.sendMessage) return;
   let count = 0;
   pi.on("session_start", () => { count = 0; });
@@ -21,7 +22,7 @@ export function installNudge(pi: NudgePi, d: { settings: RouterSettings; isChild
     return undefined;
   });
   pi.on("turn_end", (e, ctx) => {
-    if (d.isChild(ctx)) return undefined;
+    if (d.isChild(ctx) || d.enabled?.() === false) return undefined;
     const s = d.settings.delegation;
     const r = countCalls(count, (e?.toolResults ?? []).map((t: { toolName?: string }) => String(t?.toolName)), s);
     count = r.count;

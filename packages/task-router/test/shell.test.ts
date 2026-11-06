@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { install } from "../core/shell.ts";
 import { outcomeFile } from "../core/outcome.ts";
+import { fakeApi } from "./fake-api.ts";
 import { fakePi } from "./fake-pi.ts";
 import type { Card, Plan } from "../core/types.ts";
 
@@ -15,7 +16,9 @@ const plan = { worker: { tier: "qwen", effort: "xhigh" }, base: "qwen", importan
 function setup() {
   const agentDir = mkdtempSync(join(tmpdir(), "task-router-shell-"));
   const f = fakePi();
-  const router = install(f.pi, { agentDir, now: () => NOW });
+  const a = fakeApi();
+  const router = install(f.pi, { agentDir, now: () => NOW, api: () => a.api });
+  f.fire("session_start", {}, {}); // task_verdict is registered at the first session_start with the actor's API (plan T3.1)
   const lines = () => (existsSync(outcomeFile(agentDir, NOW))
     ? readFileSync(outcomeFile(agentDir, NOW), "utf8").trim().split("\n").map((l) => JSON.parse(l))
     : []);
@@ -77,7 +80,8 @@ function withWarnings<T>(fn: (warned: string[]) => T): T {
 }
 const installWith = (problems?: string[]) => {
   const f = fakePi();
-  install(f.pi, { agentDir: mkdtempSync(join(tmpdir(), "task-router-shell-")), now: () => NOW, ...(problems ? { problems } : {}) });
+  const a = fakeApi(); // with the actor's API: only the settings problems warn (plan T3.1)
+  install(f.pi, { agentDir: mkdtempSync(join(tmpdir(), "task-router-shell-")), now: () => NOW, api: () => a.api, ...(problems ? { problems } : {}) });
   return f;
 };
 

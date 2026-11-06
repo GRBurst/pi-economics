@@ -59,9 +59,15 @@ test("settings: delegation merges over the defaults, wrong types ignored", () =>
 const MAIN = { sessionManager: { getSessionId: () => "s-main" } };
 const turn = (tools: string[], stopReason = "toolUse") => ({ message: { stopReason }, toolResults: tools.map((toolName) => ({ toolName })) });
 const nudges = (h: ReturnType<typeof harness>) => h.f.sent.filter((s) => s.msg.customType === "task-router/delegation-nudge");
+// The nudge runs from the first session_start with the actor's API (plan T3.1).
+const started = (...a: Parameters<typeof harness>) => {
+  const h = harness(...a);
+  h.f.fire("session_start", {}, MAIN);
+  return h;
+};
 
 test("main session: 6 mechanical calls → one steering custom message, then the count restarts", () => {
-  const h = harness();
+  const h = started();
   h.f.fire("turn_end", turn(rep("bash", 3)), MAIN);
   assert.equal(nudges(h).length, 0);
   h.f.fire("turn_end", turn(rep("edit", 3)), MAIN);
@@ -77,7 +83,7 @@ test("main session: 6 mechanical calls → one steering custom message, then the
 });
 
 test("spawn_subagent and user input reset the count; extension-sourced input does not", () => {
-  const h = harness();
+  const h = started();
   h.f.fire("turn_end", turn(rep("bash", 5)), MAIN);
   h.f.fire("turn_end", turn(["spawn_subagent"]), MAIN);
   h.f.fire("turn_end", turn(rep("bash", 5)), MAIN);
@@ -91,13 +97,13 @@ test("spawn_subagent and user input reset the count; extension-sourced input doe
 });
 
 test("delegation.nudge off: no message", () => {
-  const h = harness({ settings: { delegation: { ...D, nudge: "off" } } });
+  const h = started({ settings: { delegation: { ...D, nudge: "off" } } });
   h.f.fire("turn_end", turn(rep("bash", 30)), MAIN);
   assert.equal(nudges(h).length, 0);
 });
 
 test("never in a child session (api.list knows the session as a child)", () => {
-  const h = harness();
+  const h = started();
   h.a.agents.push(
     { name: "main", parent: "main", sessionId: "s-main", model: "m", thinkingLevel: "high", state: "running" },
     { name: "kid", parent: "main", sessionId: "s-kid", model: "m", thinkingLevel: "high", state: "running" },
@@ -109,7 +115,7 @@ test("never in a child session (api.list knows the session as a child)", () => {
 });
 
 test("a turn without tool results does not nudge; routing off drops the card step from the text", () => {
-  const h = harness({ settings: { routing: false } });
+  const h = started({ settings: { routing: false } });
   h.f.fire("turn_end", turn([], "stop"), MAIN);
   h.f.fire("turn_end", turn(rep("bash", 6)), MAIN);
   assert.equal(nudges(h).length, 1);

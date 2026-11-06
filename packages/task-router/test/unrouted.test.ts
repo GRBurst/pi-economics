@@ -8,6 +8,7 @@ const agent = (name: string, sessionId: string, model: string, thinkingLevel: an
 
 function rig(settings: Record<string, unknown> = { routing: false }) {
   const h = harness({ base: "today", settings }); // T5.1: the free cloud model below is an enabled member only in the today fixture
+  h.f.fire("session_start", {}, {}); // task_verdict is registered at the first session_start with the actor's API (plan T3.1)
   h.a.agents.push(agent("main", "s-main", "anthropic/claude-opus-5-5"), agent("kid", "s-kid", "anthropic/claude-sonnet-5-5"), agent("qk", "s-qk", "openrouter/qwen/qwen3.8-27b:free", "xhigh"));
   return h;
 }

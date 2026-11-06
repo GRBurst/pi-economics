@@ -7,6 +7,7 @@ import { harness } from "./harness.ts";
 
 const fire = (h: ReturnType<typeof harness>) => {
   const options = { sections: {} as Record<string, string>, skills: [] };
+  h.f.fire("session_start", {}, {}); // the router routes from the first session_start with the actor's API (plan T3.1)
   h.f.fire("before_agent_start", { systemPromptOptions: options }, {});
   return options.sections;
 };
