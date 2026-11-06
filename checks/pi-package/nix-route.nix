@@ -1,0 +1,74 @@
+# The Nix route under real pi (AC15): the agent directory Home Manager
+# renders for the home-files fixture (every component on, the patched actor
+# included), each `home.file` under it linked as Home Manager links it, then
+# `pi -p x` offline with the probe (./probe.ts). Every registry entry loads
+# (pi prints each extension's factory under PI_TIMING=1; a factory that throws
+# prints none), no load error, no duplicate or missing-actor warning of
+# pi-economics, and the router's tool task_verdict exists.
+{
+  lib,
+  pkgs,
+  hm,
+}: let
+  dir = ".pi/agent";
+  # The home-files fixture's options for the default agentDir.
+  c = hm.eval {
+    programs.piEconomics = {
+      agentDir = dir;
+      tokenMeter.enable = true;
+      analysisSkill.enable = true;
+      cacheLifecycle.enable = true;
+      experiments.enable = true;
+      infiniteContext = {
+        enable = true;
+        reminders = {
+          overrides."example/model-a" = {
+            startTokens = 200000;
+            everyTokens = 50000;
+          };
+          prices."example/model-a" = {
+            w = 5;
+            r = 0.2;
+          };
+        };
+      };
+      retry.enable = true;
+      actorSubagents.enable = true;
+      taskRouter.enable = true;
+    };
+  };
+  files = lib.filter (f: lib.hasPrefix "${dir}/" f.target) (lib.attrValues c.home.file);
+  links =
+    lib.concatMapStrings (f: ''
+      mkdir -p "$HOME/$(dirname ${lib.escapeShellArg f.target})"
+      ln -s ${f.source} "$HOME/"${lib.escapeShellArg f.target}
+    '')
+    files;
+  names = lib.attrNames c.programs.piEconomics.extensions;
+in
+  pkgs.runCommand "nix-route-smoke" {nativeBuildInputs = [pkgs.pi-coding-agent pkgs.jq pkgs.coreutils pkgs.gnugrep];} ''
+    export HOME=$PWD/home PI_CODING_AGENT_DIR=$PWD/home/${dir} PI_OFFLINE=1 PI_TIMING=1 PROBE_OUT=$PWD/probe.json
+    ${links}
+    fail() {
+      echo "nix-route-smoke: $*" >&2
+      cat run.all >&2
+      exit 1
+    }
+    rc=0
+    pi -p x --no-session -e ${./probe.ts} </dev/null >run.out 2>run.err || rc=$?
+    cat run.out run.err >run.all
+    grep -qF 'No API key found' run.all || fail "pi did not reach the model call"
+    [ "$rc" = 1 ] || fail "pi -p exited $rc, expected 1"
+    # `! grep` is exempt from errexit: use `if`
+    if grep -qF 'Failed to load extension' run.all; then fail "an extension failed to load"; fi
+    if grep -qF 'loaded twice' run.all; then fail "a pi-economics component is loaded twice"; fi
+    if grep -qF 'needs pi-actor-subagents' run.all; then fail "a component misses the actor's API"; fi
+    for n in ${lib.escapeShellArgs names}; do
+      grep -F "$PI_CODING_AGENT_DIR/extensions/$n/" run.all | grep -qF ' factory: ' || fail "the extension $n did not load"
+    done
+    [ -f probe.json ] || fail "the probe wrote nothing"
+    jq -e '.tools | index("task_verdict") != null' probe.json >/dev/null || fail "no task_verdict among the tools: $(cat probe.json)"
+    echo "loaded: ${toString names}"
+    echo "experiments/settings.json under the Nix route: $([ -e "$PI_CODING_AGENT_DIR/experiments/settings.json" ] && echo present || echo absent)"
+    touch $out
+  ''

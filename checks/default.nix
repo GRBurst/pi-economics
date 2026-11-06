@@ -202,4 +202,6 @@ in {
   # (M5.11) Every log writer through pi-analyse (spec §8.1).
   log-contract = pkgs.callPackage ./log-contract {};
   home-files = import ./home-files {inherit lib pkgs hm;};
+  # (AC15) The Nix route under real pi: the home-files fixture's agent directory, pi -p offline.
+  nix-route-smoke = import ./pi-package/nix-route.nix {inherit lib pkgs hm;};
 }
