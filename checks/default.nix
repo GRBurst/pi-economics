@@ -205,6 +205,11 @@ in {
   home-files = import ./home-files {inherit lib pkgs hm;};
   # (AC2) The committed package.json against the render.
   render-package = import ./render.nix {inherit pkgs self render;};
+  # (AC3) The manifest's laws, each named.
+  pi-package-manifest = import ./pi-package/manifest.nix {
+    inherit pkgs lib self;
+    inherit (render) own;
+  };
   # (AC15) The Nix route under real pi: the home-files fixture's agent directory, pi -p offline.
   nix-route-smoke = import ./pi-package/nix-route.nix {inherit lib pkgs hm;};
 }
