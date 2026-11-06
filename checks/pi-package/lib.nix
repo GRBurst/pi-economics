@@ -28,6 +28,8 @@
         if [ -f run.all ]; then cat run.all >&2; fi
         exit 1
       }
+      # pi 1.4 prints its startup timings (PI_TIMING=1) as a block; without it every `loaded` would misreport "did not load"
+      timings() { grep -qF "Startup Timings: extensions" run.all || fail "pi printed no PI_TIMING block: the factory-line marker is pi 1.4's (did pkgs.pi-coding-agent move?)"; }
       loaded() { grep -F "$1" run.all | grep -qF ' factory: '; }
       cp -r ${self} pkg
       chmod -R u+w pkg
@@ -49,6 +51,7 @@
       [ "$rc" = 1 ] || fail "pi -p exited $rc, expected 1"
       # `! grep` is exempt from errexit: use `if`
       if grep -qF 'Failed to load extension' run.all; then fail "an extension failed to load"; fi
+      timings
       ${after}
       echo "pi -p output:"
       grep -vF ' factory: ' run.all || true

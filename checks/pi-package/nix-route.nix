@@ -62,6 +62,7 @@ in
     [ "$rc" = 1 ] || fail "pi -p exited $rc, expected 1"
     # `! grep` is exempt from errexit: use `if`
     if grep -qF 'Failed to load extension' run.all; then fail "an extension failed to load"; fi
+    grep -qF "Startup Timings: extensions" run.all || fail "pi printed no PI_TIMING block: the factory-line marker is pi 1.4's (did pkgs.pi-coding-agent move?)"
     if grep -qF 'loaded twice' run.all; then fail "a pi-economics component is loaded twice"; fi
     if grep -qF 'needs pi-actor-subagents' run.all; then fail "a component misses the actor's API"; fi
     for n in ${lib.escapeShellArgs names}; do
@@ -69,6 +70,7 @@ in
     done
     [ -f probe.json ] || fail "the probe wrote nothing"
     jq -e '.tools | index("task_verdict") != null' probe.json >/dev/null || fail "no task_verdict among the tools: $(cat probe.json)"
+    jq -e '.active | index("task_verdict") != null' probe.json >/dev/null || fail "task_verdict is registered but not active: $(cat probe.json)"
     echo "loaded: ${toString names}"
     # N4 (spec D15): the module writes experiments' opt-in file, so experiments assigns under the Nix route
     [ -e "$PI_CODING_AGENT_DIR/experiments/settings.json" ] || fail "no experiments/settings.json under the Nix route"
