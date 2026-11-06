@@ -79,6 +79,95 @@ configuration (for example `home-manager.sharedModules =
 `taskRouter` needs `actorSubagents` (an assertion says so). The agent
 directory defaults to `~/.pi/agent`; `programs.piEconomics.agentDir` moves it.
 
+## Without Nix
+
+The repository is also a pi package: the four own extensions (token meter,
+experiments, cache lifecycle, task router) and the analysis skill, without
+Home Manager.
+
+```sh
+pi install git:github.com/GRBurst/pi-economics@v0.1.0
+```
+
+Nix only: `bench`, the `piSettings` migration, the Home Manager options and
+the patched upstreams (below).
+
+### Prerequisites
+
+The task router and, in part, two other components use the subagent runner
+pi-actor-subagents through its spawn-policy API. Install the upstreams you want
+yourself; their sources are in [`NOTICE`](NOTICE). pi-economics warns once when
+it misses the API and switches off only what needs it.
+
+| Package | Used by | Without it |
+|---|---|---|
+| pi-actor-subagents | required by `task-router`; used by `cache-lifecycle`, `experiments` | the router is off (no `task_verdict`, no task cards, no nudge; its effort guard stays on); cache lifecycle does not keep sessions waiting on children warm; experiments children do not inherit an arm. Patched build via the pi-economics Nix modules; upstream support pending. |
+| pi-infinite-context | optional | no fold reminders. Patched build via the pi-economics Nix modules; upstream support pending. |
+| pi-retry | optional | no retry accounting in the meter. Patched build via the pi-economics Nix modules; upstream support pending. |
+
+### Experiments are opt-in
+
+`experiments` does nothing until `<agentDir>/experiments/settings.json` exists
+(`~/.pi/agent/experiments/settings.json` by default). With the file, each main
+session gets an arm and `experiments/assignments.jsonl` is written. The
+smallest file:
+
+```json
+{ "mode": "explore" }
+```
+
+### Load a subset
+
+Use pi's object form of a `packages` entry in `~/.pi/agent/settings.json`, or
+`pi config`. This entry loads two of the four extensions:
+
+<!-- checked: checks/pi-package/subset.json -->
+```json
+{
+  "source": "git:github.com/GRBurst/pi-economics@v0.1.0",
+  "extensions": [
+    "packages/token-meter/index.ts",
+    "packages/task-router/index.ts"
+  ]
+}
+```
+
+### Settings worth knowing
+
+- `cacheLifecycle` decides pi's idle cache warming only while pi's own
+  `settings.json` says `"cacheWarming": "idle"` (pi's default is `streaming`).
+- Children loaded by pi-actor-subagents load none of these extensions unless its
+  `<agentDir>/actor-subagents/settings.json` lists them in `childExtensions`:
+
+  ```json
+  {"childExtensions": ["~/.pi/agent/git/github.com/GRBurst/pi-economics/packages/token-meter/index.ts"]}
+  ```
+
+  Whether the runner expands `~` is not verified; use absolute paths if a child
+  does not load them.
+
+### The commands
+
+`meter-report` and `pi-analyse` are `bin` entries. Install them from the clone
+pi made, as a directory (npm links it, so Node's type stripping works):
+
+```sh
+npm install -g ~/.pi/agent/git/github.com/GRBurst/pi-economics
+```
+
+`npx` and `npm install -g github:…` copy the files under `node_modules`, where
+Node refuses to strip types (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`,
+measured with Node 24). Without the install, run
+`node --experimental-strip-types --no-warnings <clone>/packages/token-meter/bin/pi-analyse.ts`.
+
+### Together with the Nix modules
+
+When both the package and the Nix modules provide a component, the second copy
+stays inert and says so once at start (`pi-economics: <component> is loaded
+twice`). Keep one: `pi remove <source>`, or switch the component off in Nix. The
+analysis skill is then loaded twice as well:
+pi reports a name collision for `pi-token-economics-analysis` and keeps one of them.
+
 ## Requirements
 
 Home Manager on Linux (the checks run on `x86_64-linux`) and the pi coding

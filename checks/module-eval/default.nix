@@ -19,6 +19,7 @@
     ./cases/experiments.nix
     ./cases/infinite-context.nix
     ./cases/readme.nix
+    ./cases/readme-package.nix
     ./cases/retry.nix
     ./cases/task-router.nix
     ./cases/together.nix
