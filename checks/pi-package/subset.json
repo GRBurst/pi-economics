@@ -1,0 +1,7 @@
+{
+  "source": "git:github.com/GRBurst/pi-economics@v0.1.0",
+  "extensions": [
+    "packages/token-meter/index.ts",
+    "packages/task-router/index.ts"
+  ]
+}

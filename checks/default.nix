@@ -242,6 +242,8 @@ in {
   };
   # (AC9) The two CLIs after `npm install -g <dir>`, run through an explicit node.
   bins-smoke = import ./pi-package/bins.nix {inherit pkgs self;};
+  # (AC4) The README's filter loads only the listed extensions.
+  pi-install-subset = import ./pi-package/subset.nix {inherit (pkgPi) installed;};
   # (AC15) The Nix route under real pi: the home-files fixture's agent directory, pi -p offline.
   nix-route-smoke = import ./pi-package/nix-route.nix {inherit lib pkgs hm;};
 }
