@@ -21,8 +21,8 @@ without the user's explicit approval.
    Exit 0 prints `contract ok`. Exit 1 lists per log the missing required fields, the
    count and one example. Missing fields are a finding to report, not a reason to stop
    (legacy `v` 0 lines before 2026-10-03 are expected to lack `v` and partly `arm`).
-   Without `pi-analyse` on `PATH` (the package installed without Nix), run every `pi-analyse` command of
-   these steps as `node --experimental-strip-types --no-warnings ../../packages/token-meter/bin/pi-analyse.ts`,
+   Without `pi-analyse` on `PATH` (the package installed without Nix), run every `pi-analyse` command in this
+   skill (the decision menu's `pi-analyse --apply` too) as `node --experimental-strip-types --no-warnings ../../packages/token-meter/bin/pi-analyse.ts`,
    a path relative to this skill's directory.
 3. **Run the analysis:**
 

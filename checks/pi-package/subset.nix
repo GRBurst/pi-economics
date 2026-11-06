@@ -9,6 +9,9 @@
 installed {
   name = "pi-install-subset";
   before = ''
+    # the opt-in file: were experiments loaded, it would assign an arm and write assignments.jsonl
+    mkdir -p "$PI_CODING_AGENT_DIR/experiments"
+    echo '{"mode": "explore"}' >"$PI_CODING_AGENT_DIR/experiments/settings.json"
     jq --slurpfile f ${./subset.json} '.packages = [{source: "../../../pkg"} + ($f[0] | del(.source))]' \
       "$PI_CODING_AGENT_DIR/settings.json" >settings.new
     cp settings.new "$PI_CODING_AGENT_DIR/settings.json"
