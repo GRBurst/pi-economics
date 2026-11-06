@@ -10,6 +10,8 @@
   leakLib = import ./leak {inherit lib pkgs;};
   boundaryLib = import ./boundary {inherit lib pkgs;};
   npm = import ./npm {inherit lib pkgs;};
+  # The package checks' prelude (checks/pi-package).
+  pkgPi = import ./pi-package/lib.nix {inherit pkgs lib self;};
   hm = import ./lib/hm-eval.nix {
     inherit lib pkgs home-manager;
     homeModule = self.homeModules.default;
@@ -210,6 +212,8 @@ in {
     inherit pkgs lib self;
     inherit (render) own;
   };
+  # (AC1) pi install of the repository, offline.
+  pi-install-smoke = import ./pi-package/smoke.nix {inherit (pkgPi) installed;};
   # (AC15) The Nix route under real pi: the home-files fixture's agent directory, pi -p offline.
   nix-route-smoke = import ./pi-package/nix-route.nix {inherit lib pkgs hm;};
 }
