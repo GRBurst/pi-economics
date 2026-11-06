@@ -192,6 +192,17 @@ in {
       type = "SubagentsApiV1";
     };
   };
+  # (T2.1) The four components' runtime check of __subagentsApi_v1 (core/runtime-guard.ts,
+  # identical in each package: runtime-guard-copies).
+  iface-subagents-runtime-guard = iface.compare {
+    name = "subagents-runtime-guard";
+    provider = subagentsProvider;
+    consumer = {
+      src = ../packages/task-router;
+      file = "core/runtime-guard.ts";
+      type = "SubagentsApiShape";
+    };
+  };
   # (M5.7) The router's copy of __piExperimentsApi_v1 (spec §5.3, §8.1).
   iface-experiments-task-router = iface.compare {
     name = "experiments-task-router";
