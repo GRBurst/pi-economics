@@ -39,6 +39,12 @@
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
     inherit (nixpkgs) lib;
+    # The pi package manifest, rendered from the module (render/default.nix).
+    renderOf = pkgs:
+      import ./render {
+        inherit pkgs lib home-manager;
+        homeModule = self.homeModules.default;
+      };
   in {
     # The only module export (spec §3, "Exports"): every component and
     # common.nix, so every option a cross-component assertion reads exists.
@@ -65,6 +71,19 @@
 
     formatter.${system} = pkgs.alejandra;
 
-    checks.${system} = import ./checks {inherit self pkgs lib home-manager;};
+    # The render tree, to build and inspect on its own.
+    legacyPackages.${system}.render-tree = (renderOf pkgs).tree;
+
+    # `nix run .#render` writes package.json into the checkout.
+    apps.${system}.render = {
+      type = "app";
+      program = lib.getExe (renderOf pkgs).app;
+      meta.description = "Write the rendered pi package manifest (package.json) into the checkout";
+    };
+
+    checks.${system} = import ./checks {
+      inherit self pkgs lib home-manager;
+      render = renderOf pkgs;
+    };
   };
 }

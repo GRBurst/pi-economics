@@ -5,6 +5,7 @@
   pkgs,
   lib,
   home-manager,
+  render,
 }: let
   leakLib = import ./leak {inherit lib pkgs;};
   boundaryLib = import ./boundary {inherit lib pkgs;};
@@ -202,6 +203,8 @@ in {
   # (M5.11) Every log writer through pi-analyse (spec §8.1).
   log-contract = pkgs.callPackage ./log-contract {};
   home-files = import ./home-files {inherit lib pkgs hm;};
+  # (AC2) The committed package.json against the render.
+  render-package = import ./render.nix {inherit pkgs self render;};
   # (AC15) The Nix route under real pi: the home-files fixture's agent directory, pi -p offline.
   nix-route-smoke = import ./pi-package/nix-route.nix {inherit lib pkgs hm;};
 }
