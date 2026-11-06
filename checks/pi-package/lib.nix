@@ -51,6 +51,8 @@
       [ "$rc" = 1 ] || fail "pi -p exited $rc, expected 1"
       # `! grep` is exempt from errexit: use `if`
       if grep -qF 'Failed to load extension' run.all; then fail "an extension failed to load"; fi
+      # an install runs at session_start (runtime-guard.ts): its throw prints `Extension error (<path>): ...`, not a load error
+      if grep -qF 'Extension error' run.all; then fail "an extension's install threw"; fi
       timings
       ${after}
       echo "pi -p output:"

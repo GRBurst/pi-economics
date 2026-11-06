@@ -62,6 +62,8 @@ in
     [ "$rc" = 1 ] || fail "pi -p exited $rc, expected 1"
     # `! grep` is exempt from errexit: use `if`
     if grep -qF 'Failed to load extension' run.all; then fail "an extension failed to load"; fi
+    # an install runs at session_start (runtime-guard.ts): its throw prints `Extension error (<path>): ...`, not a load error
+    if grep -qF 'Extension error' run.all; then fail "an extension's install threw"; fi
     grep -qF "Startup Timings: extensions" run.all || fail "pi printed no PI_TIMING block: the factory-line marker is pi 1.4's (did pkgs.pi-coding-agent move?)"
     if grep -qF 'loaded twice' run.all; then fail "a pi-economics component is loaded twice"; fi
     if grep -qF 'needs pi-actor-subagents' run.all; then fail "a component misses the actor's API"; fi
