@@ -45,7 +45,7 @@ version, integer, 1 since 2026-10-03; absent = 0, legacy).
 | `experiments/state.json` | `posterior` (per-arm reward ± sd) and `disabled` arms with reasons; written atomically by `meter-report --posterior`, run by hand (no timer). |
 | `reports/YYYY-MM-DD-HHMM-analysis.{md,json}` | Written by `pi-analyse` (on demand; UTC time of the run, so runs of one day keep their reports). |
 | `LOGS.md` | Log manual (Home Manager link into the token-meter package). |
-| `experiments/settings.json` | Written by Home Manager from `programs.piEconomics.experiments.settings` when non-empty. |
+| `experiments/settings.json` | Written by Home Manager from `programs.piEconomics.experiments.settings` whenever experiments is enabled (`{"mode": "explore"}` for `{}`): the extension's opt-in; without the file experiments is inert (no arm, no assignments.jsonl). |
 | `{token-meter,task-router,cache-lifecycle}/settings.json` | Same: written only when the corresponding `programs.piEconomics.<x>.settings` is non-empty. Every key has a code default, so a missing file means "defaults". |
 | `bench/` | `tasks.json` + `tasks/<id>/` (meta.json, users.md, ref_answer.md, extra files), `refs/` (`pi-bench refs`), `runs/<id>.<arm>.<rep>/` (result.json, prompt.md, final.md, diff.patch, check.log, session/, events.jsonl, and `agent/` for factor arms), `judge/`, `reports/`, `pilot/`, `smoke/`, `src/` (task generator), `run-h6.sh`. |
 

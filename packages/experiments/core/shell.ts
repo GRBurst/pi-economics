@@ -8,7 +8,8 @@ import { join } from "node:path";
 import { createApi } from "./api.ts";
 import { assign, type State } from "./assign.ts";
 import { design, type Arm } from "./design.ts";
-import { defaults, type Settings } from "./settings.ts";
+import { defaults, loadOptIn, type Settings } from "./settings.ts";
+import { actorMissing, hasSubagentsApiV1, warnOnce } from "./runtime-guard.ts";
 
 export type PiLike = {
   on(name: string, handler: (e: any, ctx: any) => unknown): void;
@@ -19,6 +20,7 @@ export type SubagentsApi = {
   list(): Array<{ name: string; sessionId: string }>;
   subscribe(l: (e: { type: string; parent?: string; childSessionId?: string }) => void): () => void;
 };
+/** `settings`: given (tests), else read from <agentDir>/experiments/settings.json, whose absence leaves the extension inert (spec D15). */
 export type Deps = { agentDir: string; settings?: Settings; rng?: () => number; api?: () => SubagentsApi | undefined };
 /**
  * `design` is absent on v1 lines (five factors, 5-char arm ids); v2 = six factors, 2^(6-2); v3 = the same factors and arms as v2,
@@ -33,7 +35,9 @@ const readJson = (file: string): unknown => {
 };
 
 export function install(pi: PiLike, deps: Deps): void {
-  const settings = deps.settings ?? defaults();
+  // Opt-in (spec D15): without the settings file no arm, no API, no hook, no assignments.jsonl, no warning.
+  const settings = deps.settings ?? loadOptIn(join(deps.agentDir, "experiments", "settings.json"));
+  if (settings === undefined) return;
   const dir = join(deps.agentDir, "experiments");
   const arms = design(settings.factors, settings.maxArms);
   const rng = deps.rng ?? Math.random;
@@ -114,6 +118,8 @@ export function install(pi: PiLike, deps: Deps): void {
 
   pi.on("session_start", (_e, ctx) => {
     connect();
+    // spec D5: without the patched actor only the children's inheritance is off; the main session is assigned as before.
+    if (!hasSubagentsApiV1(subagents())) warnOnce(ctx, "actor:experiments", actorMissing("experiments", "child agents do not inherit their parent's arm"));
     main = ctx.sessionManager.getSessionId() as string;
     try { sessionDir = ctx.sessionManager.getSessionDir() as string | undefined; } catch { sessionDir = undefined; }
     const done = rows();

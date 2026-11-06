@@ -4,7 +4,8 @@
 # `pi -p x` offline with the probe (./probe.ts). Every registry entry loads
 # (pi prints each extension's factory under PI_TIMING=1; a factory that throws
 # prints none), no load error, no duplicate or missing-actor warning of
-# pi-economics, and the router's tool task_verdict exists.
+# pi-economics, the router's tool task_verdict exists, and experiments
+# assigns an arm from the settings file the module writes (N4).
 {
   lib,
   pkgs,
@@ -69,6 +70,8 @@ in
     [ -f probe.json ] || fail "the probe wrote nothing"
     jq -e '.tools | index("task_verdict") != null' probe.json >/dev/null || fail "no task_verdict among the tools: $(cat probe.json)"
     echo "loaded: ${toString names}"
-    echo "experiments/settings.json under the Nix route: $([ -e "$PI_CODING_AGENT_DIR/experiments/settings.json" ] && echo present || echo absent)"
+    # N4 (spec D15): the module writes experiments' opt-in file, so experiments assigns under the Nix route
+    [ -e "$PI_CODING_AGENT_DIR/experiments/settings.json" ] || fail "no experiments/settings.json under the Nix route"
+    [ -e "$PI_CODING_AGENT_DIR/experiments/assignments.jsonl" ] || fail "experiments assigned no arm under the Nix route"
     touch $out
   ''

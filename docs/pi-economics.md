@@ -183,7 +183,7 @@ is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 |---|---|---|
 | `enable` | `false` | registry entry `experiments` (`forChildren = false`: children inherit their parent's arm) |
 | `package` | the flake's `packages/experiments` | the extension |
-| `settings` | `{}` | written to `<agentDir>/experiments/settings.json` when non-empty (`mode`, `factors`, `maxArms`, `minExplore`, `baseline`, `guards`, `correctionRegex`) |
+| `settings` | `{}` | written to `<agentDir>/experiments/settings.json` as given, `{}` as `{"mode": "explore"}` (`mode`, `factors`, `maxArms`, `minExplore`, `baseline`, `guards`, `correctionRegex`); the file is the extension's opt-in: without it experiments is inert |
 
 Without `actorSubagents` it warns: children do not inherit an arm.
 

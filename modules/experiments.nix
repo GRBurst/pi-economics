@@ -34,10 +34,12 @@ in {
         minExplore = 0.15;
       };
       description = ''
-        Written to `<agentDir>/experiments/settings.json` when non-empty.
-        Every key has a default in the package's core/settings.ts (`mode`,
-        `factors`, `maxArms`, `minExplore`, `baseline`, `guards`,
-        `correctionRegex`), so `{}` writes no file.
+        Written to `<agentDir>/experiments/settings.json` as given; `{}`
+        writes `{"mode": "explore"}`. The file is the extension's opt-in:
+        without it the extension stays inert (no arm, no factor change), so
+        it is written whenever the component is enabled. Every key it lacks
+        has a default in the package's core/settings.ts (`mode`, `factors`,
+        `maxArms`, `minExplore`, `baseline`, `guards`, `correctionRegex`).
       '';
     };
   };
@@ -52,9 +54,13 @@ in {
       description = "One fractional-factorial arm per main session (explore/exploit assignment); children inherit the parent's arm, other extensions read the factor flags.";
     };
 
-    # (M4.14) Literal text (spec §4).
-    home.file."${pe.agentDir}/experiments/settings.json" =
-      lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
+    # (M4.14) Literal text (spec §4). N4: always written, the extension's
+    # opt-in (package spec D15); `mode` explicit when nothing is given.
+    home.file."${pe.agentDir}/experiments/settings.json".text = builtins.toJSON (
+      if cfg.settings == {}
+      then {mode = "explore";}
+      else cfg.settings
+    );
 
     # (M4.15) A soft dependency (spec §4.1): shell.ts tolerates a missing API.
     warnings = lib.optional (!pe.actorSubagents.enable) "pi-economics: experiments without actorSubagents loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";

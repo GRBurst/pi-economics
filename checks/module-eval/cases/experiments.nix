@@ -61,10 +61,20 @@ in {
     eq "drvPath" x.package.drvPath self.packages.x86_64-linux.experiments.drvPath
     ++ eq "name" x.package.name "pi-experiments-0.1.0";
 
-  # (M4.13) Files: the link only; no settings file while settings = {}.
-  experiments-files = lib.concatMap (dir:
-    eq "home.file targets (${dir})" (sorted (targets (eval dir {} {})))
-    (sorted (targets bare ++ ["${dir}/extensions/experiments"])))
+  # (M4.13; N4, spec D15) Files: the link and the settings file, the
+  # extension's opt-in, with `mode` explicit while settings = {} (given settings are
+  # written as given: experiments-settings).
+  experiments-files = lib.concatMap (dir: let
+    c = eval dir {} {};
+    f = fileAt "${dir}/experiments/settings.json" c;
+  in
+    eq "home.file targets (${dir})" (sorted (targets c))
+    (sorted (targets bare ++ ["${dir}/extensions/experiments" "${dir}/experiments/settings.json"]))
+    ++ eq "settings file (${dir})" (
+      if f == null
+      then null
+      else builtins.fromJSON f.text
+    ) {mode = "explore";})
   dirs;
 
   # (M4.14) settings: written as given (the host's check value,

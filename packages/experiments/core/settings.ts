@@ -1,6 +1,7 @@
-// Settings live in <agentDir>/experiments/settings.json. Every key has a
-// default, so the extension runs with no file at all (plain `pi install`).
-import { readFileSync } from "node:fs";
+// Settings live in <agentDir>/experiments/settings.json. The file is the
+// opt-in (spec D15): without it the extension is inert (plain `pi install`);
+// with it, every key it lacks takes its default.
+import { existsSync, readFileSync } from "node:fs";
 import type { Factor } from "./design.ts";
 
 export type Settings = {
@@ -47,6 +48,11 @@ const isFactor = (f: unknown): f is Factor =>
   Array.isArray((f as { values?: unknown }).values) &&
   (f as { values: unknown[] }).values.length === 2 &&
   (f as { values: unknown[] }).values.every((v) => typeof v === "string");
+
+/** The opt-in (spec D15): no file → undefined (experiments stays inert); a file → loadSettings(file). */
+export function loadOptIn(file: string): Settings | undefined {
+  return existsSync(file) ? loadSettings(file) : undefined;
+}
 
 /** Missing or invalid file → defaults(); known keys with a valid value override, others are ignored. */
 export function loadSettings(file: string): Settings {
