@@ -229,6 +229,11 @@ in {
   pi-git-route = import ./pi-package/git-route.nix {inherit pkgs self;};
   # (AC8) The four runtime-guard.ts copies are identical.
   runtime-guard-copies = import ./runtime-guard-copies.nix {inherit pkgs self;};
+  # (AC5) The package next to the patched actor: no warning, task_verdict.
+  pi-install-actor = import ./pi-package/actor.nix {
+    inherit (pkgPi) installed;
+    actor = actorSubagents;
+  };
   # (AC15) The Nix route under real pi: the home-files fixture's agent directory, pi -p offline.
   nix-route-smoke = import ./pi-package/nix-route.nix {inherit lib pkgs hm;};
 }
