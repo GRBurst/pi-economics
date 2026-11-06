@@ -367,8 +367,15 @@ constant in `render/default.nix`; the tag is `v` + version.
   their children warm. `experiments` warns once (only with its settings file) and children do not inherit an arm.
   The text is `actorMissing(...)`, printed through `warnOnce` (once per process; `ctx.ui.notify` with a UI,
   `console.warn` without).
-- `guardSingleCopy`: each extension claims its component on `pi.events` at load; a second copy in the same runtime
-  registers nothing and warns once at `session_start` (`loadedTwice`). The first loaded copy wins.
+- `guardSingleCopy`: each extension claims its component on `pi.events` at `session_start` and installs then, not at
+  load. pi may load a copy and then leave it out of the final extension set: in a project with its own settings it
+  loads the user-scope extensions first, before the project is trusted, and drops those that a project entry
+  replaces, without unsubscribing them. Only a copy in the final set gets `session_start`, so a claim made at load
+  would let a copy that never starts silence the one that does. The first copy to start wins (pi's order: an
+  extension in a directory, such as the Nix route's links, before the packages, and among packages a project one
+  before a user one). A later copy in the same runtime registers nothing and warns once (`loadedTwice`). The
+  install's own `session_start` handlers are run by the guard right after it, because pi snapshots its handlers for
+  each emit.
 - `experiments` is opt-in on both routes: inert without `<agentDir>/experiments/settings.json` (no arm, no
   `assignments.jsonl`, no warning). The Nix module writes the file whenever `experiments.enable` is set
   (`{}` becomes `{"mode": "explore"}`, N4).
@@ -426,7 +433,8 @@ points into `src`.
 | `pi-install-smoke` | `pi install ./pkg` offline: settings entry, `pi list`, every manifest extension loads, the router warns once, experiments stays inert (AC1) |
 | `pi-git-route` | the npm step of a git install (`--omit=dev --legacy-peer-deps`) is a no-op offline (AC10) |
 | `pi-install-actor` | the package next to the patched actor: no warning, `task_verdict` registered and active (AC5) |
-| `pi-install-duplicate` | the package next to the Nix links: one `loaded twice` per component, no tool conflict, pi's skill loader reports the collision (AC7) |
+| `pi-install-duplicate` | the package next to the Nix links: one `loaded twice` per component, exactly one bound copy (the actor warnings of task-router and cache-lifecycle appear once), no tool conflict, pi's skill loader reports the collision (AC7) |
+| `pi-install-scope-replaced`, `pi-install-scope-both` | the package in two scopes of a trusted project (user `pi install` plus `.pi/settings.json`): where the project entry replaces the user's package, no `loaded twice` and one bound copy; where a second copy joins it, one `loaded twice` per component and one bound copy (AC7, review M1) |
 | `pi-install-subset` | the README's filter loads only the listed extensions (AC4) |
 | `bins-smoke` | `npm install -g <dir>` offline, both CLIs run through an explicit node, the shipped shebang, the `node_modules` failure the README states (AC9) |
 | `runtime-guard-copies`, `iface-subagents-runtime-guard` | the four `runtime-guard.ts` copies are identical (AC8); `SubagentsApiV1` satisfies their `SubagentsApiShape` |

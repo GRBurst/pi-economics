@@ -75,8 +75,11 @@ Commits are unsigned: `git -c commit.gpgsign=false commit`.
   Its `bin` files carry the pinned shebang and mode 755 (`pi-package-manifest`).
 - The four `packages/<c>/core/runtime-guard.ts` are identical copies of
   task-router's (`runtime-guard-copies`): change one, `cp` it to the others.
-  Each `index.ts` wraps its body in `guardSingleCopy`; a component that needs
-  the actor's API decides at `session_start`, never at load.
+  Each `index.ts` wraps its body in `guardSingleCopy`, which claims the
+  component and runs the body at `session_start`, never at load (pi may load a
+  copy and drop it from the final set; only a copy that starts competes). A
+  component that needs the actor's API decides there too. Register nothing
+  outside the guarded body.
 - The package checks (`checks/pi-package/`) run pi 1.4 offline and find loaded
   extensions by its `PI_TIMING=1` factory lines (undocumented, pinned to the
   locked pi); `pi -p` fires no `message_end`, so it writes no meter line.
