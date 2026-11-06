@@ -36,6 +36,7 @@ const settle = () => new Promise((r) => setImmediate(r));
 
 // --- experiments: assignment rows, correction + rating guards, arm inheritance via spawn events
 const tr = harness({ agentDir, extra: { run: async () => ({ exit: 0, output: "ok\n", timedOut: false }) } as never });
+tr.f.fire("session_start", {}, {}); // task_verdict is registered at the first session_start with the actor's API (plan T3.1)
 const exp = { handlers: new Map<string, Array<(e: any, ctx: any) => unknown>>(), commands: new Map<string, any>() };
 installExperiments(
   { on: (n: string, h: any) => void exp.handlers.set(n, [...(exp.handlers.get(n) ?? []), h]), registerCommand: (n: string, c: any) => void exp.commands.set(n, c) },
