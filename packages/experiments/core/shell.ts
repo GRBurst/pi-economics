@@ -37,7 +37,10 @@ const readJson = (file: string): unknown => {
 export function install(pi: PiLike, deps: Deps): void {
   // Opt-in (spec D15): without the settings file no arm, no API, no hook, no assignments.jsonl, no warning.
   const settings = deps.settings ?? loadOptIn(join(deps.agentDir, "experiments", "settings.json"));
-  if (settings === undefined) return;
+  if (settings === undefined) { // an API an earlier runtime of this process published (the file was deleted, then /reload) must not outlive the opt-out
+    delete (globalThis as { __piExperimentsApi_v1?: unknown }).__piExperimentsApi_v1;
+    return;
+  }
   const dir = join(deps.agentDir, "experiments");
   const arms = design(settings.factors, settings.maxArms);
   const rng = deps.rng ?? Math.random;

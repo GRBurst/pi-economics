@@ -56,3 +56,11 @@ test("the file's mode decides: off assigns the baseline arm", () => {
   rig({ mode: "off" });
   assert.equal((globalThis as G).__piExperimentsApi_v1.armFor("s1").id, defaults().baseline);
 });
+
+test("a stale API of an earlier runtime in the same process does not survive an inert install (opt-out, then /reload)", () => {
+  rig({ mode: "explore" });
+  assert.ok((globalThis as G).__piExperimentsApi_v1);
+  rig(); // the settings file is gone, the runtime is rebuilt
+  assert.equal((globalThis as G).__piExperimentsApi_v1, undefined);
+  for (const f of defaults().factors) assert.equal(read(f.name, f.values[0]), f.values[0], f.name);
+});
