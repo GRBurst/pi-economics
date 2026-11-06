@@ -214,6 +214,8 @@ in {
   };
   # (AC1) pi install of the repository, offline.
   pi-install-smoke = import ./pi-package/smoke.nix {inherit (pkgPi) installed;};
+  # (AC10) The npm step of the git route is a no-op offline.
+  pi-git-route = import ./pi-package/git-route.nix {inherit pkgs self;};
   # (AC15) The Nix route under real pi: the home-files fixture's agent directory, pi -p offline.
   nix-route-smoke = import ./pi-package/nix-route.nix {inherit lib pkgs hm;};
 }
