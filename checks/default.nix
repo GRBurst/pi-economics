@@ -234,6 +234,12 @@ in {
     inherit (pkgPi) installed;
     actor = actorSubagents;
   };
+  # (AC7) The package next to the Nix links: each duplicate says so once.
+  pi-install-duplicate = import ./pi-package/duplicate.nix {
+    inherit lib pkgs self;
+    inherit (pkgPi) installed;
+    inherit (render) own;
+  };
   # (AC15) The Nix route under real pi: the home-files fixture's agent directory, pi -p offline.
   nix-route-smoke = import ./pi-package/nix-route.nix {inherit lib pkgs hm;};
 }
