@@ -61,19 +61,41 @@ type PiLike = { events: Bus; on(ev: "session_start" | "session_shutdown", h: Han
  * silencing the one that does. Only a copy in the final set gets `session_start`; the first to get it claims the
  * component and runs `install`, a later copy installs nothing and warns once. `install` gets a view of `pi` whose
  * `on("session_start")` is held and run by this guard right after it (pi snapshots its handlers per emit, so one
- * registered during the emit would be missed); every other member is pi's own. An instance decides once: pi builds new
- * ones for a reload, a new, resumed or forked session and a child.
+ * registered during the emit would be missed); every other member is pi's own, except that the other handlers and the
+ * bus listeners it registers go dead if it throws. An instance decides once: pi builds new ones for a reload, a new,
+ * resumed or forked session and a child.
+ *
+ * Limits. `install` must not register flags or providers (pi reads both before any `session_start`, and resolves
+ * `--model` then), and an SDK host that never binds the extensions (no `session_start`) installs nothing. A failed
+ * install keeps its claim and stays inert for the session (a later copy warns; no second, partial or full, set
+ * appears); only its own handlers and bus listeners are silenced, what pi cannot take back (a command, a tool) stays
+ * registered. The error reaches pi as an extension error.
  */
 export function guardSingleCopy<P extends PiLike>(pi: P, component: Component, path: string, install: (pi: P) => void): void {
   let claim: ReturnType<typeof claimSingleCopy> | undefined;
   let owner: string | undefined;
   let failed = false;
   const started: Handler[] = [];
+  const listeners: Array<() => unknown> = [];
+  const events = new Proxy(pi.events, {
+    get(target, key) {
+      if (key !== "on") {
+        const v = Reflect.get(target, key);
+        return typeof v === "function" ? v.bind(target) : v;
+      }
+      return (channel: string, h: (d: any) => void) => {
+        const off = target.on(channel, (d) => (failed ? undefined : h(d)));
+        listeners.push(off);
+        return off;
+      };
+    },
+  });
   const view = new Proxy(pi, {
     get(target, key) {
+      if (key === "events") return events;
       if (key !== "on") return Reflect.get(target, key);
       return (ev: string, h: Handler) => {
-        if (ev !== "session_start") return (target as { on(ev: string, h: Handler): unknown }).on(ev, h);
+        if (ev !== "session_start") return (target as { on(ev: string, h: Handler): unknown }).on(ev, (e, ctx) => (failed ? undefined : h(e, ctx)));
         started.push(h);
         return () => void (started.includes(h) && started.splice(started.indexOf(h), 1));
       };
@@ -83,16 +105,17 @@ export function guardSingleCopy<P extends PiLike>(pi: P, component: Component, p
     if (claim === undefined) {
       claim = claimSingleCopy(pi.events, component, path);
       if (claim.first) {
-        try { install(view); } catch (err) { failed = true; claim.release(); throw err; }
+        try { install(view); } catch (err) { failed = true; listeners.forEach((off) => off()); throw err; }
       } else owner = claim.owner;
     }
     if (owner !== undefined) return warnOnce(ctx, `twice:${component}:${path}`, loadedTwice(component, owner, path));
     if (failed) return;
-    let error: { err: unknown } | undefined;
+    const errors: unknown[] = [];
     for (const h of [...started]) {
-      try { await h(e, ctx); } catch (err) { error ??= { err }; }
+      try { await h(e, ctx); } catch (err) { errors.push(err); }
     }
-    if (error) throw error.err;
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, errors.map((x) => (x instanceof Error ? x.message : String(x))).join("; "));
   });
   pi.on("session_shutdown", () => void (claim?.first && claim.release()));
 }

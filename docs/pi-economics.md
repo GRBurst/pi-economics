@@ -376,6 +376,12 @@ constant in `render/default.nix`; the tag is `v` + version.
   before a user one). A later copy in the same runtime registers nothing and warns once (`loadedTwice`). The
   install's own `session_start` handlers are run by the guard right after it, because pi snapshots its handlers for
   each emit.
+  Limits: an install must not register flags or providers (pi reads both before any `session_start`, and resolves
+  `--model` then), and a host that never binds the extensions (no `session_start`, as an SDK host that skips the bind)
+  installs nothing. An install that throws keeps its claim and stays inert for the session: its own handlers and bus
+  listeners are silenced, a later copy warns instead of installing a second (partial or full) set, what pi cannot take
+  back (a command, a tool) stays registered, and the error reaches pi as an extension error. Several failing held
+  `session_start` handlers reach pi as one `AggregateError` naming all.
 - `experiments` is opt-in on both routes: inert without `<agentDir>/experiments/settings.json` (no arm, no
   `assignments.jsonl`, no warning). The Nix module writes the file whenever `experiments.enable` is set
   (`{}` becomes `{"mode": "explore"}`, N4).

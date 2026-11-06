@@ -171,15 +171,41 @@ test("guardSingleCopy: a throwing session_start handler of the install does not 
   assert.equal(ran, true);
 });
 
-test("guardSingleCopy: an install that throws gives its claim back and the error reaches pi", async () => {
+test("guardSingleCopy: an install that throws keeps its claim and goes inert: its held and plain handlers and bus listeners stop, a later copy installs nothing and warns, the error reaches pi", async () => {
   const b = bus();
-  const bad = fakePi(b), good = fakePi(b);
-  guardSingleCopy(bad.pi, "task-router", "/bad/index.ts", () => { throw new Error("no install"); });
+  const bad = fakePi(b), later = fakePi(b);
+  const ran: string[] = [];
+  guardSingleCopy(bad.pi, "task-router", "/bad/index.ts", (p) => {
+    p.on("session_start", () => void ran.push("held"));
+    p.on("message_end" as "session_start", () => void ran.push("plain"));
+    p.events.on("pi-retry:x", () => void ran.push("bus"));
+    throw new Error("no install");
+  });
   let installed = false;
-  guardSingleCopy(good.pi, "task-router", "/good/index.ts", () => void (installed = true));
+  guardSingleCopy(later.pi, "task-router", "/good/index.ts", () => void (installed = true));
   await assert.rejects(bad.fire("session_start"), /no install/);
-  await good.fire("session_start");
-  assert.equal(installed, true);
+  await bad.fire("session_start"); // again on the same instance: inert, no second install, no throw
+  await bad.fire("message_end");
+  b.emit("pi-retry:x", {});
+  assert.deepEqual(ran, [], "nothing the failed install registered runs");
+  const { notes, ctx } = ui();
+  await later.fire("session_start", ctx);
+  assert.equal(installed, false, "no partial set next to a full one");
+  assert.deepEqual(notes.map((n) => n.text), [twice("task-router", "/bad/index.ts", "/good/index.ts", "taskRouter")]);
+});
+
+test("guardSingleCopy: every failing held session_start handler is reported, not only the first (one error as itself, several as one AggregateError naming all)", async () => {
+  const f = fakePi();
+  guardSingleCopy(f.pi, "token-meter", "/a/index.ts", (p) => {
+    p.on("session_start", () => { throw new Error("first boom"); });
+    p.on("session_start", () => { throw new Error("second boom"); });
+  });
+  await assert.rejects(f.fire("session_start"), (err: any) => err instanceof AggregateError && err.errors.length === 2 && /first boom; second boom/.test(err.message));
+  const g = fakePi();
+  guardSingleCopy(g.pi, "experiments", "/b/index.ts", (p) => {
+    p.on("session_start", () => { throw new Error("only boom"); });
+  });
+  await assert.rejects(g.fire("session_start"), (err: any) => err.constructor === Error && err.message === "only boom");
 });
 
 test("guardSingleCopy: the first copy releases its claim at session_shutdown", async () => {

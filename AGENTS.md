@@ -80,6 +80,8 @@ Commits are unsigned: `git -c commit.gpgsign=false commit`.
   copy and drop it from the final set; only a copy that starts competes). A
   component that needs the actor's API decides there too. Register nothing
   outside the guarded body.
+  The body must not register flags or providers (pi reads them before
+  `session_start`); it is also never run in a host that does not bind extensions.
 - The package checks (`checks/pi-package/`) run pi 1.4 offline and find loaded
   extensions by its `PI_TIMING=1` factory lines (undocumented, pinned to the
   locked pi); `pi -p` fires no `message_end`, so it writes no meter line.
