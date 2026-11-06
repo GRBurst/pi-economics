@@ -1,4 +1,8 @@
 {
+  "bin": {
+    "meter-report": "./packages/token-meter/bin/meter-report.ts",
+    "pi-analyse": "./packages/token-meter/bin/pi-analyse.ts"
+  },
   "description": "pi token economics: a token meter, online experiments, prompt-cache lifecycle and a task-card router, plus an analysis skill.",
   "keywords": [
     "pi-package"

@@ -1,3 +1,4 @@
+#!/usr/bin/env -S node --experimental-strip-types --no-warnings
 // Usage: node --experimental-strip-types meter-report.ts [--dir <meterDir>] [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 //        meter-report.ts --arms [--posterior] [--agent-dir <dir>]   per-arm experiment analysis; --posterior also
 //        writes <agentDir>/experiments/state.json (posterior rewards, kill-switch arms) atomically.

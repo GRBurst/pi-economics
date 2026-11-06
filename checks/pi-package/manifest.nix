@@ -2,8 +2,8 @@
 # own, named, so a planted violation names its law: private, the gallery
 # keyword, a semver version, exactly pi's five host packages as `*` peers,
 # every host package a shipped `.ts` imports a peer (imported-not-peer), no
-# dependencies, every manifest path present, every skills directory holding a
-# skill. The extension set itself is render-package's (AC2). `jq` and
+# dependencies, every manifest path present, every bin with its pinned
+# shebang and executable, every skills directory holding a skill. The extension set itself is render-package's (AC2). `jq` and
 # fixed-string `grep` at build time.
 {
   pkgs,
@@ -59,6 +59,15 @@ in
     while IFS= read -r s; do
       [ -n "$(find "$s" -name SKILL.md 2>/dev/null)" ] || bad skills "the skills path $s holds no SKILL.md"
     done < <(jq -r '(.pi.skills // [])[]' "$m")
+    # every bin: the shipped first line (spec D8) and the executable bit (npm links the file as it is)
+    while IFS= read -r b; do
+      [ -f "$b" ] || {
+        bad bin-shebang "the bin $b does not exist"
+        continue
+      }
+      [ "$(head -n1 "$b")" = '#!/usr/bin/env -S node --experimental-strip-types --no-warnings' ] || bad bin-shebang "the first line of $b is not the pinned shebang"
+      [ -x "$b" ] || bad bin-executable "the bin $b is not executable"
+    done < <(jq -r '(.bin // {})[]' "$m")
     [ "$fail" = 0 ] || exit 1
     touch $out
   ''

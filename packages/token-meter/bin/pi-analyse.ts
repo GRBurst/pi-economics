@@ -1,3 +1,4 @@
+#!/usr/bin/env -S node --experimental-strip-types --no-warnings
 // Usage: pi-analyse [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--agent-dir P] [--out DIR] [--check] [--apply]
 // On-demand analysis of pi's own logs (fields in <agentDir>/LOGS.md). Writes <out>/<YYYY-MM-DD>-<HHMM>-analysis.md
 // and .json (UTC time of the run; default out: <agentDir>/reports). --check only checks the data contract for the period and

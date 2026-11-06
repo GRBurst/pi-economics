@@ -66,6 +66,11 @@
     keywords = ["pi-package"];
     description = "pi token economics: a token meter, online experiments, prompt-cache lifecycle and a task-card router, plus an analysis skill.";
     peerDependencies = lib.genAttrs host (_: "*");
+    # The token meter's two CLIs (spec D8): `npm install -g <the pi clone>` links them.
+    bin = lib.optionalAttrs pe.tokenMeter.enable {
+      meter-report = "./packages/token-meter/bin/meter-report.ts";
+      pi-analyse = "./packages/token-meter/bin/pi-analyse.ts";
+    };
     pi =
       {extensions = map entry own;}
       // lib.optionalAttrs pe.analysisSkill.enable {skills = ["./skills"];};

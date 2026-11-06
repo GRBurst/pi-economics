@@ -240,6 +240,8 @@ in {
     inherit (pkgPi) installed;
     inherit (render) own;
   };
+  # (AC9) The two CLIs after `npm install -g <dir>`, run through an explicit node.
+  bins-smoke = import ./pi-package/bins.nix {inherit pkgs self;};
   # (AC15) The Nix route under real pi: the home-files fixture's agent directory, pi -p offline.
   nix-route-smoke = import ./pi-package/nix-route.nix {inherit lib pkgs hm;};
 }
