@@ -9,5 +9,5 @@ import { guardSingleCopy } from "./core/runtime-guard.ts";
 import { install, type PiLike } from "./core/shell.ts";
 
 export default function experiments(pi: ExtensionAPI): void {
-  guardSingleCopy(pi, "experiments", fileURLToPath(import.meta.url), () => install(pi as unknown as PiLike, { agentDir: getAgentDir() }));
+  guardSingleCopy(pi, "experiments", fileURLToPath(import.meta.url), (p) => install(p as unknown as PiLike, { agentDir: getAgentDir() }));
 }

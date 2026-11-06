@@ -8,9 +8,9 @@ import { loadSettings } from "./core/settings.ts";
 import { install, type PiLike } from "./core/shell.ts";
 
 export default function tokenMeter(pi: ExtensionAPI): void {
-  guardSingleCopy(pi, "token-meter", fileURLToPath(import.meta.url), () => {
+  guardSingleCopy(pi, "token-meter", fileURLToPath(import.meta.url), (p) => {
     const agentDir = getAgentDir();
-    install(pi as unknown as PiLike, {
+    install(p as unknown as PiLike, {
       agentDir,
       settings: loadSettings(join(agentDir, "token-meter", "settings.json")),
     });

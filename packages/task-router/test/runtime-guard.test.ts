@@ -81,38 +81,117 @@ test("claimSingleCopy: after release another path claims first", () => {
   assert.equal(claimSingleCopy(b, "cache-lifecycle", "/two/index.ts").first, true);
 });
 
-/** pi as guardSingleCopy sees it: a bus and session handlers. */
+/** pi as guardSingleCopy sees it: a bus and the extension's handlers; `fire` is the runner's emit (awaits each handler in turn). */
 function fakePi(b = bus()) {
-  const handlers = new Map<string, Array<(e: unknown, ctx: any) => void>>();
+  const handlers = new Map<string, Array<(e: any, ctx: any) => unknown>>();
+  const pi = {
+    events: b,
+    on(ev: string, h: (e: any, ctx: any) => unknown) {
+      handlers.set(ev, [...(handlers.get(ev) ?? []), h]);
+      return () => void handlers.set(ev, (handlers.get(ev) ?? []).filter((x) => x !== h));
+    },
+  };
   return {
-    pi: { events: b, on: (ev: "session_start" | "session_shutdown", h: (e: unknown, ctx: any) => void) => void handlers.set(ev, [...(handlers.get(ev) ?? []), h]) },
-    fire: (ev: string, ctx: unknown = {}) => { for (const h of handlers.get(ev) ?? []) h({}, ctx); },
+    pi,
+    count: (ev: string) => (handlers.get(ev) ?? []).length,
+    fire: async (ev: string, ctx: unknown = {}) => { for (const h of [...(handlers.get(ev) ?? [])]) await h({ type: ev }, ctx); },
   };
 }
 
-test("guardSingleCopy: the first copy installs; a second copy installs nothing and warns once at session_start", () => {
+const twice = (c: string, o: string, p: string, opt: string) =>
+  `pi-economics: ${c} is loaded twice (${o} and ${p}); this copy stays inert. Keep one: remove the pi package (pi remove <source>) or disable programs.piEconomics.${opt} in Nix.`;
+
+test("guardSingleCopy: loading installs nothing; the first copy to get session_start installs, a second installs nothing and warns once", async () => {
   const b = bus();
   const one = fakePi(b), two = fakePi(b);
   let installs = 0;
   guardSingleCopy(one.pi, "token-meter", "/nix/token-meter/index.ts", () => void installs++);
   guardSingleCopy(two.pi, "token-meter", "/pkg/packages/token-meter/index.ts", () => void installs++);
-  assert.equal(installs, 1);
+  assert.equal(installs, 0, "the claim is made at session_start, never at load");
   const { notes, ctx } = ui();
-  two.fire("session_start", ctx);
-  two.fire("session_start", ctx);
-  assert.deepEqual(notes.map((n) => n.text), [
-    "pi-economics: token-meter is loaded twice (/nix/token-meter/index.ts and /pkg/packages/token-meter/index.ts); this copy stays inert. " +
-      "Keep one: remove the pi package (pi remove <source>) or disable programs.piEconomics.tokenMeter in Nix.",
-  ]);
+  await one.fire("session_start", ctx);
+  await two.fire("session_start", ctx);
+  await two.fire("session_start", ctx);
+  assert.equal(installs, 1);
+  assert.deepEqual(notes.map((n) => n.text), [twice("token-meter", "/nix/token-meter/index.ts", "/pkg/packages/token-meter/index.ts", "tokenMeter")]);
 });
 
-test("guardSingleCopy: the first copy releases its claim at session_shutdown", () => {
+test("guardSingleCopy: a copy that never gets session_start (pi dropped it after a pre-trust load) does not block the copy that does", async () => {
+  const b = bus();
+  const dropped = fakePi(b), kept = fakePi(b);
+  const installed: string[] = [];
+  guardSingleCopy(dropped.pi, "task-router", "/user/pkg/packages/task-router/index.ts", () => void installed.push("dropped"));
+  guardSingleCopy(kept.pi, "task-router", "/project/pkg/packages/task-router/index.ts", () => void installed.push("kept"));
+  const { notes, ctx } = ui();
+  await kept.fire("session_start", ctx); // pi's final set holds only the second copy
+  assert.deepEqual(installed, ["kept"]);
+  assert.deepEqual(notes, []);
+});
+
+test("guardSingleCopy: of two copies that both start, the first to get session_start wins, whatever the load order", async () => {
+  const b = bus();
+  const loadedFirst = fakePi(b), loadedSecond = fakePi(b);
+  const installed: string[] = [];
+  guardSingleCopy(loadedFirst.pi, "cache-lifecycle", "/user/index.ts", () => void installed.push("user"));
+  guardSingleCopy(loadedSecond.pi, "cache-lifecycle", "/project/index.ts", () => void installed.push("project"));
+  const { notes, ctx } = ui();
+  await loadedSecond.fire("session_start", ctx); // pi orders a project package before a user one
+  await loadedFirst.fire("session_start", ctx);
+  assert.deepEqual(installed, ["project"]);
+  assert.deepEqual(notes.map((n) => n.text), [twice("cache-lifecycle", "/project/index.ts", "/user/index.ts", "cacheLifecycle")]);
+});
+
+test("guardSingleCopy: the install's session_start handlers run in the guard's session_start, in order, with pi's event and context; other events reach pi", async () => {
+  const f = fakePi();
+  const calls: unknown[][] = [];
+  guardSingleCopy(f.pi, "experiments", "/a/index.ts", (p) => {
+    p.on("session_start", (e, ctx) => void calls.push(["first", e, ctx]));
+    p.on("session_start", (e, ctx) => void calls.push(["second", e, ctx]));
+    p.on("message_end", () => {});
+  });
+  assert.equal(f.count("message_end"), 0, "nothing is installed at load");
+  const ctx = { hasUI: false };
+  await f.fire("session_start", ctx);
+  assert.deepEqual(calls, [["first", { type: "session_start" }, ctx], ["second", { type: "session_start" }, ctx]]);
+  assert.equal(f.count("message_end"), 1);
+  assert.equal(f.count("session_start"), 1, "pi holds the guard's handler only; the install's are dispatched by it");
+  await f.fire("session_start", ctx); // the same instance again: no second install, the handlers run again
+  assert.equal(f.count("message_end"), 1);
+  assert.equal(calls.length, 4);
+});
+
+test("guardSingleCopy: a throwing session_start handler of the install does not skip the next one; the error reaches pi", async () => {
+  const f = fakePi();
+  let ran = false;
+  guardSingleCopy(f.pi, "token-meter", "/a/index.ts", (p) => {
+    p.on("session_start", () => { throw new Error("boom"); });
+    p.on("session_start", () => void (ran = true));
+  });
+  await assert.rejects(f.fire("session_start"), /boom/);
+  assert.equal(ran, true);
+});
+
+test("guardSingleCopy: an install that throws gives its claim back and the error reaches pi", async () => {
+  const b = bus();
+  const bad = fakePi(b), good = fakePi(b);
+  guardSingleCopy(bad.pi, "task-router", "/bad/index.ts", () => { throw new Error("no install"); });
+  let installed = false;
+  guardSingleCopy(good.pi, "task-router", "/good/index.ts", () => void (installed = true));
+  await assert.rejects(bad.fire("session_start"), /no install/);
+  await good.fire("session_start");
+  assert.equal(installed, true);
+});
+
+test("guardSingleCopy: the first copy releases its claim at session_shutdown", async () => {
   const b = bus();
   const one = fakePi(b);
   guardSingleCopy(one.pi, "experiments", "/a/index.ts", () => {});
-  one.fire("session_shutdown");
+  await one.fire("session_start");
+  await one.fire("session_shutdown");
   let installed = false;
-  guardSingleCopy(fakePi(b).pi, "experiments", "/b/index.ts", () => void (installed = true));
+  const two = fakePi(b);
+  guardSingleCopy(two.pi, "experiments", "/b/index.ts", () => void (installed = true));
+  await two.fire("session_start");
   assert.equal(installed, true);
 });
 

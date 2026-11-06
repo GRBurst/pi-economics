@@ -240,6 +240,19 @@ in {
     inherit (pkgPi) installed;
     inherit (render) own;
   };
+  # (AC7, review M1) The package in two scopes of one project: exactly one copy of each component is bound.
+  pi-install-scope-replaced = import ./pi-package/two-scopes.nix {
+    inherit lib;
+    inherit (pkgPi) installed;
+    inherit (render) own;
+    variant = "replaced";
+  };
+  pi-install-scope-both = import ./pi-package/two-scopes.nix {
+    inherit lib;
+    inherit (pkgPi) installed;
+    inherit (render) own;
+    variant = "both";
+  };
   # (AC9) The two CLIs after `npm install -g <dir>`, run through an explicit node.
   bins-smoke = import ./pi-package/bins.nix {inherit pkgs self;};
   # (AC4) The README's filter loads only the listed extensions.

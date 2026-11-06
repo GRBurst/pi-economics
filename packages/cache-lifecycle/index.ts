@@ -8,8 +8,8 @@ import { loadSettings } from "./core/settings.ts";
 import { install, type PiLike } from "./core/shell.ts";
 
 export default function cacheLifecycle(pi: ExtensionAPI): void {
-  guardSingleCopy(pi, "cache-lifecycle", fileURLToPath(import.meta.url), () => {
+  guardSingleCopy(pi, "cache-lifecycle", fileURLToPath(import.meta.url), (p) => {
     const agentDir = getAgentDir();
-    install(pi as unknown as PiLike, { agentDir, settings: loadSettings(join(agentDir, "cache-lifecycle", "settings.json")) });
+    install(p as unknown as PiLike, { agentDir, settings: loadSettings(join(agentDir, "cache-lifecycle", "settings.json")) });
   });
 }

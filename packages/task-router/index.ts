@@ -8,9 +8,9 @@ import { loadSettingsReport } from "./core/settings.ts";
 import { install, type PiLike } from "./core/shell.ts";
 
 export default function taskRouter(pi: ExtensionAPI): void {
-  guardSingleCopy(pi, "task-router", fileURLToPath(import.meta.url), () => {
+  guardSingleCopy(pi, "task-router", fileURLToPath(import.meta.url), (p) => {
     const agentDir = getAgentDir();
     const { settings, problems } = loadSettingsReport(join(agentDir, "task-router", "settings.json"));
-    install(pi as unknown as PiLike, { agentDir, settings, problems });
+    install(p as unknown as PiLike, { agentDir, settings, problems });
   });
 }
