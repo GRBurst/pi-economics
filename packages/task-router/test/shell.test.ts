@@ -85,16 +85,26 @@ const installWith = (problems?: string[]) => {
   return f;
 };
 
-test("problems: one console.warn each at install, one notify at the first session_start, none at the second", () => {
+test("problems: with a UI one notify at the first session_start, none at the second, and nothing on the console (the TUI is running)", () => {
   withWarnings((warned) => {
     const f = installWith(["a", "b"]);
-    assert.deepEqual(warned, ["task-router: a", "task-router: b"]);
+    assert.deepEqual(warned, [], "install writes nothing");
     const notes: [string, string][] = [];
-    const ctx = { ui: { notify: (m: string, kind: string) => void notes.push([m, kind]) } };
+    const ctx = { hasUI: true, ui: { notify: (m: string, kind: string) => void notes.push([m, kind]) } };
     f.fire("session_start", {}, ctx);
     f.fire("session_start", {}, ctx);
     assert.deepEqual(notes, [["task-router settings: a; b", "warning"]]);
-    assert.equal(warned.length, 2);
+    assert.deepEqual(warned, []);
+  });
+});
+
+test("problems: without a UI (print mode, a child) one console.warn each at the first session_start, none at the second", () => {
+  withWarnings((warned) => {
+    const f = installWith(["a", "b"]);
+    assert.deepEqual(warned, []);
+    f.fire("session_start", {}, { hasUI: false, ui: { notify: () => assert.fail("no UI, no notify") } });
+    f.fire("session_start", {}, { hasUI: false });
+    assert.deepEqual(warned, ["task-router: a", "task-router: b"]);
   });
 });
 
@@ -107,5 +117,21 @@ test("problems: none → no warning and no notify; a session without ui does not
     const g = installWith(["x"]);
     g.fire("session_start", {}, undefined);
     g.fire("session_start", {}, {});
+  });
+});
+
+test("a spawn policy that cannot be registered is told once at session_start (UI notify, else console), never on the console at install", () => {
+  withWarnings((warned) => {
+    const f = fakePi();
+    const a = fakeApi();
+    a.api.registerSpawnPolicy((() => undefined) as never); // another policy holds the slot: the router's registration throws
+    install(f.pi, { agentDir: mkdtempSync(join(tmpdir(), "task-router-shell-")), now: () => NOW, api: () => a.api });
+    assert.deepEqual(warned, []);
+    const notes: string[] = [];
+    const ctx = { hasUI: true, ui: { notify: (m: string) => void notes.push(m) } };
+    f.fire("session_start", {}, ctx);
+    f.fire("session_start", {}, ctx);
+    assert.deepEqual(notes, ["task-router: no spawn policy: a spawn policy is already registered"]);
+    assert.deepEqual(warned, []);
   });
 });

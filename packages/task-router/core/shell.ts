@@ -123,55 +123,18 @@ export function install(pi: PiLike, deps: Deps) {
     if (e.type === "kill") { log.killed(e.name); children.delete(e.name); }
   };
   // The API may appear after this extension loads (load order), so connect at install and again at session_start.
+  // Nothing is printed here: install runs at session_start, with the TUI up, so a console write would land in it.
+  // The failure waits for the session_start handler, which tells it through the UI (or the console without one).
   let off: (() => void)[] = [];
+  let connectError: string | undefined;
   const connect = (): void => {
     const a = api();
     if (off.length || !hasSubagentsApiV1(a)) return;
-    try { off = [a.registerSpawnPolicy(policy), a.subscribe(onEvent)]; } catch (err) { console.warn(`task-router: no spawn policy: ${(err as Error).message}`); }
+    try { off = [a.registerSpawnPolicy(policy), a.subscribe(onEvent)]; connectError = undefined; } catch (err) { connectError = (err as Error).message; }
   };
   connect();
   const problems = deps.problems ?? [];
-  for (const p of problems) console.warn(`task-router: ${p}`);
-  // Routing needs the actor's spawn-policy API (spec D5). Every factory runs before the first session_start, so the
-  // check there is load-order independent; until then (and without the API) the router is off.
-  let active = false;
-  let told = false;
-  pi.on("session_start", (_e, ctx) => {
-    track(ctx);
-    active = hasSubagentsApiV1(api());
-    if (active) { connect(); registerVerdict(); }
-    else warnOnce(ctx, "actor:task-router", actorMissing("task-router", "task-router routing is off (no task_verdict, no task_cards, no nudge); the effort guard and fresh-on-cold stay on"));
-    if (told || !problems.length) return;
-    told = true;
-    ctx?.ui?.notify?.(`task-router settings: ${problems.join("; ")}`, "warning");
-  });
-  pi.on("session_shutdown", () => { off.forEach((f) => f()); off = []; });
-  installEffortGuard(pi, settings.maxBurstTurns);
-  installFreshOnCold(pi, { settings, api, now: nowMs });
-  // The router is a main-session extension; the child check keeps the nudge out of a child that loads it anyway.
-  const isChild = (ctx: any): boolean => {
-    const sid = ctx?.sessionManager?.getSessionId?.() ?? sessionId;
-    return !!sid && (api()?.list() ?? []).some((a) => a.sessionId === sid && a.name !== "main");
-  };
-  installNudge(pi, { settings, isChild, enabled: () => active });
-  pi.on("before_agent_start", (e, ctx) => {
-    track(ctx);
-    skills = e.systemPromptOptions?.skills ?? skills;
-    const sections = e.systemPromptOptions?.sections;
-    if (!sections) return;
-    if (!active) { delete sections.task_cards; return; }
-    // A child inherits its parent's arm, so the delegationRule flag reads "on" there too: the rule is the main session's.
-    if (settings.routing) sections.task_cards = cardSection(settings, settings.delegation.rule === "on" && !isChild(ctx));
-    else delete sections.task_cards;
-  });
-
   // Registered once, at the first session_start with the API (pi supports tools registered after load).
-  let verdictRegistered = false;
-  const registerVerdict = (): void => {
-    if (verdictRegistered) return;
-    verdictRegistered = true;
-    pi.registerTool(verdictTool);
-  };
   const verdictTool: Parameters<PiLike["registerTool"]>[0] = {
     name: "task_verdict",
     label: "Task verdict",
@@ -197,5 +160,46 @@ export function install(pi: PiLike, deps: Deps) {
       return text(`${done}\n${spotCheckText(name)}`);
     },
   };
+  let verdictRegistered = false;
+  const registerVerdict = (): void => {
+    if (verdictRegistered) return;
+    verdictRegistered = true;
+    pi.registerTool(verdictTool);
+  };
+  // Routing needs the actor's spawn-policy API (spec D5). Every factory runs before the first session_start, so the
+  // check there is load-order independent; until then (and without the API) the router is off.
+  let active = false;
+  let told = false;
+  pi.on("session_start", (_e, ctx) => {
+    track(ctx);
+    active = hasSubagentsApiV1(api());
+    if (active) { connect(); registerVerdict(); }
+    else warnOnce(ctx, "actor:task-router", actorMissing("task-router", "task-router routing is off (no task_verdict, no task_cards, no nudge); the effort guard and fresh-on-cold stay on"));
+    if (connectError !== undefined) warnOnce(ctx, "spawn-policy:task-router", `task-router: no spawn policy: ${connectError}`);
+    if (told || !problems.length) return;
+    told = true;
+    if (ctx?.hasUI && ctx.ui?.notify) ctx.ui.notify(`task-router settings: ${problems.join("; ")}`, "warning");
+    else for (const p of problems) console.warn(`task-router: ${p}`);
+  });
+  pi.on("session_shutdown", () => { off.forEach((f) => f()); off = []; });
+  installEffortGuard(pi, settings.maxBurstTurns);
+  installFreshOnCold(pi, { settings, api, now: nowMs });
+  // The router is a main-session extension; the child check keeps the nudge out of a child that loads it anyway.
+  const isChild = (ctx: any): boolean => {
+    const sid = ctx?.sessionManager?.getSessionId?.() ?? sessionId;
+    return !!sid && (api()?.list() ?? []).some((a) => a.sessionId === sid && a.name !== "main");
+  };
+  installNudge(pi, { settings, isChild, enabled: () => active });
+  pi.on("before_agent_start", (e, ctx) => {
+    track(ctx);
+    skills = e.systemPromptOptions?.skills ?? skills;
+    const sections = e.systemPromptOptions?.sections;
+    if (!sections) return;
+    if (!active) { delete sections.task_cards; return; }
+    // A child inherits its parent's arm, so the delegationRule flag reads "on" there too: the rule is the main session's.
+    if (settings.routing) sections.task_cards = cardSection(settings, settings.delegation.rule === "on" && !isChild(ctx));
+    else delete sections.task_cards;
+  });
+
   return { log, settings };
 }
