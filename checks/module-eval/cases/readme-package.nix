@@ -1,8 +1,10 @@
 # (AC11) README's "Without Nix" section agrees with what the package ships:
 # the install line carries the manifest's version as the tag, the subset block
 # is the checked fixture line by line, every upstream has its prerequisites
-# row with the pinned wording, the experiments opt-in block and the skill
-# collision note are there. Lines are compared whole or searched with
+# row with the pinned wording (the actor: patched build, upstream support
+# pending; the other two: what the upstream does as it is, and what only the
+# patched build adds), the experiments opt-in block, the skill collision note
+# and the duplicate guard's version note are there. Lines are compared whole or searched with
 # `replaceStrings` (no regex over the README).
 {
   lib,
@@ -24,6 +26,16 @@
 
   install = "pi install git:github.com/GRBurst/pi-economics@v${version}";
   pinned = "Patched build via the pi-economics Nix modules; upstream support pending.";
+  # review L1: the upstream already gives the fold reminders and the retry events the meter reads
+  partial = {
+    pi-infinite-context = "the upstream's fold reminders work as they are";
+    pi-retry = "the meter's retry accounting works with the upstream";
+  };
+  onlyPatched = "only with the patched build via the pi-economics Nix modules (upstream support pending for that part)";
+  claimsMissing = {
+    pi-infinite-context = "no fold reminders";
+    pi-retry = "no retry accounting";
+  };
   upstreams = ["pi-actor-subagents" "pi-infinite-context" "pi-retry"];
   row = u: lib.filter (l: lib.hasPrefix "| ${u} |" l) readme;
 in {
@@ -35,11 +47,21 @@ in {
     ++ lib.concatMap (
       u:
         expect.holds "one prerequisites row for ${u}" (lib.length (row u) == 1)
-        ++ lib.concatMap (r: expect.holds "the ${u} row says: ${pinned}" (has pinned r)) (row u)
+        ++ lib.concatMap (
+          r:
+            if u == "pi-actor-subagents"
+            then expect.holds "the ${u} row says: ${pinned}" (has pinned r)
+            else
+              expect.holds "the ${u} row says: ${partial.${u}}" (has partial.${u} r)
+              ++ expect.holds "the ${u} row says: ${onlyPatched}" (has onlyPatched r)
+              ++ expect.holds "the ${u} row does not say \"${claimsMissing.${u}}\"" (!(has claimsMissing.${u} r))
+        ) (row u)
     )
     upstreams
     ++ expect.holds "the experiments opt-in names its file" (lib.length (withText "<agentDir>/experiments/settings.json") >= 1)
     ++ expect.holds "the experiments opt-in block is there" (lib.elem ''{ "mode": "explore" }'' readme)
     ++ expect.holds "the skill collision note names the skill" (lib.length (lib.filter (has "name collision") (withText "pi-token-economics-analysis")) >= 1)
-    ++ expect.holds "the duplicate warning is described" (lib.length (withText "is loaded") >= 1);
+    ++ expect.holds "the duplicate warning is described" (lib.length (withText "is loaded") >= 1)
+    ++ expect.holds "the duplicate guard's version note is there (L2)" (lib.length (withText "needs both copies at this version or later") == 1)
+    ++ expect.holds "README does not hedge on the expansion of ~ (L: pi expands it)" (lib.length (withText "is not verified") == 0);
 }

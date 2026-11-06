@@ -102,8 +102,8 @@ it misses the API and switches off only what needs it.
 | Package | Used by | Without it |
 |---|---|---|
 | pi-actor-subagents | required by `task-router`; used by `cache-lifecycle`, `experiments` | the router is off (no `task_verdict`, no task cards, no nudge; its effort guard stays on); cache lifecycle does not keep sessions waiting on children warm; experiments children do not inherit an arm. Patched build via the pi-economics Nix modules; upstream support pending. |
-| pi-infinite-context | optional | no fold reminders. Patched build via the pi-economics Nix modules; upstream support pending. |
-| pi-retry | optional | no retry accounting in the meter. Patched build via the pi-economics Nix modules; upstream support pending. |
+| pi-infinite-context | optional | the upstream's fold reminders work as they are; the per-model reminder thresholds and the cost-aware fold hint come only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
+| pi-retry | optional | the meter's retry accounting works with the upstream (it reads its `pi-retry:*` events); the handling of OpenRouter's daily free cap (that 429 is not retried) comes only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
 
 ### Experiments are opt-in
 
@@ -143,8 +143,8 @@ Use pi's object form of a `packages` entry in `~/.pi/agent/settings.json`, or
   {"childExtensions": ["~/.pi/agent/git/github.com/GRBurst/pi-economics/packages/token-meter/index.ts"]}
   ```
 
-  Whether the runner expands `~` is not verified; use absolute paths if a child
-  does not load them.
+  pi expands a leading `~` in these paths (they reach its resource loader as
+  extension sources).
 
 ### The commands
 
@@ -162,11 +162,18 @@ measured with Node 24). Without the install, run
 
 ### Together with the Nix modules
 
-When both the package and the Nix modules provide a component, the second copy
-stays inert and says so once at start (`pi-economics: <component> is loaded
+When two copies of a component are loaded, the first one pi starts runs and
+the other stays inert. This holds for the package next to the Nix modules and
+for the package in two scopes; a copy that pi loads and then leaves out (a
+user-scope package that a project entry replaces) takes no part. The inert
+copy says so once at start (`pi-economics: <component> is loaded
 twice`). Keep one: `pi remove <source>`, or switch the component off in Nix. The
 analysis skill is then loaded twice as well:
 pi reports a name collision for `pi-token-economics-analysis` and keeps one of them.
+
+The guard needs both copies at this version or later. A Nix input older than
+the package makes no claim: both copies then run, the meter logs every request
+twice, and nothing is said. Remove one of them.
 
 ## Requirements
 
