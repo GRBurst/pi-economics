@@ -5,6 +5,7 @@
   hm,
   self,
   expect,
+  version,
 }: let
   inherit (expect) eq holds failed;
   pe = cfg: cfg.programs.piEconomics;
@@ -59,7 +60,7 @@ in {
     x = (pe (eval ".pi/agent" {} {})).experiments;
   in
     eq "drvPath" x.package.drvPath self.packages.x86_64-linux.experiments.drvPath
-    ++ eq "name" x.package.name "pi-experiments-0.1.0";
+    ++ eq "name" x.package.name "pi-experiments-${version}";
 
   # (M4.13; N4, spec D15) Files: the link and the settings file, the
   # extension's opt-in, with `mode` explicit while settings = {} (given settings are

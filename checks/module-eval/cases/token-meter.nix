@@ -4,6 +4,7 @@
   hm,
   self,
   expect,
+  version,
 }: let
   inherit (expect) eq holds failed;
   pe = cfg: cfg.programs.piEconomics;
@@ -54,7 +55,7 @@ in {
     t = (pe (eval ".pi/agent" {})).tokenMeter;
   in
     eq "drvPath" t.package.drvPath self.packages.x86_64-linux.token-meter.drvPath
-    ++ eq "name" t.package.name "pi-token-meter-0.1.0";
+    ++ eq "name" t.package.name "pi-token-meter-${version}";
 
   # (M3.4) Files and commands: the link and LOGS.md under agentDir, the two
   # reports on PATH, no settings file while settings = {}.

@@ -357,7 +357,7 @@ package directory is a render error; the prerequisites `actor-subagents`, `infin
 the user installs them) and adds `bin` when `tokenMeter` is on. `render-package` compares the committed file with it;
 `pi-package-manifest` states the manifest's laws one by one (private, keyword, semver, peers = pi's five host
 packages, imported-is-peer, no dependencies, paths, bin shebang and mode, skill fallback paths). The version is the
-constant in `render/default.nix`; the tag is `v` + version.
+constant in `render/default.nix`; the tag is `v` + version. `render-package` also requires every `packages/<c>/package.json` to carry it (see AGENTS.md, "Versions").
 
 **Runtime contract** (`packages/<c>/core/runtime-guard.ts`, four identical copies, `runtime-guard-copies`):
 

@@ -4,6 +4,7 @@
   hm,
   self,
   expect,
+  version,
 }: let
   inherit (expect) eq holds failed;
   pe = cfg: cfg.programs.piEconomics;
@@ -58,7 +59,7 @@ in {
     cl = (pe (eval ".pi/agent" {} {})).cacheLifecycle;
   in
     eq "drvPath" cl.package.drvPath self.packages.x86_64-linux.cache-lifecycle.drvPath
-    ++ eq "name" cl.package.name "pi-cache-lifecycle-0.1.0";
+    ++ eq "name" cl.package.name "pi-cache-lifecycle-${version}";
 
   # (M4.9) Files: the link only; no settings file while settings = {}.
   cache-lifecycle-files = lib.concatMap (dir:

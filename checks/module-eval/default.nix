@@ -7,6 +7,7 @@
   pkgs,
   hm,
   self,
+  version,
 }: let
   expect = import ./expect.nix {inherit lib;};
   caseFiles = [
@@ -29,7 +30,7 @@
       acc: file: let
         f = import file;
         # A case file takes the arguments it names.
-        new = f (builtins.intersectAttrs (lib.functionArgs f) {inherit lib pkgs hm self expect;});
+        new = f (builtins.intersectAttrs (lib.functionArgs f) {inherit lib pkgs hm self expect version;});
         dup = lib.intersectLists (lib.attrNames acc) (lib.attrNames new);
       in
         if dup != []

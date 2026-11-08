@@ -33,6 +33,15 @@ then `<out>/bin/alejandra <files>`.
 
 Commits are unsigned: `git -c commit.gpgsign=false commit`.
 
+## Versions
+
+One version for the whole repository: the constant `version` in `render/default.nix` (the tag is `v` + it). A release
+edits the constant, the `"version"` line of each `packages/<c>/package.json` (`render-package` fails until they equal
+it), the README install line and `checks/pi-package/subset.json` (checked by `readme-package`), then `nix run .#render` writes the
+root `package.json`.
+The Nix derivation names (`pi-<c>-<version>`) follow the manifests; module-eval cases take the constant as their
+`version` argument, never a literal version.
+
 ## Rules
 
 - Tests first: every change starts with a failing check; a new check is seen red once.

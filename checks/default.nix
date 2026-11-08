@@ -71,7 +71,10 @@ in {
   npm-deps = npm.check;
   typecheck-harness = typecheck.selftest;
   iface-harness = iface.selftest;
-  module-eval = import ./module-eval {inherit lib pkgs hm self;};
+  module-eval = import ./module-eval {
+    inherit lib pkgs hm self;
+    inherit (render) version;
+  };
   pi-settings-migrate = import ./pi-settings-migrate {inherit lib pkgs hm;};
   # The bench's own tests run when its code builds (spec §8.1, "Package tests").
   bench = self.packages.${pkgs.stdenv.hostPlatform.system}.bench.code;
