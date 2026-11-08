@@ -217,7 +217,7 @@ in {
   log-contract = pkgs.callPackage ./log-contract {};
   home-files = import ./home-files {inherit lib pkgs hm;};
   # (AC2) The committed package.json against the render.
-  render-package = import ./render.nix {inherit pkgs self render;};
+  render-package = import ./render.nix {inherit lib pkgs self render;};
   # (AC3) The manifest's laws, each named.
   pi-package-manifest = import ./pi-package/manifest.nix {
     inherit pkgs lib self;

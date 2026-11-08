@@ -99,4 +99,4 @@
       cp --no-preserve=mode ${tree}/package.json package.json
     '';
   };
-in {inherit fp own manifest tree app;}
+in {inherit fp own manifest tree app version;}
