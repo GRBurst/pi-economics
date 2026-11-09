@@ -1,6 +1,6 @@
 {
   "name": "pi-experiments",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "One fractional-factorial arm per pi main session (explore/exploit assignment); children inherit the arm, other extensions read the factor flags.",
   "type": "module",
   "keywords": ["pi-package"],

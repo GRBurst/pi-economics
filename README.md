@@ -86,7 +86,7 @@ experiments, cache lifecycle, task router) and the analysis skill, without
 Home Manager.
 
 ```sh
-pi install git:github.com/GRBurst/pi-economics@v0.1.1
+pi install git:github.com/GRBurst/pi-economics@v0.1.2
 ```
 
 Nix only: `bench`, the `piSettings` migration, the Home Manager options and
@@ -124,7 +124,7 @@ Use pi's object form of a `packages` entry in `~/.pi/agent/settings.json`, or
 <!-- checked: checks/pi-package/subset.json -->
 ```json
 {
-  "source": "git:github.com/GRBurst/pi-economics@v0.1.1",
+  "source": "git:github.com/GRBurst/pi-economics@v0.1.2",
   "extensions": [
     "packages/token-meter/index.ts",
     "packages/task-router/index.ts"

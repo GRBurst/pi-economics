@@ -18,7 +18,7 @@
   hm = import ../checks/lib/hm-eval.nix {inherit lib pkgs home-manager homeModule;};
 
   # Spec §7 Q6: one constant; the tag is `v` + version.
-  version = "0.1.1";
+  version = "0.1.2";
 
   # F_P: every component on but bench (Nix-only, spec D10), the
   # prerequisites included, so the registry is the whole set the flake knows.
