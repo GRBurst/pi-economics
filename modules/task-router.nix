@@ -42,27 +42,48 @@ in {
         `test/fixtures/today-config.json` as the settings.
       '';
     };
+    # (local mode L1.T7, design §2.1)
+    localMode.enable = lib.mkEnableOption "local mode: a local model drives the main session (writes settings.mode = \"local\"; docs/pi-economics.md, taskRouter)";
   };
 
-  config = lib.mkIf cfg.enable {
-    # (M5.8) Main session only (the host's pi-extensions.nix entry).
-    programs.piEconomics.extensions.task-router = {
-      path = "${cfg.package}";
-      # The source, not the package: probing a build output would be
-      # import-from-derivation.
-      checkPath = ../packages/task-router/index.ts;
-      forChildren = false;
-      description = "Routes subagent spawns by task card: abilities and levels per model, cheapest-fit selection with a queue wait, attempts and an outcome log (<agentDir>/task-router/outcomes/YYYY-MM.jsonl); registers the task_verdict tool.";
-    };
-    # (M5.9) Literal text (spec §4): checks read it with builtins.fromJSON.
-    home.file."${pe.agentDir}/task-router/settings.json" =
-      lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
-    # (M5.10) A hard dependency (spec §4.1).
-    assertions = [
-      {
-        assertion = pe.actorSubagents.enable && (pe.actorSubagents.package.passthru.spawnPolicyApi or 0) >= 1;
-        message = "pi-economics: taskRouter requires actorSubagents with passthru.spawnPolicyApi >= 1 (the router registers through registerSpawnPolicy, and shell.ts swallows its absence: without the patched build the router does nothing)";
-      }
-    ];
-  };
+  config = lib.mkMerge [
+    {
+      # (local mode L1.T7) Outside the mkIf: this one fires when the router is off.
+      assertions = [
+        {
+          assertion = !(cfg.localMode.enable && !cfg.enable);
+          message = "pi-economics: taskRouter.localMode.enable requires taskRouter.enable";
+        }
+      ];
+    }
+    (lib.mkIf cfg.enable {
+      # (M5.8) Main session only (the host's pi-extensions.nix entry).
+      programs.piEconomics.extensions.task-router = {
+        path = "${cfg.package}";
+        # The source, not the package: probing a build output would be
+        # import-from-derivation.
+        checkPath = ../packages/task-router/index.ts;
+        forChildren = false;
+        description = "Routes subagent spawns by task card: abilities and levels per model, cheapest-fit selection with a queue wait, attempts and an outcome log (<agentDir>/task-router/outcomes/YYYY-MM.jsonl); registers the task_verdict tool.";
+      };
+      # (M5.9) Literal text (spec §4): checks read it with builtins.fromJSON.
+      home.file."${pe.agentDir}/task-router/settings.json" =
+        lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
+      # (M5.10) A hard dependency (spec §4.1).
+      assertions = [
+        {
+          assertion = pe.actorSubagents.enable && (pe.actorSubagents.package.passthru.spawnPolicyApi or 0) >= 1;
+          message = "pi-economics: taskRouter requires actorSubagents with passthru.spawnPolicyApi >= 1 (the router registers through registerSpawnPolicy, and shell.ts swallows its absence: without the patched build the router does nothing)";
+        }
+        # (local mode L1.T7, design §2.1) A settings.mode other than "local" contradicts the switch.
+        {
+          assertion = !cfg.localMode.enable || (cfg.settings.mode or "local") == "local";
+          message = "pi-economics: taskRouter.localMode.enable needs taskRouter.settings.mode = \"local\" (found ${builtins.toJSON (cfg.settings.mode or null)})";
+        }
+      ];
+      # (local mode L1.T7, design §2.1) mkDefault: a user's settings.mode wins (and fails the assertion above); the file is
+      # written even for settings = {}.
+      programs.piEconomics.taskRouter.settings.mode = lib.mkIf cfg.localMode.enable (lib.mkDefault "local");
+    })
+  ];
 }

@@ -206,7 +206,7 @@ failure, not a load error.
 | L1.T5 default section identity | append `"\n"` to `cardSection`'s result in the shell's default branch | "default mode section" | [x] |
 | L1.T5 LD3 under the experiments flag | use `settings.delegation.rule === "on"` to pick `cardSection` in local mode | "LD3: delegationRule on, local → localSection" | [x] |
 | L1.T6 nudge stays on in default mode | `enabled: () => false` | existing `test/delegation.test.ts` "main session: 6 mechanical calls …" | [x] |
-| L1.T7 module-eval | (natural) option declared without config | three cases FAIL | [ ] |
+| L1.T7 module-eval | (natural) option declared without config | three cases FAIL | [x] |
 | L2.T3 contract `force` taskId | rule `str` for all events | `test/contract.test.ts` › "force lines" | [ ] |
 | L2.T3 analyse filter | revert to `e?.event !== "spawn"` | `test/analyse.test.ts` › "session-level lines are no data-quality defect" | [ ] |
 | L2.T6 log-contract `force` | comment out `log.force(...)` in `used()` and `set` | `log-contract` "outcomes: no force event" | [ ] |
@@ -684,7 +684,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 - **Check**: fast runner; `chk task-router typecheck-task-router`.
 - **Keep green**: KG-R (`test/delegation.test.ts` unmodified; plant §11). **ACs**: AC-R4, §2.5 (local part).
 
-#### L1.T7 Home Manager `localMode.enable` and two assertions (AC-R5) `[ ] todo`
+#### L1.T7 Home Manager `localMode.enable` and two assertions (AC-R5) `[x] done`
 - **Files**: `modules/task-router.nix`, `checks/module-eval/cases/task-router.nix`.
 - **Depends**: — . **Parallel**: with every L1 TypeScript task.
 - **Read first**: `modules/task-router.nix`, `checks/module-eval/{default,expect}.nix`, `checks/module-eval/cases/task-router.nix`.

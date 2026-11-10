@@ -22,6 +22,7 @@
   fileAt = target: cfg: lib.findFirst (f: f.target == target) null (lib.attrValues cfg.home.file);
   bare = hm.evalBare {};
   message = "pi-economics: taskRouter requires actorSubagents with passthru.spawnPolicyApi >= 1 (the router registers through registerSpawnPolicy, and shell.ts swallows its absence: without the patched build the router does nothing)";
+  msgEnable = "pi-economics: taskRouter.localMode.enable requires taskRouter.enable";
 in {
   # (M5.8) Off by default: no registry entry, no file.
   task-router-off = let
@@ -138,4 +139,39 @@ in {
     }
     ++ eq "failed assertions" (failed "" c) []
     ++ eq "warnings" c.warnings bare.warnings;
+
+  # (local mode L1.T7, design §2.1, AC-R5) localMode.enable writes
+  # settings.mode = "local" (mkDefault: merged with other settings, a file even
+  # for settings = {}); two assertions, each with its negative case.
+  task-router-local-mode = lib.concatMap (dir: let
+    f = fileAt "${dir}/task-router/settings.json" (eval dir {localMode.enable = true;} withActor);
+    g = fileAt "${dir}/task-router/settings.json" (eval dir {
+        localMode.enable = true;
+        settings = {queueMaxSec = 60;};
+      }
+      withActor);
+    json = x:
+      if x == null
+      then null
+      else builtins.fromJSON x.text;
+  in
+    eq "settings file (${dir})" (json f) {mode = "local";}
+    ++ eq "merged with settings (${dir})" (json g) {
+      mode = "local";
+      queueMaxSec = 60;
+    }
+    ++ eq "failed assertions (${dir})" (failed "" (eval dir {localMode.enable = true;} withActor)) [])
+  dirs;
+  task-router-local-mode-requires-enable =
+    eq "assertions"
+    (failed "pi-economics: taskRouter.localMode" (eval ".pi/agent" null (withActor // {taskRouter.localMode.enable = true;})))
+    [msgEnable];
+  task-router-local-mode-needs-mode =
+    eq "assertions"
+    (failed "pi-economics: taskRouter.localMode" (eval ".pi/agent" {
+        localMode.enable = true;
+        settings.mode = "default";
+      }
+      withActor))
+    [''pi-economics: taskRouter.localMode.enable needs taskRouter.settings.mode = "local" (found "default")''];
 }
