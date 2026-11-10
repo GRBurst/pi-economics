@@ -694,7 +694,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 - **Check**: `chk module-eval` red → green.
 - **Keep green**: KG-M (`task-router-off`, `-defaults`, `-settings`, `-models`, `m5-host-like`, `bench` cases unchanged), `render-package`. **ACs**: AC-R5.
 
-#### L1.T8 Docs and milestone close `[ ] todo`
+#### L1.T8 Docs and milestone close `[x] done`
 - **Files**: `docs/pi-economics.md` (taskRouter: `localMode.enable` row; a "Local mode" paragraph: `mode`, the toggles and
   `"auto"`, importance without the main effort, the local section, nudge off, status line; the settings keys list points to
   `core/settings.ts`; Checks unchanged).

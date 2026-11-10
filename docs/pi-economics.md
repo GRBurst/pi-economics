@@ -273,6 +273,7 @@ on. Spawns, moves, escalations and verdicts go to the outcome log
 | `enable` | `false` | registry entry `task-router` (link `<agentDir>/extensions/task-router` → the package; `forChildren = false`) |
 | `package` | the flake's `packages/task-router` | the extension (`package.json`, `index.ts`, `core/`); its tests run when it builds |
 | `settings` | `{}` | written to `<agentDir>/task-router/settings.json` when non-empty; free-form, the schema and defaults are `packages/task-router/core/settings.ts` (`models` and `importanceTable` merge over the defaults: `models.<member>` field by field, `model = ""` removes the member; a given table cell replaces the default cell); the rollback to the routing before the new defaults is `lib.importJSON` of `packages/task-router/test/fixtures/today-config.json` |
+| `localMode.enable` | `false` | local mode (below): defines `settings.mode = lib.mkDefault "local"`, so the settings file is written even for `settings = {}`; asserts `taskRouter.enable` (`pi-economics: taskRouter.localMode.enable requires taskRouter.enable`) and that a given `settings.mode` is `"local"` (`pi-economics: taskRouter.localMode.enable needs taskRouter.settings.mode = "local" (found …)`) |
 
 Models are configured through `settings.models`, as in the option's example:
 
@@ -289,6 +290,37 @@ programs.piEconomics.taskRouter.settings = {
 `packages/task-router/test/fixtures/models-example.json` (every member written
 out) is read by the package's settings test and by the `module-eval` case
 `task-router-models`.
+
+**Local mode (milestone L1).** For a main session driven by a local model
+(Qwen). The settings key `mode` is `"default"` (the default) or `"local"`;
+`localMode.enable` sets it. There is no auto-detection: a Claude main with
+`mode = "local"` runs in local mode too. The settings declare the local
+components `hints`, `overseer`, `worktrees`, `mergeGate` and `plans`, each with
+`enabled = "auto" | "on" | "off"` (default `"auto"`: on in local mode, off in
+default mode), and `force`; L1 validates them (a bad value is reported and its
+default kept), but none of them does anything yet. The keys, their defaults and
+the messages are in `packages/task-router/core/settings.ts` and
+`packages/task-router/core/local/settings.ts`. In local mode:
+
+- Importance: the main session's effort is no importance source (a main at
+  `xhigh`, the local member's only effort, would make every child `high`); the
+  card's `importance`, the parent's importance and `pathRules` still count. The
+  routing table, the members and the selection are unchanged, so level-0 work
+  goes to the local member at cost 0 and the rest to Claude.
+- The prompt section `task_cards` of the main session is the shorter
+  `## Local mode` section (`localSection`, `packages/task-router/core/prompt.ts`:
+  do most of the work yourself, spawn only for more ability, end the turn after
+  a spawn; the card schema and one example). The orchestrator rule is off, even
+  when an experiments arm sets `delegationRule`. Children still get no section.
+- The delegation nudge is off.
+- The status line `task-router` reads `local`, or `local (main: <model>)` when
+  the main model is no local member's (set at `session_start` and on
+  `model_select`).
+
+With `mode = "default"` and every component `"auto"`, the router registers the
+same tools and hooks as before, the section is byte-identical, outcome lines
+carry no new key, and `router-golden` is unchanged (`test/local-default.test.ts`
+pins the inventory).
 
 **Scout gate (Group 6, 2026-10-28).** Haiku at medium scored 0.646 against
 Sonnet high's 0.917 (threshold 0.825, H6.4; two runs per task and arm), so
