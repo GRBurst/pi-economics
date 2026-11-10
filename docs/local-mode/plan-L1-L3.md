@@ -202,7 +202,7 @@ failure, not a load error.
 | L1.T1 inventory (tools, hooks, commands) | add `pi.on("model_select", () => undefined)` unconditionally in `install()` | "default mode: inventory" | [x] |
 | L1.T1 bash `tool_call` | in `installFreshOnCold` return `{}` for `bash` | "default mode: bash tool_call" | [x] |
 | L1.T1 outcome keys ⊆ today's | add `"mode"` to `KEYS` and `mode: "default"` to `spawnEvent` | "default mode: outcome keys" | [x] |
-| L1.T4 default importance kept | pass `mainEffort: undefined` unconditionally | "AC-R2 default mode stays high" | [ ] |
+| L1.T4 default importance kept | pass `mainEffort: undefined` unconditionally | "AC-R2 default mode stays high" | [x] |
 | L1.T5 default section identity | append `"\n"` to `cardSection`'s result in the shell's default branch | "default mode section" | [ ] |
 | L1.T5 LD3 under the experiments flag | use `settings.delegation.rule === "on"` to pick `cardSection` in local mode | "LD3: delegationRule on, local → localSection" | [ ] |
 | L1.T6 nudge stays on in default mode | `enabled: () => false` | existing `test/delegation.test.ts` "main session: 6 mechanical calls …" | [ ] |
@@ -643,7 +643,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 - **Check**: fast runner; `chk task-router typecheck-task-router`.
 - **Keep green**: KG-R; `test/settings.test.ts` "M1: the default tables …" (X4) must stay green. **ACs**: AC-R1 (rest of §3.0.1).
 
-#### L1.T4 Importance without the main effort (AC-R2, LD1) `[ ] todo`
+#### L1.T4 Importance without the main effort (AC-R2, LD1) `[x] done`
 - **Files**: `core/policy.ts` (one expression), `test/local-routing.test.ts` (new).
 - **Depends**: L1.T2. **Parallel**: with L1.T3, L1.T5, L1.T7.
 - **Read first**: `core/policy.ts` `createPolicy`, `core/importance.ts`, `test/policy.test.ts` "meta carries the importance …".

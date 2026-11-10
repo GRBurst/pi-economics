@@ -8,6 +8,7 @@ import type { Named } from "./members.ts";
 import type { MemberCounter } from "./counter.ts";
 import type { Health } from "./health.ts";
 import { importanceOf } from "./importance.ts";
+import { isLocal } from "./local/mode.ts";
 import { planSpawn } from "./pipeline.ts";
 import { profileFor, skillBlocks, skillNames } from "./profile.ts";
 import { pickMember } from "./select.ts";
@@ -107,7 +108,8 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     const cwd = resolveCwd(card.cwd, caller.cwd, d.home);
     const v = verifyT0(card, cwd, d.fs, s);
     const parent = (caller.policyMeta as { importance?: Importance } | undefined)?.importance;
-    const importance = importanceOf({ mainEffort: caller.thinkingLevel, parent, pathRules: s.pathRules, files: card.files, card: card.importance });
+    // LD1 (design §2.2 item 1): in local mode the main's effort is no importance source (a Qwen main offers only xhigh).
+    const importance = importanceOf({ mainEffort: isLocal(s) ? undefined : caller.thinkingLevel, parent, pathRules: s.pathRules, files: card.files, card: card.importance });
     const sp = planSpawn(d, { taskId: args.name, card, verified: v, profile: prof.value, importance, model: args.model, effort: args.thinkingLevel });
     if (!sp.ok) return reject(sp.errors);
     const names = skillNames(prof.value, card);
