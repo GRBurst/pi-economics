@@ -91,12 +91,15 @@ export function install(pi: PiLike, deps: Deps) {
   let skills: Array<{ name: string; filePath: string; baseDir: string }> = [];
   const skillPort: SkillPort = { find: (n) => skills.find((x) => x.name === n), read: (path) => readFileSync(path, "utf8") };
   const counter = createMemberCounter(join(deps.agentDir, "task-router", "member-count.json"), now);
+  // The force override (design §3.6): `/force` and the settings force; the policy reads its port (plan D7).
+  const force = installForce(pi, { settings, log, onChange: (ctx) => { ui = ctx?.ui ?? ui; render(); } });
   const pd: PolicyDeps = {
     settings, api, children, attempts: new Map(), now: nowMs, skills: () => skillPort,
     rng: deps.rng ?? Math.random, home: deps.home ?? homedir(),
     fs: deps.fs ?? { exists: existsSync, size: (p) => statSync(p).size, isDir: (p) => existsSync(p) && statSync(p).isDirectory() },
     sleep: deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))),
     probe: createProbes({ fetch: deps.fetch ?? (globalThis.fetch as unknown as FetchLike), now: nowMs }), counter, blocks: new Map(),
+    force: force.port,
   };
   const policy = createPolicy(pd);
   const failover = createFailover({ ...pd, log });
@@ -105,7 +108,7 @@ export function install(pi: PiLike, deps: Deps) {
   const onEvent = (e: ApiEvent): void => {
     const c = children.get((e as { name?: string }).name ?? "");
     if (e.type === "spawn" && c) {
-      log.spawn({ taskId: e.name, card: c.card, plan: c.plan, start: c.start, arm: armOf(c.parentSession), sessionId: e.childSessionId, parentSessionId: c.parentSession, unresolved: c.unresolved });
+      log.spawn({ taskId: e.name, card: c.card, plan: c.plan, start: c.start, arm: armOf(c.parentSession), sessionId: e.childSessionId, parentSessionId: c.parentSession, unresolved: c.unresolved, forced: c.forced });
       if (c.esc) { // from the attempt state (D9): the failed attempt's entry may be gone (killed), its ranMember is not
         // An unknown attempt (RG6): its stand-in member is the new plan's, not where it ran, so the line names no `from` side.
         const ran = c.esc.known ? settings.models[c.esc.ranMember] : undefined, to = settings.models[c.start.member];
@@ -190,7 +193,6 @@ export function install(pi: PiLike, deps: Deps) {
     main = typeof model?.provider === "string" && typeof model?.id === "string" ? `${model.provider}/${model.id}` : undefined;
     render();
   };
-  const force = installForce(pi, { settings, log, onChange: (ctx) => { ui = ctx?.ui ?? ui; render(); } });
   pi.on("session_start", (_e, ctx) => {
     track(ctx);
     force.start(ctx, problems); // plan D8: its problem joins the one notification below

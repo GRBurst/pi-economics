@@ -13,14 +13,15 @@ export function createGuards(d: PolicyDeps) {
     seen.set(e.name, st);
     st.requests++;
     const info = d.api()?.list().find((a) => a.name === e.name);
-    const window = d.settings.models[c.member].contextWindow;
+    // A forced non-member (design §3.6.3, plan X6) has no member and so no known window: no context note for it.
+    const window = d.settings.models[c.member]?.contextWindow;
     const ctx = info?.contextTokens ?? 0;
     const notes: [string, boolean, string][] = [
       ["requests", st.requests > d.settings.runaway.requests, `has made ${st.requests} requests (limit ${d.settings.runaway.requests}); check it is not looping`],
       ["usd", (info?.costUsd ?? 0) > d.settings.runaway.usd, `has cost $${(info?.costUsd ?? 0).toFixed(2)} (limit $${d.settings.runaway.usd}); check it is not looping`],
-      ["context", ctx > d.settings.contextGuard * window,
-        `context ${Math.round(ctx / 1000)}k is ${Math.round((100 * ctx) / window)} % of its ${Math.round(window / 1000)}k window; hand the rest of the task to a fresh agent with a handoff`],
     ];
+    if (window !== undefined) notes.push(["context", ctx > d.settings.contextGuard * window,
+      `context ${Math.round(ctx / 1000)}k is ${Math.round((100 * ctx) / window)} % of its ${Math.round(window / 1000)}k window; hand the rest of the task to a fresh agent with a handoff`]);
     for (const [key, hit, text] of notes) {
       if (!hit || st.told.has(key)) continue;
       st.told.add(key);

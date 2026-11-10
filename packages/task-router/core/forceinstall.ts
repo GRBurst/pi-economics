@@ -1,6 +1,6 @@
 // Force override, the pi side (design §3.6, plan S6): the `/force` command, its session entries (design §3.0.2), the settings
 // force resolved at session_start, and the port the spawn policy reads. The policy has no ctx, so this owns the state (plan D7).
-import { FORCE_TYPE, describeForce, effective, parseForce, rebuild, resolveRef } from "./force.ts";
+import { FORCE_TYPE, consume, describeForce, effective, parseForce, rebuild, resolveRef } from "./force.ts";
 import type { ActiveForce, ForceEntry } from "./force.ts";
 import type { createOutcomeLog } from "./log.ts";
 import type { RouterSettings } from "./types.ts";
@@ -10,7 +10,8 @@ export type ForcePi = {
   registerCommand?(name: string, c: { description?: string; handler(args: string, ctx: any): unknown }): void;
   appendEntry?(customType: string, data: unknown): void;
 };
-export type ForcePort = { active(): ActiveForce | undefined };
+/** `active`: the force a routed spawn runs under now; `used`: a spawn ran under it (a `next:N` command force counts down). */
+export type ForcePort = { active(): ActiveForce | undefined; used(taskId: string): void };
 
 const USAGE = "usage: /force <model> [effort] [next[:N] | session] | /force off | /force";
 const NOT_FORCED = "overseer reviews are not forced (they use overseer.*)";
@@ -76,8 +77,20 @@ export function installForce(pi: ForcePi, d: {
   // Plan D6: registered at install, inside the guarded body, with or without the actor's API.
   pi.registerCommand?.("force", { description: "Force the model (and effort) of routed spawns: /force <model> [effort] [next[:N] | session], /force off, /force", handler });
 
+  const used = (): void => {
+    const f = active();
+    if (!f) return;
+    d.log.force({ action: "used", source: f.source, model: f.model, effort: f.thinkingLevel });
+    if (f.source !== "command") return;
+    const r = consume(cmd);
+    if (r.next === cmd || r.next === undefined) return;
+    store(r.next);
+    if (r.expired) d.log.force({ action: "expired", source: "command", model: f.model, effort: f.thinkingLevel });
+    d.onChange();
+  };
+
   return {
-    port: { active } as ForcePort,
+    port: { active, used } as ForcePort,
     /** In the shell's session_start handler, before the problems notification (plan D8): rebuild the command force from the
      *  branch; once per process resolve the settings force (unresolvable → a problem and a rejected line, inactive). */
     start(ctx: any, problems: string[]): void {

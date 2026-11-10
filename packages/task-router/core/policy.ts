@@ -3,7 +3,8 @@ import type { Caller, SpawnPolicy, SubagentsApiV1 } from "./api.ts";
 import type { AttemptState, Escalation } from "./attempts.ts";
 import { briefAppend } from "./brief.ts";
 import { parseCard } from "./card.ts";
-import { effortAt, lvl, named, sameLadder } from "./members.ts";
+import type { ForcePort } from "./forceinstall.ts";
+import { byModel, effortAt, lvl, named, sameLadder } from "./members.ts";
 import type { Named } from "./members.ts";
 import type { MemberCounter } from "./counter.ts";
 import type { Health } from "./health.ts";
@@ -19,13 +20,16 @@ import type { SkillPort } from "./profile.ts";
 import { toolsFor } from "./toolguard.ts";
 import { resolveCwd, verifyT0 } from "./verify.ts";
 import type { FsPort } from "./verify.ts";
+import type { Forced } from "./outcome.ts";
 import type { Card, Importance, Plan, Result, RouterSettings, Start, ThinkingLevel } from "./types.ts";
 
 /** What the router remembers about a child it spawned (keyed by child name = task id). */
 /** `cwd` is the task's (card `cwd`, else the caller's); `unresolved`: relative card files missing under it; `esc`: a re-spawn's
- *  escalation (the member the failed attempt ran on, the levels), for its escalate line. */
+ *  escalation (the member the failed attempt ran on, the levels), for its escalate line; `forced`: the force it was spawned under
+ *  and what routing chose instead (design §3.6.3), for its spawn line. */
 export type ChildBase = {
   parent: string; parentSession: string; card: Card; plan: Plan; cwd: string; importance: Importance; unresolved?: true; esc?: Escalation;
+  forced?: Forced;
 };
 /** `member`/`model`: the member it runs on (its slot, counter, window); `route`: that member's log label; `reservedUntil`: its
  *  slot is held until then, listed or not (mi11); `failover`: the leg's candidate names, the targets of a move (spec §4.8);
@@ -43,6 +47,8 @@ export type PolicyDeps = {
   skills: () => SkillPort | undefined;
   /** Random source in [0, 1) for randomize / spot checks; `home` expands `~` in a card cwd. */
   rng: () => number; home: string;
+  /** The force override (design §3.6; plan D7): its owner is the shell; absent = never forced. */
+  force?: ForcePort;
 };
 
 const POLL_MS = 2000;
@@ -110,7 +116,10 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     const parent = (caller.policyMeta as { importance?: Importance } | undefined)?.importance;
     // LD1 (design §2.2 item 1): in local mode the main's effort is no importance source (a Qwen main offers only xhigh).
     const importance = importanceOf({ mainEffort: isLocal(s) ? undefined : caller.thinkingLevel, parent, pathRules: s.pathRules, files: card.files, card: card.importance });
-    const sp = planSpawn(d, { taskId: args.name, card, verified: v, profile: prof.value, importance, model: args.model, effort: args.thinkingLevel });
+    // A force (design §3.6.3, LD4): routed as usual for the counterfactual and the card's errors, without the explicit
+    // arguments (the force replaces them), then run on the forced model; routing is on here (plan D12).
+    const f = d.force?.active();
+    const sp = planSpawn(d, { taskId: args.name, card, verified: v, profile: prof.value, importance, model: f ? undefined : args.model, effort: f ? undefined : args.thinkingLevel });
     if (!sp.ok) return reject(sp.errors);
     const names = skillNames(prof.value, card);
     const blocks = names.length ? skillBlocks(names, d.skills() ?? { find: () => undefined, read: () => "" }) : { ok: true as const, value: "" };
@@ -123,21 +132,41 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     const plan: Plan = { ...sp.value.plan, reasons: [...sp.value.plan.reasons] }, a = plan.ability, need = v.tokens ?? 0;
     const capped = capToTable(s, prof.value).models, cappedLvl = (m: Named) => lvl(named(capped, m.name)!, a);
     const failover = (st.pinned ? leg.filter((m) => cappedLvl(m) >= cappedLvl(M)) : leg).map((m) => m.name);
+    const entry: ChildBase = {
+      parent: caller.name, parentSession: caller.sessionId, card, plan, cwd, importance,
+      ...(v.unresolved ? { unresolved: true as const } : {}), ...(sp.value.esc ? { esc: sp.value.esc } : {}),
+    };
+    const result = (model: string, thinkingLevel: ThinkingLevel) => ({
+      model, thinkingLevel, briefAppend: briefAppend(card, plan, v.t0.specified, prof.value, blocks.value, s.delegation.nudge !== "off"),
+      ...toolsFor(prof.value, card, cwd, caller.cwd), meta: { taskId: args.name, importance },
+    });
+    if (f) {
+      // Plan D9, D11: the forced effort, else the plan's effort literally. A member waits for its slot alone (pinned) and never
+      // fails over (`failover: []`, A4); a non-member starts at once with no slot. Nothing is used when the spawn is rejected.
+      const effort = f.thinkingLevel ?? plan.worker.effort;
+      const forced: Forced = { source: f.source, routedModel: plan.worker.model, routedEffort: plan.worker.effort };
+      const member = byModel(s.models, f.model);
+      plan.reasons.push(`force: ${f.model} ${effort} (${f.source})`);
+      if (member) {
+        const to = await resolveLeg(d, { name: args.name, cands: [member], planned: member, step: plan.worker.step, effort, pinned: true, failover: [], entry: { ...entry, forced } });
+        if (!to.ok) return reject(to.errors.map((e) => `force ${f.model}: ${e}`));
+        plan.reasons.push(to.value.why);
+      } else {
+        const now = d.now();
+        d.children.set(args.name, { ...entry, forced, member: "", route: "forced", model: f.model, effort, at: now, reservedUntil: now,
+          failover: [], start: { member: "", model: f.model, effort, waitMs: 0 } });
+      }
+      d.force!.used(args.name);
+      return result(f.model, effort);
+    }
     if (st.pinned && s.contextFit > 0 && need > s.contextFit * M.contextWindow)
       plan.reasons.push(`context: files need ~${Math.round(need)} tokens; explicit ${M.name} holds ${M.contextWindow}`);
     const to = await resolveLeg(d, {
       name: args.name, cands: st.pinned ? [M] : leg, planned: leg[0], step: plan.worker.step,
-      effort: st.pinned ? st.effort : args.thinkingLevel, pinned: st.pinned, failover,
-      entry: {
-        parent: caller.name, parentSession: caller.sessionId, card, plan, cwd, importance,
-        ...(v.unresolved ? { unresolved: true as const } : {}), ...(sp.value.esc ? { esc: sp.value.esc } : {}),
-      },
+      effort: st.pinned ? st.effort : args.thinkingLevel, pinned: st.pinned, failover, entry,
     });
     if (!to.ok) return reject(to.errors);
     plan.reasons.push(to.value.why);
-    return {
-      model: to.value.member.model, thinkingLevel: to.value.effort, briefAppend: briefAppend(card, plan, v.t0.specified, prof.value, blocks.value, s.delegation.nudge !== "off"),
-      ...toolsFor(prof.value, card, cwd, caller.cwd), meta: { taskId: args.name, importance },
-    };
+    return result(to.value.member.model, to.value.effort);
   };
 }

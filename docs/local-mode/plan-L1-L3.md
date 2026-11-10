@@ -755,7 +755,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 - **Check**: fast runner; `chk task-router typecheck-task-router`.
 - **Keep green**: KG-R, L1.T1 hooks inventory (unchanged), `test/shell.test.ts` problems tests unmodified. **ACs**: AC-F3, AC-F4 (notify/problem/inactive), AC-N3 (`/force`), §2.5 force.
 
-#### L2.T5 The policy's force branch (AC-F1, AC-F2, AC-F4 part, AC-F5) `[ ] todo`
+#### L2.T5 The policy's force branch (AC-F1, AC-F2, AC-F4 part, AC-F5) `[x] done`
 - **Files**: `core/policy.ts` (S7), `core/guards.ts` (X6), `core/shell.ts` (`pd.force = force.port`; `onEvent` passes `forced`), `test/force-policy.test.ts` (new).
 - **Depends**: L2.T4.
 - **Read first**: `core/policy.ts` `resolveLeg`/`createPolicy`, `core/failover.ts`, `core/guards.ts`, `test/policy.test.ts` (explicit-model tests), `test/failover.test.ts`.
