@@ -703,7 +703,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 
 ### L2 — Force override
 
-#### L2.T1 Pure force core `[ ] todo`
+#### L2.T1 Pure force core `[x] done`
 - **Files**: `core/force.ts` (new, S5), `test/force.test.ts` (new).
 - **Depends**: L1 done. **Parallel**: with L2.T2, L2.T3.
 - **RED**: `parseForce` table: `""`→show, `"off"`→off, `"sonnet"`→set session, `"sonnet high"`, `"sonnet next"`→n 1,
