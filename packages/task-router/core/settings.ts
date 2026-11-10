@@ -2,6 +2,7 @@
 // default, so the extension runs with no file at all (plain `pi install`).
 import { readFileSync } from "node:fs";
 import { EFFORTS, effortRank, enabled } from "./members.ts";
+import { validateLocal } from "./local/settings.ts";
 import type { Cell, Member, Profile, Rows, RouterSettings } from "./types.ts";
 
 export type Settings = RouterSettings;
@@ -83,6 +84,38 @@ export function defaults(): Settings {
     // T5.21/T5.22: off by default; the user's Home Manager config switches them on.
     randomize: { enabled: false, share: 0.2 },
     spotCheck: { enabled: false, share: 0.1 },
+    // Local mode (design §3.0.1; validated in core/local/settings.ts). Every component "auto": on in local mode only.
+    mode: "default",
+    hints: {
+      enabled: "auto",
+      identicalCalls: 3, noChangeWrites: 4, alternations: 2,
+      repeatedErrors: 2, errorSimilarity: 0.92,
+      churnEdits: 3, churnTurns: 4,
+      checkFailures: 2,
+      contextPercent: 85, stallTurns: 25, contextSoftTokens: 32000,
+      cooldownCalls: 5, persistTrips: 2, steer: "on",
+    },
+    overseer: {
+      member: "opus", effort: "high",
+      fallbackMember: "sonnet", fallbackEffort: "xhigh",
+      budget: 15, steerBudget: 3,
+      timeoutSec: 900, resubmits: 2,
+      tools: ["read", "grep", "find", "ls"],
+    },
+    worktrees: { enabled: "auto", root: "../{repo}.worktrees", branchPrefix: "lm/", removeAfterMerge: true },
+    mergeGate: {
+      enabled: "auto", mainBranches: ["main", "master"],
+      maxDiffLines: 150, maxDiffFiles: 6, extraChecks: [], redRun: true,
+      rejectionsBeforeFixer: 2, fixerMember: "sonnet", fixerEffort: "high", fixerRounds: 1,
+      push: false, remote: "origin",
+    },
+    plans: {
+      enabled: "auto", dir: "docs/plans",
+      taskFiles: 2, taskLines: 60, splitFiles: 3, splitLines: 100,
+      milestoneTasks: 5, milestoneLines: 250, taskTurns: 12,
+      rounds: 2, regression: "milestone", publicApiGlobs: [],
+    },
+    force: { model: "", thinkingLevel: "" },
   };
 }
 
@@ -356,6 +389,7 @@ function validate(s: Settings, base: Settings, problems: string[], raw: Record<s
     problems.push("contextFit: must be a number from 0 to 1; default kept");
   }
   validatePlanning(s, base, problems, raw);
+  validateLocal(s, base, problems);
 }
 
 export type Loaded = { settings: Settings; problems: string[] };

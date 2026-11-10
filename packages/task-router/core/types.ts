@@ -103,6 +103,37 @@ export type RouterSettings = {
   randomize: { enabled: boolean; share: number };
   /** Spot-check reviews (T5.22): an accepted verdict asks for a fresh review with probability `share`. */
   spotCheck: { enabled: boolean; share: number };
+  // Local mode (design §3.0.1): declared in L1, inert until their milestones.
+  mode: "default" | "local";
+  hints: HintSettings;
+  overseer: OverseerSettings;
+  worktrees: WorktreeSettings;
+  mergeGate: MergeGateSettings;
+  plans: PlanSettings;
+  /** A settings force (design §3.6): every routed worker spawn runs on `model` (blank = none). */
+  force: { model: string; thinkingLevel: "" | ThinkingLevel };
+};
+
+/** A local-mode component's switch (design §2.1): "auto" = on in local mode only. */
+export type Toggle = "auto" | "on" | "off";
+export type HintSettings = {
+  enabled: Toggle; identicalCalls: number; noChangeWrites: number; alternations: number; repeatedErrors: number;
+  errorSimilarity: number; churnEdits: number; churnTurns: number; checkFailures: number; contextPercent: number;
+  stallTurns: number; contextSoftTokens: number; cooldownCalls: number; persistTrips: number; steer: "on" | "off";
+};
+export type OverseerSettings = {
+  member: string; effort: ThinkingLevel; fallbackMember: string; fallbackEffort: ThinkingLevel;
+  budget: number; steerBudget: number; timeoutSec: number; resubmits: number; tools: string[];
+};
+export type WorktreeSettings = { enabled: Toggle; root: string; branchPrefix: string; removeAfterMerge: boolean };
+export type MergeGateSettings = {
+  enabled: Toggle; mainBranches: string[]; maxDiffLines: number; maxDiffFiles: number; extraChecks: string[]; redRun: boolean;
+  rejectionsBeforeFixer: number; fixerMember: string; fixerEffort: ThinkingLevel; fixerRounds: number; push: boolean; remote: string;
+};
+export type PlanSettings = {
+  enabled: Toggle; dir: string; taskFiles: number; taskLines: number; splitFiles: number; splitLines: number;
+  milestoneTasks: number; milestoneLines: number; taskTurns: number; rounds: number;
+  regression: "milestone" | "plan" | "off"; publicApiGlobs: string[];
 };
 
 export type Ability = string; // built-in scales: "write", "read"

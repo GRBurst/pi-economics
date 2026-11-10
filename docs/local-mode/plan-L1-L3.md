@@ -614,7 +614,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 - **Check**: fast runner on `test/local-default.test.ts`; then `chk task-router typecheck-task-router`.
 - **Keep green**: KG-R. **ACs**: AC-N3 (inventory, bash), AC-N4.
 
-#### L1.T2 Settings keys, types, enums, mode helpers (AC-R1) `[ ] todo`
+#### L1.T2 Settings keys, types, enums, mode helpers (AC-R1) `[x] done`
 - **Goal**: `parseSettings` knows every local key; `mode` and toggles are validated.
 - **Files**: `core/types.ts`, `core/settings.ts` (`defaults()` + one call), `core/local/settings.ts` (new, enum rules), `core/local/mode.ts` (new: `LOCAL_COMPONENTS`, `isLocal`, `componentOn`), `test/local-settings.test.ts` (new).
 - **Depends**: L1.T1. **Parallel**: with L1.T7.
