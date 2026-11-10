@@ -11,6 +11,9 @@ import { installEffortGuard } from "./effort.ts";
 import { createFailover } from "./failover.ts";
 import { withFlags } from "./flags.ts";
 import { installFreshOnCold } from "./fresh.ts";
+import { describeForce } from "./force.ts";
+import { installForce } from "./forceinstall.ts";
+import type { ForcePi } from "./forceinstall.ts";
 import { installNudge } from "./nudge.ts";
 import type { NudgePi } from "./nudge.ts";
 import { createGate, runCheck } from "./gate.ts";
@@ -34,7 +37,7 @@ import { defaults } from "./settings.ts";
 import type { Settings } from "./settings.ts";
 
 export type ToolResult = { content: { type: "text"; text: string }[]; details: unknown; isError?: boolean };
-export type PiLike = NudgePi & {
+export type PiLike = NudgePi & ForcePi & {
   on(name: string, handler: (e: any, ctx: any) => unknown): void;
   registerTool(tool: {
     name: string; label: string; description: string; parameters: unknown;
@@ -172,15 +175,25 @@ export function install(pi: PiLike, deps: Deps) {
   // check there is load-order independent; until then (and without the API) the router is off.
   let active = false;
   let told = false;
-  // The status line (design §2.5, OQ12): local mode only; default mode never touches it.
+  // The status line (design §2.5, OQ12): local mode, and an active force (plan Q4); default mode without a force never touches
+  // it. A force can change outside an event with a ctx (a forced spawn counts down), so the last UI and main model are kept.
   const localModels = enabled(settings.models).filter((m) => m.route === "local").map((m) => m.model);
-  const showStatus = (ctx: any, model: any): void => {
-    const main = typeof model?.provider === "string" && typeof model?.id === "string" ? `${model.provider}/${model.id}` : undefined;
-    const t = statusText({ local: isLocal(settings), main, localModels });
-    if (t !== undefined) ctx?.ui?.setStatus?.("task-router", t);
+  let ui: any, main: string | undefined, shown = false;
+  const render = (): void => {
+    const f = force.port.active();
+    const t = statusText({ local: isLocal(settings), main, localModels, force: f && describeForce(f) });
+    if (t !== undefined) { ui?.setStatus?.("task-router", t); shown = true; }
+    else if (shown) { ui?.setStatus?.("task-router", undefined); shown = false; }
   };
+  const showStatus = (ctx: any, model: any): void => {
+    ui = ctx?.ui ?? ui;
+    main = typeof model?.provider === "string" && typeof model?.id === "string" ? `${model.provider}/${model.id}` : undefined;
+    render();
+  };
+  const force = installForce(pi, { settings, log, onChange: (ctx) => { ui = ctx?.ui ?? ui; render(); } });
   pi.on("session_start", (_e, ctx) => {
     track(ctx);
+    force.start(ctx, problems); // plan D8: its problem joins the one notification below
     showStatus(ctx, ctx?.model);
     active = hasSubagentsApiV1(api());
     if (active) { connect(); registerVerdict(); }

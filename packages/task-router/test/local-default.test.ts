@@ -23,7 +23,7 @@ test("default mode: inventory", () => {
   const h = harness();
   h.f.fire("session_start", {}, {});
   assert.deepEqual([...h.f.tools.keys()], ["task_verdict"]);
-  assert.deepEqual([...h.f.commands.keys()], []);
+  assert.deepEqual([...h.f.commands.keys()], ["force"]); // L2.T4: AC-N3's final form (plan X9)
   assert.deepEqual(h.f.hookNames(), TODAY_HOOKS);
 });
 

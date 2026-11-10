@@ -737,7 +737,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 - **Check**: fast runner (token-meter); `chk token-meter typecheck-token-meter log-contract`.
 - **Keep green**: KG-L. **ACs**: AC-L1 (force).
 
-#### L2.T4 `/force` command, session entries, settings force, status (AC-F3, AC-F4 part, AC-N3) `[ ] todo`
+#### L2.T4 `/force` command, session entries, settings force, status (AC-F3, AC-F4 part, AC-N3) `[x] done`
 - **Files**: `core/forceinstall.ts` (new, S6), `core/shell.ts` (create it; `force.start(ctx, problems)` in the `session_start`
   handler before the problems notification; status uses `describeForce`), `core/local/mode.ts` (`statusText` force part, if not in L1),
   `test/force-shell.test.ts` (new), `test/local-default.test.ts` (one assertion).
