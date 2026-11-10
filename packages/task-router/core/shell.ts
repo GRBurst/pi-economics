@@ -18,7 +18,8 @@ import type { Runner } from "./gate.ts";
 import { createGuards } from "./guards.ts";
 import { createOutcomeLog } from "./log.ts";
 import { cardSection, localSection } from "./prompt.ts";
-import { isLocal } from "./local/mode.ts";
+import { isLocal, statusText } from "./local/mode.ts";
+import { enabled } from "./members.ts";
 import { createPolicy } from "./policy.ts";
 import { spotCheckDue, spotCheckText } from "./spotcheck.ts";
 import type { Child, PolicyDeps } from "./policy.ts";
@@ -171,8 +172,16 @@ export function install(pi: PiLike, deps: Deps) {
   // check there is load-order independent; until then (and without the API) the router is off.
   let active = false;
   let told = false;
+  // The status line (design §2.5, OQ12): local mode only; default mode never touches it.
+  const localModels = enabled(settings.models).filter((m) => m.route === "local").map((m) => m.model);
+  const showStatus = (ctx: any, model: any): void => {
+    const main = typeof model?.provider === "string" && typeof model?.id === "string" ? `${model.provider}/${model.id}` : undefined;
+    const t = statusText({ local: isLocal(settings), main, localModels });
+    if (t !== undefined) ctx?.ui?.setStatus?.("task-router", t);
+  };
   pi.on("session_start", (_e, ctx) => {
     track(ctx);
+    showStatus(ctx, ctx?.model);
     active = hasSubagentsApiV1(api());
     if (active) { connect(); registerVerdict(); }
     else warnOnce(ctx, "actor:task-router", actorMissing("task-router", "task-router routing is off (no task_verdict, no task_cards, no nudge); the effort guard and fresh-on-cold stay on"));
@@ -182,6 +191,7 @@ export function install(pi: PiLike, deps: Deps) {
     if (ctx?.hasUI && ctx.ui?.notify) ctx.ui.notify(`task-router settings: ${problems.join("; ")}`, "warning");
     else for (const p of problems) console.warn(`task-router: ${p}`);
   });
+  if (isLocal(settings)) pi.on("model_select", (e, ctx) => { showStatus(ctx, e?.model); });
   pi.on("session_shutdown", () => { off.forEach((f) => f()); off = []; });
   installEffortGuard(pi, settings.maxBurstTurns);
   installFreshOnCold(pi, { settings, api, now: nowMs });
@@ -190,7 +200,8 @@ export function install(pi: PiLike, deps: Deps) {
     const sid = ctx?.sessionManager?.getSessionId?.() ?? sessionId;
     return !!sid && (api()?.list() ?? []).some((a) => a.sessionId === sid && a.name !== "main");
   };
-  installNudge(pi, { settings, isChild, enabled: () => active });
+  // LD3 (design §2.4): local mode replaces the nudge with hints; its steer messages would interrupt a local main mid-task.
+  installNudge(pi, { settings, isChild, enabled: () => active && !isLocal(settings) });
   pi.on("before_agent_start", (e, ctx) => {
     track(ctx);
     skills = e.systemPromptOptions?.skills ?? skills;
