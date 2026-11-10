@@ -778,7 +778,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   (so one spawn is forced and `set/used/expired` are written); add `"force"` to the required outcome events. Plant §11 → red; remove.
 - **Check**: `chk log-contract` red (plant) → green. **Keep green**: KG-L. **ACs**: AC-L1 (real path).
 
-#### L2.T7 Docs and milestone close `[ ] todo`
+#### L2.T7 Docs and milestone close `[x] done`
 - **Files**: `docs/pi-economics.md` (taskRouter: `/force` syntax and scopes, the settings `force`, precedence, overseers not
   forced (OQ5), the `force` event and spawn fields; Checks row of `task-router` unchanged).
 - **Depends**: L2.T1–T6. **Check**: `chk leak boundary`; L2 sweep KG-R, KG-L, KG-M, KG-P.

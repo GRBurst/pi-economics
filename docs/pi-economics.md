@@ -297,8 +297,8 @@ out) is read by the package's settings test and by the `module-eval` case
 `mode = "local"` runs in local mode too. The settings declare the local
 components `hints`, `overseer`, `worktrees`, `mergeGate` and `plans`, each with
 `enabled = "auto" | "on" | "off"` (default `"auto"`: on in local mode, off in
-default mode), and `force`; L1 validates them (a bad value is reported and its
-default kept), but none of them does anything yet. The keys, their defaults and
+default mode), and `force` (below); L1 validates them (a bad value is reported and its
+default kept), but none of the components does anything yet. The keys, their defaults and
 the messages are in `packages/task-router/core/settings.ts` and
 `packages/task-router/core/local/settings.ts`. In local mode:
 
@@ -318,9 +318,42 @@ the messages are in `packages/task-router/core/settings.ts` and
   `model_select`).
 
 With `mode = "default"` and every component `"auto"`, the router registers the
-same tools and hooks as before, the section is byte-identical, outcome lines
-carry no new key, and `router-golden` is unchanged (`test/local-default.test.ts`
-pins the inventory).
+same tools and hooks as before plus the `/force` command, the section is
+byte-identical, outcome lines carry no new key while no force is active, and
+`router-golden` is unchanged (`test/local-default.test.ts` pins the inventory).
+
+**Force override (milestone L2).** The user, never the main model, can fix the
+model (and effort) of routed spawns, in either mode:
+
+    /force <model> [effort] [next[:N] | session]
+    /force off
+    /force
+
+`<model>` is a member name (its `model`) or `provider/id`, resolved through pi's
+model registry, so models outside the table and effort `max` are accepted; an
+unknown model is refused with the first ten available ones, and the previous
+force stays. Without `effort` the routed effort is kept. The scope defaults to
+`session`; `next` is one spawn, `next:N` N spawns, then the force expires.
+`/force off` clears it, `/force` alone shows it. The command force is kept as a
+session entry (`task-router/force`), so a resumed session or a reload finds it.
+The settings key `force = { model; thinkingLevel; }` (`model = ""`, the
+default, is no force) forces every session; it is resolved once at
+`session_start`, and an unknown model is a reported problem with the force
+inactive. A command force takes precedence over the settings force while it
+lasts. While a force is active, every routed spawn (one with a task card) is
+planned as usual, without the spawner's `model` and `thinkingLevel`, then runs
+on the forced model: a member through its
+slot, as an explicit `model` does, without failover to another member; a
+non-member at once, with no slot accounting. Overseer reviews are not forced
+(they use `overseer.*`), and with `routing = false` nothing is forced; `/force`
+says both. The status line `task-router` shows `force <model> [effort]
+[(<N> left)]`, after `local` in local mode. Logs: a `force` outcome line
+(`taskId: ""`, `action` `set`, `clear`, `used`, `expired` or `rejected`,
+`source` `command` or `settings`, optional `model`, `effort`, `reason`), and a
+forced `spawn` carries `forced: true`, `forceSource` and the routed
+counterfactual `routedModel`, `routedEffort` (`packages/token-meter/LOGS.md`).
+The code: `packages/task-router/core/force.ts`, `core/forceinstall.ts` and the
+force branch of `core/policy.ts`.
 
 **Scout gate (Group 6, 2026-10-28).** Haiku at medium scored 0.646 against
 Sonnet high's 0.917 (threshold 0.825, H6.4; two runs per task and arm), so
