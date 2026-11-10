@@ -355,3 +355,15 @@ test("render: the fold ledger section names the net formula and the counterfactu
   assert.match(md, /v3 fixed/);
   assert.match(renderAnalysis(analyse({ meter: [turn("x", T0, { arm: "------" })], outcomes: [], guards: [], assignments: [] })), /no folds in Claude sessions/);
 });
+
+// Local mode L2.T3 (plan D20): session-level lines (force, taskId "") are no task events; they never count as unjoinable.
+test("quality: session-level lines are no data-quality defect", () => {
+  const item = (w: Logs) => analyse(w).quality.unjoinable.find((x) => x.what === "task events without a spawn")!;
+  const base = world();
+  base.outcomes.push({ v: 1, ts: iso(T0), event: "verdict", taskId: "t9", verdict: "accepted" }); // one real defect
+  const w: Logs = JSON.parse(JSON.stringify(base));
+  for (const action of ["set", "used", "expired", "rejected", "clear"])
+    w.outcomes.push({ v: 1, ts: iso(T0 + 61 * MIN), event: "force", taskId: "", action, source: "command", model: "anthropic/claude-sonnet-5-5" });
+  assert.deepEqual(item(w), item(base));
+  assert.equal(item(base).n, 1);
+});

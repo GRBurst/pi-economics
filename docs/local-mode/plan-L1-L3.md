@@ -207,8 +207,8 @@ failure, not a load error.
 | L1.T5 LD3 under the experiments flag | use `settings.delegation.rule === "on"` to pick `cardSection` in local mode | "LD3: delegationRule on, local → localSection" | [x] |
 | L1.T6 nudge stays on in default mode | `enabled: () => false` | existing `test/delegation.test.ts` "main session: 6 mechanical calls …" | [x] |
 | L1.T7 module-eval | (natural) option declared without config | three cases FAIL | [x] |
-| L2.T3 contract `force` taskId | rule `str` for all events | `test/contract.test.ts` › "force lines" | [ ] |
-| L2.T3 analyse filter | revert to `e?.event !== "spawn"` | `test/analyse.test.ts` › "session-level lines are no data-quality defect" | [ ] |
+| L2.T3 contract `force` taskId | rule `str` for all events | `test/contract.test.ts` › "force lines" | [x] |
+| L2.T3 analyse filter | revert to `e?.event !== "spawn"` | `test/analyse.test.ts` › "session-level lines are no data-quality defect" | [x] |
 | L2.T6 log-contract `force` | comment out `log.force(...)` in `used()` and `set` | `log-contract` "outcomes: no force event" | [ ] |
 | L3.T8 trip guard never blocks | make the trip guard return its hint text | "AC-H6 no child call is blocked" | [ ] |
 | L3.T9 log-contract `hint` | drop the `log.hint` call in `installLocal` | `log-contract` "outcomes: no hint event" | [ ] |
@@ -724,7 +724,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 - **GREEN**: S8 (L2 part). **Check**: fast runner; `chk task-router typecheck-task-router`.
 - **Keep green**: KG-R, `test/outcome.test.ts` unmodified, L1.T1 "outcome keys". **ACs**: AC-L2 (force).
 
-#### L2.T3 Contract, analyse filter, LOGS.md (token-meter) (AC-L1) `[ ] todo`
+#### L2.T3 Contract, analyse filter, LOGS.md (token-meter) (AC-L1) `[x] done`
 - **Files**: `packages/token-meter/core/contract.ts`, `packages/token-meter/core/analyse.ts`, `packages/token-meter/test/contract.test.ts`, `packages/token-meter/test/analyse.test.ts`, `packages/token-meter/LOGS.md`.
 - **Depends**: L1 done. **Parallel**: with L2.T1, L2.T2.
 - **Read first**: `core/contract.ts`, `test/contract.test.ts`, `test/world.ts`, `core/analyse.ts` (~l.420–450), `LOGS.md` §task-router.

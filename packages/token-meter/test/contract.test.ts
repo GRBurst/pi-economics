@@ -107,3 +107,40 @@ for (const [i, bad, field] of [
     assert.deepEqual(fields(check(w)), [`outcomes.${field}`]);
   });
 }
+
+// Local mode L2.T3 (design §3.0.3, AC-L1, plan D21): the session-level `force` line, with `taskId: ""` (only there), and a
+// forced spawn's optional fields.
+const FORCE = { v: 1, ts: iso(T0 + 61 * MIN), event: "force", taskId: "", action: "set", source: "command", model: "anthropic/claude-sonnet-5-5", effort: "high" };
+
+test("force lines: a valid line passes, with taskId \"\"; action and source are required enums; model, effort, reason typed", () => {
+  const w = world();
+  w.outcomes.push(FORCE, { ...FORCE, action: "rejected", source: "settings", model: "nosuch/x", effort: undefined, reason: "unknown-model" });
+  w.outcomes.push({ v: 1, ts: iso(T0 + 61 * MIN), event: "force", taskId: "", action: "clear", source: "command" });
+  w.outcomes.push({ v: 1, ts: iso(T0 + 61 * MIN), event: "force", taskId: "", action: "rejected", source: "command", reason: "usage" });
+  assert.deepEqual(check(JSON.parse(JSON.stringify(w))), []);
+  for (const [bad, field] of [
+    [{ action: undefined }, "action"], [{ action: "maybe" }, "action"], [{ source: undefined }, "source"], [{ source: "user" }, "source"],
+    [{ model: "" }, "model"], [{ effort: "huge" }, "effort"], [{ reason: "nope" }, "reason"], [{ taskId: undefined }, "taskId"], [{ taskId: 3 }, "taskId"],
+  ] as const) {
+    const x = world();
+    x.outcomes.push(JSON.parse(JSON.stringify({ ...FORCE, ...bad })));
+    assert.deepEqual(fields(check(x)), [`outcomes.${field}`], JSON.stringify(bad));
+  }
+});
+
+test("force lines: only a force line may have an empty taskId", () => {
+  const w = world();
+  w.outcomes.push({ v: 1, ts: iso(T0 + 80 * MIN), event: "verdict", taskId: "", verdict: "accepted" });
+  assert.deepEqual(fields(check(w)), ["outcomes.taskId"]);
+});
+
+test("force lines: a forced spawn's fields pass when valid and are never required; forced must be true", () => {
+  const w = world();
+  Object.assign(w.outcomes[0], { forced: true, forceSource: "settings", routedModel: "llama/qwen3.8", routedEffort: "xhigh" });
+  assert.deepEqual(check(w), []);
+  for (const [bad, field] of [[{ forced: "yes" }, "forced"], [{ forced: false }, "forced"], [{ forceSource: "user" }, "forceSource"], [{ routedModel: "" }, "routedModel"], [{ routedEffort: 3 }, "routedEffort"]] as const) {
+    const x = world();
+    Object.assign(x.outcomes[0], bad);
+    assert.deepEqual(fields(check(x)), [`outcomes.${field}`], JSON.stringify(bad));
+  }
+});

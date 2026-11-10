@@ -29,7 +29,9 @@ const METER: Rule[] = [
 ];
 const OUTCOMES: Rule[] = [
   versioned,
-  ...every({ ts: time, event: oneOf("spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck"), taskId: str }, "every outcome event"),
+  ...every({ ts: time, event: oneOf("spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck", "force") }, "every outcome event"),
+  // A session-level line (task-router local mode, design §3.0.3) has `taskId: ""`; only `force` is one.
+  { field: "taskId", why: "every outcome event (force: a string, may be empty)", ok: (v, l) => (l?.event === "force" ? typeof v === "string" : str(v)) },
   ...every({ kind: str, workerTier: str, workerEffort: str, sessionId: str, parentSessionId: str }, "spawn: tier mix, child-session join", (l) => l.event === "spawn"),
   ...optional({ assigned: oneOf("router", "random"), routeBase: str, unresolved: (v) => typeof v === "boolean", cwd: str, reviewOf: str }, "spawn: randomized routing, unresolved cards, working directory, spot-check review", (l) => l.event === "spawn"),
   ...every({ verdict: oneOf("accepted", "partial", "rejected", "unjudged") }, "verdict", (l) => l.event === "verdict"),
@@ -43,6 +45,10 @@ const OUTCOMES: Rule[] = [
   }, "spawn: requirement, levels, started member, model, effort, wait (router 2026-10-17)", (l) => l.event === "spawn"),
   ...optional({ fromModel: str, toModel: str }, "reroute/escalate: the models on both routes (router 2026-10-17); escalate.fromModel absent when the attempt is unknown", (l) => l.event === "escalate" || l.event === "reroute"),
   ...optional({ ability: str, fromLevel: int0, toLevel: int0 }, "escalate: ability and levels (router 2026-10-17); fromLevel absent when the attempt is unknown", (l) => l.event === "escalate"),
+  // task-router local mode L2 (design §3.6): the force override's line and a forced spawn's fields
+  ...every({ action: oneOf("set", "clear", "used", "expired", "rejected"), source: oneOf("command", "settings") }, "force", (l) => l.event === "force"),
+  ...optional({ model: str, effort: oneOf("off", "minimal", "low", "medium", "high", "xhigh", "max"), reason: oneOf("unknown-model", "usage") }, "force", (l) => l.event === "force"),
+  ...optional({ forced: (v) => v === true, forceSource: oneOf("command", "settings"), routedModel: str, routedEffort: str }, "spawn: a forced spawn", (l) => l.event === "spawn"),
 ];
 const ASSIGNMENTS: Rule[] = [
   versioned,

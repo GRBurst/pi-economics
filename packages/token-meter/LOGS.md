@@ -98,17 +98,19 @@ the warm gets its own line. A warm aborted before its headers gets no line.
 
 ## task-router/outcomes/YYYY-MM.jsonl
 
-Common: `v` (int), `ts` (ISO), `event`, `taskId` (subagent name) — all required.
+Common: `v` (int), `ts` (ISO), `event`, `taskId` (subagent name; `""` on `force` lines, which belong to the session,
+not to a task) — all required.
 
 | event | fields (required **bold**) | meaning |
 | --- | --- | --- |
-| `spawn` | **`kind`**, **`workerTier`** (`qwen` \| `haiku` \| `T1` \| `T2` \| …), **`workerEffort`**, `reviewTier`, `reviewEffort`, `cardHash`, `base`, `importance`, `reasons` (string[]), `arm`*, **`sessionId`** (child), **`parentSessionId`**, `attemptOf`, `assigned`† (`router` \| `random`), `routeBase`† (tier), `unresolved`† (`true`), `reviewOf`†, `ability`†, `level`† (int ≥ 0), `draft`† (`true`), `workerLevel`†, `reviewLevel`† (int ≥ 0), `workerMember`†, `workerModel`†, `startEffort`†, `waitMs`† (≥ 0) | a routed (or unrouted) spawn |
+| `spawn` | **`kind`**, **`workerTier`** (`qwen` \| `haiku` \| `T1` \| `T2` \| …), **`workerEffort`**, `reviewTier`, `reviewEffort`, `cardHash`, `base`, `importance`, `reasons` (string[]), `arm`*, **`sessionId`** (child), **`parentSessionId`**, `attemptOf`, `assigned`† (`router` \| `random`), `routeBase`† (tier), `unresolved`† (`true`), `reviewOf`†, `ability`†, `level`† (int ≥ 0), `draft`† (`true`), `workerLevel`†, `reviewLevel`† (int ≥ 0), `workerMember`†, `workerModel`†, `startEffort`†, `waitMs`† (≥ 0), `forced`‡ (`true`), `forceSource`‡ (`command` \| `settings`), `routedModel`‡, `routedEffort`‡ | a routed (or unrouted) spawn |
 | `reroute` | **`from`**, **`to`**, `reason`, `fromModel`†, `toModel`† | provider fallback (rate limit, outage) |
 | `check` | **`exit`**, `durationMs` | the card's check ran after the child reported |
 | `corrective` | — | one corrective message to the child |
 | `escalate` | **`from`**, **`to`**, `attemptOf`, `fromModel`†, `toModel`†, `ability`†, `fromLevel`†, `toLevel`† (int ≥ 0) | re-spawn one level above the failed attempt (the higher of its planned and ran member's levels on `ability`) |
 | `verdict` | **`verdict`** (`accepted` \| `partial` \| `rejected` \| `unjudged`), `note`, `reviewOf`† | the parent's judgement; `unjudged` when killed without one |
 | `spotcheck` | `requested` (`true`) | an accepted verdict was drawn for a spot-check review (`spotCheck.share`); the parent was told to spawn a `review` card with `reviewOf` |
+| `force` | **`action`** (`set` \| `clear` \| `used` \| `expired` \| `rejected`), **`source`** (`command` \| `settings`), `model`, `effort`, `reason` (`unknown-model` \| `usage`) | the force override (task-router local mode): `/force` set, cleared or rejected; a forced spawn used it; a `next:N` force ran out; `taskId` is `""` |
 
 \* `arm` is required on a spawn whose parent session (or its root) has an assignment.
 
@@ -137,6 +139,13 @@ is in memory: a restart, a hand-off, a mistyped `attemptOf`); `fromModel` and `f
 on `ability` (D7), so it exceeds the level of `from`/`fromModel` when the planned member rates higher on `ability`
 (a write-0 plan that fell back to Sonnet logs `from: "T1"`, `fromLevel: 1`).
 `pi-analyse` counts an escalation in its failed task's row (card kind × `workerTier`).
+
+‡ Optional, added with task-router's force override (local mode L2, no `v` bump); present only on a forced spawn.
+`forced` is `true`, `forceSource` says whether `/force` or the settings `force` applied, and `routedModel`/`routedEffort`
+are what routing would have chosen (the planned worker leg). `workerModel`/`startEffort` are the forced model and effort;
+a forced model outside the router's members has no `workerMember`. A `force` line has no task: `pi-analyse` counts
+only the task events (`reroute`, `check`, `corrective`, `escalate`, `verdict`, `spotcheck`) as "task events without a
+spawn".
 
 ### Older lines: the old → new mapping
 

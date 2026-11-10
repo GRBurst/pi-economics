@@ -415,6 +415,10 @@ export type QualitySection = { period: Period & { first?: string; last?: string 
   piQuota: { q5h: { pi: number; total: number; share: number }; q7d: { pi: number; total: number; share: number } };
   problems: Problem[] };
 
+/** The outcome events of a delegated task, which join its spawn by `taskId`; session-level lines (task-router's `force`,
+ *  `taskId: ""`) are none (plan D20). */
+const TASK_EVENTS = new Set(["reroute", "check", "corrective", "escalate", "verdict", "spotcheck"]);
+
 function quality(all: Logs, logs: Logs, period: Period): QualitySection {
   const meter = logs.meter.filter((l) => isLine(l) && typeof l.sessionId === "string");
   const ts = (ls: any[]) => ls.filter(isLine).map((l) => l.ts as string).sort();
@@ -443,7 +447,7 @@ function quality(all: Logs, logs: Logs, period: Period): QualitySection {
       item("child sessions without a spawn event (their $ is in no tier)", unspawned, (s) => String(s)),
       item("spawns without a child session id", spawns.filter((e) => typeof e.sessionId !== "string"), (e) => e.taskId),
       item("spawns whose child session has no meter line", spawns.filter((e) => typeof e.sessionId === "string" && !meterSessions.has(e.sessionId)), (e) => e.sessionId),
-      item("task events without a spawn", logs.outcomes.filter((e) => e?.event !== "spawn" && !spawnTasks.has(e?.taskId)), (e) => String(e?.taskId)),
+      item("task events without a spawn", logs.outcomes.filter((e) => TASK_EVENTS.has(e?.event) && !spawnTasks.has(e?.taskId)), (e) => String(e?.taskId)),
       item("guard events of sessions without meter lines", logs.guards.filter((e) => !meterSessions.has(e?.sessionId)), (e) => String(e?.sessionId)),
       item("assignments of sessions without meter lines", inPer.filter((r) => !meterSessions.has(r?.sessionId)), (r) => String(r?.sessionId)),
     ],
