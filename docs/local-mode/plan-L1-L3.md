@@ -785,7 +785,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 
 ### L3 — Hints and tripwires
 
-#### L3.T1 Records, keys and the first detectors (AC-H1 part, AC-H3) `[ ] todo`
+#### L3.T1 Records, keys and the first detectors (AC-H1 part, AC-H3) `[x] done`
 - **Files**: `core/local/tripwires.ts` (new: `TRIPS`, `CallRecord`, `windowSize`, `push`, `stableJson`, `callKey`, `errSig`,
   `trigramJaccard`, `changed`, identical-call, no-change-writes, alternation), `test/local-tripwires.test.ts` (new).
 - **Depends**: L1 done. **Parallel**: with L3.T4, L3.T5, L3.T6.
