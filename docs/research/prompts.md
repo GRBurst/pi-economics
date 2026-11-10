@@ -2,7 +2,8 @@
 
 The six Gemini Deep Research prompts behind the reports, as sent. Prompts 1–3 went out first; 4–6 after the
 decision to review plans and merges with Opus. The evidence rules at the end were meant for 4–6; the user's
-own prompt carried similar rules.
+own prompt carried similar rules. Prompt 7 was added with `docs/local-mode/design.md` (its OQ10) and has not
+been sent yet; send it with the evidence rules appended.
 
 | Prompt | Report |
 |---|---|
@@ -12,6 +13,7 @@ own prompt carried similar rules.
 | 4 | `two-tier-agent-planning-architecture.md` |
 | 5 | `agentic-plan-and-code-sizing.md` |
 | 6 | `frontier-model-plan-review-protocol.md` |
+| 7 | not yet run |
 
 ## 1. Open-weight routing models that run on a CPU
 
@@ -114,7 +116,22 @@ Questions:
 5. Failure modes: anchoring on the weak model's framing, rubber-stamping, over-specification that a weak executor cannot follow.
 ```
 
-## Evidence rules (for prompts 4–6)
+## 7. Breaking loops of small local coding agents: hints, blocks, resets
+
+```
+Research how a deterministic harness should detect and break loops and stalls of a small local coding agent, and whether advisory feedback works or the harness must block.
+
+Setting: a local Qwen 3.x-class model (~30B, one inference slot) drives a coding agent and does most work itself. The harness sees every tool call and result. It detects tripwires (the same tool call 3 times; writes that leave the file unchanged; an A-B-A-B call pattern; the same error twice; the same file edited 3 times in 4 turns; a check failing twice; context nearly full without progress) and appends a short fixed note to the tool result. If the pattern persists, a frontier model (Claude Opus) is asked once for typed, advisory findings. No human is involved.
+
+Questions:
+1. Adherence: do small open models (7B-35B) change behaviour after harness feedback injected into tool results or system reminders? Compare with blocking the call (a tool error), forcing a context reset or summary, and re-prompting. Which intervention ends a loop most often, and at what cost?
+2. Detectors: which loop and stall detectors have measured precision and recall in agent trajectories (exact call repeats, n-gram or alternation patterns, error-text similarity, no-progress counters, learned trajectory monitors)? What thresholds were used, and how often do they fire on productive work (false positives)?
+3. Progress: how do agent harnesses or studies define progress deterministically (tree changes, test results, new information read), and which definition best separates stuck from slow?
+4. Escalation: after a detector fires, when is escalating to a stronger model (advice only, or taking over the subtask) better than letting the small model retry? Evidence on advice-only overseers versus handoff.
+5. Repetition across a session: do repeated hints lose effect (habituation), and how should cooldowns or escalating severity be set?
+```
+
+## Evidence rules (for prompts 4–7)
 
 ```
 Evidence rules:
