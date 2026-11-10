@@ -17,7 +17,8 @@ import { createGate, runCheck } from "./gate.ts";
 import type { Runner } from "./gate.ts";
 import { createGuards } from "./guards.ts";
 import { createOutcomeLog } from "./log.ts";
-import { cardSection } from "./prompt.ts";
+import { cardSection, localSection } from "./prompt.ts";
+import { isLocal } from "./local/mode.ts";
 import { createPolicy } from "./policy.ts";
 import { spotCheckDue, spotCheckText } from "./spotcheck.ts";
 import type { Child, PolicyDeps } from "./policy.ts";
@@ -197,7 +198,10 @@ export function install(pi: PiLike, deps: Deps) {
     if (!sections) return;
     if (!active) { delete sections.task_cards; return; }
     // A child inherits its parent's arm, so the delegationRule flag reads "on" there too: the rule is the main session's.
-    if (settings.routing) sections.task_cards = cardSection(settings, settings.delegation.rule === "on" && !isChild(ctx));
+    // Local mode (design §2.3, LD3): the main gets the local section and never the rule, whatever the arm says; a child that
+    // loads the router anyway keeps today's section without the rule (plan D5).
+    const local = isLocal(settings), child = isChild(ctx);
+    if (settings.routing) sections.task_cards = local && !child ? localSection(settings) : cardSection(settings, !local && settings.delegation.rule === "on" && !child);
     else delete sections.task_cards;
   });
 

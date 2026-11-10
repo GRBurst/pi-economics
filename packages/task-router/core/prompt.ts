@@ -43,3 +43,24 @@ ${JSON.stringify(example, null, 2)}
 
 A rejected card comes back with the reason. Passing model/thinkingLevel is only accepted at or above the routed level; an explicit model waits for its own slot and is never replaced by another.`;
 }
+
+/** The local section's example card: a debug-design card, the kind a local main hands off (design §2.3). One line. */
+const LOCAL_EXAMPLE = {
+  kind: "debug-design", files: ["src/a.ts"], check: "npm test -- a", acceptance: ["a() handles empty input"],
+  t0: Object.fromEntries(T0_KEYS.map((k) => [k, true])), t2: [],
+};
+/** The main session's section in local mode (design §2.3, LD3; text pinned by test/local-prompt.test.ts, AC-R3): rules, field
+ *  names and one example, no strategy prose, no per-turn values (cache-stable). The branch and plan lines arrive with their
+ *  components (L5, L6, L7; plan D4). */
+export function localSection(s: RouterSettings): string {
+  return `## Local mode
+
+You do most of the work yourself. Spawn a subagent only when a task needs more ability than yours
+(design, security, concurrency, an unknown root cause) or when a <router-hint> says so. After spawning,
+end your turn; the child's report wakes you.
+<router-hint> notes report what the router measured. Act on them.
+
+Task card (spawn_subagent \`task\`; do not set model or thinkingLevel):
+${cardSchema(s)}
+${JSON.stringify(LOCAL_EXAMPLE)}`;
+}
