@@ -714,7 +714,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   combinations; `rebuild` takes the last `FORCE_TYPE` entry and ignores other custom types and non-custom entries.
 - **GREEN**: S5. **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R.
 
-#### L2.T2 Force log lines (router side) (AC-L2) `[ ] todo`
+#### L2.T2 Force log lines (router side) (AC-L2) `[x] done`
 - **Files**: `core/outcome.ts` (KEYS, `forceEvent`, `spawnEvent` forced keys, empty `workerMember` omitted), `core/log.ts` (`force`, `spawn` passes `forced`), `test/force-log.test.ts` (new).
 - **Depends**: L1 done. **Parallel**: with L2.T1, L2.T3.
 - **RED**: `forceEvent` for each action has `taskId: ""`, `event: "force"`; `spawnEvent` with `forced` has the four keys,

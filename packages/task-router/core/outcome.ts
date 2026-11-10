@@ -1,7 +1,7 @@
 // Outcome log events (spec §5.2.7, R2): allowlisted keys, bounded strings, no card or prompt text.
 import { createHash } from "node:crypto";
 import { isAbsolute, join } from "node:path";
-import type { Card, LoggedPlan, Start } from "./types.ts";
+import type { Card, LoggedPlan, Start, ThinkingLevel } from "./types.ts";
 
 export type OutcomeEvent = Record<string, string | number | boolean | string[]>;
 export type Verdict = "accepted" | "partial" | "rejected" | "unjudged";
@@ -17,6 +17,8 @@ const KEYS = [
   // optional, router 2026-10-17 (spec §6.4): requirement, levels, started member, model, effort, wait; reroute/escalate models, levels
   "ability", "level", "draft", "workerLevel", "reviewLevel", "workerMember", "workerModel", "startEffort", "waitMs",
   "fromModel", "toModel", "fromLevel", "toLevel",
+  // local mode L2 (design §3.0.3): the force line; a forced spawn's source and what routing would have chosen
+  "action", "source", "model", "effort", "forced", "forceSource", "routedModel", "routedEffort",
 ];
 const MAX_STR = 256;
 const MAX_ITEMS = 20;
@@ -39,17 +41,19 @@ const base = (event: string, now: Date, taskId: string) => ({ v: SCHEMA_VERSION,
 /** Hash of the card; the card text itself is never logged. */
 export const cardHash = (c: Card): string => createHash("sha256").update(JSON.stringify(c)).digest("hex").slice(0, 16);
 
-/** `workerTier`/`workerEffort` are the planned leg (RD2); `start` is what the child started on (a routed spawn only). */
-export const spawnEvent = (i: { now: Date; taskId: string; card: Card; plan: LoggedPlan; start?: Start; arm?: string; sessionId?: string; parentSessionId?: string; attemptOf?: string; unresolved?: boolean }) =>
+/** `workerTier`/`workerEffort` are the planned leg (RD2); `start` is what the child started on (a routed spawn only; a forced
+ *  non-member has no member, so no `workerMember`, plan D10); `forced`: the force it ran under and the routed counterfactual. */
+export const spawnEvent = (i: { now: Date; taskId: string; card: Card; plan: LoggedPlan; start?: Start; arm?: string; sessionId?: string; parentSessionId?: string; attemptOf?: string; unresolved?: boolean; forced?: Forced }) =>
   finish({
     ...base("spawn", i.now, i.taskId), cardHash: cardHash(i.card), kind: i.card.kind,
     workerTier: i.plan.worker.tier, workerEffort: i.plan.worker.effort,
     reviewTier: i.plan.review?.tier, reviewEffort: i.plan.review?.effort,
     ability: i.plan.ability, level: i.plan.level, draft: i.plan.draft, workerLevel: i.plan.worker.level, reviewLevel: i.plan.review?.level,
-    workerMember: i.start?.member, workerModel: i.start?.model, startEffort: i.start?.effort, waitMs: i.start?.waitMs,
+    workerMember: i.start?.member || undefined, workerModel: i.start?.model, startEffort: i.start?.effort, waitMs: i.start?.waitMs,
     base: i.plan.base, importance: i.plan.importance, reasons: i.plan.reasons,
     arm: i.arm, sessionId: i.sessionId, parentSessionId: i.parentSessionId, attemptOf: i.attemptOf ?? i.card.attemptOf,
     assigned: i.plan.assigned, routeBase: i.plan.routeBase, unresolved: i.unresolved || undefined, reviewOf: i.card.reviewOf,
+    ...(i.forced ? { forced: true, forceSource: i.forced.source, routedModel: i.forced.routedModel, routedEffort: i.forced.routedEffort } : {}),
   });
 /** A failover's line: the routes and, when known, the models on both (spec §6.4). */
 export const rerouteEvent = (i: { now: Date; taskId: string; from: string; to: string; reason: string; fromModel?: string; toModel?: string }) =>
@@ -67,6 +71,12 @@ export const escalateEvent = (i: { now: Date; taskId: string; from: string; to: 
 export const verdictEvent = (i: { now: Date; taskId: string; verdict: Verdict; note?: string; reviewOf?: string }) =>
   finish({ ...base("verdict", i.now, i.taskId), verdict: i.verdict, note: i.note, reviewOf: i.reviewOf });
 export const spotcheckEvent = (i: { now: Date; taskId: string }) => finish({ ...base("spotcheck", i.now, i.taskId), requested: true });
+export type ForceAction = "set" | "clear" | "used" | "expired" | "rejected";
+export type ForceSource = "command" | "settings";
+export type Forced = { source: ForceSource; routedModel: string; routedEffort: ThinkingLevel };
+/** A session-level line (design §3.0.3): `taskId: ""`; `model` is a model reference, never the command's text. */
+export const forceEvent = (i: { now: Date; action: ForceAction; source: ForceSource; model?: string; effort?: string; reason?: "unknown-model" | "usage" }) =>
+  finish({ ...base("force", i.now, ""), action: i.action, source: i.source, model: i.model, effort: i.effort, reason: i.reason });
 
 export const serializeEvent = (e: OutcomeEvent): string => `${JSON.stringify(e)}\n`;
 

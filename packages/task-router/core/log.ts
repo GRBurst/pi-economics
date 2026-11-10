@@ -1,5 +1,5 @@
 // Outcome log with verdict tracking: a task killed without a verdict is logged `unjudged`.
-import { checkEvent, correctiveEvent, escalateEvent, rerouteEvent, spawnEvent, spotcheckEvent, verdictEvent } from "./outcome.ts";
+import { checkEvent, correctiveEvent, escalateEvent, forceEvent, rerouteEvent, spawnEvent, spotcheckEvent, verdictEvent } from "./outcome.ts";
 import type { EscalateFields, OutcomeEvent, Verdict } from "./outcome.ts";
 
 export type OutcomeLogDeps = { append: (e: OutcomeEvent) => void; now: () => Date };
@@ -26,6 +26,7 @@ export function createOutcomeLog(d: OutcomeLogDeps) {
       return true;
     },
     spotcheck(taskId: string) { w(spotcheckEvent({ now: d.now(), taskId })); },
+    force(i: Omit<Parameters<typeof forceEvent>[0], "now">) { w(forceEvent({ ...i, now: d.now() })); },
     killed(taskId: string) { if (open.delete(taskId)) w(verdictEvent({ now: d.now(), taskId, verdict: "unjudged" })); },
   };
 }
