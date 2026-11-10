@@ -74,8 +74,10 @@ async function mainSession(sid: string, child: string, usd: number): Promise<voi
   expFire("session_start", {}, sid);
   tr.clock.t = clock.t;
   for (let i = 0; i < 6; i++) turn(sid, undefined, undefined, usd);
-  // task-router: a routed spawn, the child's session id, its check and the verdict
+  // task-router: a forced spawn (`/force` for the next one: set, used, expired), the child's session id, its check and the verdict
   tr.clock.t = clock.t;
+  const registry = { find: (p: string, id: string) => ({ provider: p, id }), getAvailable: () => [] };
+  await tr.f.commands.get("force")!.handler("sonnet high next:1", { modelRegistry: registry, ui: { notify: () => {} } });
   const r = await tr.a.spawn({ name: child, task: card() }, { sessionId: sid });
   assert.ok(!("reject" in r), `${child}: spawn rejected`);
   tr.a.emit({ type: "spawn", name: child, by: "main", parent: "main", childSessionId: child, ts: clock.t });
@@ -128,7 +130,7 @@ for (const [name, lines] of Object.entries(logs)) {
   const old = lines.filter((l) => l.v !== 1);
   if (old.length) failures.push(`${name}: ${old.length} line(s) without schema version v=1, e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
 }
-for (const e of ["spawn", "check", "verdict", "reroute", "escalate"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
+for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
 for (const e of ["correction", "rating", "peek-after-mask"]) if (!logs.guards.some((l) => l.event === e)) failures.push(`guards: no ${e} event`);
 
 // --- pi-analyse --check over the produced lines, then the full analysis

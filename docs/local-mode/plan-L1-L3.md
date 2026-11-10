@@ -209,7 +209,7 @@ failure, not a load error.
 | L1.T7 module-eval | (natural) option declared without config | three cases FAIL | [x] |
 | L2.T3 contract `force` taskId | rule `str` for all events | `test/contract.test.ts` › "force lines" | [x] |
 | L2.T3 analyse filter | revert to `e?.event !== "spawn"` | `test/analyse.test.ts` › "session-level lines are no data-quality defect" | [x] |
-| L2.T6 log-contract `force` | comment out `log.force(...)` in `used()` and `set` | `log-contract` "outcomes: no force event" | [ ] |
+| L2.T6 log-contract `force` | comment out `log.force(...)` in `used()` and `set` | `log-contract` "outcomes: no force event" | [x] |
 | L3.T8 trip guard never blocks | make the trip guard return its hint text | "AC-H6 no child call is blocked" | [ ] |
 | L3.T9 log-contract `hint` | drop the `log.hint` call in `installLocal` | `log-contract` "outcomes: no hint event" | [ ] |
 
@@ -771,7 +771,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 - **Check**: fast runner; `chk task-router typecheck-task-router router-golden`.
 - **Keep green**: KG-R (all `policy.test.ts`, `failover.test.ts`, `explicit.test.ts` unmodified). **ACs**: AC-F1, AC-F2, AC-F4, AC-F5.
 
-#### L2.T6 Log contract over the real force path `[ ] todo`
+#### L2.T6 Log contract over the real force path `[x] done`
 - **Files**: `checks/log-contract/contract.ts`.
 - **Depends**: L2.T3, L2.T5.
 - **RED/plant**: in `mainSession`, before the first spawn, `tr.f.commands.get("force").handler("sonnet high next:1", ctxWithRegistry)`
