@@ -628,7 +628,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
 - **Check**: fast runner `test/local-settings.test.ts` red → green; `chk task-router typecheck-task-router router-golden`.
 - **Keep green**: KG-R (incl. `test/settings.test.ts` unmodified). **ACs**: AC-R1.
 
-#### L1.T3 Value and member validation (design §3.0.1 rules 3–6) `[ ] todo`
+#### L1.T3 Value and member validation (design §3.0.1 rules 3–6) `[x] done`
 - **Goal**: counts, ranges, lists and member references produce problems; default mode untouched (D2).
 - **Files**: `core/local/settings.ts`, `test/local-settings.test.ts`.
 - **Depends**: L1.T2. **Parallel**: with L1.T4, L1.T5, L1.T7.

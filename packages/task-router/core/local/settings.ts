@@ -1,8 +1,8 @@
 // Local-mode settings rules (design §3.0.1; plan D1–D3). `defaults()` owns the keys (so `merge()` accepts them); this file
 // owns their rules. An invalid value gets its default back, reported as "<path>: <why>; default kept".
 import { EFFORTS } from "../members.ts";
-import type { RouterSettings } from "../types.ts";
-import { LOCAL_COMPONENTS } from "./mode.ts";
+import type { RouterSettings, ThinkingLevel } from "../types.ts";
+import { LOCAL_COMPONENTS, isLocal } from "./mode.ts";
 
 type Obj = Record<string, unknown>;
 const get = (o: unknown, path: string): unknown => path.split(".").reduce<unknown>((x, k) => (x as Obj | undefined)?.[k], o);
@@ -28,11 +28,48 @@ const ENUMS: [string, readonly string[], string?][] = [
   ["mergeGate.fixerEffort", EFFORTS, EFFORT_WHY],
 ];
 
-/** Called at the end of `validate()` (core/settings.ts); `s` is the merged settings, `base` the defaults. */
+/** Number leaves of the local sections that are ranges, not counts: path, upper bound (the lower bound 0 is exclusive). */
+const RANGES: [string, number][] = [["hints.errorSimilarity", 1], ["hints.contextPercent", 100]];
+const SECTIONS = ["hints", "overseer", "mergeGate", "plans"] as const;
+const isStr = (x: unknown): x is string => typeof x === "string";
+/** path, the list rule, its reason. */
+const LISTS: [string, (xs: unknown[]) => boolean, string][] = [
+  ["mergeGate.mainBranches", (xs) => xs.length > 0 && xs.every((x) => isStr(x) && x !== ""), "must be a non-empty list of non-empty strings"],
+  ["overseer.tools", (xs) => xs.length > 0 && xs.every(isStr), "must be a non-empty list of strings"],
+  ["mergeGate.extraChecks", (xs) => xs.every(isStr), "must be a list of strings"],
+  ["plans.publicApiGlobs", (xs) => xs.every(isStr), "must be a list of strings"],
+];
+/** A member reference and the effort paired with it. */
+const MEMBERS: [string, string][] = [
+  ["overseer.member", "overseer.effort"], ["overseer.fallbackMember", "overseer.fallbackEffort"], ["mergeGate.fixerMember", "mergeGate.fixerEffort"],
+];
+
+/** Called at the end of `validate()` (core/settings.ts); `s` is the merged settings, `base` the defaults. A wrong-typed value
+ *  never gets here: `merge()` keeps the default for it. */
 export function validateLocal(s: RouterSettings, base: RouterSettings, problems: string[]): void {
   const reset = (path: string, why: string): void => {
     set(s, path, structuredClone(get(base, path)));
     problems.push(`${path}: ${why}; default kept`);
   };
   for (const [path, values, why] of ENUMS) if (!values.includes(get(s, path) as string)) reset(path, why ?? `must be ${listing(values)}`);
+  const ranges = new Map(RANGES);
+  for (const sec of SECTIONS) for (const [k, d] of Object.entries(base[sec])) {
+    const path = `${sec}.${k}`, v = get(s, path) as number, top = ranges.get(path);
+    if (typeof d !== "number") continue;
+    if (top === undefined && !(Number.isInteger(v) && v > 0)) reset(path, "must be a positive integer");
+    if (top !== undefined && !(v > 0 && v <= top)) reset(path, `must be a number in (0, ${top}]`);
+  }
+  for (const [path, ok, why] of LISTS) if (!ok(get(s, path) as unknown[])) reset(path, why);
+  // Plan D2: member references only matter when a component that uses them can run; in default mode with every component
+  // "auto" a blank Opus or Sonnet must not add a problem (G6, AC-N2).
+  if (!isLocal(s) && !LOCAL_COMPONENTS.some((c) => s[c].enabled === "on")) return;
+  const live = (n: string): boolean => s.models[n] !== undefined && s.models[n].model !== "";
+  for (const [mp, ep] of MEMBERS) {
+    // A default that is itself invalid (a blank Opus) is reported and kept; its effort cannot be checked then.
+    if (!live(get(s, mp) as string)) reset(mp, `${JSON.stringify(get(s, mp))} is not an enabled member`);
+    const member = get(s, mp) as string;
+    if (!live(member)) continue;
+    const ladder = s.models[member].efforts, e = get(s, ep) as ThinkingLevel;
+    if (!ladder.includes(e)) reset(ep, `${e} is not an effort of ${member} (${ladder.join(", ")})`);
+  }
 }

@@ -98,3 +98,86 @@ test("defaults() holds design §3.0.1's keys and values; {} parses to defaults()
   assert.deepEqual(parseSettings({}).settings, defaults());
   assert.deepEqual(parseSettings({}).problems, []);
 });
+
+// --- L1.T3: counts, ranges, lists, member references ------------------------------------------------------------------
+
+const RANGES = ["hints.errorSimilarity", "hints.contextPercent"];
+/** Every number-valued leaf of the local sections except the two ranges (derived from defaults(), not a literal). */
+const COUNTS = (["hints", "overseer", "mergeGate", "plans"] as const).flatMap((sec) =>
+  Object.entries(defaults()[sec]).filter(([, v]) => typeof v === "number").map(([k]) => `${sec}.${k}`)).filter((p) => !RANGES.includes(p));
+const one = (path: string, v: unknown): Record<string, unknown> => { const [top, key] = path.split("."); return { [top]: { [key]: v } }; };
+
+test("COUNT: every count must be a positive integer", () => {
+  assert.ok(COUNTS.length >= 20, `${COUNTS.length} counts`);
+  for (const p of COUNTS) {
+    for (const v of [0, -1, 1.5]) {
+      const r = parseSettings(one(p, v));
+      assert.deepEqual(r.problems, [kept(p, "must be a positive integer")], `${p} = ${v}`);
+      assert.equal(at(r.settings, p), at(defaults(), p));
+    }
+    const s = parseSettings(one(p, "7")); // merge() drops a value of the wrong type: no problem
+    assert.deepEqual([s.problems, at(s.settings, p)], [[], at(defaults(), p)], `${p} = "7"`);
+    for (const v of [1, 9]) {
+      const r = parseSettings(one(p, v));
+      assert.deepEqual([r.problems, at(r.settings, p)], [[], v], `${p} = ${v}`);
+    }
+  }
+});
+
+test("RANGE: errorSimilarity in (0, 1], contextPercent in (0, 100]", () => {
+  for (const [p, bad, good, why] of [
+    ["hints.errorSimilarity", [0, 1.2, -0.5], [1, 0.5], "must be a number in (0, 1]"],
+    ["hints.contextPercent", [0, 101, -3], [100, 85, 0.5], "must be a number in (0, 100]"],
+  ] as const) {
+    for (const v of bad) {
+      const r = parseSettings(one(p, v));
+      assert.deepEqual(r.problems, [kept(p, why)], `${p} = ${v}`);
+      assert.equal(at(r.settings, p), at(defaults(), p));
+    }
+    for (const v of good) assert.deepEqual(parseSettings(one(p, v)).problems, [], `${p} = ${v}`);
+  }
+});
+
+test("LIST: mainBranches non-empty strings; tools non-empty; extraChecks and publicApiGlobs strings", () => {
+  const cases: [string, unknown, string][] = [
+    ["mergeGate.mainBranches", [], "must be a non-empty list of non-empty strings"],
+    ["mergeGate.mainBranches", ["main", ""], "must be a non-empty list of non-empty strings"],
+    ["mergeGate.mainBranches", [3], "must be a non-empty list of non-empty strings"],
+    ["overseer.tools", [], "must be a non-empty list of strings"],
+    ["overseer.tools", ["read", 1], "must be a non-empty list of strings"],
+    ["mergeGate.extraChecks", [{}], "must be a list of strings"],
+    ["plans.publicApiGlobs", [null], "must be a list of strings"],
+  ];
+  for (const [p, v, why] of cases) {
+    const r = parseSettings(one(p, v));
+    assert.deepEqual(r.problems, [kept(p, why)], `${p} = ${JSON.stringify(v)}`);
+    assert.deepEqual(at(r.settings, p), at(defaults(), p));
+  }
+  for (const [p, v] of [["mergeGate.mainBranches", ["trunk"]], ["overseer.tools", ["read"]], ["mergeGate.extraChecks", ["make lint"]], ["plans.publicApiGlobs", ["src/api/**"]]] as const) {
+    const r = parseSettings(one(p, v));
+    assert.deepEqual([r.problems, at(r.settings, p)], [[], v], p);
+  }
+});
+
+test("MEMBER: in local mode the overseer and fixer name enabled members and efforts on their ladders", () => {
+  const blank = parseSettings({ mode: "local", models: { opus: { model: "" } } });
+  assert.deepEqual(blank.problems.filter((l) => l.startsWith("overseer.")), [kept("overseer.member", '"opus" is not an enabled member')]);
+  assert.equal(blank.settings.overseer.member, "opus", "an invalid default is reported and kept");
+  const low = parseSettings({ mode: "local", overseer: { effort: "low" } });
+  assert.deepEqual(low.problems, [kept("overseer.effort", "low is not an effort of opus (high, xhigh)")]);
+  assert.equal(low.settings.overseer.effort, "high");
+  const fix = parseSettings({ mode: "local", mergeGate: { fixerMember: "nosuch", fixerEffort: "medium" }, overseer: { fallbackMember: "haiku", fallbackEffort: "xhigh" } });
+  assert.deepEqual(fix.problems, [
+    kept("overseer.fallbackEffort", "xhigh is not an effort of haiku (medium, high)"),
+    kept("mergeGate.fixerMember", '"nosuch" is not an enabled member'),
+    kept("mergeGate.fixerEffort", "medium is not an effort of sonnet (high, xhigh)"),
+  ]);
+  assert.deepEqual([fix.settings.mergeGate.fixerMember, fix.settings.mergeGate.fixerEffort, fix.settings.overseer.fallbackMember], ["sonnet", "high", "haiku"]);
+});
+
+test("MEMBER (D2): default mode does not check member references; a component switched on does", () => {
+  for (const raw of [{ models: { opus: { model: "" } } }, { overseer: { effort: "low" } }])
+    assert.deepEqual(parseSettings(raw).problems.filter((l) => l.startsWith("overseer.")), [], JSON.stringify(raw));
+  const on = parseSettings({ hints: { enabled: "on" }, models: { opus: { model: "" } } });
+  assert.deepEqual(on.problems.filter((l) => l.startsWith("overseer.")), [kept("overseer.member", '"opus" is not an enabled member')]);
+});
