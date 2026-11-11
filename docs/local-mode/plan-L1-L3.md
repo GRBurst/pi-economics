@@ -836,7 +836,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   guard is called until the first block (call log); `composeGuards()` and `composeGuards(undefined)` → `undefined`.
 - **GREEN**: S13 first part. **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R (`test/guard.test.ts` unmodified). **ACs**: X1.
 
-#### L3.T7 Main-session wiring (AC-H2, AC-H4 L3, AC-H5) `[ ] todo`
+#### L3.T7 Main-session wiring (AC-H2, AC-H4 L3, AC-H5) `[x] done`
 - **Files**: `core/local/install.ts` (new, S12), `core/shell.ts` (`installLocal(pi, {...})` after `installFreshOnCold`; status suffix if Q5 accepted), `test/local-hints.test.ts` (new).
 - **Depends**: L3.T2, L3.T3, L3.T4.
 - **Read first**: `core/fresh.ts` (the `tool_call`/`tool_result` note pattern), `test/fresh.test.ts`.

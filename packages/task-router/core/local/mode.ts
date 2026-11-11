@@ -9,10 +9,12 @@ export const componentOn = (s: RouterSettings, c: LocalComponent): boolean =>
   s[c].enabled === "on" || (s[c].enabled === "auto" && isLocal(s));
 /** The status line `task-router` (design §2.5, OQ12): "local", or "local (main: <model>)" when the main runs on no local member;
  *  an active force adds its description (`force`, design §3.6.3), alone in default mode (plan Q4).
- *  undefined = leave the status line alone (default mode, no force). */
-export function statusText(x: { local: boolean; main?: string; localModels: string[]; force?: string }): string | undefined {
+ *  undefined = leave the status line alone (default mode, no force). `hint`: the trip of the last hint until the next progress
+ *  (design §3.1.2 "a status entry", plan Q5). */
+export function statusText(x: { local: boolean; main?: string; localModels: string[]; force?: string; hint?: string }): string | undefined {
   const parts: string[] = [];
   if (x.local) parts.push(x.main !== undefined && !x.localModels.includes(x.main) ? `local (main: ${x.main})` : "local");
   if (x.force) parts.push(x.force);
+  if (x.hint) parts.push(`hint ${x.hint}`);
   return parts.length ? parts.join(" · ") : undefined;
 }

@@ -22,6 +22,9 @@ import { createGuards } from "./guards.ts";
 import { createOutcomeLog } from "./log.ts";
 import { cardSection, localSection } from "./prompt.ts";
 import { isLocal, statusText } from "./local/mode.ts";
+import { installLocal } from "./local/install.ts";
+import type { LocalDeps } from "./local/install.ts";
+import type { Trip } from "./local/tripwires.ts";
 import { enabled } from "./members.ts";
 import { createPolicy } from "./policy.ts";
 import { spotCheckDue, spotCheckText } from "./spotcheck.ts";
@@ -58,6 +61,8 @@ export type Deps = {
   fetch?: FetchLike; fs?: FsPort; sleep?: (ms: number) => Promise<void>; run?: Runner;
   /** Random source for randomize / spot checks (default Math.random); home dir for `~` in a card cwd (default os.homedir()). */
   rng?: () => number; home?: string;
+  /** The hint engine's file hash and call detectors (test seams, plan S12). */
+  hash?: LocalDeps["hash"]; detect?: LocalDeps["detect"];
 };
 
 const VERDICTS = ["accepted", "partial", "rejected"] as const;
@@ -181,10 +186,10 @@ export function install(pi: PiLike, deps: Deps) {
   // The status line (design §2.5, OQ12): local mode, and an active force (plan Q4); default mode without a force never touches
   // it. A force can change outside an event with a ctx (a forced spawn counts down), so the last UI and main model are kept.
   const localModels = enabled(settings.models).filter((m) => m.route === "local").map((m) => m.model);
-  let ui: any, main: string | undefined, shown = false;
+  let ui: any, main: string | undefined, shown = false, hint: Trip | undefined;
   const render = (): void => {
     const f = force.port.active();
-    const t = statusText({ local: isLocal(settings), main, localModels, force: f && describeForce(f) });
+    const t = statusText({ local: isLocal(settings), main, localModels, force: f && describeForce(f), hint });
     if (t !== undefined) { ui?.setStatus?.("task-router", t); shown = true; }
     else if (shown) { ui?.setStatus?.("task-router", undefined); shown = false; }
   };
@@ -217,6 +222,8 @@ export function install(pi: PiLike, deps: Deps) {
   };
   // LD3 (design §2.4): local mode replaces the nudge with hints; its steer messages would interrupt a local main mid-task.
   installNudge(pi, { settings, isChild, enabled: () => active && !isLocal(settings) });
+  // Hints (design §3.1, plan S12): in local mode, or anywhere with hints "on"; the status line names the last hint (plan Q5).
+  installLocal(pi, { settings, log, isChild, sessionId: () => sessionId, hash: deps.hash, detect: deps.detect, onTrip: (t) => { hint = t; render(); } });
   pi.on("before_agent_start", (e, ctx) => {
     track(ctx);
     skills = e.systemPromptOptions?.skills ?? skills;
