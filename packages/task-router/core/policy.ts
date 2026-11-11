@@ -210,7 +210,7 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
       plan.reasons.push(`force: ${f.model} ${effort} (${f.source})`);
       if (member) {
         const to = await resolveLeg(d, { name: args.name, cands: [member], planned: member, step: plan.worker.step, effort, pinned: true, failover: [],
-          entry: { ...entry, forced }, explain: (cause) => forceRejection(f, cause) });
+          entry: { ...entry, forced }, explain: (cause) => forceRejection(f, cause, d.force?.underneath?.()) });
         if (!to.ok) return reject(to.errors);
         plan.reasons.push(to.value.why);
       } else {

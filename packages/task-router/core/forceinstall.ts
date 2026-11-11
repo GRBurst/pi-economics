@@ -10,8 +10,9 @@ export type ForcePi = {
   registerCommand?(name: string, c: { description?: string; handler(args: string, ctx: any): unknown }): void;
   appendEntry?(customType: string, data: unknown): void;
 };
-/** `active`: the force a routed spawn runs under now; `used`: a spawn ran under it (a `next:N` command force counts down). */
-export type ForcePort = { active(): ActiveForce | undefined; used(taskId: string): void };
+/** `active`: the force a routed spawn runs under now; `used`: a spawn ran under it (a `next:N` command force counts down);
+ *  `underneath`: the settings force, which applies again once a command force over it ends (spot-check F9). */
+export type ForcePort = { active(): ActiveForce | undefined; used(taskId: string): void; underneath?(): ActiveForce | undefined };
 
 const USAGE = "usage: /force <model> [effort] [next[:N] | session] | /force off | /force";
 const NOT_FORCED = "overseer reviews are not forced (they use overseer.*)";
@@ -90,7 +91,7 @@ export function installForce(pi: ForcePi, d: {
   };
 
   return {
-    port: { active, used } as ForcePort,
+    port: { active, used, underneath: () => fromSettings } as ForcePort,
     /** In the shell's session_start handler, before the problems notification (plan D8): rebuild the command force from the
      *  branch; once per process resolve the settings force (unresolvable → a problem and a rejected line, inactive). */
     start(ctx: any, problems: string[]): void {

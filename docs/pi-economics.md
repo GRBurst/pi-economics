@@ -363,7 +363,9 @@ slot, as an explicit `model` does, without failover to another member; a
 non-member at once, with no slot accounting. A forced spawn its member cannot
 take is rejected as an explicit `model` is, but the text names the force and
 how to end it instead of "leave `model` unset": ``force <model> (/force):
-<cause>; `/force off` clears it``, or for the settings force ``force <model>
+<cause>; `/force off` clears it`` (with a settings force underneath: ``…
+`/force off` clears it, and the settings force <model> (settings `force.model`)
+then applies``), or for the settings force ``force <model>
 (settings `force.model`): <cause>; an empty `force.model` in the task-router
 settings clears it, `/force <model>` overrides it for this session`` (`/force
 off` does not end a settings force). Overseer reviews are not forced

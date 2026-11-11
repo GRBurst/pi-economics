@@ -9,8 +9,8 @@ type H = ReturnType<typeof harness>;
 const SONNET = "anthropic/claude-sonnet-5-5", HAIKU = "anthropic/claude-haiku-5-5", OPUS = "anthropic/claude-opus-5-5", QWEN = "llama/qwen3.8";
 const KNOWN = [HAIKU, SONNET, OPUS, QWEN, "other/model"];
 const FORCED_KEYS = ["forced", "forceSource", "routedModel", "routedEffort"];
-function setup(s: Partial<RouterSettings> = {}) {
-  const h = harness({ settings: s });
+function setup(s: Partial<RouterSettings> = {}, health?: { health: number; slots: number }) {
+  const h = harness({ settings: s, health });
   const status: [string, string | undefined][] = [];
   const ctx = {
     hasUI: true,
@@ -143,6 +143,29 @@ test("a rejected forced spawn names the force (/force or the settings) and how t
   assert.equal(await full({}, "qwen-local"), `force ${QWEN} (/force): no free slot after 0 s; \`/force off\` clears it`);
   assert.equal(await full({ force: { model: "qwen-local", thinkingLevel: "" } }),
     `force ${QWEN} (settings \`force.model\`): no free slot after 0 s; an empty \`force.model\` in the task-router settings clears it, \`/force <model>\` overrides it for this session`);
+});
+
+// spot-check F9: the other cause, and a command force over a settings force
+test("a forced member whose server is down is rejected with the force named", async () => {
+  const down = async (s: Partial<RouterSettings>, set?: string) => {
+    const { h, force } = setup(s, { health: 0, slots: 0 });
+    if (set) await force(set);
+    const r = await h.a.spawn({ name: "c1", task: card() });
+    return "reject" in r ? r.reject : JSON.stringify(r);
+  };
+  assert.equal(await down({}, "qwen-local"), `force ${QWEN} (/force): down; \`/force off\` clears it`);
+  assert.equal(await down({ force: { model: "qwen-local", thinkingLevel: "" } }),
+    `force ${QWEN} (settings \`force.model\`): down; an empty \`force.model\` in the task-router settings clears it, \`/force <model>\` overrides it for this session`);
+});
+
+test("spot-check F9: a command force over a settings force says that /force off hands the spawn back to the settings force", async () => {
+  const { h, force } = setup({ queueMaxSec: 0, force: { model: "sonnet", thinkingLevel: "" } });
+  await force("qwen-local");
+  await spawn(h, "c0"); // takes the one slot
+  h.a.agents.push({ name: "c0", parent: "main", sessionId: "s-c0", model: QWEN, thinkingLevel: "xhigh", state: "running" });
+  const r = await h.a.spawn({ name: "c1", task: card() });
+  assert.ok("reject" in r, JSON.stringify(r));
+  assert.equal(r.reject, `force ${QWEN} (/force): no free slot after 0 s; \`/force off\` clears it, and the settings force ${SONNET} (settings \`force.model\`) then applies`);
 });
 
 test("routing off (plan D12): the force is not applied", async () => {
