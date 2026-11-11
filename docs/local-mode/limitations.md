@@ -27,6 +27,8 @@ or a real Opus overseer yet.
 
 - One global switch: `settings.mode = "local"` applies to every session of the agent dir. A Claude main in that
   dir also runs in local mode. There is no auto-detection and no per-session mode.
+  Wanted (user, 2026-11-11): a runtime switch between local and default mode (per session, without a rebuild).
+  Until then the author's setup runs every session in local mode with `llama/qwen3.8` as the default model.
 - The router routes subagents only. It does not choose or change the main session's model.
 - Plan and branch records live only in the session that made them. Another session cannot continue a plan
   (`start_branch {plan}`, `amend_plan` and `plan_request` say so). Rebuilding the records from `main` would trust
