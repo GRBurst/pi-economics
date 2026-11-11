@@ -74,6 +74,24 @@ const done = (status: MergeStatus, reason: MergeReason | undefined, detail: stri
 const refuse = (reason: MergeReason, x: Record<string, string>, commit?: string): MergeResult => done("refused", reason, reasonText(reason, x), commit);
 const gitError = (err: string, commit?: string): MergeResult => done("error", "git", reasonText("git", { err }), commit);
 
+// ── step 6: the red run ──
+export type Red = "passed" | "failed" | "skipped";
+/** The review input's line (S27, pinned). */
+export const RED_TEXT: Record<Red, string> = { passed: "passed — the check may be vacuous", failed: "failed as expected", skipped: "skipped" };
+/** Runs `check` at `base` in a detached temporary worktree (`p.tmp()`), removed afterwards whatever happened (a timeout too).
+ *  A worktree git cannot make skips the red run: it informs the reviewer and never refuses on its own. */
+export async function redRun(p: MergePorts, repo: string, base: string, check: string): Promise<Red> {
+  const dir = p.tmp();
+  const add = await p.git.worktreeAddDetached(repo, dir, base);
+  if (!add.ok) return "skipped";
+  try {
+    const r = await p.run(check, dir, p.settings.checkTimeoutSec * 1000);
+    return r.exit === 0 ? "passed" : "failed";
+  } finally {
+    await p.git.worktreeRemove(repo, dir, true);
+  }
+}
+
 /** `request_merge` (design §3.4.2). Total: an unexpected exception is a `git` error, and nothing after it runs. */
 export async function requestMerge(p: MergePorts, input: Input, cwd: string): Promise<MergeResult> {
   try { return await pipeline(p, input, cwd); } catch (err) { return gitError((err as Error)?.message ?? String(err)); }
@@ -118,7 +136,9 @@ async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<Merge
     checks.push({ cmd, exit: r.exit, output: tailOf(r.output) });
     if (r.exit !== 0) return refuse("check", { cmd, exit: String(r.exit), tail: tailOf(r.output) }, commit);
   }
-  // Steps 6–9 follow (L6.T8–T10); until then nothing merges.
-  void checks;
+  // ── 6 red run (a branch without a plan; its own check only) ──
+  const red: Red = g.redRun && rec?.check ? await redRun(p, repo, main.sha, rec.check) : "skipped";
+  // Steps 7–9 follow (L6.T9–T10); until then nothing merges.
+  void checks; void red;
   return done("error", "review-unavailable", reasonText("review-unavailable", {}), commit);
 }
