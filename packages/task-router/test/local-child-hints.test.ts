@@ -69,7 +69,8 @@ test("composition (D19): a read-only+files child keeps its files block, and its 
 test("default mode: an `all` child has no toolGuard (unchanged); hints off in local mode likewise", async () => {
   assert.equal((await child({})).g, undefined);
   assert.equal((await child({ hints: { enabled: "on" } })).g, undefined); // children: local mode only (plan L3.T8)
-  assert.equal((await child({ mode: "local", hints: { enabled: "off" } })).g, undefined);
+  // L6.T4: the merge gate's git guard is a child guard of its own (test/local-git-guard.test.ts › "AC-M7").
+  assert.equal((await child({ mode: "local", hints: { enabled: "off" }, mergeGate: { enabled: "off" } })).g, undefined);
 });
 
 test("a kill event drops the child's state", async () => {

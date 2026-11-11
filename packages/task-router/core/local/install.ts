@@ -17,7 +17,8 @@ import type { Git } from "./git.ts";
 import { block, createHintEngine } from "./hints.ts";
 import type { Delivery } from "./hints.ts";
 import { activeSet, componentOn } from "./mode.ts";
-import { guardGit, hasGitToken, UNCLASSIFIED } from "./gitcmd.ts";
+import { gitGuard } from "./childguards.ts";
+import type { Guard } from "../toolguard.ts";
 import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
@@ -94,6 +95,9 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     ready: (): Promise<void> => ready,
     /** Resolves when no diff read is running or waiting (a test seam). */
     settled: async (): Promise<void> => { while (sizing) await sizing; await ready; },
+    /** The git guard for a session in `cwd` (design §3.4.5) while the merge gate is on, else undefined: a routed child's. */
+    gitGuard: (cwd: string): Guard | undefined =>
+      activeSet(d.settings).mergeGate ? gitGuard(d.settings.mergeGate.mainBranches, (dir) => git.branchOf(dir), cwd) : undefined,
   };
   const s = d.settings, h = s.hints;
   if (componentOn(s, "worktrees")) pi.registerTool?.(startBranchTool({ git, store: branches, settings: s }, () => ready));
@@ -123,13 +127,11 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     if (!activeSet(s).mergeGate) return;
     const verdict = (why: string | undefined) => (why === undefined ? undefined : { block: true, reason: why });
     pi.on("tool_call", (e, ctx) => {
-      const tool = String(e?.toolName), cmd = e?.input?.command;
-      if ((tool !== "bash" && tool !== "powershell") || typeof cmd !== "string") return undefined;
-      try {
-        if (d.isChild(ctx)) return undefined;
-        const r = guardGit(cmd, ctx?.cwd ?? process.cwd(), s.mergeGate.mainBranches, (dir) => git.branchOf(dir));
-        return r instanceof Promise ? r.then(verdict, () => verdict(UNCLASSIFIED)) : verdict(r);
-      } catch { return verdict(hasGitToken(cmd) ? UNCLASSIFIED : undefined); }
+      let child = false;
+      try { child = d.isChild(ctx); } catch { /* the main session's */ }
+      if (child) return undefined;
+      const r = handle.gitGuard(ctx?.cwd ?? process.cwd())!(String(e?.toolName), e?.input);
+      return r instanceof Promise ? r.then(verdict) : verdict(r);
     });
   };
   if (!componentOn(s, "hints")) { guardWrites(); guardMain(); return handle; }

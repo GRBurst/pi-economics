@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MERGE_REASON, UNCLASSIFIED, UNKNOWN_DIR } from "../core/local/gitcmd.ts";
 import { fakeGit } from "./fake-git.ts";
-import { harness } from "./harness.ts";
+import { accepted, card, harness, provideSkills } from "./harness.ts";
 
 const REPO = "/r/x", WT = "/r/x.worktrees/lm--x";
 
@@ -82,4 +82,41 @@ test("AC-N3 default mode push: settings {} register no guard and block nothing",
 test("git guard (OQ11): mergeGate \"on\" guards in default mode too", async () => {
   const { call } = rig({ mergeGate: { enabled: "on" } });
   assert.deepEqual(await call("git push origin main"), blocked(MERGE_REASON("main")));
+});
+
+// ── children (L6.T4, AC-M7; plan D44): the git guard joins the composed toolGuard of every routed child ──
+type Guard = (tool: string, input: unknown) => string | undefined | Promise<string | undefined>;
+async function child(settings: Record<string, unknown>, task = card()) {
+  const g = fakeGit({ repos: [{ root: "/work" }] });
+  void g.git.worktreeAdd("/work", "/work.worktrees/lm--x", "lm/x", "main");
+  const h = harness({ settings: settings as never, extra: { git: g.git } as never });
+  h.f.fire("session_start", {}, { sessionManager: { getSessionId: () => "s-main", getBranch: () => [] }, cwd: "/work" });
+  provideSkills(h, ["tdd-implementation-planner"]);
+  const r = accepted(await h.a.spawn({ name: "c1", task })) as { toolGuard?: Guard };
+  return { g, h, guard: r.toolGuard };
+}
+
+test("AC-M7: a routed child's bash push to main is blocked with a reason naming request_merge; reads and branch work pass", async () => {
+  const { guard } = await child({ mode: "local" });
+  assert.equal(typeof guard, "function");
+  assert.equal(await guard!("bash", { command: "git -C /work.worktrees/lm--x push origin HEAD:main" }), MERGE_REASON("main"));
+  assert.equal(await guard!("bash", { command: "git commit -qm x" }), MERGE_REASON("main"), "the child's cwd is the main checkout");
+  assert.equal(await guard!("bash", { command: "git -C /work.worktrees/lm--x commit -qm x" }), undefined);
+  assert.equal(await guard!("powershell", { command: "git push origin main" }), MERGE_REASON("main"));
+  assert.equal(guard!("read", { path: "src/a.ts" }), undefined, "a read stays synchronous");
+  assert.equal(guard!("bash", { command: "ls src" }), undefined, "a command without git calls stays synchronous");
+});
+
+test("AC-M7: a read-only+files child keeps its files block and gets the git guard too", async () => {
+  const { guard } = await child({ mode: "local" }, card({ kind: "plan", files: ["docs/plan.md"] }));
+  assert.match(String(guard!("edit", { path: "src/a.ts", oldText: "x", newText: "y" })), /limited to the files of your task card/);
+  assert.equal(guard!("edit", { path: "docs/plan.md", oldText: "x", newText: "y" }), undefined);
+  assert.equal(await guard!("bash", { command: "git push origin main" }), MERGE_REASON("main"));
+});
+
+test("AC-M7: no git guard for children while the merge gate is off", async () => {
+  assert.equal((await child({})).guard, undefined);
+  assert.equal((await child({ mode: "local", hints: { enabled: "off" }, mergeGate: { enabled: "off" } })).guard, undefined);
+  const on = await child({ mergeGate: { enabled: "on" } });
+  assert.equal(await on.guard!("bash", { command: "git push origin main" }), MERGE_REASON("main"), "OQ11: \"on\" guards in default mode too");
 });

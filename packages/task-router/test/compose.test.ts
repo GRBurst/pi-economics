@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { composeGuards } from "../core/toolguard.ts";
-import type { SyncGuard } from "../core/toolguard.ts";
+import type { Guard, SyncGuard } from "../core/toolguard.ts";
 
 test("composeGuards: nothing to compose → undefined", () => {
   assert.equal(composeGuards(), undefined);
@@ -39,4 +39,43 @@ test("composeGuards property: the first guard's block wins; every guard up to it
       assert.deepEqual(calls, tables.map((tb, j) => (tb && j < upTo ? j : -1)).filter((j) => j >= 0), `sequence ${s}, ${tool}: call log`);
     }
   }
+});
+
+// Local mode L6.T4 (plan D44): a guard may answer with a Promise (the git guard reads branches). Sync guards keep a sync answer;
+// the first Promise turns the rest of the chain into a Promise.
+test("composeGuards property (D44): with async guards the answer is the first block in order; it is a Promise iff an async guard ran", async () => {
+  let seed = 11;
+  const rnd = (n: number): number => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return (((t ^ (t >>> 14)) >>> 0) / 4294967296 * n) | 0;
+  };
+  const tools = ["read", "edit", "write", "bash"];
+  let asyncSeen = 0, syncSeen = 0;
+  for (let s = 0; s < 300; s++) {
+    const k = rnd(5);
+    const specs = Array.from({ length: k }, () => (rnd(4) === 0 ? undefined : { table: tools.filter(() => rnd(3) === 0), async: rnd(2) === 0 }));
+    const calls: number[] = [];
+    const guards: (Guard | undefined)[] = specs.map((sp, j) => sp && ((tool: string) => {
+      calls.push(j);
+      const r = sp.table.includes(tool) ? `g${j}:${tool}` : undefined;
+      return sp.async ? Promise.resolve(r) : r;
+    }));
+    const g = composeGuards(...guards);
+    if (specs.every((sp) => sp === undefined)) { assert.equal(g, undefined); continue; }
+    for (const tool of tools) {
+      calls.length = 0;
+      const first = specs.findIndex((sp) => sp?.table.includes(tool));
+      const upTo = first < 0 ? specs.length : first + 1;
+      const ran = specs.map((sp, j) => (sp && j < upTo ? j : -1)).filter((j) => j >= 0);
+      const r = g!(tool, {});
+      const isAsync = ran.some((j) => specs[j]!.async);
+      assert.equal(r instanceof Promise, isAsync, `sequence ${s}, ${tool}: a Promise iff an async guard ran`);
+      if (isAsync) asyncSeen++; else syncSeen++;
+      assert.equal(await r, first < 0 ? undefined : `g${first}:${tool}`, `sequence ${s}, ${tool}`);
+      assert.deepEqual(calls, ran, `sequence ${s}, ${tool}: call log`);
+    }
+  }
+  assert.ok(asyncSeen > 100 && syncSeen > 100, `${asyncSeen}/${syncSeen}`);
 });

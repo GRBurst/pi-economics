@@ -10,19 +10,27 @@ const WRITERS = ["write", "edit"];
 
 /** A spawn policy's `toolGuard` (core/api.ts `PolicyResult`): a string blocks the child's call with that reason. */
 export type Guard = (tool: string, input: unknown) => string | undefined | Promise<string | undefined>;
-/** A guard that answers at once (profile tools, trip wires): the ones `composeGuards` composes. */
+/** A guard that answers at once (profile tools, trip wires); `composeGuards` keeps a composition of them synchronous. */
 export type SyncGuard = (tool: string, input: unknown) => string | undefined;
-/** Guards in order (design §2.2.3, plan D19): each runs until one blocks; that block wins. No guard → undefined. */
-export const composeGuards = (...gs: (SyncGuard | undefined)[]): SyncGuard | undefined => {
-  const xs = gs.filter((g): g is SyncGuard => g !== undefined);
-  return xs.length ? (t, i) => {
-    for (const g of xs) {
-      const r = g(t, i);
-      if (r !== undefined) return r;
-    }
-    return undefined;
-  } : undefined;
-};
+/** Guards in order (design §2.2.3, plan D19): each runs until one blocks; that block wins. No guard → undefined. D44: a guard may
+ *  answer with a Promise; the answer stays synchronous until a guard returns one, which turns the rest of the chain into a Promise. */
+export function composeGuards(...gs: (SyncGuard | undefined)[]): SyncGuard | undefined;
+export function composeGuards(...gs: (Guard | undefined)[]): Guard | undefined;
+export function composeGuards(...gs: (Guard | undefined)[]): Guard | undefined {
+  const xs = gs.filter((g): g is Guard => g !== undefined);
+  if (!xs.length) return undefined;
+  return (t, i) => {
+    const from = (k: number): string | undefined | Promise<string | undefined> => {
+      for (let j = k; j < xs.length; j++) {
+        const r = xs[j]!(t, i);
+        if (r instanceof Promise) return r.then((v) => (v !== undefined ? v : from(j + 1)));
+        if (r !== undefined) return r;
+      }
+      return undefined;
+    };
+    return from(0);
+  };
+}
 
 /**
  * `all` → no restriction. `read-only` → read tools + bash + the non-mutating extension tools above.
