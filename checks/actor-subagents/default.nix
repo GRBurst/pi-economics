@@ -59,9 +59,12 @@ pkgs.runCommand "pi-actor-subagents-tests" {nativeBuildInputs = [pkgs.nodejs];} 
   # The spawn-api patch's tests must be part of what ran, and index.ts must bind api.spawn/api.kill
   # (spawnPolicyApi 2, local mode's overseers), start a child in the policy's cwd with the policy's
   # child tools, and keep quiet agents off the roster.
-  for t in spawn-api child-tools; do
+  for t in spawn-api child-tools quiet-control; do
     test -f "$t.test.ts"
   done
+  # LD13 (review F2): a quiet agent answers only to the API and the user; send_message asks the engine first.
+  grep -qF 'engine.quietRefusal(selfName, t)' agent-tools.ts
+  grep -qF 'd.engine.kill(API_ACTOR, names)' api.ts
   grep -q 'spawnApiDeps({ engine, spawnAgent' index.ts
   grep -q 'cwd = cwdOf(spec)' index.ts
   grep -qF '.map(piTool)' index.ts

@@ -13,7 +13,9 @@
 #   child's transient error (429 under pi-retry) wakes its parent.
 # - spawn-api (spawnPolicyApi 2, local mode): optional `api.spawn` and
 #   `api.kill` for the router's own agents (quiet: no notices to the parent,
-#   no roster entry), per-child tools (`childTools`) and cwd from the policy,
+#   no roster entry, and only the API and the user act on the agent: no
+#   agent, its spawner included, messages or controls it), per-child tools
+#   (`childTools`) and cwd from the policy,
 #   and tool guards that may answer with a Promise. `version` stays 1.
 #
 # The patch files keep the host's names, so the store paths, and with the

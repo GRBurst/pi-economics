@@ -33,8 +33,9 @@ export interface SubagentsApiV1 {
   retune(name: string, t: { model?: string; thinkingLevel?: ThinkingLevel }): Promise<void>;
   send(to: string, text: string, from?: string): Promise<void>;
   list(): AgentInfo[];
-  /** spawnPolicyApi ≥ 2: spawn through the registered policy as `by` (default "main"); quiet: no notices, no roster entry. */
+  /** spawnPolicyApi ≥ 2: spawn through the registered policy as `by` (default "main"); quiet: no notices, no roster entry, and
+   *  no agent (its spawner included) may message or control the child: only the API and the user act on it (LD13). */
   spawn?(args: SpawnArgs, opts?: { by?: string; quiet?: boolean }): Promise<SpawnResult>;
-  /** spawnPolicyApi ≥ 2: kill as "main"; resolves with the names taken down. */
+  /** spawnPolicyApi ≥ 2: kill as the actor "api" (main's authority); resolves with the names taken down. */
   kill?(names: string[]): Promise<string[]>;
 }

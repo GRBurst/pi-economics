@@ -275,10 +275,23 @@ export interface SubagentsApiV1 {
   /** NEW (spawnPolicyApi ≥ 2): spawn like spawn_subagent from `by` (default "main"), through the registered policy.
    *  quiet: no lifecycle notices to `by`. Resolves once the child exists. */
   spawn?(args: SpawnArgs, opts?: { by?: string; quiet?: boolean }): Promise<{ ok: true; name: string; sessionId: string } | { ok: false; reason: string }>;
-  /** NEW: kill as 'main' (root authority); resolves with the names taken down. */
+  /** NEW: kill as the actor 'api' (main's authority); resolves with the names taken down. */
   kill?(names: string[]): Promise<string[]>;
 }
 ```
+
+**Quiet agents answer only to the API (LD13).** The actor's rule "who spawns, owns" would give the spawner of
+`api.spawn` (`main`, which is Qwen in local mode) full authority over its overseer: it could message it (shown as
+`[message from main]`), retune it (retunes bypass the spawn policy), pause or kill it, and so shape an independent
+review. In the patch a quiet agent therefore answers only to the API and the human: `send_message`,
+`set_subagent_model`, `pause_subagents`, `resume_subagents` and `kill_subagents` refuse it for every agent, its
+spawner and itself included ("'<name>' was spawned quietly through the API; only the API and the user act on
+it"), and a pause or resume without names leaves it out. `list_subagents` and `subagent_history` still show it.
+`api.kill` acts as the actor `api` (main's authority, a reserved name like `user` and `restore`); `api.send`
+reaches it (sender `router`); `api.retune` acts as `main` and is refused, so an overseer keeps its ticket's model.
+The human's commands (`user`) and panel input still reach it. The flag is set at the reservation, so the rule holds
+while the child's session is created. Rejected: a `tool_call` guard in task-router that blocks these tools for
+ticket children (it covers only the main session, and only while the router is loaded).
 
 The router detects the extension with `typeof api.spawn === "function" && typeof api.kill === "function"`
 (`core/local/overseer.ts`). If it is missing in local mode, the router warns once ("task-router: local mode needs
@@ -1135,3 +1148,4 @@ existing reports are used as general advice only, and their numbers are not reli
 | LD10 | the router commits approved plans on main | worktrees need the plan; no self-review | a plan branch through the merge gate |
 | LD11 | only the user forces: command or settings | a main-model force bypasses routing | a card `force` field |
 | LD12 | local mode lives in task-router (`core/local/`) | one spawn policy per process; no fifth runtime-guard copy | a new component package |
+| LD13 | a quiet agent (`api.spawn` with `quiet`) answers only to the API and the user; agents' control tools and `send_message` refuse it (§3.0.4) | an overseer must be independent of the main model it reviews (LD5); "who spawns, owns" gave `main` message, retune, pause and kill | a task-router `tool_call` guard on the main session (misses other agents and an unloaded router) |

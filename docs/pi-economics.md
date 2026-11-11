@@ -107,8 +107,10 @@ pi-actor-subagents (upstream input `pi-actor-subagents`) with three patches
 from `patches/pi-actor-subagents`: child prompt, spawn policy (the
 `globalThis.__subagentsApi_v1` other extensions drive) and spawn API (local
 mode L4: the API's optional `spawn(args, {by, quiet})` and `kill(names)` for
-the router's own agents, where `quiet` sends no notice to the spawner and
-keeps the child out of the persisted roster; a spawn policy may give a child
+the router's own agents, where `quiet` sends no notice to the spawner,
+keeps the child out of the persisted roster and lets only the API and the
+user act on it: no agent, its spawner included, may message, retune, pause,
+resume or kill it (`api.kill` acts as the reserved actor `api`); a spawn policy may give a child
 extra tools (`childTools`) and a working directory (`cwd`), and its tool
 guard may answer with a Promise; the API's `version` stays 1).
 

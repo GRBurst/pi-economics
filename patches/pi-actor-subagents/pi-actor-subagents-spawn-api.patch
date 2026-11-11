@@ -11,19 +11,38 @@ index 45c3c53..d716cbc 100644
  	/**
  	 * Phase of the running turn (reasoning vs answer text vs tool run); undefined means no
  	 * turn is running. Single field for "is it working" AND "at what": a separate streaming
+diff --git a/extensions/actor-subagents/agent-tools.ts b/extensions/actor-subagents/agent-tools.ts
+index 2c5b25b..c6e4d99 100644
+--- a/extensions/actor-subagents/agent-tools.ts
++++ b/extensions/actor-subagents/agent-tools.ts
+@@ -211,7 +211,11 @@ export function makeAgentTools(
+         const routed = [];
+         for (const t of targets) {
+           const sinceEvent = engine.events.length;
+-          const outcome = await engine.route(selfName, t, args.content);
++          // Local patch (spawn-api): a quiet agent takes no message from an agent.
++          const quiet = engine.quietRefusal(selfName, t);
++          const outcome = quiet
++            ? { outcome: "failed" as const, reason: quiet }
++            : await engine.route(selfName, t, args.content);
+           routed.push({ target: t, sinceEvent, ...outcome });
+         }
+         // The per-target waits run in PARALLEL: serial waits would cost timeout x targets for a
 diff --git a/extensions/actor-subagents/api.ts b/extensions/actor-subagents/api.ts
-index 75460be..088f0cc 100644
+index 75460be..dd636b8 100644
 --- a/extensions/actor-subagents/api.ts
 +++ b/extensions/actor-subagents/api.ts
-@@ -11,6 +11,7 @@ import type { AgentEvent } from "./agent-event.ts";
+@@ -10,7 +10,9 @@
+ import type { AgentEvent } from "./agent-event.ts";
  import type { AgentRecord } from "./agent-record.ts";
  import type { AgentStatus } from "./agent-status.ts";
++import { API_ACTOR } from "./authorize.ts";
  import type { Engine } from "./engine.ts";
 +import type { Spawner } from "./spawner.ts";
  import type { ThinkingLevel } from "./thinking-level.ts";
  import type { ToolGuard } from "./tool-guard.ts";
  
-@@ -33,6 +34,16 @@ export type Caller = {
+@@ -33,6 +35,16 @@ export type Caller = {
  	policyMeta?: unknown;
  	cwd: string;
  };
@@ -40,7 +59,7 @@ index 75460be..088f0cc 100644
  export type PolicyResult =
  	| {
  			model: string;
-@@ -47,9 +58,15 @@ export type PolicyResult =
+@@ -47,9 +59,15 @@ export type PolicyResult =
  			meta?: unknown;
  			/** Checked on each of the child's tool calls; a returned reason blocks the call. */
  			toolGuard?: ToolGuard;
@@ -56,22 +75,23 @@ index 75460be..088f0cc 100644
  
  export type AgentInfo = {
  	name: string;
-@@ -84,6 +101,14 @@ export interface SubagentsApiV1 {
+@@ -84,6 +102,15 @@ export interface SubagentsApiV1 {
  	/** Deliver like send_message from `from` (default "router"); rejects when routing fails. */
  	send(to: string, text: string, from?: string): Promise<void>;
  	list(): AgentInfo[];
 +	/**
 +	 * Local patch (spawnPolicyApi >= 2): spawn like spawn_subagent from `by` (default "main"), through the
-+	 * registered policy. quiet: no lifecycle or error notices to the parent, and no roster entry. Resolves
++	 * registered policy. quiet: no lifecycle or error notices to the parent, no roster entry, and
++	 * no agent may message or control the child (only the API and the user act on it). Resolves
 +	 * once the child exists.
 +	 */
 +	spawn?(args: SpawnArgs, opts?: { by?: string; quiet?: boolean }): Promise<SpawnResult>;
-+	/** Local patch (spawnPolicyApi >= 2): kill as 'main' (root authority); resolves with the names taken down. */
++	/** Local patch (spawnPolicyApi >= 2): kill as the actor 'api' (main's authority); resolves with the names taken down. */
 +	kill?(names: string[]): Promise<string[]>;
  }
  
  /** What the shell binds on every load. */
-@@ -91,6 +116,29 @@ export interface ApiDeps {
+@@ -91,6 +118,29 @@ export interface ApiDeps {
  	engine: Engine;
  	retune: SubagentsApiV1["retune"];
  	now?: () => number;
@@ -93,7 +113,7 @@ index 75460be..088f0cc 100644
 +			return r.ok ? { ok: true, name: args.name, sessionId: r.sessionId ?? "" } : { ok: false, reason: r.msg };
 +		},
 +		kill: async (names) => {
-+			const r = await d.engine.kill("main", names);
++			const r = await d.engine.kill(API_ACTOR, names);
 +			d.persist();
 +			return r.affected;
 +		},
@@ -101,7 +121,7 @@ index 75460be..088f0cc 100644
  }
  
  /** The installed object: the public API plus the hooks this extension itself reads. */
-@@ -146,6 +194,10 @@ function makeApi(initial: ApiDeps): InstalledApi {
+@@ -146,6 +196,10 @@ function makeApi(initial: ApiDeps): InstalledApi {
  			if (result.outcome === "failed") throw new Error(result.reason);
  		},
  		list: () => deps.engine.list().map((rec) => agentInfo(rec, deps.engine.status(rec), (deps.now ?? Date.now)())),
@@ -112,6 +132,41 @@ index 75460be..088f0cc 100644
  		spawnPolicy: () => policy,
  		rebind(next) {
  			deps = next;
+diff --git a/extensions/actor-subagents/authorize.ts b/extensions/actor-subagents/authorize.ts
+index 30d0281..61f98f7 100644
+--- a/extensions/actor-subagents/authorize.ts
++++ b/extensions/actor-subagents/authorize.ts
+@@ -15,8 +15,19 @@ import type { AgentRecord } from "./agent-record.ts";
+ import type { CheckResult } from "./control-result.ts";
+ import { isStrictDescendant } from "./spawn-tree.ts";
+ 
+-/** Actors that are not agents: the human and session restore. Reserved as agent names. */
+-export const NON_AGENT_ACTORS = ["user", "restore"] as const;
++/** Local patch (spawn-api): the API's own actor (api.kill), with main's authority. */
++export const API_ACTOR = "api";
++/** Actors that are not agents: the human, session restore and the API. Reserved as agent names. */
++export const NON_AGENT_ACTORS = ["user", "restore", API_ACTOR] as const;
++
++/**
++ * Local patch (spawn-api): a quiet agent (api.spawn with quiet) answers only to the API and the human. No agent, its
++ * spawner included, may act on it or message it; observation stays open. The reason, or undefined when `by` may act.
++ */
++export function quietRefusal(agents: ReadonlyMap<string, AgentRecord>, by: string, name: string): string | undefined {
++	if (agents.get(name)?.quiet !== true || by === "user" || by === API_ACTOR) return undefined;
++	return `'${name}' was spawned quietly through the API; only the API and the user act on it`;
++}
+ 
+ /** The agent whose authority `by` acts with: 'main' for the non-agent actors, else `by` itself. */
+ export function authorityOf(by: string): string {
+@@ -30,6 +41,8 @@ export function authorize(
+ 	self?: "self",
+ ): CheckResult {
+ 	if (!agents.has(name)) return { ok: false, reason: `unknown agent '${name}'` };
++	const quiet = quietRefusal(agents, by, name);
++	if (quiet) return { ok: false, reason: quiet };
+ 	if (self && name === by) return { ok: true };
+ 	if (isStrictDescendant(agents, name, authorityOf(by))) return { ok: true };
+ 	return { ok: false, reason: `'${name}' is not in your subtree` };
 diff --git a/extensions/actor-subagents/child-tools.test.ts b/extensions/actor-subagents/child-tools.test.ts
 new file mode 100644
 index 0000000..b28eb34
@@ -268,9 +323,18 @@ index 0000000..f91475a
 + */
 +export const persisted = <R extends { quiet?: boolean }>(rs: R[]): R[] => rs.filter((r) => r.quiet !== true);
 diff --git a/extensions/actor-subagents/engine.ts b/extensions/actor-subagents/engine.ts
-index 68cb056..51f8af8 100644
+index 68cb056..344fb65 100644
 --- a/extensions/actor-subagents/engine.ts
 +++ b/extensions/actor-subagents/engine.ts
+@@ -12,7 +12,7 @@ import {
+ } from "./agent-message.ts";
+ import type { AgentEvent } from "./agent-event.ts";
+ import { AbortTracker } from "./abort-tracker.ts";
+-import { authorityOf, authorize, NON_AGENT_ACTORS } from "./authorize.ts";
++import { authorityOf, authorize, NON_AGENT_ACTORS, quietRefusal } from "./authorize.ts";
+ import type { AgentHandle, AgentRecord, AgentTuning, AgentView, ModelChange } from "./agent-record.ts";
+ import { type AgentActivity, type AgentStatus, agentStatus, type StopReason } from "./agent-status.ts";
+ import type { CheckResult, ControlResult, EngineResumeResult, TargetOutcome } from "./control-result.ts";
 @@ -72,6 +72,8 @@ const NAME_RE = /^[a-zA-Z0-9_-]+$/;
  
  /** A record as a lifecycle-notice target: itself and the parent to tell. */
@@ -280,7 +344,37 @@ index 68cb056..51f8af8 100644
  
  /** Feed preview of a message body: one short excerpt, never the whole payload. */
  const previewOf = (content: string): string => (content.length > 60 ? `${content.slice(0, 60)}...` : content);
-@@ -197,6 +199,7 @@ export class Engine {
+@@ -119,6 +121,11 @@ export class Engine {
+ 		return this.agents.get(name);
+ 	}
+ 
++	/** Local patch (spawn-api): why `by` may not act on or message `name` (a quiet agent), else undefined. */
++	quietRefusal(by: string, name: string): string | undefined {
++		return quietRefusal(this.agents, by, name);
++	}
++
+ 	list(): AgentRecord[] {
+ 		return [...this.agents.values()];
+ 	}
+@@ -152,7 +159,7 @@ export class Engine {
+ 	// reserve locks the name synchronously, attach fills in the real session afterwards.
+ 
+ 	/** Reserves an agent name synchronously. Buffers messages until attach. */
+-	reserve(name: string, spawnerName: string): CheckResult {
++	reserve(name: string, spawnerName: string, opts: { quiet?: boolean } = {}): CheckResult {
+ 		const spawner = this.agents.get(spawnerName);
+ 		const depth = spawner ? spawner.depth : 0;
+ 		const check = this.canSpawn(name, depth);
+@@ -177,6 +184,8 @@ export class Engine {
+ 			lastActivity: Date.now(),
+ 			pending: true,
+ 			buffer,
++			// Local patch (spawn-api): quiet from the reservation on, so no agent reaches it while its session is created.
++			...(opts.quiet === true && { quiet: true }),
+ 		};
+ 		this.agents.set(name, record);
+ 		this.emit({ type: "spawn", name, by: spawnerName, ts: Date.now() });
+@@ -197,6 +206,7 @@ export class Engine {
  			sessionFile?: string;
  			sessionId?: string;
  			policyMeta?: unknown;
@@ -288,7 +382,7 @@ index 68cb056..51f8af8 100644
  		},
  	): void {
  		const rec = this.agents.get(name);
-@@ -211,6 +214,7 @@ export class Engine {
+@@ -211,6 +221,7 @@ export class Engine {
  		rec.sessionFile = opts.sessionFile;
  		rec.sessionId = opts.sessionId;
  		rec.policyMeta = opts.policyMeta;
@@ -296,7 +390,7 @@ index 68cb056..51f8af8 100644
  		rec.pending = false;
  		this.emit({ type: "attach", name, by: rec.spawnedBy, childSessionId: rec.sessionId, ts: Date.now() });
  		const buffered = rec.buffer ?? [];
-@@ -269,8 +273,9 @@ export class Engine {
+@@ -269,8 +280,9 @@ export class Engine {
  				continue;
  			}
  			results.push({ target, ok: true });
@@ -308,7 +402,21 @@ index 68cb056..51f8af8 100644
  			affected.push(...(await this.killSubtree(by, target)));
  		}
  		// Announced after the whole operation, so a parent taken down by it is no longer live.
-@@ -511,7 +516,7 @@ export class Engine {
+@@ -350,7 +362,12 @@ export class Engine {
+ 	 */
+ 	private controlTargets(by: string, names?: string[]): { results: TargetOutcome[]; recs: AgentRecord[] } {
+ 		const targets =
+-			names && names.length > 0 ? names : childrenOf(this.agents, authorityOf(by)).map((rec) => rec.name);
++			names && names.length > 0
++				? names
++				: childrenOf(this.agents, authorityOf(by))
++						// Local patch (spawn-api): the default leaves out the quiet children `by` may not act on.
++						.filter((rec) => this.quietRefusal(by, rec.name) === undefined)
++						.map((rec) => rec.name);
+ 		const results: TargetOutcome[] = [];
+ 		const recs: AgentRecord[] = [];
+ 		for (const target of targets) {
+@@ -511,7 +528,7 @@ export class Engine {
  		for (const rec of newlyPaused) if (rec.activity !== undefined) rec.pausedMidTurn = true;
  		for (const rec of newlyPaused) this.startAbort(rec);
  		this.emit({ type: "pause", names: flagged.map((rec) => rec.name), by, ts: Date.now() });
@@ -317,7 +425,7 @@ index 68cb056..51f8af8 100644
  		return { results, affected: newlyPaused.map((rec) => rec.name) };
  	}
  
-@@ -551,7 +556,7 @@ export class Engine {
+@@ -551,7 +568,7 @@ export class Engine {
  		this.announce({
  			kind: "resumed",
  			by,
@@ -326,7 +434,7 @@ index 68cb056..51f8af8 100644
  		});
  
  		// The released agents that still run now: not killed (or respawned) and not paused again.
-@@ -721,7 +726,7 @@ export class Engine {
+@@ -721,7 +738,7 @@ export class Engine {
  	/** Route the scheduler's error message to the live direct parent of `name` (lifecycle-notice.ts decides who). */
  	announceError(name: string, reason: string): void {
  		const rec = this.agents.get(name);
@@ -406,9 +514,137 @@ index 69fbfaa..e796b74 100644
      } catch {
        /* best-effort */
      }
+diff --git a/extensions/actor-subagents/quiet-control.test.ts b/extensions/actor-subagents/quiet-control.test.ts
+new file mode 100644
+index 0000000..04b57ff
+--- /dev/null
++++ b/extensions/actor-subagents/quiet-control.test.ts
+@@ -0,0 +1,122 @@
++// Local patch (spawn-api, review F2): a quiet agent (api.spawn with quiet, a router's overseer) answers only to the API and
++// the human. No agent, its spawner 'main' included, may message, retune, pause, resume or kill it; reading stays open.
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import type { AgentHandle, AgentRecord } from "./agent-record.ts";
++import { makeAgentTools } from "./agent-tools.ts";
++import { installApi, spawnApiDeps } from "./api.ts";
++import { Engine } from "./engine.ts";
++import { createSpawner, type SessionLike } from "./spawner.ts";
++
++const inbox: string[] = [];
++const handle = (name: string): AgentHandle => ({ deliver: async () => void inbox.push(name), abort: async () => {} });
++const record = (name: string, o: Partial<AgentRecord> = {}): AgentRecord => ({
++	name,
++	model: "test/m",
++	handle: handle(name),
++	spawnedBy: "main",
++	depth: name === "main" ? 0 : 1,
++	createdAt: 0,
++	turns: 0,
++	lastActivity: 0,
++	...o,
++});
++/** 'main', a quiet child 'ovs' and a loud child 'w'. */
++function swarm(): Engine {
++	const e = new Engine({ maxAgents: 8, maxSpawnDepth: 3 });
++	e.addAgent(record("main"));
++	e.addAgent(record("ovs", { quiet: true }));
++	e.addAgent(record("w"));
++	return e;
++}
++const REFUSED = "'ovs' was spawned quietly through the API; only the API and the user act on it";
++const refused = [{ target: "ovs", ok: false, reason: REFUSED }];
++
++test("review F2: main's kill, pause, resume and retune refuse a quiet agent with the reason; it stays as it was", async () => {
++	const e = swarm();
++	assert.deepEqual((await e.kill("main", ["ovs"])).results, refused);
++	assert.deepEqual(e.pause("main", ["ovs"]).results, refused);
++	assert.deepEqual((await e.resume("main", ["ovs"])).results, refused);
++	assert.deepEqual(await e.retune("main", "ovs", { thinkingLevel: "low" }), { ok: false, reason: REFUSED });
++	assert.deepEqual(await e.retune("ovs", "ovs", { thinkingLevel: "low" }), { ok: false, reason: REFUSED });
++	assert.equal(e.has("ovs"), true);
++	assert.deepEqual(e.pausedAgents(), []);
++});
++
++test("review F2: a pause or resume without names leaves a quiet child out; the user still reaches it", async () => {
++	const e = swarm();
++	assert.deepEqual(e.pause("main").results, [{ target: "w", ok: true }]);
++	assert.deepEqual(e.pausedAgents(), ["w"]);
++	assert.deepEqual((await e.resume("main")).results, [{ target: "w", ok: true }]);
++	assert.deepEqual(e.pause("restore").results, [{ target: "w", ok: true }]);
++	assert.deepEqual(e.pause("user", ["ovs"]).results, [{ target: "ovs", ok: true }]);
++	assert.deepEqual((await e.resume("user", ["ovs"])).results, [{ target: "ovs", ok: true }]);
++	assert.deepEqual((await e.kill("user", ["ovs"])).results, [{ target: "ovs", ok: true }]);
++});
++
++test("review F2: send_message refuses a quiet target (nothing delivered); the other targets get it ('main', not watched)", async () => {
++	const e = swarm();
++	const tools = makeAgentTools("main", {
++		engine: e,
++		spawnAgent: async () => ({ ok: true, msg: "" }),
++		setAgentModel: async () => ({ ok: true, msg: "" }),
++		resumeAgents: (by, names) => e.resume(by, names),
++		persistRoster: () => {},
++		updateStatus: () => {},
++	});
++	const send = tools.find((t) => t.name === "send_message")!;
++	inbox.length = 0;
++	const r = await send.execute("c1", { to: ["ovs", "main"], content: "approve it" }, undefined, undefined, undefined as never);
++	assert.match((r.content[0] as { text: string }).text, new RegExp(`failed: ovs: ${REFUSED.replace(/[()]/g, "\\$&")}$`));
++	assert.deepEqual(inbox, ["main"]);
++	assert.equal(e.quietRefusal("main", "w"), undefined);
++	assert.equal(e.quietRefusal("user", "ovs"), undefined);
++});
++
++/** The smallest session the spawner can wire; `gate` holds the session's creation. */
++function fakeSession(): SessionLike {
++	return {
++		sendAgentMessage: async () => {},
++		sendUserMessage: async () => {},
++		abort: async () => {},
++		shutdown: async () => {},
++		dispose: () => {},
++		thinkingLevel: "high",
++		setModel: async () => {},
++		setThinkingLevel: () => {},
++		subscribe: () => () => {},
++		getToolDefinition: () => undefined,
++		messages: [],
++		getContextUsage: () => undefined,
++	} as Partial<SessionLike> as SessionLike;
++}
++
++test("review F2: the API kills a quiet agent as 'api' (main's authority); quiet from the reservation on (review L3)", async () => {
++	const e = new Engine({ maxAgents: 8, maxSpawnDepth: 3 });
++	e.addAgent(record("main"));
++	let open!: () => void;
++	const gate = new Promise<void>((r) => {
++		open = r;
++	});
++	const spawner = createSpawner({
++		engine: e,
++		resolveModel: (ref) => (ref ? { provider: "a", id: "b", model: { ref } } : undefined),
++		createSession: async (spec) => {
++			await gate;
++			return { session: fakeSession(), sessionId: `sess-${spec.name}` };
++		},
++		cwd: () => "/repo",
++	});
++	const api = installApi({ engine: e, retune: async () => {}, ...spawnApiDeps({ engine: e, spawnAgent: spawner.spawnAgent, persist: () => {} }) }, {});
++	const spawned = api.spawn!({ name: "ovs", systemPrompt: "s", message: "m", model: "a/b" }, { quiet: true });
++	await new Promise((r) => setTimeout(r, 0));
++	assert.equal(e.get("ovs")?.pending, true);
++	assert.equal(e.quietRefusal("main", "ovs"), REFUSED);
++	assert.deepEqual((await e.kill("main", ["ovs"])).results, refused);
++	open();
++	assert.equal((await spawned).ok, true);
++	const events: { type: string; by?: string }[] = [];
++	e.subscribe((ev) => void events.push(ev));
++	assert.deepEqual(await api.kill!(["ovs"]), ["ovs"]);
++	assert.deepEqual(events.filter((ev) => ev.type === "kill").map((ev) => ev.by), ["api"]);
++});
 diff --git a/extensions/actor-subagents/spawn-api.test.ts b/extensions/actor-subagents/spawn-api.test.ts
 new file mode 100644
-index 0000000..76ac9db
+index 0000000..21e161b
 --- /dev/null
 +++ b/extensions/actor-subagents/spawn-api.test.ts
 @@ -0,0 +1,150 @@
@@ -524,14 +760,14 @@ index 0000000..76ac9db
 +	assert.equal(engine.has("ovs-merge-1"), false);
 +});
 +
-+test("api.kill kills as 'main' and resolves with the names taken down", async () => {
++test("api.kill kills as 'api' (main's authority) and resolves with the names taken down", async () => {
 +	const { api, events, persisted } = setup(ALLOW);
 +	await api.spawn!(OVS, { quiet: true });
 +	assert.deepEqual(await api.kill!(["ovs-merge-1"]), ["ovs-merge-1"]);
 +	assert.equal(api.list().some((a) => a.name === "ovs-merge-1"), false);
 +	assert.deepEqual(
 +		events.filter((e) => e.type === "kill").map((e) => [e.name, (e as { by: string }).by]),
-+		[["ovs-merge-1", "main"]],
++		[["ovs-merge-1", "api"]],
 +	);
 +	assert.equal(persisted(), 2);
 +	assert.deepEqual(await api.kill!(["nobody"]), []);
@@ -563,7 +799,7 @@ index 0000000..76ac9db
 +	assert.equal("kill" in api, false);
 +});
 diff --git a/extensions/actor-subagents/spawner.ts b/extensions/actor-subagents/spawner.ts
-index b0ab9ce..8ce8d5a 100644
+index b0ab9ce..3382e1a 100644
 --- a/extensions/actor-subagents/spawner.ts
 +++ b/extensions/actor-subagents/spawner.ts
 @@ -5,7 +5,7 @@
@@ -603,7 +839,7 @@ index b0ab9ce..8ce8d5a 100644
  	/** Re-register an agent from a restored session (used by restart resume). */
  	restoreAgent: (spec: RestoreSpec) => void;
  }
-@@ -373,7 +383,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+@@ -373,14 +383,14 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  		});
  	};
  
@@ -612,6 +848,14 @@ index b0ab9ce..8ce8d5a 100644
  		const spawner = engine.get(spawnerName);
  		let inheritRef = spec.model ?? spawner?.model;
  		// The Map Is Not the Territory: inherit the observed effective level, not prior intent.
+ 		let thinkingLevel = spec.thinkingLevel ?? spawner?.thinkingLevel;
+ 
+ 		// 1) Reserve the name synchronously (atomic: duplicate/cap/depth) — closes races.
+-		const reserved = engine.reserve(spec.name, spawnerName);
++		const reserved = engine.reserve(spec.name, spawnerName, { quiet: opts.quiet === true });
+ 		if (!reserved.ok) return { ok: false, msg: `error: ${reserved.reason}` };
+ 		// Identity, not just the name, distinguishes this reservation from a later re-spawn.
+ 		const reservation = engine.get(spec.name);
 @@ -390,6 +400,8 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  		let message = spec.message;
  		let tools: string[] | undefined;
