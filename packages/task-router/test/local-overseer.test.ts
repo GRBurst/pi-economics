@@ -139,6 +139,23 @@ test("spawn {ok: false} → attempt 2; both failing → {ok: false}", async () =
   assert.deepEqual(both.entries, []);
 });
 
+test("review F4: a spawn that fails before the policy took its ticket (a duplicate name, a throwing spawn) revokes the ticket", async () => {
+  const ticketOf = (r: ReturnType<typeof rig>, i: number) => (r.h.a.apiSpawns[i]!.args.task as { ticket: string }).ticket;
+  const r = rig();
+  r.h.a.agents.push({ name: "ovs-merge-1", parent: "main", sessionId: "s-x", model: "m", thinkingLevel: undefined, state: "idle" });
+  r.script.push(async () => r.tool().execute(VALID));
+  assert.ok((await r.run()).ok);
+  assert.equal(r.h.a.apiSpawns[0]!.policy, undefined); // the duplicate never reached the policy
+  // The open ticket would answer with the overseer's fields; a revoked one falls through to card routing (no card: reject).
+  assert.ok("reject" in await r.h.a.spawn({ name: "probe", task: { ticket: ticketOf(r, 0) } }));
+
+  const t = rig(), tickets: string[] = [];
+  t.h.a.api.spawn = async (args) => { tickets.push((args.task as { ticket: string }).ticket); throw new Error("session creation failed"); };
+  assert.deepEqual(await t.run(), { ok: false, outcome: "error" });
+  assert.equal(tickets.length, 2);
+  for (const [i, id] of tickets.entries()) assert.ok("reject" in await t.h.a.spawn({ name: `probe-${i}`, task: { ticket: id } }), `ticket ${i}`);
+});
+
 test("both attempts invalid → {ok: false, outcome: 'invalid'}; an invalid attempt 1 is retried (D28)", async () => {
   const r = rig();
   r.h.router.settings.overseer.resubmits = 0;

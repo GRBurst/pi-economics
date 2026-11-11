@@ -39,6 +39,8 @@ export function createTickets(hex: (bytes: number) => string) {
     /** The ticket a child was spawned with (its spawn line, its events). */
     owner: (name: string): Ticket | undefined => byName.get(name),
     forget(name: string): void { byName.delete(name); },
+    /** Closes a ticket no policy took (review F4: a spawn that failed before the policy ran); a taken one is gone already. */
+    revoke(id: string): void { open.delete(id); },
   };
 }
 export type Tickets = ReturnType<typeof createTickets>;
@@ -154,8 +156,9 @@ export function createOverseer(d: OverseerDeps) {
     });
     const abort = (): void => finish({ kind: "aborted" });
     r.signal?.addEventListener("abort", abort, { once: true });
+    let ticket: string | undefined;
     try {
-      const ticket = d.tickets.issue({ role: r.role, reviewId, member, model, effort, cwd: r.cwd, tools: s.tools, childTools: [tool],
+      ticket = d.tickets.issue({ role: r.role, reviewId, member, model, effort, cwd: r.cwd, tools: s.tools, childTools: [tool],
         toolGuard: overseerGuard([...s.tools, tool.name]) });
       const sp = await a.spawn({ name, systemPrompt: PROMPT[r.role], message: r.input, task: { ticket } }, { by: "main", quiet: true })
         .catch((err: Error) => ({ ok: false as const, reason: err.message }));
@@ -178,6 +181,7 @@ export function createOverseer(d: OverseerDeps) {
       d.tickets.forget(name);
       return settled;
     } finally {
+      if (ticket !== undefined) d.tickets.revoke(ticket); // review F4: never left open
       off();
       r.signal?.removeEventListener("abort", abort);
     }

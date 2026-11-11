@@ -36,10 +36,15 @@ export function fakeApi(o: { ext?: boolean } = {}) {
       async spawn(args: SpawnArgs, opts?: { by?: string; quiet?: boolean }): Promise<SpawnResult> {
         await control.spawnGate;
         const by = opts?.by ?? "main";
+        // The spawner reserves the name before it asks the policy (spawner.ts): a duplicate never reaches the policy.
+        if (agents.some((a) => a.name === args.name)) {
+          const result: SpawnResult = { ok: false, reason: `agent "${args.name}" already exists` };
+          apiSpawns.push({ args, opts, result });
+          return result;
+        }
         const p = policy ? await policy(args, { ...caller, name: by }) : { model: args.model ?? caller.model, thinkingLevel: args.thinkingLevel ?? caller.thinkingLevel };
         const result: SpawnResult = control.spawnFail !== undefined ? { ok: false, reason: control.spawnFail }
           : "reject" in p ? { ok: false, reason: p.reject }
-          : agents.some((a) => a.name === args.name) ? { ok: false, reason: `agent "${args.name}" already exists` }
           : { ok: true, name: args.name, sessionId: `s-${args.name}` };
         apiSpawns.push({ args, opts, result, policy: p });
         if (result.ok && !("reject" in p)) {
