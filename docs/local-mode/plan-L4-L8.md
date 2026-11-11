@@ -272,9 +272,9 @@ inventory/keys tests; L6.T3 adds the default-mode `git push origin main` asserti
 | L6.T14 AC-M6 | compare against the live ref instead of the record | "AC-M6" | [x] |
 | L6.T16 contract `merge` | `reason: str` instead of `oneOf(REASONS)` | `test/contract.test.ts` › "merge reason" | [x] |
 | L6.T17 log-contract `merge` | drop `log.merge` | `log-contract` | [x] |
-| L7.T2 AC-P4 | render keys unsorted | "AC-P4" (hash differs) | [ ] |
-| L7.T3 tick-only | allow `[x]`→`[ ]` | "AC-P5 untick blocked" | [ ] |
-| L7.T16 log-contract `plan` | drop `log.plan` | `log-contract` | [ ] |
+| L7.T2 AC-P4 | render keys unsorted | "AC-P4" (hash differs) | [x] |
+| L7.T3 tick-only | allow `[x]`→`[ ]` | "AC-P5 untick blocked" | [x] |
+| L7.T16 log-contract `plan` | drop `log.plan` | `log-contract` | [x] |
 | L8.T2 LOGS examples | add a `review` example without `outcome` | `test/logs-examples.test.ts` | [ ] |
 
 All other new tests are red by construction; record the red in the task's status line.
@@ -1001,92 +1001,112 @@ message). Open notes, for L6 or later:
 
 ### L7 Plans
 
-#### L7.T1 Skeleton schema and validation (AC-P2) `[ ] todo`
+#### L7.T1 Skeleton schema and validation (AC-P2) `[x] done`
 - **Files**: `core/local/plan.ts` (`SKELETON_SCHEMA`, `validateSkeleton`), `test/local-plan.test.ts`. **Depends**: L4.T5.
 - **RED**: schema deep-equals design §3.2.4; "AC-P2 <rule>" one counterexample per rule (duplicate id; `dependsOn` naming a later id; a cycle; `files ∪ create` > `splitFiles`; a missing file; a `create` that exists; a `create` without parent dir; > `milestoneTasks`; empty check) → `ok: false` naming the rule; generated valid skeletons → `ok`.
 - **Check**: fast runner; `chk task-router typecheck-task-router`. **ACs**: AC-P2 (pure).
 
-#### L7.T2 Canonical JSON, hash, render, parse (AC-P4) `[ ] todo`
+#### L7.T2 Canonical JSON, hash, render, parse (AC-P4) `[x] done`
 - **Files**: `core/local/plan.ts`, `test/local-plan.test.ts`. **Depends**: L7.T1.
 - **RED**: "AC-P4" property over generated skeletons and tick sets: `parsePlan(renderPlan(m, sk, t))` = `{sk, ticks: t}`; `skeletonHash` invariant under key order and re-render; one rendered file pinned (design §3.5.3 layout).
 - **Check**: fast runner. **ACs**: AC-P4.
 
-#### L7.T3 Ticks and tick-only diff (AC-P5 pure) `[ ] todo`
+#### L7.T3 Ticks and tick-only diff (AC-P5 pure) `[x] done`
 - **Files**: `core/local/plan.ts` (`TICK`, `tickOnly`), `test/local-plan.test.ts`. **Parallel**: with L7.T2.
 - **RED**: property: flipping any subset of `[ ]` task lines → `ok` with exactly those ids; any other line change, `[x]`→`[ ]` (plant §11), or an added line → `ok: false`. **Check**: fast runner.
 
-#### L7.T4 Plan store and triggers `[ ] todo`
+#### L7.T4 Plan store and triggers `[x] done`
 - **Files**: `core/local/plans.ts` (store: `PlanRecord`, `open(slug, kind, task?)` → `t<n>`, `close`, merged-task set from branch records), `test/local-triggers.test.ts`. **Depends**: L7.T2.
 - **RED**: entries round-trip (rebuild); trigger ids sequential per plan; `open` of an already-open (kind, task) returns the same id.
 - **Check**: fast runner; `chk task-router typecheck-task-router`.
 
-#### L7.T5 Git port for plans `[ ] todo`
+#### L7.T5 Git port for plans `[x] done`
 - **Files**: `core/local/git.ts` (`grepWord`, `lsFiles`, `commitFile` D50), `test/local-git.test.ts`. **Parallel**: with L7.T1–T4.
 - **RED** (temp repo): `grepWord` whole-word (`foo` ∉ `foobar`); `lsFiles(n)` capped; `commitFile` → a commit whose parent is the tip, whose tree differs only in that path, main checkout's index and files untouched.
 - **Check**: fast runner; `chk task-router`.
 
-#### L7.T6 `plan_request` grounding (AC-P1) `[ ] todo`
+#### L7.T6 `plan_request` grounding (AC-P1) `[x] done`
 - **Files**: `core/local/planflow.ts` (`planRequest` step 1, D51), `test/local-plan-request.test.ts`. **Depends**: L7.T4, L7.T5.
 - **RED**: "AC-P1": a missing file and an absent symbol → refused, detail lists both misses, 0 spawns; a used slug → refused; a dirty main checkout → refused before authoring.
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-P1.
 
-#### L7.T7 Plan author and red runs (AC-P3) `[ ] todo`
+#### L7.T7 Plan author and red runs (AC-P3) `[x] done`
 - **Files**: `core/local/planflow.ts` (step 2–3: `runOverseer("plan-author")` with `submit_plan`; `check` = validate + red runs in a detached temp worktree at the main tip), `test/local-plan-request.test.ts`. **Depends**: L7.T6.
 - **RED**: "AC-P3": a task check `true` → the author's `execute` gets `isError` with a `check` finding targeting the task id; after `plans.rounds` such rounds → accepted, `vacuousCheck: true` recorded; a check exiting 127 after `rounds` → `plan_request` fails (D52); validation errors count toward `rounds`.
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-P3.
 
-#### L7.T8 Render, commit on main, record, return (LD10) `[ ] todo`
+#### L7.T8 Render, commit on main, record, return (LD10) `[x] done`
 - **Files**: `core/local/planflow.ts` (steps 4–5), `test/local-plan-request.test.ts`. **Depends**: L7.T7, L6.T10 (ff path).
 - **RED** (temp repo): approved skeleton → `plans.dir/<slug>.md` on main in one commit `plan(<slug>): approved <reviewId>`, main checkout fast-forwarded (or ref updated), `task-router/plan` + `main-ref` entries; result names the path, the first startable unit and `start_branch {plan: {slug, id}}`; no `gatebypass` afterwards.
 - **Check**: fast runner; `chk task-router`.
 
-#### L7.T9 Plan-bound `start_branch` (AC-W2) `[ ] todo`
+#### L7.T9 Plan-bound `start_branch` (AC-W2) `[x] done`
 - **Files**: `core/local/worktree.ts`, `test/local-plan-branch.test.ts`. **Depends**: L7.T8.
 - **RED**: "AC-W2": missing plan, an unmet dependency, a changed skeleton hash (file edited by bash), a task id in a `milestone`-branch milestone → refused, repository unchanged; valid → branch `lm/<slug>/<id>`, result `files` = whitelist and the check(s).
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-W2.
 
-#### L7.T10 Plan guard, main and children (AC-P5) `[ ] todo`
+#### L7.T10 Plan guard, main and children (AC-P5) `[x] done`
 - **Files**: `core/local/planguard.ts` (new: simulate `edit` (`edits[]` or `oldText`/`newText`, G9) / `write`, then `tickOnly`), `core/local/install.ts`, `core/local/childguards.ts`, `test/local-plan-guard.test.ts`. **Depends**: L7.T9, L6.T4.
 - **RED**: "AC-P5": an `edit` flipping `[ ]`→`[x]` on a task line → allowed; any other change, an unappliable `edit`, a `write` of other content → `change the plan with amend_plan`; the same through a child's guard.
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-P5.
 
-#### L7.T11 Whitelist guard (AC-P7) `[ ] todo`
+#### L7.T11 Whitelist guard (AC-P7) `[x] done`
 - **Files**: `core/local/planguard.ts` (`whitelistGuard`), `core/local/install.ts`, `core/local/childguards.ts`, `test/local-plan-guard.test.ts`. **Depends**: L7.T10.
 - **RED**: "AC-P7": in a plan-bound worktree, a write outside `files ∪ create` (and not the plan file) → blocked with `<path> is outside the task's files; finish within them or call amend_plan (trigger <id> is open)` and opens `non-whitelisted`; inside → allowed; a child of that branch likewise.
 - **Check**: fast runner. **ACs**: AC-P7.
 
-#### L7.T12 Merge for plan-bound branches (AC-M2 `scope`) `[ ] todo`
+#### L7.T12 Merge for plan-bound branches (AC-M2 `scope`) `[x] done`
 - **Files**: `core/local/merge.ts` (step 3 tick-only exclusion + `over-budget`; step 4 scope; `plan-changed`; step 5 task/milestone checks + regression per `plans.regression`; goal from the plan), `test/local-merge-plan.test.ts`. **Depends**: L7.T11.
 - **RED**: "AC-M2 scope": a changed file outside the whitelist → `scope`, `non-whitelisted` open; a non-tick plan change → `scope`; skeleton hash changed → `plan-changed`; a tick-only plan change does not count toward size; size over `splitLines` → `size` + `over-budget`; an earlier task's check failing → `check` + `regression`; `regression: "off"` → not run.
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-M2 (scope).
 
-#### L7.T13 `over-budget` turns and `remediation-failed` `[ ] todo`
+#### L7.T13 `over-budget` turns and `remediation-failed` `[x] done`
 - **Files**: `core/local/install.ts` (`turn_end` count, D54), `core/local/merge.ts` (fixer exhaustion), `test/local-triggers.test.ts`. **Depends**: L7.T12.
 - **RED**: `taskTurns + 1` counted turns → `over-budget` open; turns without worktree calls not counted; a plan-bound `blocked` → `remediation-failed` open and the result text names `amend_plan`.
 - **Check**: fast runner.
 
-#### L7.T14 `amend_plan`: trigger, evidence, validation (AC-P6 trigger/evidence) `[ ] todo`
+#### L7.T14 `amend_plan`: trigger, evidence, validation (AC-P6 trigger/evidence) `[x] done`
 - **Files**: `core/local/planflow.ts` (`amendPlan` steps 1–2), `test/local-amend.test.ts`. **Depends**: L7.T13.
 - **RED**: "AC-P6 trigger": no open trigger → `no replan trigger is open; finish the task as planned`; "AC-P6 evidence": `{id: "new", kind: "interface-break", evidenceCommand: "false"}` → accepted, `"true"` → refused; validation errors; a change to a checked task → refused.
 - **Check**: fast runner. **ACs**: AC-P6 (part).
 
-#### L7.T15 `amend_plan`: review kind, apply, rounds (AC-P6 review kind) `[ ] todo`
+#### L7.T15 `amend_plan`: review kind, apply, rounds (AC-P6 review kind) `[x] done`
 - **Files**: `core/local/planflow.ts` (steps 3–5), `test/local-amend.test.ts`. **Depends**: L7.T14.
 - **RED**: "AC-P6 review kind": a task touching `publicApiGlobs` → `plan-review`, `interface-break` → `plan-review`, a milestone added → `plan-review`, else `delta`; approved → re-rendered with unchanged ticks kept, committed on main, trigger closed; rejected → findings; "rounds exhausted" → `plan-author` writes the amendment, applied without review.
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-P6.
 
-#### L7.T16 `plan` lines, contract, log-contract (AC-L1, AC-L2) `[ ] todo`
+#### L7.T16 `plan` lines, contract, log-contract (AC-L1, AC-L2) `[x] done`
 - **Files**: `core/outcome.ts`, `core/log.ts`, `test/plan-log.test.ts`, token-meter `contract.ts`/tests/`LOGS.md`, `checks/log-contract/contract.ts`. **Depends**: L7.T15.
 - **RED**: shapes and `textFree`; contract accepts each `action`, rejects `trigger: "x"`; log-contract required `plan` (plant §11).
 - **Check**: fast runner; `chk task-router token-meter typecheck-token-meter log-contract`. **ACs**: AC-L1, AC-L2 (plan).
 
-#### L7.T17 Tools, prerequisites, section plans line `[ ] todo`
+#### L7.T17 Tools, prerequisites, section plans line `[x] done`
 - **Files**: `core/local/install.ts` (`plan_request`, `amend_plan` when `activeSet(s).plans`; `submit_plan` is a child tool only), `core/local/settings.ts` (problem `plans: needs worktrees and mergeGate; off`, D40), `core/prompt.ts` (`PLANS`), tests. **Depends**: L7.T16.
 - **RED**: "AC-R3 all" pinned (`BRANCH_FULL` + `PLANS`); `plans: on` with `mergeGate: off` → problem, no plan tools; default mode inventory green.
 - **Check**: fast runner; `chk task-router typecheck-task-router`. **ACs**: AC-R3 (plans line).
 
-#### L7.T18 Package check, docs, close `[ ] todo`
+#### L7.T18 Package check, docs, close `[x] done`
 - **Files**: `checks/pi-package/local.nix` (`plan_request`, `amend_plan`), `docs/pi-economics.md` (plans). **Check**: `chk pi-install-local leak boundary`; sweep KG-R, KG-L, KG-M, KG-A, KG-P.
+
+#### L7 deviations
+- T1: `PlanRecord` gains `repo` (a plan belongs to one repository; `start_branch` refuses another one's). `vacuousCheck: true`
+  lives in the skeleton JSON (the hash covers it); `SKELETON_SCHEMA` rejects it, so validation runs on the skeleton without it.
+- T5/T9: the Git port also gains `show(repo, rev, path)` (`git cat-file blob`): `start_branch` and the merge read the plan
+  file at a commit. T8 moves the merge's step 9 into `advanceMain` (merge.ts), which plan commits share.
+- T7: `SubmitSpec.resubmits` (optional) overrides `overseer.resubmits` for one run (`plans.rounds` for `submit_plan`).
+- T9: the skeleton hash is checked on the main tip and in the main checkout's copy; `Started.files` and
+  `BranchRecord.files` (T11) carry the whitelist (files ∪ create).
+- T10: `PolicyDeps.local.gitGuard` becomes `guard`: the child guard composes the git, plan and whitelist guards.
+- T12: a regression trigger's task is the merging unit's id (the unit that broke the earlier task).
+- T13: the turn counts toward `taskTurns` are per session (memory), not session entries; a reload starts them at 0.
+- T14/T15: amended task checks get red runs at the main tip like the author's (exit 126/127 → `broken-check`, exit 0 →
+  `vacuousCheck`). Rejections are counted per trigger (`Trigger.rejected`); "milestone added" for `plan-review` means
+  the milestone id set changed. `plans.taskFiles`/`taskLines`/`milestoneLines` reach the author as limits; the merge's
+  task budget is `splitLines`/`splitFiles` (the over-size trip's), a milestone branch's `milestoneLines`.
+- T16: the store writes the `trigger` line, once per new trigger; `plan` lines carry the slug as `taskId`.
+- T17: the D40 problem is reported only for `plans.enabled = "on"`; `"auto"` without worktrees and mergeGate stays
+  inactive silently (`activeSet`). The overseer's attempt waits at its deadline for a submit check that is still running
+  (plan red runs take seconds), so a timeout no longer drops a submission under check (L4 code, one test).
 
 ### L8 Close-out
 

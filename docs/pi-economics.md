@@ -306,7 +306,7 @@ out) is read by the package's settings test and by the `module-eval` case
 components `hints`, `worktrees`, `mergeGate` and `plans`, each with
 `enabled = "auto" | "on" | "off"` (default `"auto"`: on in local mode, off in
 default mode), the `overseer` that serves them (no switch of its own), and `force` (below); L1 validates them (a bad value is reported and its
-default kept); `hints` works since L3, the overseer since L4, `worktrees` since L5 and `mergeGate` since L6 (below); `plans` does nothing yet. The keys, their defaults and
+default kept); `hints` works since L3, the overseer since L4, `worktrees` since L5, `mergeGate` since L6 and `plans` since L7 (below). The keys, their defaults and
 the messages are in `packages/task-router/core/settings.ts` and
 `packages/task-router/core/local/settings.ts`. In local mode:
 
@@ -490,8 +490,8 @@ the prompts), `core/local/schema.ts`, `core/local/verdict.ts`,
 The tool `start_branch` takes `slug` (`[a-z0-9-]{1,40}`, without `--`: the worktree
 directory joins a plan unit's parts with it), `goal` and `check` (each
 at most 300 characters, both required), optionally `repo` (an absolute path in the
-repository; default: the session's cwd) and `plan` (refused until plans exist:
-`plans are not active`; give a slug or a plan, not both). It validates everything
+repository; default: the session's cwd) and `plan` (a plan unit, below; without
+plans `plans are not active`; give a slug or a plan, not both). It validates everything
 first (a failure changes nothing), then makes the branch `<worktrees.branchPrefix><slug>` (`lm/`)
 at the tip of the first existing branch in `mergeGate.mainBranches` in the worktree
 `<worktrees.root>/<branch with / as -->` (`../{repo}.worktrees`; `{repo}` is the repository's
@@ -587,7 +587,7 @@ Opus last (`packages/task-router/core/local/merge.ts`):
 The refusal codes are `main-branch`, `dirty`, `behind`, `fixer-running`,
 `abandoned`, `blocked`, `size`, `scope`, `check`, `main-dirty`,
 `plan-changed`, `no-worktree`, `review-unavailable`, `aborted` and `git`
-(`scope` and `plan-changed` belong to plans, L7).
+(`scope` and `plan-changed` belong to plans, below).
 
 Fixer: at `rejectionsBeforeFixer` (2) rejections the router spawns a fixer
 itself (a ticket, `fixerMember` at `fixerEffort`: `sonnet`, `high`; under a
@@ -633,6 +633,130 @@ Logs: one `merge` line per `request_merge` call (`taskId` the branch, `""` when 
 pipeline, approvals, the fixer's brief, bypass detection, the tool),
 `core/local/gitcmd.ts` and `core/local/childguards.ts` (the guard),
 `core/local/install.ts` (the wiring).
+
+**Plans (milestone L7).** With `plans` on (local mode, or `plans.enabled =
+"on"`) a request that needs more than one branch is planned first. Plans need
+`worktrees` and `mergeGate`: `"on"` without both is reported (`plans: needs
+worktrees and mergeGate; off`) and switched off, `"auto"` stays inactive. The
+main session gets two tools, `plan_request` and `amend_plan`, and the section
+line "A request that needs more than one branch starts with plan_request.
+Follow the plan file, tick only your task's checkbox, and change the plan only
+with amend_plan." Both answer like `request_merge` (`status: <status>
+(<reason>)`, the detail, one line per finding, and the result as `details`);
+only `status: "error"` and invalid input are error results.
+
+`plan_request` takes `slug` (`[a-z0-9-]{1,40}`), `request` (a digest of the
+user's request, at most 2000 characters), `acceptance` (1–10 lines), `files`
+(1–20 paths) and `symbols` (at most 40), for the repository of the session's
+cwd (`packages/task-router/core/local/planflow.ts`):
+
+1. ground: every file must exist and every symbol must occur as a word in one
+   of them (`git grep -w`); the slug must be new (no plan record, no file
+   `<plans.dir>/<slug>.md`, `docs/plans`); the main checkout must be clean.
+   Failures are `refused` (`grounding`, listing every miss, `slug`,
+   `main-dirty`), before any agent runs;
+2. author: the `plan-author` overseer (above) gets the request, the acceptance,
+   the grounding, the first 400 paths of `git ls-files` and the limits, and
+   submits a skeleton through `submit_plan`: invariants and milestones (`M<n>`,
+   goal, acceptance, `branch` `task` or `milestone`, `dependsOn`, at most
+   `milestoneTasks` (5) tasks), each task (`M<n>.T<m>`) with goal, `files`,
+   `create`, `forbidden`, `check` and `dependsOn`. The router validates it
+   (JSON schema, unique ids, dependencies on earlier ids and no cycle, files
+   that exist, `create` paths that do not but whose directory does, at most
+   `splitFiles` (3) paths per task, a non-empty check) and runs each task's
+   check at the main tip in a detached temporary worktree: a check that
+   cannot run (exit 126 or 127) or passes there (vacuous) goes back as a
+   `check` finding. Rejections count against `plans.rounds` (2); after them a
+   skeleton that is still invalid is `refused` `invalid`, a check that still
+   cannot run `broken-check`, and a vacuous one is accepted with
+   `vacuousCheck: true` (the merge reviewer is told);
+3. commit: the plan file `<plans.dir>/<slug>.md` (a heading, the request, the
+   invariants, per milestone its tasks as checkboxes `- [ ] M1.T1: <goal>`
+   with files, forbidden, check and dependencies, then the canonical skeleton
+   as JSON in a `<details>` block) is committed onto the main tip with git
+   plumbing (`plan(<slug>): approved <reviewId>`, a temporary index; the main
+   checkout's index is not touched) and the main branch advanced as a merge
+   does (fast-forward in the main checkout, else `update-ref`; `push`; the
+   main tip recorded, so no `gatebypass`). The plan record
+   (`task-router/plan`: slug, repository, file, skeleton hash, the approving
+   review, the triggers) is kept as a session entry;
+4. answer: `approved` with the path and the first unit that can start, as
+   `start_branch {"plan": {"slug": "<slug>", "id": "M1.T1"}}`.
+
+`start_branch` with `plan: {slug, id}` (instead of `slug`, `goal` and `check`)
+starts a plan unit: a task of a milestone whose `branch` is `task`, or a whole
+milestone whose `branch` is `milestone`. It refuses a plan that has no record in
+the repository, a plan file that is not on the main branch or whose skeleton
+(on the main tip or in the main checkout) no longer has the approved hash, an
+unknown id, the wrong unit kind, a unit merged already and one whose
+dependencies are not merged (`<id> depends on <a>, not merged yet`). The branch
+is `lm/<slug>/<id>`, its goal and check come from the plan (a milestone's checks
+joined with `&&`), and the result adds `files`: the task's whitelist (`files`
+and `create`).
+
+Plan-bound branches have guards and their own merge rules:
+
+- plan guard: an `edit` or `write` of a plan file (in the main checkout or any
+  of the repository's worktrees), by the main session, a routed child or the
+  fixer, passes only when it changes nothing but checkboxes from `- [ ]` to
+  `- [x]`; else it is blocked with "change the plan with amend_plan";
+- whitelist guard: a write inside a plan-bound worktree to a path outside its
+  task's `files` and `create` (and the plan file) is blocked with "<path> is
+  outside the task's files; finish within them or call amend_plan (trigger
+  <id> is open)" and opens a `non-whitelisted` trigger;
+- turns: a main-session turn with a call whose path is in the active
+  plan-bound worktree (or a bash command that names it) counts; more than
+  `taskTurns` (12) open `over-budget` (counted per session, not kept across a
+  reload);
+- `request_merge`: the plan file at the branch's commit must still hold the
+  approved skeleton (`plan-changed`); the size leaves out tick-only plan
+  lines and is bounded by `splitLines` (100) and `splitFiles` (3) for a task
+  branch, `milestoneLines` (250) for a milestone branch, never above the
+  gate's own limits (`size`, opens `over-budget`); a changed file outside the whitelist, or a plan change that
+  is not a tick of the branch's own tasks, is `scope` (opens
+  `non-whitelisted`); then the unit's checks, `extraChecks` and, with
+  `regression` `milestone` (the default) or `plan`, the checks of the merged
+  tasks of the milestone or the plan (a failure there is `check` and opens
+  `regression`; `off` runs none); there is no red run (the reviewer reads `passed` for a
+  check the author left vacuous, else `failed`), and the reviewer gets the unit's goal and
+  the invariants plus the tasks' `forbidden`. A fixer round rejected again
+  blocks the branch, opens `remediation-failed` and says "restructure the
+  task with amend_plan".
+
+Triggers (`non-whitelisted`, `interface-break`, `regression`, `over-budget`,
+`remediation-failed`) are kept in the plan record with ids `t1`, `t2`, …; the
+same open trigger for the same task is not opened twice. `amend_plan` takes
+`slug`, `trigger` (`{id}` of an open trigger, or `{id: "new", kind:
+"interface-break", evidenceCommand}`), `changes` (1–8 of `add` a task after
+`after` or as a new milestone, `replace` the task `id`, `remove` a task or
+milestone) and `reason`. It refuses: no plan record (`no-plan`), a plan file
+on the main tip that does not hold the approved skeleton (`plan-changed`), no
+open trigger ("no replan trigger is open; finish the task as planned") or an
+unknown one (`trigger`), a new trigger whose evidence command exits 0 in the
+active worktree or else the main checkout (`evidence`; one that fails opens the `interface-break`
+trigger), a change to a checked task (ticked on main or merged: `checked`),
+an amended skeleton that is invalid (`invalid`) and amended checks that
+cannot run (`broken-check`). Then a review: the whole plan (`plan-review`) for
+an `interface-break`, a changed task with a path in `publicApiGlobs` (`[]`),
+or a milestone added or removed; else the `delta` review (the trigger and its
+evidence, the old and the proposed tasks, the dependants). Approved: the plan
+file is rendered again, keeping the ticks of unchanged tasks, committed
+(`plan(<slug>): amended <reviewId>`) and main advanced as above, the record
+gets the new hash, the trigger is closed and live branches of changed tasks
+take their new goal, check and whitelist. Rejected: `rejected` with the
+findings; after `rounds` rejections for one trigger the plan author rewrites
+the trigger's milestone (only it; checked tasks unchanged), and the rewrite
+is applied without review.
+
+Logs: one `plan` line per plan event (`taskId` the slug, `action` `skeleton`
+(an authored skeleton), `approve`, `trigger` (a new trigger), `amend` or
+`reject`, optional `trigger` (the kind), `nTasks`, `reviewId`, `full`), no
+free text (`packages/token-meter/LOGS.md`). The code: `core/local/plan.ts`
+(the skeleton, its schema and rules, the file's rendering and parsing, the
+tick rule), `core/local/plans.ts` (the store), `core/local/planflow.ts`
+(`plan_request`, `amend_plan`), `core/local/plantools.ts` (the tools),
+`core/local/planguard.ts` (the guards), plan-bound parts of
+`core/local/worktree.ts` and `core/local/merge.ts`.
 
 **Scout gate (Group 6, 2026-10-28).** Haiku at medium scored 0.646 against
 Sonnet high's 0.917 (threshold 0.825, H6.4; two runs per task and arm), so
@@ -792,7 +916,7 @@ points into `src`.
 | `pi-install-smoke` | `pi install ./pkg` offline: settings entry, `pi list`, every manifest extension loads, the router warns once, experiments stays inert (AC1) |
 | `pi-git-route` | the npm step of a git install (`--omit=dev --legacy-peer-deps`) is a no-op offline (AC10) |
 | `pi-install-actor` | the package next to the patched actor: no warning, `task_verdict` registered and active (AC5) |
-| `pi-install-local` | the same with the router's settings `{"mode": "local"}`: the router finds the spawn API (no warning), `task_verdict`, `start_branch` and `request_merge` registered; a control run without the actor prints the spawn-API warning (local mode L4) |
+| `pi-install-local` | the same with the router's settings `{"mode": "local"}`: the router finds the spawn API (no warning), `task_verdict`, `start_branch`, `request_merge`, `plan_request` and `amend_plan` registered; a control run without the actor prints the spawn-API warning (local mode L4) |
 | `pi-install-duplicate` | the package next to the Nix links: one `loaded twice` per component, exactly one bound copy (the actor warnings of task-router and cache-lifecycle appear once), no tool conflict, pi's skill loader reports the collision (AC7) |
 | `pi-install-scope-replaced`, `pi-install-scope-both` | the package in two scopes of a trusted project (user `pi install` plus `.pi/settings.json`): where the project entry replaces the user's package, no `loaded twice` and one bound copy; where a second copy joins it, one `loaded twice` per component and one bound copy (AC7, review M1) |
 | `pi-install-subset` | the README's filter loads only the listed extensions (AC4) |
