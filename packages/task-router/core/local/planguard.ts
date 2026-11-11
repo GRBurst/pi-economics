@@ -2,8 +2,10 @@
 // when the new text differs from the current one in ticked task boxes alone (`tickOnly`). Pure but for the `read` port; the
 // main session's `tool_call` and every routed child's toolGuard run it (core/local/install.ts). Bash is not parsed:
 // `start_branch` and `request_merge` re-hash the skeleton.
-import { resolve } from "node:path";
+import { posix, relative, resolve } from "node:path";
+import type { BranchRecord } from "./branches.ts";
 import { tickOnly } from "./plan.ts";
+import { inside } from "./worktree.ts";
 
 export const PLAN_REASON = "change the plan with amend_plan";
 /** pi's line endings for an edit (its `normalizeToLF`). */
@@ -54,4 +56,28 @@ export function planGuard(x: { tool: string; input: unknown; cwd: string; files:
   if (before === undefined) return PLAN_REASON;
   const after = x.tool === "edit" ? applyEdit(before, i) : typeof i.content === "string" ? i.content : undefined;
   return after !== undefined && tickOnly(lf(before), lf(after)).ok ? undefined : PLAN_REASON;
+}
+
+// ── the whitelist guard (design §3.5.5, AC-P7; plan L7.T11) ──
+export const outsideText = (path: string, trigger: string): string =>
+  `${path} is outside the task's files; finish within them or call amend_plan (trigger ${trigger} is open)`;
+/** The states whose worktree is still worked in. */
+const LIVE: readonly string[] = ["active", "fixer", "blocked"];
+/** An `edit` or `write` inside the worktree of a live plan-bound branch must name one of its unit's `files` (files ∪ create,
+ *  recorded by `start_branch`) or the plan file (the plan guard's); else `non-whitelisted` opens for the unit (`open`: the
+ *  trigger's id, the same while it stays open) and the write is blocked naming it. Every other call passes. Total. */
+export function whitelistGuard(x: { tool: string; input: unknown; cwd: string; branches: readonly BranchRecord[];
+  planFile(slug: string): string | undefined; open(slug: string, task: string): string | undefined }): string | undefined {
+  if (x.tool !== "edit" && x.tool !== "write") return undefined;
+  const raw = (x.input as { path?: unknown } | null | undefined)?.path;
+  if (typeof raw !== "string") return undefined;
+  const p = resolve(x.cwd, raw);
+  const rec = x.branches.filter((r) => r.plan && r.files && LIVE.includes(r.state) && inside(p, r.worktree))
+    .sort((a, b) => b.worktree.length - a.worktree.length)[0];
+  if (!rec?.plan || !rec.files) return undefined;
+  const rel = relative(rec.worktree, p);
+  const allowed = new Set([...rec.files, x.planFile(rec.plan.slug)].filter((f): f is string => f !== undefined).map((f) => posix.normalize(f)));
+  if (allowed.has(rel)) return undefined;
+  const id = x.open(rec.plan.slug, rec.plan.id);
+  return id === undefined ? `${rel} is outside the task's files; finish within them` : outsideText(rel, id);
 }

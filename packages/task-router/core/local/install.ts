@@ -19,9 +19,9 @@ import { block, createHintEngine } from "./hints.ts";
 import type { Delivery } from "./hints.ts";
 import { activeSet, componentOn } from "./mode.ts";
 import { gitGuard } from "./childguards.ts";
-import { composeGuards, type Guard } from "../toolguard.ts";
+import { composeGuards, type Guard, type SyncGuard } from "../toolguard.ts";
 import { createPlanStore } from "./plans.ts";
-import { planGuard } from "./planguard.ts";
+import { planGuard, whitelistGuard } from "./planguard.ts";
 import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { bypassHint, bypassText, checkBypass, createApprovals, createMainRefs, requestMergeTool } from "./merge.ts";
@@ -205,10 +205,15 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     gitGuard: (cwd: string): Guard | undefined =>
       activeSet(d.settings).mergeGate ? gitGuard(d.settings.mergeGate.mainBranches, (dir) => git.branchOf(dir), cwd) : undefined,
     /** The plan guard for a session in `cwd` (design §3.5.6) while plans are active, else undefined. */
-    planGuard: (cwd: string): Guard | undefined =>
+    planGuard: (cwd: string): SyncGuard | undefined =>
       activeSet(d.settings).plans ? (tool, input) => planGuard({ tool, input, cwd, files: planFiles(), read: readText }) : undefined,
-    /** A routed child's (and the fixer's) local guards in order: git, then the plan guard. */
-    childGuard: (cwd: string): Guard | undefined => composeGuards(handle.gitGuard(cwd), handle.planGuard(cwd)),
+    /** The whitelist guard for a session in `cwd` (design §3.5.5, AC-P7) while plans are active, else undefined. */
+    whitelistGuard: (cwd: string): SyncGuard | undefined => activeSet(d.settings).plans
+      ? (tool, input) => whitelistGuard({ tool, input, cwd, branches: branches.all(), planFile: (slug) => plans.get(slug)?.file,
+        open: (slug, task) => plans.open(slug, "non-whitelisted", task) })
+      : undefined,
+    /** A routed child's (and the fixer's) local guards in order: git, then the plan and whitelist guards. */
+    childGuard: (cwd: string): Guard | undefined => composeGuards(handle.gitGuard(cwd), handle.planGuard(cwd), handle.whitelistGuard(cwd)),
   };
   const s = d.settings, h = s.hints;
   // Review F2: a repository start_branch registers gets its baseline before the tool returns.
@@ -256,13 +261,14 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       return r instanceof Promise ? r.then(verdict) : verdict(r);
     });
   };
-  // The main session's plan guard (design §3.5.6, AC-P5). Total, as the write guard.
+  // The main session's plan and whitelist guards (design §3.5.6, §3.5.5; AC-P5, AC-P7). Total, as the write guard.
   const guardPlans = (): void => {
     if (!activeSet(s).plans) return;
     pi.on("tool_call", (e, ctx) => {
       try {
         if (d.isChild(ctx)) return undefined;
-        const why = planGuard({ tool: String(e?.toolName), input: e?.input, cwd: ctx?.cwd ?? process.cwd(), files: planFiles(), read: readText });
+        const cwd = ctx?.cwd ?? process.cwd(), tool = String(e?.toolName);
+        const why = handle.planGuard(cwd)!(tool, e?.input) ?? handle.whitelistGuard(cwd)!(tool, e?.input);
         return why === undefined ? undefined : { block: true, reason: why };
       } catch { return undefined; }
     });

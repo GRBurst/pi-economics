@@ -6,10 +6,10 @@ export type BranchState = (typeof BRANCH_STATES)[number];
 /** `plan`: set for a plan-bound branch (L7); `rejections`: merge reviews that asked for changes; `fixerRuns`/`fixer`: the fixer
  *  rounds spent and the running fixer's name (L6); `goal`/`check`: the merge review's goal and the branch check (D37);
  *  `handmade`: a branch the router did not make (D40) that a merge review rejected: its counts only, never active, never cleaned
- *  up (review F8). */
+ *  up (review F8); `files`: a plan unit's whitelist (its tasks' files ∪ create, L7). */
 export type BranchRecord = {
   repo: string; branch: string; worktree: string; base: string; plan?: { slug: string; id: string }; state: BranchState;
-  rejections: number; fixerRuns: number; fixer?: string; goal?: string; check?: string; handmade?: true;
+  rejections: number; fixerRuns: number; fixer?: string; goal?: string; check?: string; handmade?: true; files?: string[];
 };
 /** Facts the synchronous guards read (D39): refreshed by `start_branch`, `request_merge` and at `session_start`, per repository:
  *  the main checkout's directory (the worktree that has a main branch checked out) and every registered worktree. */
@@ -44,6 +44,7 @@ export function readRecord(x: unknown): BranchRecord | undefined {
   if (r.plan !== undefined && !(p && isStr(p.slug) && isStr(p.id))) return undefined;
   for (const k of ["fixer", "goal", "check"]) if (r[k] !== undefined && !isStr(r[k])) return undefined;
   if (r.handmade !== undefined && r.handmade !== true) return undefined;
+  if (r.files !== undefined && !(Array.isArray(r.files) && r.files.every(isStr))) return undefined;
   const { keep: _order, ...rec } = structuredClone(r);
   return rec as BranchRecord;
 }

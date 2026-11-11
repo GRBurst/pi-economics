@@ -8,7 +8,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { renderPlan, type Skeleton, skeletonHash } from "../core/local/plan.ts";
-import { applyEdit, PLAN_REASON, planGuard } from "../core/local/planguard.ts";
+import { BRANCH_TYPE, type BranchRecord } from "../core/local/branches.ts";
+import { applyEdit, outsideText, PLAN_REASON, planGuard, whitelistGuard } from "../core/local/planguard.ts";
 import { PLAN_TYPE } from "../core/local/plans.ts";
 import { fakeGit } from "./fake-git.ts";
 import { accepted, card, harness, provideSkills } from "./harness.ts";
@@ -111,4 +112,59 @@ test("AC-P5 plans off: no plan guard", async () => {
   h.f.fire("session_start", {}, ctx);
   const r = (await Promise.all(h.f.fire("tool_call", { toolName: "write", toolCallId: "t1", input: { path: file, content: "x" } }, ctx))).filter((v) => v !== undefined);
   assert.deepEqual(r, []);
+});
+
+// ── L7.T11 (design §3.5.5, AC-P7): the whitelist guard ──
+const W = "/r/x.worktrees/lm--p--M1.T1";
+const BOUND: BranchRecord = { repo: "/r/x", branch: "lm/p/M1.T1", worktree: W, base: "b".repeat(40), plan: { slug: "p", id: "M1.T1" }, state: "active",
+  rejections: 0, fixerRuns: 0, goal: "write the parser", check: "test -f src/a.ts", files: ["src/a.ts", "src/parse.ts"] };
+
+test("AC-P7 a write outside the task's files in a plan-bound worktree is blocked and opens non-whitelisted; inside passes", () => {
+  const opened: string[] = [];
+  const g = (tool: string, path: unknown, cwd = W, branches: BranchRecord[] = [BOUND]) => whitelistGuard({ tool, input: { path }, cwd, branches,
+    planFile: (slug) => (slug === "p" ? "docs/plans/p.md" : undefined), open: (slug, task) => { opened.push(`${slug} ${task}`); return "t1"; } });
+  assert.equal(g("write", "src/c.ts"), "src/c.ts is outside the task's files; finish within them or call amend_plan (trigger t1 is open)");
+  assert.equal(outsideText("src/c.ts", "t1"), g("edit", `${W}/src/c.ts`));
+  assert.deepEqual(opened, ["p M1.T1", "p M1.T1"]);
+  for (const ok of ["src/a.ts", `${W}/src/parse.ts`, "./src/../src/a.ts", "docs/plans/p.md"]) assert.equal(g("edit", ok), undefined, ok);
+  assert.equal(g("write", "/r/x/src/c.ts", "/r/x"), undefined, "the main checkout is the write guard's");
+  assert.equal(g("write", "src/c.ts", W, [{ ...BOUND, plan: undefined, files: undefined }]), undefined, "a slug branch has no whitelist");
+  assert.equal(g("write", "src/c.ts", W, [{ ...BOUND, state: "merged" }]), undefined, "only a live branch");
+  assert.equal(g("write", "src/c.ts", W, [{ ...BOUND, state: "fixer" }]) !== undefined, true, "the fixer's branch too");
+  assert.equal(g("read", "src/c.ts"), undefined);
+  assert.equal(g("bash", "src/c.ts"), undefined);
+  assert.equal(opened.length, 3);
+});
+
+/** The rig with a live plan-bound branch `lm/p/M1.T1` whose worktree is active. */
+function bound() {
+  const x = rig();
+  const rec: BranchRecord = { ...BOUND, repo: x.repo, worktree: x.wt };
+  const plan = { slug: "p", repo: x.repo, file: "docs/plans/p.md", skeletonHash: skeletonHash(SK), approvedBy: "rv-1", triggers: [] };
+  const ctx = (cwd = x.repo) => ({ sessionManager: { getSessionId: () => "s-main", getBranch: () => [
+    { type: "custom", customType: PLAN_TYPE, data: plan }, { type: "custom", customType: BRANCH_TYPE, data: rec }] }, cwd });
+  x.h.f.fire("session_start", {}, ctx());
+  const call = async (toolName: string, input: unknown, cwd = x.wt) =>
+    (await Promise.all(x.h.f.fire("tool_call", { toolName, toolCallId: `t${Math.random()}`, input }, ctx(cwd)))).filter((v) => v !== undefined);
+  return { ...x, call };
+}
+
+test("AC-P7 the main session: blocked outside, the trigger opened once and named; inside passes", async () => {
+  const x = bound();
+  await x.h.router.settled();
+  const why = outsideText("src/c.ts", "t1");
+  assert.deepEqual(await x.call("write", { path: join(x.wt, "src/c.ts"), content: "x" }), [{ block: true, reason: why }]);
+  assert.deepEqual(await x.call("edit", { path: "src/c.ts", edits: [{ oldText: "a", newText: "b" }] }), [{ block: true, reason: why }], "the same trigger");
+  const triggers = x.h.f.entries.filter((e: { type: string }) => e.type === PLAN_TYPE).map((e) => (e.data as { triggers: unknown }).triggers);
+  assert.deepEqual(triggers, [[{ id: "t1", kind: "non-whitelisted", task: "M1.T1", open: true }]]);
+  assert.deepEqual(await x.call("write", { path: join(x.wt, "src/a.ts"), content: "x" }), []);
+});
+
+test("AC-P7 a child of that branch: the same guard in its toolGuard (its cwd is the worktree)", async () => {
+  const x = bound();
+  await x.h.router.settled();
+  provideSkills(x.h, ["tdd-implementation-planner"]);
+  const r = accepted(await x.h.a.spawn({ name: "c1", task: card({ files: ["src/a.ts"] }) })) as { toolGuard?: (t: string, i: unknown) => unknown };
+  assert.equal(await r.toolGuard!("write", { path: "src/c.ts", content: "x" }), outsideText("src/c.ts", "t1"));
+  assert.equal(await r.toolGuard!("write", { path: "src/a.ts", content: "x" }), undefined);
 });

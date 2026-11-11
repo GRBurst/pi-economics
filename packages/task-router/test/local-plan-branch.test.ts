@@ -94,7 +94,7 @@ test("AC-W2 a valid task: branch lm/<slug>/<id>, its whitelist and check; again 
   assert.deepEqual(r.value, { branch: "lm/parser/M1.T1", worktree: dir, base: x.mainSha(), check: "test -f src/parse.ts", files: ["src/a.ts", "src/parse.ts"] });
   assert.ok(existsSync(join(dir, FILE)), "the worktree holds the plan");
   assert.deepEqual(x.branches.active(), { repo: x.r.dir, branch: "lm/parser/M1.T1", worktree: dir, base: x.mainSha(), plan: { slug: "parser", id: "M1.T1" },
-    state: "active", rejections: 0, fixerRuns: 0, goal: "write the parser", check: "test -f src/parse.ts" });
+    state: "active", rejections: 0, fixerRuns: 0, goal: "write the parser", check: "test -f src/parse.ts", files: ["src/a.ts", "src/parse.ts"] });
   const n = x.entries.length;
   const again = await startBranch(x.d, { plan: { slug: "parser", id: "M1.T1" } }, x.r.dir);
   assert.deepEqual(again, r);

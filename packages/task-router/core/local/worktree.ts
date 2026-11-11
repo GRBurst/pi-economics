@@ -138,9 +138,10 @@ export async function startBranch(d: StartDeps, input: unknown, cwd: string): Pr
     if (known && known.state !== "active" && known.state !== "abandoned") return fail(`branch ${branch} is ${known.state}; start another`);
     // review F8: a hand-made record is adopted (the router's from now on)
     const { handmade: _adopted, ...prior } = known ?? { repo, branch, base: main.sha, rejections: 0, fixerRuns: 0 };
-    rec = { ...prior, ...(u.value.plan && { plan: u.value.plan }), worktree: there.dir, state: "active", goal, check };
+    rec = { ...prior, ...(u.value.plan && { plan: u.value.plan }), worktree: there.dir, state: "active", goal, check, ...(files && { files }) };
     const current = d.store.active();
-    const same = known !== undefined && current?.repo === repo && current.branch === branch && current.goal === goal && current.check === check;
+    const same = known !== undefined && current?.repo === repo && current.branch === branch && current.goal === goal && current.check === check
+      && JSON.stringify(current.files) === JSON.stringify(files);
     if (!same) d.store.put(rec);
   } else {
     const dir = worktreeDir(d.settings.worktrees.root, repo, branch);
@@ -151,7 +152,7 @@ export async function startBranch(d: StartDeps, input: unknown, cwd: string): Pr
       return fail(added.err);
     }
     rec = { repo, branch, worktree: dir, base: main.sha, ...(u.value.plan && { plan: u.value.plan }), state: "active", rejections: 0, fixerRuns: 0,
-      goal, check };
+      goal, check, ...(files && { files }) };
     d.store.put(rec);
   }
   await refreshFacts(d, repo);
