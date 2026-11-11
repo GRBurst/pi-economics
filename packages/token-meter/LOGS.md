@@ -159,6 +159,22 @@ overseer: `kind: "overseer"`; a fixer: `kind: "implement"`) with a ticket instea
 verdict (a kill logs no `unjudged`). Each overseer attempt adds a `review` line; a `review` is no task event, and the
 overseer's session is a child named by its ticket `spawn` line.
 
+### Examples: task-router local mode
+
+One line per event that local mode added (`test/logs-examples.test.ts` runs each through the contract): a
+`/force` set by the command, a hint to the main session, a ticket `spawn` of a merge overseer and its `review`, the
+rejected `request_merge`, a main branch moved outside the gate, and a plan approved by `plan_request`.
+
+```jsonl
+{"v":1,"ts":"2026-11-02T09:00:00.000Z","event":"force","taskId":"","action":"set","source":"command","model":"anthropic/claude-sonnet-5-5","effort":"high"}
+{"v":1,"ts":"2026-11-02T09:01:00.000Z","event":"hint","taskId":"main","trip":"identical-call","stage":"hint","count":3,"sessionId":"s-main"}
+{"v":1,"ts":"2026-11-02T09:02:00.000Z","event":"spawn","taskId":"ovs-merge-1","kind":"overseer","ticket":"merge","workerTier":"T2","workerEffort":"high","workerMember":"opus","workerModel":"anthropic/claude-opus-5-5","sessionId":"s-ovs-merge-1","parentSessionId":"s-main"}
+{"v":1,"ts":"2026-11-02T09:05:00.000Z","event":"review","taskId":"rv-1a2b3c4d","role":"merge","member":"opus","model":"anthropic/claude-opus-5-5","outcome":"revise","attempt":1,"durationMs":180000,"findings":2,"blocking":1,"commit":"0123abc","branch":"lm/parser"}
+{"v":1,"ts":"2026-11-02T09:05:01.000Z","event":"merge","taskId":"lm/parser","outcome":"revise","commit":"0123abc","nLines":42,"nFiles":2,"reviewId":"rv-1a2b3c4d"}
+{"v":1,"ts":"2026-11-02T09:10:00.000Z","event":"gatebypass","taskId":"main","from":"0123abc","to":"4567def","repo":"app"}
+{"v":1,"ts":"2026-11-02T09:20:00.000Z","event":"plan","taskId":"parser","action":"approve","nTasks":4,"reviewId":"rv-5e6f7a8b"}
+```
+
 ### Older lines: the old → new mapping
 
 Lines from before 2026-10-17 carry tiers and route labels only. Readers map them with `levelsOfLine`

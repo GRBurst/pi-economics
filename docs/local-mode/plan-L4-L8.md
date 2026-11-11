@@ -275,7 +275,7 @@ inventory/keys tests; L6.T3 adds the default-mode `git push origin main` asserti
 | L7.T2 AC-P4 | render keys unsorted | "AC-P4" (hash differs) | [x] |
 | L7.T3 tick-only | allow `[x]`→`[ ]` | "AC-P5 untick blocked" | [x] |
 | L7.T16 log-contract `plan` | drop `log.plan` | `log-contract` | [x] |
-| L8.T2 LOGS examples | add a `review` example without `outcome` | `test/logs-examples.test.ts` | [ ] |
+| L8.T2 LOGS examples | add a `review` example without `outcome` | `test/logs-examples.test.ts` | [x] |
 
 All other new tests are red by construction; record the red in the task's status line.
 
@@ -1118,7 +1118,7 @@ message). Open notes, for L6 or later:
 #### L8.T1 Module contract complete `[x] done`
 - **Files**: `docs/pi-economics.md` (taskRouter: one local-mode subsection — switch, components and `activeSet`, settings table for every §3.0.1 key with default and unit, tools `start_branch`/`request_merge`/`plan_request`/`amend_plan`, `/force`, session entries, events, failure modes; actorSubagents and Patched upstreams consistent). **Check**: `chk leak boundary`.
 
-#### L8.T2 `LOGS.md` examples, verified (D58) `[ ] todo`
+#### L8.T2 `LOGS.md` examples, verified (D58) `[x] done`
 - **Files**: `packages/token-meter/LOGS.md` (one example line per new event: `force`, `hint`, `review`, `merge`, `gatebypass`, `plan`, ticket `spawn`, in one fenced `jsonl` block under a fixed heading), `packages/token-meter/test/logs-examples.test.ts`.
 - **RED**: the test extracts the block's lines and runs them through the contract: before the examples exist it fails (block missing); plant (a `review` example without `outcome`) → FAIL seen. **Check**: `chk token-meter`.
 
