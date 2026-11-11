@@ -4,7 +4,7 @@
 // what can move a ref: quotes, escapes, operators, groups, redirections, heredocs, comments, substitutions and `-c` strings.
 // What it cannot read (a computed word, nesting deeper than 2) is unknown or throws; `safeClassify` turns a throw into a block
 // for a command with a `git` token and an allow for every other (LD8).
-import { basename, isAbsolute, resolve } from "node:path";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 
 /** Stands for the computed part of a word (a variable, a substitution, `~`): `a$X` is `a` + DYN. The classifier cannot read it. */
 export const DYN = "\u0000";
@@ -365,3 +365,135 @@ export function gitCalls(cmd: string, cwd: string): GitCall[] {
 }
 /** The directories whose current branch `classify` needs (D43), once each. */
 export const gitDirs = (cmd: string, cwd: string): string[] => [...new Set(gitCalls(cmd, cwd).flatMap((c) => (c.dir ? [c.dir] : [])))];
+
+// ── classification (design §3.4.5) ──
+export const MERGE_REASON = (main: string): string => `merging into ${main} goes through request_merge`;
+export const UNKNOWN_DIR = "cannot tell the branch; run git with a literal -C <worktree>";
+export const UNCLASSIFIED = "router could not classify this git command; split it";
+type Branch = string | undefined | "unknown";
+/** The subcommands that write the current branch (design §3.4.5). */
+const ON_CURRENT = new Set(["merge", "pull", "rebase", "cherry-pick", "revert", "am", "commit", "reset"]);
+/** Per subcommand, the options whose value is the next word (so it is no positional). */
+const VALUED: Record<string, string[]> = {
+  push: ["-o", "--push-option", "--repo", "--receive-pack", "--exec"],
+  fetch: ["--depth", "--deepen", "--shallow-since", "--shallow-exclude", "-j", "--jobs", "--upload-pack", "-o", "--server-option", "--negotiation-tip", "--refmap"],
+  rebase: ["--onto", "-s", "--strategy", "-X", "--strategy-option", "-x", "--exec", "-C"],
+  branch: ["-u", "--set-upstream-to", "--contains", "--no-contains", "--merged", "--no-merged", "--points-at", "--sort", "--format"],
+  checkout: ["-b", "-B", "--orphan", "--conflict", "--pathspec-from-file"],
+  switch: ["-c", "-C", "--create", "--force-create", "--orphan", "--conflict"],
+  "update-ref": ["-m"],
+};
+/** The words that are no option and no option's value; everything after `--` (`rest`) separately. */
+function positionals(sub: string, args: readonly string[]): { pos: string[]; rest: string[] | undefined } {
+  const valued = VALUED[sub] ?? [], pos: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i]!;
+    if (w === "--") return { pos, rest: args.slice(i + 1) };
+    if (w.startsWith("-") && w !== "-") { if (valued.includes(w)) i++; continue; }
+    pos.push(w);
+  }
+  return { pos, rest: undefined };
+}
+/** A short-option cluster (`-fD`) or a long option names `flag`. */
+const has = (args: readonly string[], short: string, long: string[] = []): boolean =>
+  args.some((a) => long.includes(a.split("=")[0]!) || (short !== "" && /^-[A-Za-z]+$/.test(a) && a.includes(short)));
+/** The value of the first of `opts` (`-B x`, `--force-create=x`), or undefined. */
+function valueOf(args: readonly string[], opts: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (opts.includes(a)) return args[i + 1] ?? "";
+    const eq = a.indexOf("=");
+    if (eq > 0 && opts.includes(a.slice(0, eq))) return a.slice(eq + 1);
+  }
+  return undefined;
+}
+const short = (ref: string): string => ref.replace(/^refs\/heads\//, "");
+
+/** One git call's verdict given its directory's current branch `cur`. */
+function rule(c: GitCall, cur: Branch, mains: readonly string[]): string | undefined {
+  const isMain = (b: Branch): b is string => b !== undefined && b !== "unknown" && mains.includes(b);
+  /** A ref the call names: a main blocks, a computed one cannot be read. */
+  const named = (ref: string): string | undefined => (dyn(ref) ? UNCLASSIFIED : mains.includes(short(ref)) ? MERGE_REASON(short(ref)) : undefined);
+  /** The call writes the current branch. */
+  const current = (): string | undefined => (cur === "unknown" ? UNKNOWN_DIR : isMain(cur) ? MERGE_REASON(cur) : undefined);
+  const first = (...xs: (string | undefined)[]): string | undefined => xs.find((x) => x !== undefined);
+  const { sub, args } = c;
+  if (dyn(sub)) return UNCLASSIFIED;
+  const { pos } = positionals(sub, args);
+  /** A fetch refspec `src:dst` writes dst: into a main ref it is a merge. */
+  const fetched = (): string | undefined => first(...pos.filter((r) => !dyn(r) && r.includes(":"))
+    .map((r) => { const d = short(r.slice(r.lastIndexOf(":") + 1)); return mains.includes(d) ? MERGE_REASON(d) : undefined; }));
+  switch (sub) {
+    case "filter-branch": return MERGE_REASON(mains[0] ?? "main");
+    case "fetch": return fetched();
+    case "pull": return first(fetched(), current());
+    case "rebase": return first(pos[1] !== undefined ? named(pos[1]) : undefined, current());
+    case "push": {
+      if (has(args, "", ["--all", "--mirror", "--branches"])) return MERGE_REASON(mains[0] ?? "main");
+      const specs = pos.slice(1);
+      if (!specs.length) return has(args, "", ["--tags"]) ? undefined : current();
+      for (const r of specs) {
+        if (dyn(r)) return UNCLASSIFIED;
+        const x = r.replace(/^\+/, ""), dst = x.includes(":") ? x.slice(x.lastIndexOf(":") + 1) : x;
+        const why = dst.includes("*") ? MERGE_REASON(mains[0] ?? "main") : dst === "HEAD" || dst === "@" ? current() : named(dst);
+        if (why !== undefined) return why;
+      }
+      return undefined;
+    }
+    case "branch": {
+      if (!has(args, "f", ["--force"]) && !has(args, "M") && !has(args, "m", ["--move"]) && !has(args, "D") && !has(args, "d", ["--delete"])
+        && !has(args, "c", ["--copy"]) && !has(args, "C")) return undefined;
+      const renames = has(args, "m", ["--move"]) || has(args, "M") || has(args, "c", ["--copy"]) || has(args, "C");
+      return first(...pos.map(named), renames && pos.length === 1 ? current() : undefined);
+    }
+    case "checkout": { const b = valueOf(args, ["-B"]); return b === undefined ? undefined : named(b); }
+    case "switch": { const b = valueOf(args, ["-C", "--force-create"]); return b === undefined ? undefined : named(b); }
+    case "update-ref": {
+      if (args.includes("--stdin")) return UNCLASSIFIED;
+      const ref = pos[0];
+      if (ref === undefined) return undefined;
+      return ref === "HEAD" && !args.includes("--no-deref") ? current() : named(ref);
+    }
+    default: return ON_CURRENT.has(sub) ? current() : undefined;
+  }
+}
+/** The branch of a directory after a `checkout` or `switch` there: the new branch, a main, detached; a word that may be a branch
+ *  or a path leaves a main checkout unknown (main may stay checked out). */
+function after(c: GitCall, cur: Branch, mains: readonly string[]): Branch {
+  const created = valueOf(c.args, c.sub === "switch" ? ["-c", "-C", "--create", "--force-create", "--orphan"] : ["-b", "-B", "--orphan"]);
+  if (created !== undefined) return dyn(created) ? "unknown" : created;
+  if (c.args.includes("--detach") || (c.sub === "switch" && c.args.includes("-d"))) return undefined;
+  const { pos, rest } = positionals(c.sub, c.args);
+  if (c.sub === "checkout" && rest !== undefined) return cur; // `checkout [x] -- paths`: files only
+  const p = pos[0];
+  if (p === undefined) return cur;
+  if (dyn(p) || p === "-" || p.includes("@{")) return "unknown";
+  if (mains.includes(p)) return p;
+  if (c.sub === "switch") return p;
+  return cur === "unknown" || (cur !== undefined && mains.includes(cur)) ? "unknown" : cur;
+}
+
+/** undefined = allow; a string = the block reason (design §3.4.5). `branches`: directory → its current branch (undefined:
+ *  detached or none; "unknown": git could not tell in time); a directory not in it is unknown. A `checkout`/`switch` earlier in
+ *  the command changes the branch for the later calls in its directory (and below it). */
+export function classify(cmd: string, cwd: string, mains: readonly string[], branches: ReadonlyMap<string, Branch>): string | undefined {
+  const moved: [string, Branch][] = [];
+  const cur = (dir: string | undefined): Branch => {
+    if (dir === undefined) return "unknown";
+    const m = moved.filter(([d]) => inside(dir, d)).sort((a, b) => b[0].length - a[0].length)[0];
+    return m ? m[1] : branches.has(dir) ? branches.get(dir) : "unknown";
+  };
+  for (const c of gitCalls(cmd, cwd)) {
+    const b = cur(c.dir), why = rule(c, b, mains);
+    if (why !== undefined) return why;
+    if (c.dir !== undefined && (c.sub === "checkout" || c.sub === "switch")) moved.push([c.dir, after(c, b, mains)]);
+  }
+  return undefined;
+}
+const inside = (p: string, dir: string): boolean => { const r = relative(dir, p); return r === "" || (!r.startsWith("..") && !isAbsolute(r)); };
+/** A `git` word in the command text (not `.git`, `gitk` or `git-lfs`). */
+export const hasGitToken = (cmd: string): boolean => /(^|[^A-Za-z0-9_.-])git($|[^A-Za-z0-9_-])/.test(cmd);
+/** LD8: an exception allows a command with no `git` token and blocks every other with `UNCLASSIFIED`. */
+export function safeClassify(...a: Parameters<typeof classify>): string | undefined {
+  try { return classify(...a); } catch { return hasGitToken(a[0]) ? UNCLASSIFIED : undefined; }
+}
