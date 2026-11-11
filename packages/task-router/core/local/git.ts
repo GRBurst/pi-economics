@@ -18,13 +18,16 @@ export const gitRunner = (file = "git", env: Record<string, string> = {}): GitRu
       cwd, detached: true, stdio: [opts.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       env: { ...process.env, LC_ALL: "C", GIT_TERMINAL_PROMPT: "0", ...env, ...opts.env },
     });
-    let out = "", err = "", timedOut = false, settled = false;
+    // review L7 F12: stdout's chunks are decoded once, at the end (a multibyte character may span two chunks)
+    const chunks: Buffer[] = [];
+    let bytes = 0, err = "", timedOut = false, settled = false;
+    const out = (): string => Buffer.concat(chunks).toString("utf8");
     const finish = (r: GitOut): void => { if (!settled) { settled = true; clearTimeout(timer); done(r); } };
-    p.stdout!.on("data", (b: Buffer) => { if (out.length < OUT_MAX) out += b; });
+    p.stdout!.on("data", (b: Buffer) => { if (bytes < OUT_MAX) { chunks.push(b); bytes += b.length; } });
     p.stderr!.on("data", (b: Buffer) => { err = (err + b).slice(-ERR_MAX); });
     const timer = setTimeout(() => { timedOut = true; try { process.kill(-p.pid!, "SIGKILL"); } catch { p.kill("SIGKILL"); } }, timeoutMs);
-    p.on("error", (e) => finish({ exit: 127, out, err: String(e), timedOut: false }));
-    p.on("close", (code) => finish({ exit: timedOut ? 124 : (code ?? 1), out, err, timedOut }));
+    p.on("error", (e) => finish({ exit: 127, out: out(), err: String(e), timedOut: false }));
+    p.on("close", (code) => finish({ exit: timedOut ? 124 : (code ?? 1), out: out(), err, timedOut }));
     if (opts.stdin !== undefined) { p.stdin!.on("error", () => undefined); p.stdin!.end(opts.stdin); }
   });
 

@@ -422,3 +422,13 @@ test("show: a file at a commit or branch, byte for byte; an unknown path or comm
   assert.equal(await git.show(r.dir, "0".repeat(40), "docs/plans/p.md"), undefined);
   assert.equal(await git.show(r.dir, "main", "docs/plans"), undefined, "a directory is no file");
 });
+
+test("review L7 F12: stdout is decoded once, so a multibyte character on a pipe chunk's boundary survives (a large plan file)", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const text = `# plan\n${"a — b → c\n".repeat(30_000)}`; // ≈ 400 kB, far over one 64 kB pipe chunk
+  r.commit("docs/plans/big.md", text);
+  assert.equal(await git.show(r.dir, "HEAD", "docs/plans/big.md"), text);
+  const raw = await gitRunner("git", r.env)(["cat-file", "blob", "HEAD:docs/plans/big.md"], r.dir, 30_000);
+  assert.equal(raw.out, text);
+});
