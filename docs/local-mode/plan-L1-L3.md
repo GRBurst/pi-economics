@@ -829,7 +829,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   `outcomes.trip`; `stage: "x"` → problem; analyse: hint lines do not change "task events without a spawn" (D20 already in place).
 - **GREEN**: S9 (L3 part); `LOGS.md` `hint` row. **Check**: fast runner (token-meter); `chk token-meter typecheck-token-meter log-contract`. **Keep green**: KG-L. **ACs**: AC-L1 (hint).
 
-#### L3.T6 `composeGuards` `[ ] todo`
+#### L3.T6 `composeGuards` `[x] done`
 - **Files**: `core/toolguard.ts`, `test/compose.test.ts` (new).
 - **Depends**: L1 done. **Parallel**: with L3.T1–T5.
 - **RED**: property over random guard tables: `composeGuards(g1, …, gk)(t, i)` = the first non-undefined `gj(t, i)`; every
