@@ -1117,8 +1117,11 @@ Worktrees come before the gate so that L5 is usable on its own, and plans build 
 
 ## 7. Open questions (with recommendations)
 
-**Resolution:** every recommendation below is accepted for the first version. OQ18: a new patch file. OQ7: `quiet`.
-Revisit OQ6, OQ10 and OQ19 with meter data and the answers to research prompts 7 and 8.
+**Resolution:** every recommendation below is accepted for the first version, except OQ21,
+which is open (a proposal in `merge-gate-sizing.md`; the current values stay until its phases land).
+OQ18: a new patch file. OQ7: `quiet`.
+Revisit OQ6, OQ10 and OQ19 with meter data and the answers to research prompts 7 and 8 (the batch-3
+reports land with branch `lm/research-reports-batch-7-8`).
 
 - **OQ1. Paths in worktrees.** Block writes to the main checkout and instruct (LD6), or rewrite relative paths
   and prefix bash with `cd <wt> &&` through the mutable `tool_call` input? *Recommend* blocking for L5. Count
@@ -1177,12 +1180,13 @@ Revisit OQ6, OQ10 and OQ19 with meter data and the answers to research prompts 7
 - **OQ20. Turn cap for `over-budget`.** `taskTurns` 12 counts main turns since `start_branch`, including turns
   spent waiting for children. *Recommend* counting only turns with at least one tool call in the active
   worktree.
-- **OQ21. Merge-gate sizing and class.** The 150/6 budget refuses real work (a docs branch 1148 lines/8 files;
-  a CI migration 13299/136), and the prescribed "split the branch" multiplies the per-merge fixed cost
-  (check, red run, cold review). *Recommend* `merge-gate-sizing.md`: a deterministic inert class (checks
-  only, no LLM review, no size refusal), an `atomic` override for unsplittable code units, main-dirty
-  checked in step 2 as well as step 9, and tuning from OQ17 data. The research's numbers (120/3) are
-  recorded there as exploration candidates; the current values stay.
+- **OQ21. Merge-gate sizing and class (open — proposal, not accepted).** The 150/6 budget refuses real work
+  (a docs branch 1148 lines/8 files; a CI migration 13299/136), and the prescribed "split the branch"
+  multiplies the per-merge fixed cost (check, red run, cold review). *Proposal* (`merge-gate-sizing.md`):
+  a deterministic inert class (checks only, no LLM review, no size refusal; instruction files excluded,
+  LD14), an `atomic` plan-milestone budget for unsplittable code units, main-dirty checked in step 2 as
+  well as step 9 for every class, and tuning from OQ17 data. The research's numbers (120/3) are recorded
+  there as exploration candidates; the current values stay.
 
 ## 8. Research
 

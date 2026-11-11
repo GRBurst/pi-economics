@@ -1,12 +1,14 @@
 # Merge-gate sizing: class, atomic units, and the review's fixed cost (proposal)
 
-Status: proposal (OQ21). The current budgets stay: 150 lines / 6 files (gate),
-100/3 (task), 250/6 (milestone). Triggered by `size` refusals on real work (a
-docs branch of 1148 lines / 8 files adding user-supplied references; a
-CI-images migration of 13299/136; repeated hits in other sessions) and one
-metered waste: a 46 s cold Opus review ran on `lm/context-folding-notes`
-before the `main-dirty` refusal that a step-2 check would have returned for
-free.
+Status: proposal (OQ21) — open, not accepted; the current budgets stay: 150
+lines / 6 files (gate), 100/3 (task), 250/6 (milestone). The batch-3 report
+and prompts 8–9 live on branch `lm/research-reports-batch-7-8` (checks green,
+awaiting merge); the references below resolve on main once that branch lands.
+Triggered by `size` refusals on real work (a docs branch of 1148 lines / 8
+files adding user-supplied references; a CI-images migration of 13299/136;
+repeated hits in other sessions) and one metered waste: a 46 s cold Opus
+review ran on `lm/context-folding-notes` before the `main-dirty` refusal
+that a step-2 check would have returned for free.
 
 ## 1. What the gate gets wrong
 
@@ -25,12 +27,15 @@ free.
    system prompt and framing at full price) — plus a variable part
    `v·(diff + check output)`. Laying a unit of work `W` out as `n` merges
    costs ≈ `n·F + v·W`: **splitting strictly increases the total review and
-   check cost** and only marginally improves per-review recall. The diff
-   budget is `8·lines + 8·files`, so a 150/6 diff arrives at the reviewer as
-   up to ≈1250 input lines of context and headers. "Split the branch" is
-   therefore the worst economic shape the gate can prescribe. (The research's
-   own cost function agrees at the small end: below ≈30 lines,
-   orchestration overhead dominates the denominator.)
+   check cost**. It does buy something: the recall-per-review gain is real
+   and verified for code (README spot check: review F1 0.657 below 10
+   changed lines, 0.043 above 150). The question is total cost per unit of
+   work, where splitting multiplies `F`; "split the branch" is the most
+   expensive shape available, and the gate prescribes it as the only remedy.
+   (The research's own cost function agrees at the small end: below ≈30
+   lines, orchestration overhead dominates the denominator.) The diff budget
+   is `8·lines + 8·files`, so a 150/6 diff arrives at the reviewer as up to
+   ≈1250 input lines of context and headers.
 4. **No escape, no class, no data.** No override on `request_merge`, no
    docs/reference class, one budget for all repositories, plan budgets can
    never exceed the gate budget, and the tuning loop (OQ17) is unbuilt. The
@@ -50,14 +55,19 @@ risk), not diff size.**
 
 From the numstat; no model-declared exemption. Setting
 `mergeGate.inertGlobs` (default `["*.md", "*.txt", "*.rst", "LICENSE",
-"NOTICE"]`). An inert branch must have at least one check running (branch
-check or `extraChecks`), else it is refused (`no-check`): an inert merge
-with no checks at all is just a bypass with better manners.
+"NOTICE"]`). Excluded from inert (routed to code): agent-instruction files —
+`AGENTS.md` and `CLAUDE.md` at any level, and anything under `.pi/`,
+`skills/` or a prompts directory — and matches of the router's riskGlobs.
+An unreviewed rewrite of the base's AGENTS.md would re-poison every later
+review: the overseer uses the base's AGENTS.md precisely because it is
+trusted (LD14). An inert branch must have at least one check running
+(branch check or `extraChecks`), else it is refused (`no-check`): an inert
+merge with no checks at all is just a bypass with better manners.
 
 | | inert (all files match) | code |
 |---|---|---|
-| refusals (step 2) | as today, **plus main-dirty** | as today |
-| size refusal | none (optional `inertMaxLines`, default 10000) | as today (150/6) |
+| refusals (step 2) | as today, plus main-dirty | as today, plus main-dirty |
+| size refusal | none | as today (150/6) |
 | checks | `extraChecks` (leak, boundary, build) | as today |
 | red run | skipped | as today |
 | LLM review | **none** | as today |
@@ -68,12 +78,18 @@ branch, the gate, done — no Opus, no splitting.
 
 ### 2.2 An atomic override for unsplittable code units
 
-`request_merge {atomic: true}` (or a plan-milestone flag): the budget
-becomes `atomicFactor × (150/6)` (default factor 5 → 750/30); the reviewer
-is told the unit is atomic (review it whole; invariants and the check
-first); the merge line logs `atomic: true`. A narrow, metered escape hatch
-that replaces the "split the branch" dead end for migrations. No silent
-bypass: it is visible in the OQ17 section.
+A plan milestone the author marks `atomic` (the plan is Opus-approved, so
+the exemption is not model-declared) merges at `atomicFactor × (150/6)`
+(default factor 5 → 750/30); the reviewer is told the unit is atomic
+(review it whole; invariants and the check first); the merge line logs
+`atomic: true`. Capped at 2 atomic units per session. 750 lines is above
+the verified recall range (F1 0.043 above 150): the compensation is the
+invariants, the checks and the atomic instruction, and it is the rare path,
+not the default. A migration that large as the 13299/136 example is beyond
+one atomic unit: structure it as a plan of atomic milestones (each ≤ 750/30);
+if it is truly one unit, it merges manually outside the gate — a logged
+bypass, the last resort, visible in the OQ17 section. No silent bypass
+otherwise: the path is visible.
 
 ### 2.3 Measure before tuning (OQ17, token-meter)
 
