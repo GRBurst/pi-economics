@@ -1161,6 +1161,22 @@ message). Open notes, for L6 or later:
   fixer) pass the routed spawn's provider block and health probe in `ticketRoom` (`core/policy.ts`, now async): blocked,
   down or busy is unavailable, so the fallback / fail-closed path (`review-unavailable`, `author-unavailable`, fixer
   `revise`) applies; a forced fixer still skips it (D47).
+- Spot-check fixes F1–F9 (review of the L8 code items and the L7 review fixes), one commit each, test first. F1 supersedes
+  L7 F9's shared round budget: each red run has its own `checkTimeoutSec`; the round's runs together have the new setting
+  `plans.redRunSec` (3600 s; a check cut short or not started by it is a `check` finding, `broken-check` after the rounds), and
+  the author's input has a `Check time:` line with both. F2 file names in the merge review input (`Risky paths`, `Numstat`)
+  and the fixer brief are C-quoted (`quotePath`, `core/local/git.ts`: control characters, `"`, `\`; non-ASCII stays); the
+  scope and plan-file checks and the verdict targets read the raw paths. F3 the amendment reviewer is told `Approving unblocks
+  <branch> (unit <id>)…` (counts reset); the reset rule is unchanged (`restarts`), since unblocking only on a changed unit
+  would strand a blocked branch whose `remediation-failed` trigger the amendment closed. F4 a test for the child copy in the
+  order the actor has (its record not listed yet): the guard is `policyOn()` (one policy), documented. F5 at `session_start`
+  with reason `reload` the listed agents (pending records too) are added to `placed`, so a spawn in flight across the reload
+  is not killed as restored. F6 the `over-size` trip and its hint use the branch's merge budget (`sizeBudget`, `tripwires.ts`:
+  task `planBudget`, milestone `planBudget`, a branch without a plan the gate's `maxDiffLines`/`maxDiffFiles`; the hint
+  engine's `detected` takes it); the trip now fires at 150 lines/6 files for a branch without a plan. F7 validation refuses
+  `files`/`create` under `plans.dir`. F8 test only. F9 `forceRejection` names the settings force under a command force
+  (`ForcePort.underneath`); the `down` cause is tested. Not fixed: ticket children's free-cap errors set no `blocks`
+  (pre-existing, `failover.ts` watches `d.children`); a transient git error ends a `plan_request` without a resubmit.
 - T1 keeps the milestone paragraphs and adds a heading `#### Local mode` before them and a reference block (switch and
   active set, settings table, tools and section lines, session entries, events, result codes, failure modes) after
   the plans, then `#### Scout gate, dependencies and checks`. T3 also fixes AC-O1's overseer cwd (LD14) and §2.1's
