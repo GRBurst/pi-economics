@@ -22,10 +22,10 @@ import type { Runner } from "./gate.ts";
 import { createGuards } from "./guards.ts";
 import { createOutcomeLog } from "./log.ts";
 import { cardSection, localSection } from "./prompt.ts";
-import { isLocal, statusText } from "./local/mode.ts";
+import { isLocal, opusLeft, statusText } from "./local/mode.ts";
 import { installLocal } from "./local/install.ts";
 import { createChildTrips } from "./local/childtrips.ts";
-import { createTickets } from "./local/overseer.ts";
+import { createTickets, hasSpawnApi, NO_SPAWN_API } from "./local/overseer.ts";
 import type { LocalDeps } from "./local/install.ts";
 import type { Trip } from "./local/tripwires.ts";
 import { enabled } from "./members.ts";
@@ -98,7 +98,8 @@ export function install(pi: PiLike, deps: Deps) {
   // A routed child's tripwires (design §3.1.3): the policy composes their guard in local mode with hints on.
   const childTrips = createChildTrips({ settings, api, log });
   const children = new Map<string, Child>();
-  const tickets = createTickets((bytes) => randomBytes(bytes).toString("hex"));
+  const hex = (bytes: number): string => randomBytes(bytes).toString("hex");
+  const tickets = createTickets(hex);
   let skills: Array<{ name: string; filePath: string; baseDir: string }> = [];
   const skillPort: SkillPort = { find: (n) => skills.find((x) => x.name === n), read: (path) => readFileSync(path, "utf8") };
   const counter = createMemberCounter(join(deps.agentDir, "task-router", "member-count.json"), now);
@@ -200,8 +201,8 @@ export function install(pi: PiLike, deps: Deps) {
   const localModels = enabled(settings.models).filter((m) => m.route === "local").map((m) => m.model);
   let ui: any, main: string | undefined, shown = false, hint: Trip | undefined;
   const render = (): void => {
-    const f = force.port.active();
-    const t = statusText({ local: isLocal(settings), main, localModels, force: f && describeForce(f), hint });
+    const f = force.port.active(), local = isLocal(settings);
+    const t = statusText({ local, main, localModels, force: f && describeForce(f), opusLeft: local ? opusLeft(settings, lm.budget) : undefined, hint });
     if (t !== undefined) { ui?.setStatus?.("task-router", t); shown = true; }
     else if (shown) { ui?.setStatus?.("task-router", undefined); shown = false; }
   };
@@ -210,14 +211,23 @@ export function install(pi: PiLike, deps: Deps) {
     main = typeof model?.provider === "string" && typeof model?.id === "string" ? `${model.provider}/${model.id}` : undefined;
     render();
   };
+  let spawnWarned = false;
   pi.on("session_start", (_e, ctx) => {
     track(ctx);
     force.start(ctx, problems); // plan D8: its problem joins the one notification below
+    lm.start(ctx); // the Opus budget (D30) before the status line shows it
     showStatus(ctx, ctx?.model);
-    active = hasSubagentsApiV1(api());
+    const a = api();
+    active = hasSubagentsApiV1(a);
     if (active) { connect(); registerVerdict(); }
     else warnOnce(ctx, "actor:task-router", actorMissing("task-router", "task-router routing is off (no task_verdict, no task_cards, no nudge); the effort guard and fresh-on-cold stay on"));
     if (connectError !== undefined) warnOnce(ctx, "spawn-policy:task-router", `task-router: no spawn policy: ${connectError}`);
+    // Design §3.0.4: without the spawn API the overseer cannot run; the merge gate fails closed (L6).
+    if (isLocal(settings) && !spawnWarned && !(active && hasSpawnApi(a!))) {
+      spawnWarned = true;
+      if (ctx?.hasUI && ctx.ui?.notify) ctx.ui.notify(NO_SPAWN_API, "warning");
+      else console.warn(NO_SPAWN_API);
+    }
     if (told || !problems.length) return;
     told = true;
     if (ctx?.hasUI && ctx.ui?.notify) ctx.ui.notify(`task-router settings: ${problems.join("; ")}`, "warning");
@@ -235,7 +245,9 @@ export function install(pi: PiLike, deps: Deps) {
   // LD3 (design §2.4): local mode replaces the nudge with hints; its steer messages would interrupt a local main mid-task.
   installNudge(pi, { settings, isChild, enabled: () => active && !isLocal(settings) });
   // Hints (design §3.1, plan S12): in local mode, or anywhere with hints "on"; the status line names the last hint (plan Q5).
-  installLocal(pi, { settings, log, isChild, sessionId: () => sessionId, hash: deps.hash, detect: deps.detect, onTrip: (t) => { hint = t; render(); } });
+  // The overseer (design §3.2) lives here too: its spawn line comes from `onEvent` (D26), its events from its own subscription.
+  const lm = installLocal(pi, { settings, log, isChild, sessionId: () => sessionId, hash: deps.hash, detect: deps.detect, onTrip: (t) => { hint = t; render(); },
+    api, tickets, hex, now: nowMs, sleep: pd.sleep, onBudget: render });
   pi.on("before_agent_start", (e, ctx) => {
     track(ctx);
     skills = e.systemPromptOptions?.skills ?? skills;
@@ -250,5 +262,5 @@ export function install(pi: PiLike, deps: Deps) {
     else delete sections.task_cards;
   });
 
-  return { log, settings, tickets };
+  return { log, settings, tickets, overseer: lm.overseer, budget: lm.budget };
 }

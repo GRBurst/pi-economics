@@ -32,8 +32,8 @@ test("happy: one quiet spawn by main with a 32-hex ticket; a valid submit is rec
   assert.deepEqual([res.member, res.model], ["opus", OPUS]);
   assert.deepEqual((p.meta as { taskId: string }).taskId, res.reviewId);
   assert.deepEqual(r.h.a.killed, ["ovs-merge-1"]);
-  assert.deepEqual(r.entries.map((e) => e.type), ["task-router/review"]);
-  assert.deepEqual(r.entries[0]!.data, { reviewId: res.reviewId, role: "merge", member: "opus", verdict: VALID, approved: true, ts: r.h.clock.t });
+  assert.deepEqual(r.entries.map((e) => e.type), ["task-router/budget", "task-router/review"]); // L4.T12: the budget entry (D30)
+  assert.deepEqual(r.entries[1]!.data, { reviewId: res.reviewId, role: "merge", member: "opus", verdict: VALID, approved: true, ts: r.h.clock.t });
   assert.equal(r.h.router.tickets.owner("ovs-merge-1"), undefined);
 });
 
@@ -66,7 +66,7 @@ test("AC-O3 property: with resubmits r ∈ 0…3, submissions 1…r get '; resub
     assert.deepEqual(out.at(-1), { text: "invalid: $.summary: is required; $.findings: is required; no resubmits left", isError: true, terminate: true });
     assert.deepEqual(res, { ok: false, outcome: "invalid" }, `r=${resubmits}`);
     assert.deepEqual(r.h.a.killed, ["ovs-steer-1"]);
-    assert.deepEqual(r.entries, []);
+    assert.deepEqual(r.entries, [{ type: "task-router/budget", data: { opusUsed: 1, steerUsed: 1 } }]); // L4.T12: no review entry
   }
 });
 

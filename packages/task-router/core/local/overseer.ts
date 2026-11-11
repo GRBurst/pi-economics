@@ -45,6 +45,8 @@ export type Tickets = ReturnType<typeof createTickets>;
 
 export const hasSpawnApi = (a: SubagentsApiV1): a is SubagentsApiV1 & Required<Pick<SubagentsApiV1, "spawn" | "kill">> =>
   typeof a.spawn === "function" && typeof a.kill === "function";
+/** The warning in local mode without the spawn API (design §3.0.4), once per session start of the process. */
+export const NO_SPAWN_API = "task-router: local mode needs actor-subagents with spawnPolicyApi ≥ 2; merges are refused and plans are unavailable";
 
 /** Blocks every tool outside `allowed` (the orchestration tools too); the last allowed tool is the submit tool. */
 export const overseerGuard = (allowed: readonly string[]): SyncGuard => (tool) =>
@@ -108,6 +110,15 @@ export function pickMember(s: RouterSettings, role: Role, b: Budget):
 /** Polls between the child's events (D27: the API has no idle event), the verify gate's interval. */
 const POLL_MS = 2000;
 export const REVIEW_TYPE = "task-router/review";
+/** One entry per budget change (D30), rebuilt at session_start (design §3.0.2). */
+export const BUDGET_TYPE = "task-router/budget";
+const count = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 0;
+/** The last well-formed budget entry on the branch, else nothing used. */
+export function budgetOf(branch: readonly unknown[]): Budget {
+  const last = branch.filter((e: any) => e?.type === "custom" && e.customType === BUDGET_TYPE && count(e.data?.opusUsed) && count(e.data?.steerUsed))
+    .at(-1) as { data: Budget } | undefined;
+  return last ? { opusUsed: last.data.opusUsed, steerUsed: last.data.steerUsed } : { opusUsed: 0, steerUsed: 0 };
+}
 type Settled<T> = { kind: "ok"; value: T } | { kind: "timeout" | "error" | "invalid" | "aborted" };
 type SpawnApi = SubagentsApiV1 & Required<Pick<SubagentsApiV1, "spawn" | "kill">>;
 
@@ -188,6 +199,7 @@ export function createOverseer(d: OverseerDeps) {
           if (p.fallback) return;
           d.budget.opusUsed += 1;
           if (r.role === "steer") d.budget.steerUsed += 1;
+          d.append(BUDGET_TYPE, { opusUsed: d.budget.opusUsed, steerUsed: d.budget.steerUsed });
         };
         const reviewId = `rv-${d.hex(4)}`, t0 = d.now();
         const o = await attempt(a, r, p.member, model, p.effort, reviewId, charge);
