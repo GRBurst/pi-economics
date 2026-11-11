@@ -688,7 +688,9 @@ cwd (`packages/task-router/core/local/planflow.ts`):
    enforces) and runs each task's
    check at the main tip in a detached temporary worktree: a check that
    cannot run (exit 126 or 127), that the git guard (above) blocks (it is not
-   run), or that passes there (vacuous) goes back as a `check` finding. Rejections count against `plans.rounds` (2), per overseer
+   run), or that passes there (vacuous) goes back as a `check` finding; a
+   worktree git cannot make fails the plan with `git` (as in `amend_plan`;
+   never a pass). Rejections count against `plans.rounds` (2), per overseer
    attempt (the fallback author starts afresh); after them a
    skeleton that is still invalid is `refused` `invalid`, a check that still
    cannot run `broken-check`, and a vacuous one is accepted with

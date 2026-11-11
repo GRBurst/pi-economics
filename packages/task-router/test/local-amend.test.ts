@@ -234,6 +234,19 @@ test("review L7 F5: an amended check that passes on the main tip is named to the
   assert.ok(no.detail.endsWith(`; vacuous checks: ${note}`), no.detail);
 });
 
+test("review L7 F6: an amended check whose red-run worktree git cannot make fails amend_plan with git; no review, main unchanged", async () => {
+  const x = approved();
+  x.plans.open("parser", "over-budget", "M1.T2");
+  const before = x.mainSha();
+  x.ports.git = { ...x.git, worktreeAddDetached: async () => ({ ok: false as const, err: "No space left on device" }) };
+  const r = await amendPlan(x.ports, amend({ changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: "true" } }] }), x.r.dir);
+  assert.deepEqual([r.status, r.reason, r.detail], ["error", "git", "git failed: the red run of M1.T2 has no worktree: No space left on device"]);
+  assert.equal(x.runs.length, 0, "no review");
+  assert.equal(x.checks.length, 0, "no check ran");
+  assert.equal(x.mainSha(), before);
+  assert.deepEqual(x.plans.openTriggers("parser").map((t) => t.id), ["t1"]);
+});
+
 test("review F7: an amended check or an evidence command the git guard blocks is never run", async () => {
   const bad = "git push origin HEAD:main";
   const x = approved();

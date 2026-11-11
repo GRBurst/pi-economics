@@ -147,7 +147,8 @@ export function startable(sk: Skeleton, merged: ReadonlySet<string>): string[] {
 // ── steps 2–3: the author and the red runs ──
 /** Design §3.2.1: the repository map is the first 400 tracked paths. */
 const REPO_MAP = 400;
-const AUTHOR_FAILED: Record<"invalid" | "broken-check", string> = {
+const AUTHOR_FAILED: Record<"invalid" | "broken-check" | "git", string> = {
+  git: "git failed",
   invalid: "the plan author's skeleton is still invalid after plans.rounds",
   "broken-check": "task checks still cannot run after plans.rounds",
 };
@@ -168,9 +169,15 @@ export function authorInput(s: RouterSettings, i: PlanInput, files: readonly str
 }
 
 /** What `submit_plan` records: an accepted skeleton, or why the plan fails once `plans.rounds` are spent. */
-export type Authored = { ok: true; sk: Skeleton } | { ok: false; reason: "invalid" | "broken-check"; reasons: string[] };
-/** A red run's outcome: the check's exit, or `blocked`, the git guard's reason (review F7: the check was not run). */
-type RedExit = { task: Task; exit: number; blocked?: string };
+export type Authored = { ok: true; sk: Skeleton } | { ok: false; reason: "invalid" | "broken-check" | "git"; reasons: string[] };
+/** A red run's outcome: the check's exit, or `blocked`, the git guard's reason (review F7: the check was not run), or `git`, why
+ *  git could not make its worktree (review L7 F6: the check was not run; the flow fails with `git`). */
+type RedExit = { task: Task; exit: number; blocked?: string; git?: string };
+/** The first red run git could not make a worktree for, as a `git failed` detail's text. */
+const lostRed = (red: readonly RedExit[]): string | undefined => {
+  const r = red.find((x) => x.git !== undefined);
+  return r && `the red run of ${r.task.id} has no worktree: ${r.git}`;
+};
 /** Exit 0: vacuous; 126/127 or blocked: broken (design §3.5.2 step 3). */
 const failsRed = (r: RedExit): boolean => r.blocked !== undefined || r.exit === 0 || r.exit === 126 || r.exit === 127;
 const brokenRed = (r: RedExit): boolean => failsRed(r) && (r.blocked !== undefined || r.exit !== 0);
@@ -185,7 +192,8 @@ const redFinding = (r: RedExit, i: number, tip: string): Finding => ({
     : r.exit === 0 ? "the check fails on the main tip and passes once the task is done" : "the check command runs on the main tip and fails there",
 });
 
-/** Each task's check on `tip` in its own detached temporary worktree (removed afterwards); a worktree git cannot make skips it.
+/** Each task's check on `tip` in its own detached temporary worktree (removed afterwards); a worktree git cannot make ends the
+ *  runs (review L7 F6: never a pass).
  *  Review F7: the git classifier reads each check first, as in the worktree of the branch it will run on (`unit`: the task's
  *  plan unit); a check it blocks is not run. */
 async function redRuns(p: PlanPorts, repo: string, tip: string, tasks: readonly Task[], slug: string, unit: (t: Task) => string): Promise<RedExit[]> {
@@ -196,7 +204,8 @@ async function redRuns(p: PlanPorts, repo: string, tip: string, tasks: readonly 
     const blocked = await vetCheck({ git: p.git, store: p.branches, settings: p.settings }, task.check, worktreeDir(w.root, repo, branch), branch);
     if (blocked !== undefined) { out.push({ task, exit: -1, blocked }); continue; }
     const dir = p.tmp();
-    if (!(await p.git.worktreeAddDetached(repo, dir, tip)).ok) continue;
+    const made = await p.git.worktreeAddDetached(repo, dir, tip);
+    if (!made.ok) { out.push({ task, exit: -1, git: made.err.trim() }); break; }
     try { out.push({ task, exit: (await p.run(task.check, dir, p.settings.checkTimeoutSec * 1000, p.signal)).exit }); }
     finally { await p.git.worktreeRemove(repo, dir, true); }
   }
@@ -223,6 +232,8 @@ export function planSubmit(p: PlanPorts, x: { repo: string; slug: string; checko
       const tasks = x.rewrite ? changedTasks(x.rewrite.old, v.value) : v.value.milestones.flatMap((m) => m.tasks);
       const red = await redRuns(p, x.repo, x.tip, tasks, x.slug, unitOf(v.value));
       if (p.signal?.aborted) return { ok: false, reasons: ["aborted"] }; // the run ends aborted (review F11)
+      const lost = lostRed(red);
+      if (lost) return { ok: true, value: { ok: false, reason: "git", reasons: [lost] } };
       const bad = red.filter(failsRed);
       if (!bad.length) return { ok: true, value: { ok: true, sk: x.rewrite ? marked(x.rewrite.old, v.value, new Set()) : v.value } };
       const lines = bad.map((r, i) => findingLine(redFinding(r, i, x.tip)));
@@ -352,6 +363,8 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   // one is marked
   const changed = changedTasks(old, amended), red = await redRuns(p, repo, main.sha, changed, slug, unitOf(amended));
   if (p.signal?.aborted) return amendDone("error", "aborted", "aborted", { trigger });
+  const lost = lostRed(red);
+  if (lost) return amendDone("error", "git", `git failed: ${lost}`, { trigger });
   const broken = red.filter(brokenRed);
   if (broken.length) return refused("broken-check", `the amended checks cannot run: ${broken.map(redLine).join("; ")}`, { trigger });
   const passing = red.filter((r) => r.blocked === undefined && r.exit === 0);

@@ -142,6 +142,20 @@ test("D52 a check exiting 127 still broken after plans.rounds fails plan_request
   assert.equal(x.mainSha(), before);
 });
 
+test("review L7 F6: a red run whose worktree git cannot make fails plan_request with git; it never counts as passed", async () => {
+  const x = planRig();
+  const before = x.mainSha();
+  x.ports.git = { ...x.git, worktreeAddDetached: async () => ({ ok: false as const, err: "No space left on device" }) };
+  x.script.push([skeleton()]);
+  const r = await planRequest(x.ports, INPUT, x.r.dir);
+  assert.deepEqual([r.status, r.reason], ["error", "git"], r.detail);
+  assert.equal(r.detail, "git failed: the red run of M1.T1 has no worktree: No space left on device");
+  assert.deepEqual(x.replies.map((y) => y.ok), [true], "the submission ends the author's run");
+  assert.equal(x.checks.length, 0, "no check ran");
+  assert.equal(x.mainSha(), before);
+  assert.equal(x.plans.get("parser"), undefined);
+});
+
 test("AC-P3 validation errors count toward plans.rounds", async () => {
   const x = planRig();
   const bad = skeleton("test -f src/parse.ts", { files: ["src/gone.ts"] });
