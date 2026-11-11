@@ -101,15 +101,23 @@ async function mainSession(sid: string, child: string, usd: number): Promise<voi
   tr.clock.t = clock.t;
   assert.ok(!("reject" in await tr.a.spawn({ name: again, task: card({ attemptOf: fail }) }, { sessionId: sid })), `${again}: spawn rejected`);
   tr.a.emit({ type: "spawn", name: again, by: "main", parent: "main", childSessionId: again, ts: clock.t });
-  // task-router in local mode (design §3.1): the main session repeats one call three times → a hint in its result, a hint line
-  const local = harness({ agentDir, settings: { mode: "local" } });
+  // task-router in local mode (design §3.1, §3.2): the main session repeats one call five times → a hint in the third result,
+  // a steer overseer at the fifth (the API extension): its ticket spawn line, and a review line once the fake child submits.
+  const local = harness({ agentDir, settings: { mode: "local" }, apiExt: true });
   local.clock.t = clock.t;
+  local.hooks.onSleep = () => {
+    const p = local.a.apiSpawns.at(-1)?.policy as { childTools?: { execute(x: unknown): Promise<unknown> }[] } | undefined;
+    void p?.childTools?.[0]?.execute({ verdict: "REVISE", summary: "s", findings: [
+      { id: "F1", category: "approach", target: "a.ts", defect: "d", evidence: "e", fix: "f", blocking: true }] });
+  };
   const lctx = { sessionManager: { getSessionId: () => sid }, cwd: work, getContextUsage: () => ({ tokens: 1000, percent: 10 }) };
   local.f.fire("session_start", {}, lctx);
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     local.f.fire("tool_call", { toolName: "read", toolCallId: `r${i}`, input: { path: "a.ts" } }, lctx);
     local.f.fire("tool_result", { toolName: "read", toolCallId: `r${i}`, input: { path: "a.ts" }, content: [{ type: "text", text: "a" }], isError: false }, lctx);
   }
+  for (let i = 0; i < 20; i++) await settle();
+  assert.equal(local.f.sent.length, 1, "the steer message");
   // guards
   expFire("message_end", { message: { role: "assistant" } }, sid);
   expFire("input", { text: "No, that's wrong, revert it", source: "interactive" }, sid);
@@ -141,7 +149,8 @@ for (const [name, lines] of Object.entries(logs)) {
   const old = lines.filter((l) => l.v !== 1);
   if (old.length) failures.push(`${name}: ${old.length} line(s) without schema version v=1, e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
 }
-for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force", "hint"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
+for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force", "hint", "review"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
+if (!logs.outcomes.some((l) => l.event === "spawn" && l.ticket === "steer")) failures.push("outcomes: no ticket spawn line");
 // The contract keeps literal copies of the router's enums (token-meter imports nothing of the router): the overseer roles.
 const same = (a: readonly string[], b: readonly string[]) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 if (!same(CONTRACT_ROLES, ROLES)) failures.push(`contract ROLES ${JSON.stringify(CONTRACT_ROLES)} differ from the router's ${JSON.stringify(ROLES)}`);
