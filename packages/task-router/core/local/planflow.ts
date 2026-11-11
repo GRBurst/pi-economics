@@ -1,17 +1,19 @@
 // Local mode L7 (design §3.5.2, §3.5.4; plan D49–D53, LD10): the plan flow behind `plan_request` and `amend_plan`.
 // L7.T6: `plan_request` step 1, the grounding check, refuses before any overseer runs (a main checkout that is dirty too, D51).
 // L7.T7: steps 2–3, the plan author and the red runs of its task checks on the main tip, counted toward `plans.rounds` (D52).
+// L7.T8: steps 4–5, the plan file committed on main through the merge's fast-forward path (LD10, D50), recorded, and the
+// first startable unit.
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, join, normalize, posix, relative } from "node:path";
 import type { Runner } from "../gate.ts";
 import type { RouterSettings } from "../types.ts";
 import type { BranchStore } from "./branches.ts";
 import type { Git } from "./git.ts";
-import { type OverseerPort, reasonText } from "./merge.ts";
+import { advanceMain, type OverseerPort, reasonText } from "./merge.ts";
 import type { SubmitSpec } from "./overseer.ts";
-import { type PlanFs, type Skeleton, SKELETON_SCHEMA, type Task, validateSkeleton } from "./plan.ts";
+import { type PlanFs, renderPlan, type Skeleton, SKELETON_SCHEMA, skeletonHash, type Task, validateSkeleton } from "./plan.ts";
 import { findingLine, type Finding } from "./verdict.ts";
-import type { PlanStore } from "./plans.ts";
+import { mergedUnits, type PlanStore } from "./plans.ts";
 import { refreshFacts } from "./worktree.ts";
 
 export type PlanPorts = {
@@ -97,7 +99,36 @@ async function request(p: PlanPorts, input: PlanInput, cwd: string): Promise<Pla
     return out.outcome === "aborted" ? done("error", "aborted", "aborted") : done("error", "author-unavailable", `the plan author is unavailable (${out.outcome})`);
   }
   if (!out.value.ok) return done("error", out.value.reason, `${AUTHOR_FAILED[out.value.reason]}: ${out.value.reasons.join("; ")}`);
-  return { ...done("approved", undefined, "the skeleton is accepted"), reviewId: out.reviewId };
+  // ── 4 render, commit on main (D50: plumbing, then the merge's fast-forward path), record ──
+  const sk = out.value.sk, reviewId = out.reviewId;
+  const now = await mainOf(git, s, repo);
+  if (!now) return done("error", "git", `git failed: the main branch of ${repo} is gone`);
+  const c = await git.commitFile(repo, now.sha, file, renderPlan({ slug: input.slug, request: input.request }, sk, new Set()),
+    `plan(${input.slug}): approved ${reviewId}`);
+  if (!c.ok) return { ...done("error", "git", `git failed: ${c.err}`), reviewId };
+  const adv = await advanceMain(p, repo, now, c.out);
+  if (!adv.ok) {
+    return { ...(adv.reason === "main-dirty" ? done("refused", "main-dirty", reasonText("main-dirty", { checkout: adv.checkout }))
+      : done("error", "git", `git failed: ${adv.err}`)), reviewId };
+  }
+  p.plans.put({ slug: input.slug, repo, file, skeletonHash: skeletonHash(sk), approvedBy: reviewId, triggers: [] });
+  // ── 5 return: the path and the first startable unit ──
+  const next = startable(sk, mergedUnits(sk, input.slug, p.branches.all()))[0];
+  const start = next ? `; start with start_branch {"plan": {"slug": "${input.slug}", "id": "${next}"}}` : "";
+  return { status: "approved", detail: `plan approved: ${file} at ${c.out.slice(0, 7)}${adv.push}${start}`, path: file, commit: c.out, reviewId,
+    ...(next && { next: { slug: input.slug, id: next } }) };
+}
+
+/** The units a plan-bound branch may start now (design §3.3.2): per milestone whose dependencies merged, the milestone itself
+ *  (`branch: milestone`) or each of its tasks whose dependencies merged (`branch: task`); merged units are not startable. */
+export function startable(sk: Skeleton, merged: ReadonlySet<string>): string[] {
+  const out: string[] = [];
+  for (const m of sk.milestones) {
+    if (merged.has(m.id) || !m.dependsOn.every((d) => merged.has(d))) continue;
+    if (m.branch === "milestone") out.push(m.id);
+    else for (const t of m.tasks) if (!merged.has(t.id) && t.dependsOn.every((d) => merged.has(d))) out.push(t.id);
+  }
+  return out;
 }
 
 // ── steps 2–3: the author and the red runs ──

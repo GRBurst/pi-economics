@@ -1,12 +1,14 @@
 // Local mode L7.T6–T8 (design §3.5.2; plan D50–D52, LD10): `plan_request` in a temporary repository. T6: the grounding
 // check refuses before any overseer runs ("AC-P1"), as do a used slug and a dirty main checkout (D51). T7: the plan author
-// and the red runs of its task checks on the main tip ("AC-P3", D52).
+// and the red runs of its task checks on the main tip ("AC-P3", D52). T8: the plan file committed on main (LD10, D50).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Skeleton } from "../core/local/plan.ts";
+import { checkBypass, MAIN_REF_TYPE } from "../core/local/merge.ts";
+import { renderPlan, type Skeleton, skeletonHash } from "../core/local/plan.ts";
 import { planRequest } from "../core/local/planflow.ts";
+import { PLAN_TYPE } from "../core/local/plans.ts";
 import { rig } from "./overseer-rig.ts";
 import { planRig } from "./plan-rig.ts";
 
@@ -142,4 +144,53 @@ test("an author that cannot run is an error; an aborted one is aborted (D49)", a
   y.ports.overseer = { ready: () => true, run: async () => ({ ok: false, outcome: "aborted" }) };
   const s = await planRequest(y.ports, INPUT, y.r.dir);
   assert.deepEqual([s.status, s.reason], ["error", "aborted"]);
+});
+
+// ── L7.T8: render, commit on main, record, return (LD10, D50) ──
+
+test("LD10 an approved skeleton is committed on main as plans.dir/<slug>.md; recorded; the result names the first unit", async () => {
+  const x = planRig();
+  const tip = x.mainSha();
+  x.script.push([skeleton()]);
+  const r = await planRequest(x.ports, INPUT, x.r.dir);
+  assert.equal(r.status, "approved", r.detail);
+  const head = x.mainSha();
+  assert.equal(x.r.git(["rev-parse", `${head}^`]), tip, "one commit on the old tip");
+  assert.equal(x.r.git(["log", "-1", "--format=%s", head]), "plan(parser): approved rv-1");
+  assert.equal(x.r.git(["diff", "--name-only", tip, head]), "docs/plans/parser.md");
+  const text = readFileSync(join(x.r.dir, "docs/plans/parser.md"), "utf8");
+  assert.equal(text, renderPlan({ slug: "parser", request: INPUT.request }, skeleton(), new Set()));
+  assert.equal(x.r.git(["status", "--porcelain"]), "", "the main checkout is fast-forwarded and clean");
+  assert.deepEqual(x.entries.map((e) => e.type), [MAIN_REF_TYPE, PLAN_TYPE]);
+  assert.deepEqual(x.entries[0]!.data, { repo: x.r.dir, branch: "main", sha: head });
+  assert.deepEqual(x.entries[1]!.data, { slug: "parser", repo: x.r.dir, file: "docs/plans/parser.md", skeletonHash: skeletonHash(skeleton()), approvedBy: "rv-1", triggers: [] });
+  assert.deepEqual([r.path, r.commit, r.reviewId, r.next], ["docs/plans/parser.md", head, "rv-1", { slug: "parser", id: "M1.T1" }]);
+  assert.ok(r.detail.includes('start_branch {"plan": {"slug": "parser", "id": "M1.T1"}}'), r.detail);
+  assert.deepEqual(await checkBypass({ git: x.git, settings: x.settings, refs: x.refs }, [x.r.dir]), [], "no gatebypass afterwards");
+});
+
+test("LD10 main checked out nowhere: the ref moves; a milestone branch's first unit is the milestone", async () => {
+  const x = planRig();
+  x.r.git(["switch", "-q", "-c", "side"]);
+  const tip = x.mainSha();
+  const sk = skeleton();
+  sk.milestones[0]!.branch = "milestone";
+  x.script.push([sk]);
+  const r = await planRequest(x.ports, INPUT, x.r.dir);
+  assert.equal(r.status, "approved", r.detail);
+  assert.equal(x.r.git(["rev-parse", `${x.mainSha()}^`]), tip);
+  assert.equal(x.r.git(["show", `main:docs/plans/parser.md`]) + "\n", renderPlan({ slug: "parser", request: INPUT.request }, sk, new Set()));
+  assert.deepEqual(r.next, { slug: "parser", id: "M1" });
+});
+
+test("LD10 a main checkout made dirty during authoring refuses the commit; nothing is recorded", async () => {
+  const x = planRig();
+  const tip = x.mainSha();
+  x.script.push([skeleton()]);
+  const run = x.overseer.run.bind(x.overseer);
+  x.ports.overseer = { ready: () => true, run: async (a) => { writeFileSync(join(x.r.dir, "src/b.ts"), "dirty\n"); return run(a); } };
+  const r = await planRequest(x.ports, INPUT, x.r.dir);
+  assert.deepEqual([r.status, r.reason], ["refused", "main-dirty"]);
+  assert.equal(x.mainSha(), tip);
+  assert.deepEqual(x.entries, []);
 });

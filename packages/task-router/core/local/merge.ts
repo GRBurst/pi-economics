@@ -225,6 +225,29 @@ async function attempt(p: MergePorts, input: Input, cwd: string, seen: Seen): Pr
 }
 
 export const MAIN_REF_TYPE = "task-router/main-ref";
+export type Advanced = { ok: true; push: string; pushed?: boolean } | { ok: false; reason: "main-dirty"; checkout: string } | { ok: false; reason: "git"; err: string };
+/** Step 9's move of main (LD7), shared with the plan commits (LD10, D50): the checkout that has main fast-forwards to `commit` (it
+ *  must be clean), else the ref moves from `main.sha`; then the push (`push`: its text for the detail) and the main-ref entry, the
+ *  three in `exclusive` (review F3). */
+export async function advanceMain(p: Pick<MergePorts, "git" | "settings" | "append" | "exclusive">, repo: string,
+  main: { name: string; sha: string }, commit: string): Promise<Advanced> {
+  const git = p.git, g = p.settings.mergeGate;
+  const there = (await git.worktrees(repo)).find((w) => w.branch === main.name && !w.prunable);
+  if (there && await git.dirty(there.dir)) return { ok: false, reason: "main-dirty", checkout: there.dir };
+  const exclusive = p.exclusive ?? (<T>(f: () => Promise<T>) => f());
+  return exclusive(async (): Promise<Advanced> => {
+    const moved = there ? await git.ffMerge(there.dir, commit) : await git.updateRef(repo, `refs/heads/${main.name}`, commit, main.sha);
+    if (!moved.ok) return { ok: false, reason: "git", err: moved.err };
+    let push = "", pushed: boolean | undefined;
+    if (g.push) {
+      const pu = await git.push(repo, g.remote, main.name);
+      pushed = pu.ok;
+      push = pu.ok ? `; pushed to ${g.remote}` : `; push to ${g.remote} failed: ${pu.err}`;
+    }
+    p.append(MAIN_REF_TYPE, { repo, branch: main.name, sha: commit });
+    return { ok: true, push, ...(pushed !== undefined && { pushed }) };
+  });
+}
 
 async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): Promise<MergeResult | "moved"> {
   const s = p.settings, g = s.mergeGate, git = p.git;
@@ -333,24 +356,10 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
   }
   // ── 9 merge: fast-forward only (LD7), so main's tree is the reviewed and checked one ──
   if ((await git.sha(wt.dir, "HEAD")) !== commit) return "moved";
-  const there = (await git.worktrees(repo)).find((w) => w.branch === main.name && !w.prunable);
-  if (there && await git.dirty(there.dir)) return { ...refuse("main-dirty", { checkout: there.dir }, commit), reviewId };
-  const exclusive = p.exclusive ?? (<T>(f: () => Promise<T>) => f());
-  const step9 = await exclusive(async (): Promise<MergeResult | { detail: string; pushed?: boolean }> => {
-    const moved = there ? await git.ffMerge(there.dir, commit) : await git.updateRef(repo, `refs/heads/${main.name}`, commit, main.sha);
-    if (!moved.ok) return { ...gitError(moved.err, commit), reviewId };
-    let detail = `merged ${branch} into ${main.name} at ${commit.slice(0, 7)}`, pushed: boolean | undefined;
-    if (g.push) {
-      const pu = await git.push(repo, g.remote, main.name);
-      pushed = pu.ok;
-      detail += pu.ok ? `; pushed to ${g.remote}` : `; push to ${g.remote} failed: ${pu.err}`;
-    }
-    p.append(MAIN_REF_TYPE, { repo, branch: main.name, sha: commit });
-    return { detail, ...(pushed !== undefined && { pushed }) };
-  });
-  if ("status" in step9) return step9;
-  let detail = step9.detail;
-  const pushed = step9.pushed;
+  const adv = await advanceMain(p, repo, main, commit);
+  if (!adv.ok) return { ...(adv.reason === "main-dirty" ? refuse("main-dirty", { checkout: adv.checkout }, commit) : gitError(adv.err, commit)), reviewId };
+  let detail = `merged ${branch} into ${main.name} at ${commit.slice(0, 7)}${adv.push}`;
+  const pushed = adv.pushed;
   // A branch the router made becomes `merged` and is cleaned up; one made by hand (D40, with or without a hand-made record of its
   // rejections) is left as it is (review F8).
   const now = p.branches.get(repo, branch);
