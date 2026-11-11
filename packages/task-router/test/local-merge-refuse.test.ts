@@ -128,3 +128,34 @@ test("a branch made by hand in a worktree (D40) passes steps 1–3; a directory 
   assert.equal(res2.status, "error");
   assert.equal(res2.reason, "git");
 });
+
+// ── step 5: checks (L6.T7, AC-M2 `check`) ──
+/** A rig whose branch check is `check`, with one commit (x.ts). */
+async function checked(check: string, settings?: Record<string, unknown>) {
+  const m = mergeRig({ settings });
+  const rec = await m.start("x", check);
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  return { ...m, rec, before: m.mainSha() };
+}
+
+test("AC-M2 check: a failing branch check refuses with its exit and the output tail", async () => {
+  const m = await checked("echo boom; false");
+  const res = await refused(m, "check");
+  assert.equal(res.detail, reasonText("check", { cmd: "echo boom; false", exit: "1", tail: "boom" }));
+  assert.equal(res.detail, "`echo boom; false` exit 1\nboom");
+});
+
+test("AC-M2 check: extraChecks run after the branch check; the first failure refuses", async () => {
+  const m = await checked("true", { mergeGate: { extraChecks: ["true", "(exit 3)", "echo never"] } });
+  const res = await refused(m, "check");
+  assert.equal(res.detail, "`(exit 3)` exit 3"); // a subshell: `exit` in the login shell would run bash_logout
+  assert.deepEqual(m.runs.map((x) => x.cmd), ["true", "true", "(exit 3)"]);
+});
+
+test("checks that pass reach the red run (step 6); they run in the worktree", async () => {
+  const m = await checked("test -f only-in-branch", { mergeGate: { extraChecks: ["true"], redRun: false } });
+  m.r.commit("only-in-branch", "1\n", "b", m.rec.worktree);
+  const res = await m.merge();
+  assert.notEqual(res.reason, "check", JSON.stringify(res));
+  assert.deepEqual(m.runs, [{ cmd: "test -f only-in-branch", cwd: m.rec.worktree }, { cmd: "true", cwd: m.rec.worktree }]);
+});

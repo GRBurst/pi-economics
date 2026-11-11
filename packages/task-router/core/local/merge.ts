@@ -63,6 +63,11 @@ export type MergePorts = {
   signal?: AbortSignal;
 };
 type Input = { branch?: string; summary?: string };
+/** A check the pipeline ran (step 5), for the review input (S27). */
+type CheckRun = { cmd: string; exit: number; output: string };
+/** The tail of a check's output: the last 40 lines, at most 4 kB (design §3.2.1). */
+const TAIL_LINES = 40, TAIL_BYTES = 4096;
+export const tailOf = (out: string): string => out.trimEnd().split("\n").slice(-TAIL_LINES).join("\n").slice(-TAIL_BYTES);
 
 const done = (status: MergeStatus, reason: MergeReason | undefined, detail: string, commit?: string): MergeResult =>
   ({ status, ...(reason && { reason }), detail, ...(commit !== undefined && { commit }) });
@@ -106,6 +111,14 @@ async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<Merge
     const z = sizeOf(st);
     return refuse("size", { lines: String(z.lines), files: String(z.files), maxLines: String(g.maxDiffLines), maxFiles: String(g.maxDiffFiles) }, commit);
   }
-  // Steps 5–9 follow (L6.T7–T10); until then nothing merges.
+  // ── 5 checks: the branch check, then mergeGate.extraChecks, in the worktree; the first failure refuses ──
+  const checks: CheckRun[] = [];
+  for (const cmd of [...(rec?.check ? [rec.check] : []), ...g.extraChecks]) {
+    const r = await p.run(cmd, wt.dir, s.checkTimeoutSec * 1000);
+    checks.push({ cmd, exit: r.exit, output: tailOf(r.output) });
+    if (r.exit !== 0) return refuse("check", { cmd, exit: String(r.exit), tail: tailOf(r.output) }, commit);
+  }
+  // Steps 6–9 follow (L6.T8–T10); until then nothing merges.
+  void checks;
   return done("error", "review-unavailable", reasonText("review-unavailable", {}), commit);
 }

@@ -10,6 +10,7 @@ import type { RunArgs, RunResult } from "../core/local/overseer.ts";
 import type { Finding, Verdict } from "../core/local/verdict.ts";
 import { startBranch } from "../core/local/worktree.ts";
 import { runCheck } from "../core/gate.ts";
+import type { Runner } from "../core/gate.ts";
 import { parseSettings } from "../core/settings.ts";
 import { tempRepo } from "./git-repo.ts";
 
@@ -37,7 +38,10 @@ export function mergeRig(o: { settings?: Record<string, unknown> } = {}) {
     },
   };
   let tmps = 0;
-  const ports: MergePorts = { git, run: runCheck, overseer, branches: store, settings, append, tmp: () => join(r.base, `red-${++tmps}`) };
+  /** Every check the pipeline ran, in order. */
+  const runs: Array<{ cmd: string; cwd: string }> = [];
+  const run: Runner = (cmd, cwd, ms) => { runs.push({ cmd, cwd }); return runCheck(cmd, cwd, ms); };
+  const ports: MergePorts = { git, run, overseer, branches: store, settings, append, tmp: () => join(r.base, `red-${++tmps}`) };
   /** start_branch for `slug`; the record. */
   const start = async (slug = "x", check = "true", goal = "add x"): Promise<BranchRecord> => {
     const res = await startBranch({ git, store, settings }, { slug, goal, check }, r.dir);
@@ -46,6 +50,6 @@ export function mergeRig(o: { settings?: Record<string, unknown> } = {}) {
   };
   const merge = (input: { branch?: string; summary?: string } = {}, cwd = r.dir) => requestMerge(ports, input, cwd);
   const mainSha = (): string => r.git(["rev-parse", "main"]);
-  return { r, git, store, entries, settings, verdicts, reviews, overseer, ports, start, merge, mainSha };
+  return { r, git, store, entries, settings, verdicts, reviews, overseer, ports, runs, start, merge, mainSha };
 }
 export type MergeRig = ReturnType<typeof mergeRig>;
