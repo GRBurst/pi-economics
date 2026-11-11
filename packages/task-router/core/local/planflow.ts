@@ -12,7 +12,7 @@ import { isAbsolute, join, normalize, posix, relative } from "node:path";
 import type { Runner } from "../gate.ts";
 import type { PlanLogInput } from "../outcome.ts";
 import type { RouterSettings } from "../types.ts";
-import type { BranchStore } from "./branches.ts";
+import type { BranchRecord, BranchStore } from "./branches.ts";
 import type { Git } from "./git.ts";
 import { globMatch } from "../glob.ts";
 import { advanceMain, type OverseerPort, reasonText, tailOf } from "./merge.ts";
@@ -418,10 +418,13 @@ async function amendment(p: PlanPorts, input: AmendInput, cwd: string): Promise<
   const gone = new Set([...changed, ...removed].map((x) => x.id));
   const dependants = final.milestones.flatMap((m) => m.tasks).filter((x) => !gone.has(x.id) && x.dependsOn.some((d) => gone.has(d)));
   const c: AmendCtx = { rec, slug, request: requestOf(text!), trigger };
+  // review spot-check F3: approving gives these blocked branches a new start (counts at 0, a full round of reviews and fixer runs)
+  const resets = p.branches.all().filter((b) => b.plan?.slug === slug && restarts(b, old, final, trig))
+    .map((b) => `Approving unblocks ${b.branch} (unit ${b.plan!.id}): its counts reset, so it gets a full set of merge reviews and fixer runs again.`);
   const head = [`Plan: ${slug} (${rec.file})`, triggerLine(trig), ...(evidence ? [`Evidence: ${evidence}`] : []), `Reason: ${oneLine(input.reason)}`,
     ...(vacuous ? [`Vacuous checks: ${vacuous}`] : [])];
-  const text2 = full ? [...head, "The plan with the amendment applied:", renderPlan({ slug, request: c.request }, final, kept(parsed, final))].join("\n")
-    : [...head, ...section("Old tasks", olds.map(taskLine)), ...section("Proposed tasks", changed.map(taskLine)),
+  const text2 = full ? [...head, ...resets, "The plan with the amendment applied:", renderPlan({ slug, request: c.request }, final, kept(parsed, final))].join("\n")
+    : [...head, ...resets, ...section("Old tasks", olds.map(taskLine)), ...section("Proposed tasks", changed.map(taskLine)),
       ...section("Removed tasks", removed.map((x) => x.id)), ...section("Dependants", dependants.map(taskLine))].join("\n");
   const out = await p.overseer.run({ role: full ? "plan-review" : "delta", input: text2, cwd: checkout, submit: verdictSubmit(new Set([rec.file, ...paths])),
     signal: p.signal });
@@ -496,7 +499,7 @@ async function commitAmended(p: PlanPorts, c: AmendCtx, final: Skeleton, by: str
     if (b.state === "blocked" && !u) {
       p.branches.update({ ...b, state: "abandoned" });
       notes.push(`${b.branch} is abandoned: the plan has no ${id} now`);
-    } else if (b.state === "blocked" && (unitChanged(cur.sk, final, id) || (kind === "remediation-failed" && answered?.task === id))) {
+    } else if (restarts(b, cur.sk, final, answered)) {
       const { fixer: _none, ...rest } = b;
       p.branches.update({ ...rest, ...u, state: "active", rejections: 0, fixerRuns: 0 }); // not made active (review F8)
       notes.push(`${b.branch} is unblocked (its counts reset): resume it with start_branch {"plan": {"slug": "${c.slug}", "id": "${id}"}}`);
@@ -507,6 +510,11 @@ async function commitAmended(p: PlanPorts, c: AmendCtx, final: Skeleton, by: str
 }
 
 const same = (a: Task | undefined, b: Task | undefined): boolean => !!a && !!b && canonical(bareTask(a)) === canonical(bareTask(b));
+/** Review L7 F2: an approved amendment starts a blocked branch over (counts at 0) when it changed the branch's unit or answers the
+ *  `remediation-failed` trigger of that unit (`answered`); a unit it removed abandons the branch instead. */
+const restarts = (b: BranchRecord, old: Skeleton, final: Skeleton, answered: Pick<Trigger, "kind" | "task"> | undefined): boolean =>
+  b.state === "blocked" && b.plan !== undefined && unitFacts(final, b.plan.id) !== undefined
+  && (unitChanged(old, final, b.plan.id) || (answered?.kind === "remediation-failed" && answered.task === b.plan.id));
 /** The tasks of the unit `id` (a task, or a milestone's tasks) differ between `old` and `sk` (vacuous marks aside). */
 const unitChanged = (old: Skeleton, sk: Skeleton, id: string): boolean => canonical(unitTasks(old, id)) !== canonical(unitTasks(sk, id));
 const unitTasks = (sk: Skeleton, id: string): Task[] => {

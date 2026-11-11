@@ -786,7 +786,8 @@ gets the new hash, the trigger is closed and live branches of changed tasks
 take their new goal, check and whitelist. A `blocked` branch whose unit the
 amendment changed, or whose `remediation-failed` trigger it answers, starts
 over (`active`, its counts at 0; the answer names the `start_branch` that
-resumes it); one whose unit it removed is `abandoned`. Until then
+resumes it; the reviewer is told "Approving unblocks <branch>"); one whose unit
+it removed is `abandoned`. Until then
 `start_branch` of the blocked unit names `amend_plan` and the open trigger.
 Rejected: `rejected` with the
 findings; after `rounds` rejections for one trigger the plan author rewrites

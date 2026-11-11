@@ -196,6 +196,33 @@ test("review L7 F2: an amendment that removes a blocked branch's task abandons t
   assert.deepEqual([rec.state, rec.rejections, rec.fixerRuns], ["active", 0, 0], "the remediation-failed trigger is answered");
 });
 
+const UNBLOCKS = "Approving unblocks lm/parser/M1.T1 (unit M1.T1): its counts reset, so it gets a full set of merge reviews and fixer runs again.";
+const lastReview = (x: { reviews: Array<{ input: unknown }> }): string[] => String(x.reviews.at(-1)!.input).split("\n");
+
+test("spot-check F3: the reviewer of an amendment that answers a blocked branch's trigger is told approving resets its counts", async () => {
+  const kept = await blockedUnit(); // M1.T1 is untouched; its remediation-failed trigger is what the amendment answers
+  const reviews = kept.x.reviews.length;
+  await kept.amend([{ op: "replace", id: "M1.T2", task: { ...T2, goal: "wire the parser in" } }]);
+  assert.equal(kept.x.reviews.length, reviews + 1);
+  assert.ok(lastReview(kept.x).includes(UNBLOCKS), lastReview(kept.x).join(" | "));
+  const changed = await blockedUnit(); // the unit itself changes
+  await changed.amend([{ op: "replace", id: "M1.T1", task: { ...T1, check: "test -f src/parse.ts" } }]);
+  assert.ok(lastReview(changed.x).includes(UNBLOCKS), lastReview(changed.x).join(" | "));
+});
+
+test("spot-check F3: no such line when approving would unblock nothing (another trigger, the blocked unit untouched)", async () => {
+  const { x } = await blockedUnit();
+  const t2 = x.plans.open("parser", "over-budget", "M1.T2")!;
+  const reviews = x.reviews.length;
+  const ports: PlanPorts = { git: x.git, run: x.ports.run, overseer: x.overseer, branches: x.store, plans: x.plans, settings: x.settings,
+    append: x.ports.append, tmp: x.ports.tmp };
+  const r = await amendPlan(ports, { slug: "parser", trigger: { id: t2 }, changes: [{ op: "replace", id: "M1.T2", task: { ...T2, goal: "wire the parser in" } }], reason: "split" }, x.r.dir);
+  assert.equal(r.status, "approved", r.detail);
+  assert.equal(x.reviews.length, reviews + 1);
+  assert.ok(!lastReview(x).some((l) => l.startsWith("Approving unblocks")), lastReview(x).join(" | "));
+  assert.equal(x.store.get(x.r.dir, "lm/parser/M1.T1")!.state, "blocked", "and nothing was unblocked");
+});
+
 /** M1.T1 merged (its record), then M1.T2 breaks M1.T1's check. */
 async function regression(settings: Record<string, unknown> = {}) {
   const x = rig(settings);
