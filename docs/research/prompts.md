@@ -3,7 +3,8 @@
 The eight Gemini Deep Research prompts behind the reports, as sent. Prompts 1–3 went out first; 4–6 after
 the decision to review plans and merges with Opus. The evidence rules at the end were meant for 4–6; the
 user's own prompt carried similar rules. Prompt 7 was added with `docs/local-mode/design.md` (its OQ10);
-prompts 7 and 8 went out with the evidence rules appended, and both reports are in.
+prompts 7 and 8 went out with the evidence rules appended, and both reports are in. Prompt 9 was added
+after the first `size` refusals hit real work; send it with the evidence rules appended.
 
 | Prompt | Report |
 |---|---|
@@ -15,6 +16,7 @@ prompts 7 and 8 went out with the evidence rules appended, and both reports are 
 | 6 | `frontier-model-plan-review-protocol.md` |
 | 7 | `coding-agent-loop-harness-research.md` |
 | 8 | `autonomous-merge-pipeline-size-limits.md` |
+| 9 | not yet run |
 
 ## 1. Open-weight routing models that run on a CPU
 
@@ -183,7 +185,23 @@ Questions:
    rather than direct evidence for these exact models flagged as such.
 ```
 
-## Evidence rules (for prompts 4–8)
+## 9. Review economics: fixed versus variable cost, batch versus split, risk triage
+
+```
+Research the economics of LLM code review in autonomous pipelines, specifically where the cost of review falls as a given unit of work is landed as more or fewer increments.
+
+Setting: a local coding agent (Qwen 3.8, 27B) lands work through a merge gate. Each merge request runs a deterministic check, plus a second run of that check at the base commit (a "red run"), and then one frontier model (Claude Opus 5.5) reviews the diff in a fresh session — cold cache, so the reviewer's system prompt and framing are re-prefilled at full price for every review — and gives a typed approve/reject verdict. The gate caps each branch at 150 changed lines (added + deleted) and 6 files, and prescribes "split the branch" beyond that. We suspect the per-merge fixed cost (check runs, cold prefill, framing) dominates the variable cost, so that splitting work into more, smaller increments raises the total cost per unit of work instead of lowering it.
+
+Questions:
+1. Fixed versus variable review cost: published or measured breakdowns of LLM code-review cost into a per-review fixed component (system prompt, reviewer instructions, repo context, check output) and a per-diff-token component. How large is the fixed component relative to a 100–300 line diff for frontier-class models (Claude Opus/Sonnet 4.x/5.x or the nearest published tier)?
+2. Batch versus split: evidence (studies, vendor engineering posts, practitioner measurements) on total review cost and on defect detection for the same total work landed as one large review versus several small ones — including the added check/test runs and orchestration overhead. Any measurement of cost per accepted-and-correct unit of work as a function of split granularity?
+3. Risk triage: how do production code-review systems (CodeRabbit, Greptile, Graphite, Snyk, or similar) decide which changes get deep review versus light or no review — file classification, path risk, change type, test coverage — and what does their data say about missed defects in the lightly reviewed class?
+4. Cache economics: evidence on reducing the per-review fixed cost with prompt caching or persistent reviewer sessions (one reviewer model session reviewing many diffs in sequence), and by how much the per-review input cost drops once the prefix is cached?
+
+Output: for each question the evidence with exact numbers and sources; a cost model (fixed per review F, per-line v) with your best estimates for a 5.x-class reviewer and the implied optimal split granularity for low-risk versus high-risk work; and the list of least-certain claims.
+```
+
+## Evidence rules (for prompts 4–9)
 
 ```
 Evidence rules:
