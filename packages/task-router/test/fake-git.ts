@@ -3,6 +3,8 @@
 // about git's behaviour run real git (test/git-repo.ts); test/local-fake-git.test.ts keeps the two in step.
 import type { Git, Res, Stat, Wt } from "../core/local/git.ts";
 import { inside } from "../core/local/worktree.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 export type FakeRepo = {
   /** The repository's root (D35). */
@@ -30,6 +32,9 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
   /** `<remote> <branch> <commit>` per push; `remotes`: the remotes a push reaches. */
   const pushes: string[] = [];
   const remotes = new Set(["origin"]);
+  /** L7: repository → what `lsFiles` lists; commit → the file `commitFile` set in it. */
+  const tracked = new Map<string, string[]>();
+  const blobs = new Map<string, { path: string; content: string }>();
   let shas = 0;
   const addRepo = (root: string, main = "main", sha = "a".repeat(40)): FakeRepo => {
     const r: FakeRepo = { root, refs: new Map([[main, sha]]), worktrees: [{ dir: root, branch: main, head: sha }] };
@@ -170,6 +175,30 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
       if (s instanceof Error) throw s;
       return s ?? [];
     },
+    /** The real files under `repo` (a test writes them): a whole-word, literal match. */
+    async grepWord(repo, word, files) {
+      calls.push(`grepWord ${repo} ${word} ${files.join(",")}`);
+      const isWord = (c: string | undefined) => c !== undefined && /[A-Za-z0-9_]/.test(c);
+      const holds = (text: string): boolean => {
+        for (let i = text.indexOf(word); i >= 0 && word !== ""; i = text.indexOf(word, i + 1))
+          if (!isWord(text[i - 1]) && !isWord(text[i + word.length])) return true;
+        return false;
+      };
+      return files.filter((f) => { try { return holds(readFileSync(join(repo, f), "utf8")); } catch { return false; } });
+    },
+    async lsFiles(repo, n) { calls.push(`lsFiles ${repo} ${n}`); return (tracked.get(repo) ?? []).slice(0, n); },
+    async commitFile(repo, parent, path, content, message) {
+      calls.push(`commitFile ${repo} ${parent} ${path} ${message}`);
+      const bad = scripted("commitFile");
+      if (bad) return bad;
+      const r = repoOf(repo);
+      if (!r || !known(r, parent)) return { ok: false, err: `fatal: not a valid object name ${parent}` };
+      const sha = (++shas).toString(16).padStart(40, "d");
+      const added = (content.match(/\n/g)?.length ?? 0) + (content !== "" && !content.endsWith("\n") ? 1 : 0);
+      commits.set(sha, { parent, stat: [{ path, added, deleted: 0 }] });
+      blobs.set(sha, { path, content });
+      return { ok: true, out: sha };
+    },
   };
   /** A commit in the checkout that holds `dir` with the files it changed: its branch (or its detached HEAD) moves to it. */
   const commit = (dir: string, stat: Stat = [{ path: "f", added: 1, deleted: 0 }]): string => {
@@ -180,6 +209,6 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
     if (w.branch !== undefined) r.refs.set(w.branch, sha); else w.head = sha;
     return sha;
   };
-  return { git, repos, addRepo, calls, existing, dirty, fail, stats, diffs, commit, commits, pushes, remotes };
+  return { git, repos, addRepo, calls, existing, dirty, fail, stats, diffs, commit, commits, pushes, remotes, tracked, blobs };
 }
 export type FakeGit = ReturnType<typeof fakeGit>;

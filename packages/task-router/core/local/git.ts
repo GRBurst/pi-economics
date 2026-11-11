@@ -1,7 +1,8 @@
 // Git for local mode (design §3.3; plan S21): an argv runner and the port the worktree, merge and plan code talk to. Every
 // method is total: a failing command is a value (`undefined`, `false`, `{ok: false}`), never an exception.
 import { spawn } from "node:child_process";
-import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import { lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 export type GitOut = { exit: number; out: string; err: string; timedOut: boolean };
@@ -62,6 +63,14 @@ export type Git = {
   updateRef(repo: string, ref: string, next: string, prev: string): Promise<Res>;
   /** `git push remote branch`. */
   push(repo: string, remote: string, branch: string): Promise<Res>;
+  // ── plans (L7, design §3.5.2; plan S21, D50) ──
+  /** The ones among `files` (relative to `repo`) whose working copy holds `word` as a whole word (`git grep -w -F`). */
+  grepWord(repo: string, word: string, files: string[]): Promise<string[]>;
+  /** The first `n` tracked paths (`git ls-files`); [] when git fails. */
+  lsFiles(repo: string, n: number): Promise<string[]>;
+  /** D50: a commit on `parent` whose tree is `parent`'s with `path` set to `content`, built in a temporary index (plumbing),
+   *  so the main checkout's index and files are never touched; no ref moves. `out` = the new commit. */
+  commitFile(repo: string, parent: string, path: string, content: string, message: string): Promise<Res>;
 };
 /** A command that either gave its stdout or failed with the tail of its stderr (2048 characters). */
 export type Res = { ok: true; out: string } | { ok: false; err: string };
@@ -145,6 +154,35 @@ export function createGit(run: GitRun): Git {
     async ffMerge(dir, commit) { return res(await run(["merge", "--ff-only", "-q", commit], dir, ADD_MS)); },
     async updateRef(repo, ref, next, prev) { return res(await run(["update-ref", ref, next, prev], repo, SHORT_MS)); },
     async push(repo, remote, branch) { return res(await run(["push", "-q", remote, branch], repo, ADD_MS)); },
+    async grepWord(repo, word, files) {
+      if (!files.length) return [];
+      const r = await run(["-c", "core.quotepath=off", "grep", "-l", "-w", "-F", "-e", word, "--", ...files], repo, STAT_MS);
+      return r.exit === 0 ? r.out.split("\n").filter((p) => p !== "") : [];
+    },
+    async lsFiles(repo, n) {
+      const r = await run(["ls-files", "-z"], repo, STAT_MS);
+      return r.exit === 0 ? r.out.split("\0").filter((p) => p !== "").slice(0, n) : [];
+    },
+    async commitFile(repo, parent, path, content, message) {
+      let tmp: string | undefined;
+      try {
+        tmp = mkdtempSync(join(tmpdir(), "task-router-index-"));
+        const env = { GIT_INDEX_FILE: join(tmp, "index") };
+        const read = res(await run(["read-tree", parent], repo, SHORT_MS, { env }));
+        if (!read.ok) return read;
+        const blob = res(await run(["hash-object", "-w", "--stdin"], repo, SHORT_MS, { stdin: content }));
+        if (!blob.ok) return blob;
+        const add = res(await run(["update-index", "--add", "--cacheinfo", `100644,${blob.out},${path}`], repo, SHORT_MS, { env }));
+        if (!add.ok) return add;
+        const tree = res(await run(["write-tree"], repo, SHORT_MS, { env }));
+        if (!tree.ok) return tree;
+        return res(await run(["commit-tree", tree.out, "-p", parent, "-m", message], repo, SHORT_MS));
+      } catch (e) {
+        return { ok: false, err: String(e) };
+      } finally {
+        if (tmp) rmSync(tmp, { recursive: true, force: true });
+      }
+    },
     async dirty(dir) {
       const r = await run(["status", "--porcelain"], dir, ADD_MS);
       return r.exit !== 0 || r.out.trim() !== ""; // a status that fails counts as dirty: nothing is removed or merged on it

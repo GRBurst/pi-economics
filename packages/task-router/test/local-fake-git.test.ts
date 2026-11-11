@@ -98,3 +98,23 @@ test("fake-git: push records the remote, the branch and its commit; an unknown r
   f.fail.set("push", "rejected");
   assert.deepEqual(await f.git.push("/r/x", "origin", "main"), { ok: false, err: "rejected" });
 });
+
+/** L7.T5: a plan commit (D50) on the tip, read back through the merge port; a whole-word grep. */
+async function planScenario(git: Git, repo: string): Promise<unknown[]> {
+  const tip = (await git.sha(repo, "main"))!;
+  const c = await git.commitFile(repo, tip, "docs/plans/p.md", "# Plan: p\nline\n", "plan(p): approved rv-1");
+  const sha = c.ok ? c.out : "";
+  return [c.ok, await git.isAncestor(repo, tip, sha), await git.numstat(repo, tip, sha), await git.sha(repo, "main") === tip,
+    (await git.updateRef(repo, "refs/heads/main", sha, tip)).ok, await git.sha(repo, "main") === sha,
+    await git.grepWord(repo, "foo", ["a.ts", "b.ts", "missing.ts"]), (await git.commitFile(repo, "0".repeat(40), "x", "x", "m")).ok];
+}
+
+test("fake-git and real git agree on the plan scenario (L7.T5)", async () => {
+  const r = tempRepo();
+  r.commit("a.ts", "foobar\n");
+  r.commit("b.ts", "x = foo(1)\n");
+  const real = await planScenario(createGit(gitRunner("git", r.env)), r.dir);
+  const f = fakeGit({ repos: [{ root: r.dir, sha: r.git(["rev-parse", "main"]) }] });
+  assert.deepEqual(await planScenario(f.git, r.dir), real);
+  assert.deepEqual(real, [true, true, [{ path: "docs/plans/p.md", added: 2, deleted: 0 }], true, true, true, ["b.ts"], false]);
+});

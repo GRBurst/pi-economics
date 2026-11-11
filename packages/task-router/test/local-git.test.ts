@@ -1,7 +1,8 @@
-// Local mode L5.T1 (design §3.3; plan S21, D35, D55): the git runner and the port over a real temporary repository.
+// Local mode L5.T1, L6.T5, L7.T5 (design §3.3, §3.5.2; plan S21, D35, D50, D55): the git runner and the port over a real
+// temporary repository.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createGit, gitRunner } from "../core/local/git.ts";
 import { tempBase, tempRepo } from "./git-repo.ts";
@@ -342,4 +343,54 @@ test("push: the branch to a remote (a local bare repository); an unknown remote 
   assert.equal((await git.push(r.dir, "origin", "main")).ok, true);
   assert.equal(r.git(["rev-parse", "main"], bare), c1);
   assert.equal((await git.push(r.dir, "nosuch", "main")).ok, false);
+});
+
+// ── L7.T5: the port for plans (design §3.5.2; plan S21, D50) ──
+
+test("grepWord: the files among the given ones that hold the word as a whole word", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  r.commit("src/a.ts", "export const foobar = 1;\n");
+  r.commit("src/b.ts", "const x = foo(1);\n");
+  r.commit("src/c.ts", "foo\n");
+  assert.deepEqual(await git.grepWord(r.dir, "foo", ["src/a.ts", "src/b.ts"]), ["src/b.ts"]);
+  assert.deepEqual(await git.grepWord(r.dir, "foo", ["src/a.ts"]), []);
+  assert.deepEqual(await git.grepWord(r.dir, "foobar", ["src/a.ts", "src/b.ts", "src/c.ts"]), ["src/a.ts"]);
+  assert.deepEqual(await git.grepWord(r.dir, "-e", ["src/a.ts"]), [], "a word is never an option");
+  assert.deepEqual(await git.grepWord(r.dir, "foo", []), []);
+});
+
+test("lsFiles: the first n tracked paths", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  for (const f of ["a", "b", "c"]) r.commit(`src/${f}.ts`, `${f}\n`);
+  assert.deepEqual(await git.lsFiles(r.dir, 10), ["README", "src/a.ts", "src/b.ts", "src/c.ts"]);
+  assert.deepEqual(await git.lsFiles(r.dir, 2), ["README", "src/a.ts"]);
+  assert.deepEqual(await git.lsFiles(join(r.base, "nowhere"), 2), []);
+});
+
+test("D50 commitFile: a commit on the tip whose tree differs only in that path; the main checkout is untouched", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const tip = r.commit("src/a.ts", "a\n");
+  writeFileSync(join(r.dir, "src/a.ts"), "edited\n");
+  r.git(["add", "src/a.ts"]);
+  writeFileSync(join(r.dir, "README"), "unstaged\n");
+  const status = r.git(["status", "--porcelain"]), index = r.git(["ls-files", "-s"]);
+  const c = await git.commitFile(r.dir, tip, "docs/plans/p.md", "# Plan: p\n", "plan(p): approved rv-1");
+  assert.equal(c.ok, true);
+  const sha = c.ok ? c.out : "";
+  assert.match(sha, /^[0-9a-f]{40}$/);
+  assert.equal(r.git(["rev-parse", `${sha}^`]), tip);
+  assert.equal(r.git(["log", "-1", "--format=%s", sha]), "plan(p): approved rv-1");
+  assert.equal(r.git(["diff", "--name-status", tip, sha]), "A\tdocs/plans/p.md");
+  assert.equal(r.git(["show", `${sha}:docs/plans/p.md`]), "# Plan: p");
+  assert.equal(r.git(["rev-parse", "main"]), tip, "no ref moves");
+  assert.equal(r.git(["status", "--porcelain"]), status);
+  assert.equal(r.git(["ls-files", "-s"]), index);
+  assert.equal(readFileSync(join(r.dir, "README"), "utf8"), "unstaged\n");
+  assert.equal(existsSync(join(r.dir, "docs")), false);
+  const again = await git.commitFile(r.dir, sha, "docs/plans/p.md", "# Plan: p\n- [x] M1.T1: a\n", "plan(p): amended rv-2");
+  assert.equal(again.ok && r.git(["diff", "--name-status", sha, again.out]), "M\tdocs/plans/p.md");
+  assert.equal((await git.commitFile(r.dir, "0".repeat(40), "x", "x", "m")).ok, false);
 });
