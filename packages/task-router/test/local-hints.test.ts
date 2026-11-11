@@ -126,7 +126,9 @@ test("AC-H5: a throwing hash likewise (at the call and at the result)", (t) => {
 test("default mode: no hint hooks unless hints are on (OQ11); off in local mode removes them", () => {
   const names = (settings: Record<string, unknown>) => harness({ settings: settings as never }).f.hookNames();
   const today = names({});
-  assert.deepEqual(names({ mode: "local", hints: { enabled: "off" } }).filter((n) => n !== "model_select"), today);
+  // L5.T7: the write guard (worktrees on in local mode) adds one tool_call hook of its own; with worktrees off the hooks are today's.
+  assert.deepEqual(names({ mode: "local", hints: { enabled: "off" }, worktrees: { enabled: "off" } }).filter((n) => n !== "model_select"), today);
+  assert.deepEqual(names({ mode: "local", hints: { enabled: "off" } }).filter((n) => n !== "model_select"), [...today, "tool_call"].sort());
   const on = names({ hints: { enabled: "on" } });
   const extra = [...on];
   for (const n of today) extra.splice(extra.indexOf(n), 1);

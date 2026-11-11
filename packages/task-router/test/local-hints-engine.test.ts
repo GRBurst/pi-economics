@@ -21,6 +21,7 @@ const PINNED: Record<Trip, string> = {
   "risky-path": "This path matches a risk rule. Keep the change minimal and spawn a review card for it (the file and its check).",
   "context-soft": "Context is above 32k tokens. Fold finished work or hand off with a task card.",
   "context-stall": "Context is above 85 % and nothing changed for 25 turns. Hand the rest to a fresh agent with a task card, or fold finished work.",
+  "outside-worktree": "write in the worktree; use absolute paths under it", // L5.T7: raised by the write guard
 };
 
 test("HINT_TEXT: the pinned text of every trip under defaults; ESCALATION", () => {

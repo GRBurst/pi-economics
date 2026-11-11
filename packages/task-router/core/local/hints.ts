@@ -14,6 +14,8 @@ export const HINT_TEXT: Record<Trip, (h: HintSettings, p: RouterSettings["plans"
   "over-size": (_h, p) => `This branch exceeds ${p.splitLines} changed lines or ${p.splitFiles} files. Commit what passes and split the rest.`,
   "risky-path": () => `This path matches a risk rule. Keep the change minimal and spawn a review card for it (the file and its check).`,
   "context-soft": (h) => `Context is above ${Math.round(h.contextSoftTokens / 1000)}k tokens. Fold finished work or hand off with a task card.`,
+  // Raised by the write guard (design §3.3.3), which blocks the write with the same sentence plus the worktree's directory.
+  "outside-worktree": () => "write in the worktree; use absolute paths under it",
   "context-stall": (h) => `Context is above ${h.contextPercent} % and nothing changed for ${h.stallTurns} turns. Hand the rest to a fresh agent with a task card, or fold finished work.`,
 };
 /** The fixed escalation (§3.1.2) while there is no steer overseer (L3; L4 runs the overseer when its budget has room). */

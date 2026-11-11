@@ -262,7 +262,7 @@ inventory/keys tests; L6.T3 adds the default-mode `git push origin main` asserti
 | L4.T17 `pi-install-local` | build against the Actor without the spawn-api patch | `pi-install-local` (warning present) | [x] |
 | L5.T1 git in sandbox | remove `git` from `nativeCheckInputs` | `task-router` (exit 127) | [x] |
 | L5.T6 default inventory | register `start_branch` unconditionally | P13 "default mode: inventory" | [x] |
-| L5.T7 write guard property | `inside()` by string prefix without a separator (`/r/x` vs `/r/xy`) | "write guard property" | [ ] |
+| L5.T7 write guard property | `inside()` by string prefix without a separator (`/r/x` vs `/r/xy`) | "write guard property" | [x] |
 | L5.T9 default mode keys | return `cwd` always | "default mode: no cwd key" | [ ] |
 | L6.T2 AC-M1 allow corpus | block every `push` | "AC-M1 allow corpus" | [ ] |
 | L6.T3 AC-N3 | register the bash guard regardless of `mergeGate` | "AC-N3 default mode push" | [ ] |
@@ -830,7 +830,7 @@ message). Open notes, for L6 or later:
 - **RED**: tool registered in local mode, schema = §3.3.2; result text/`details` (D48); default mode: P13 inventory green (plant §11); "AC-R3 worktrees" pinned (`BRANCH_ONLY`); `mergeGate` off, worktrees on is what L5 ships.
 - **GREEN**: S25 (L5 part). **Check**: fast runner; `chk task-router typecheck-task-router`. **ACs**: AC-R3 (worktrees line).
 
-#### L5.T7 Main-checkout write guard (AC-W3) and `outside-worktree` `[ ] todo`
+#### L5.T7 Main-checkout write guard (AC-W3) and `outside-worktree` `[x] done`
 - **Files**: `core/local/worktree.ts` (`writeGuard`, S23), `core/local/install.ts` (main `tool_call` for `edit`/`write`; hint line), `core/local/tripwires.ts` (`TRIPS += "outside-worktree"`), `core/local/hints.ts` (its text: the block reason without the dir), `test/local-write-guard.test.ts`.
 - **Depends**: L5.T6.
 - **RED**: "AC-W3" (temp repo): active worktree; `edit {path: <main>/a.ts}` → `{block: true, reason: "write in the worktree <wt>; use absolute paths under it"}`; `edit <wt>/a.ts` → `undefined`; relative `a.ts` with `ctx.cwd = <main>` → blocked; no active worktree → `undefined`; each block → one `hint` line `trip: "outside-worktree"`. Property: blocked ⇔ tool ∈ {edit, write} ∧ inside(p, main) ∧ ∄w inside(p, w) (plant §11).

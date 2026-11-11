@@ -17,7 +17,7 @@ import type { Git } from "./git.ts";
 import { block, createHintEngine } from "./hints.ts";
 import type { Delivery } from "./hints.ts";
 import { componentOn } from "./mode.ts";
-import { refreshFacts } from "./worktree.ts";
+import { refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
 import type { Budget, Tickets } from "./overseer.ts";
@@ -86,7 +86,27 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   };
   const s = d.settings, h = s.hints;
   if (componentOn(s, "worktrees")) pi.registerTool?.(startBranchTool({ git, store: branches, settings: s }));
-  if (!componentOn(s, "hints")) return handle;
+  // The main-checkout write guard (design §3.3.3). It blocks on purpose, so it is total itself: pi treats a throwing handler as a
+  // block. Registered after the hint recorder's `tool_call` handler, so that call is recorded first.
+  const guardWrites = (): void => {
+    if (!componentOn(s, "worktrees")) return;
+    let blocked = 0;
+    pi.on("tool_call", (e, ctx) => {
+      try {
+        if (d.isChild(ctx)) return undefined;
+        const tool = String(e?.toolName), active = branches.active();
+        const reason = writeGuard({ tool, input: e?.input, cwd: ctx?.cwd ?? process.cwd(), active,
+          mainCheckout: active && branches.facts.mainCheckout.get(active.repo), worktrees: (active && branches.facts.worktrees.get(active.repo)) ?? [] });
+        if (reason === undefined) {
+          if (WRITERS.has(tool)) blocked = 0; // the count is of blocks since the last write that passed
+          return undefined;
+        }
+        d.log.hint("main", "outside-worktree", "hint", ++blocked, d.sessionId());
+        return { block: true, reason };
+      } catch { return undefined; }
+    });
+  };
+  if (!componentOn(s, "hints")) { guardWrites(); return handle; }
   // A persistent trip runs a steer overseer instead of the escalation block while one can run (design §3.1.2, AC-H4).
   const steer = createSteer({ settings: s, overseer,
     send: (content) => pi.sendMessage?.({ customType: STEER_TYPE, content, display: true }, { deliverAs: "steer" }) });
@@ -154,6 +174,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     if (!blocks.length) return undefined;
     return { content: [...(Array.isArray(e.content) ? e.content : []), ...blocks.map((text) => ({ type: "text", text }))] };
   }));
+  guardWrites();
   pi.on("turn_end", (_e, ctx) => {
     safe(() => {
       if (d.isChild(ctx)) return;

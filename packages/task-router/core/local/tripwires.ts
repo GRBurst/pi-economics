@@ -5,7 +5,7 @@ import { globMatch } from "../glob.ts";
 import type { HintSettings, RouterSettings } from "../types.ts";
 
 export const TRIPS = ["identical-call", "no-change-writes", "alternation", "repeated-error", "churn", "check-failing",
-  "over-size", "risky-path", "context-soft", "context-stall"] as const;
+  "over-size", "risky-path", "context-soft", "context-stall", "outside-worktree"] as const;
 export type Trip = (typeof TRIPS)[number];
 /** One tool call (§3.1.1): `hashBefore`/`hashAfter` are the target file's hashes around a write (undefined = the hash failed,
  *  or a missing file before a write); `turn` is the main session's turn number; `cmd` a bash command's first 200 characters,
