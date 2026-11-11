@@ -114,6 +114,9 @@ resume or kill it (`api.kill` acts as the reserved actor `api`), and its system 
 preamble (no handshake); a spawn policy may give a child
 extra tools (`childTools`) and a working directory (`cwd`), and its tool
 guard may answer with a Promise; the API's `version` stays 1).
+After a restart the actor restores the persisted agents without what a spawn
+policy gave them (tool guard, child tools, cwd); in local mode task-router
+kills the routed ones it restores (`taskRouter`, local mode reference).
 
 | Option | Default | Effect |
 |---|---|---|
@@ -299,6 +302,11 @@ programs.piEconomics.taskRouter.settings = {
 out) is read by the package's settings test and by the `module-eval` case
 `task-router-models`.
 
+#### Local mode
+
+The milestones L1–L7 below, then a reference (switch, settings, tools, session
+entries, events, failure modes) after the plans.
+
 **Local mode (milestone L1).** For a main session driven by a local model
 (Qwen). The settings key `mode` is `"default"` (the default) or `"local"`;
 `localMode.enable` sets it. There is no auto-detection: a Claude main with
@@ -352,7 +360,13 @@ lasts. While a force is active, every routed spawn (one with a task card) is
 planned as usual, without the spawner's `model` and `thinkingLevel`, then runs
 on the forced model: a member through its
 slot, as an explicit `model` does, without failover to another member; a
-non-member at once, with no slot accounting. Overseer reviews are not forced
+non-member at once, with no slot accounting. A forced spawn its member cannot
+take is rejected as an explicit `model` is, but the text names the force and
+how to end it instead of "leave `model` unset": ``force <model> (/force):
+<cause>; `/force off` clears it``, or for the settings force ``force <model>
+(settings `force.model`): <cause>; an empty `force.model` in the task-router
+settings clears it, `/force <model>` overrides it for this session`` (`/force
+off` does not end a settings force). Overseer reviews are not forced
 (they use `overseer.*`), and with `routing = false` nothing is forced; `/force`
 says both. The status line `task-router` shows `force <model> [effort]
 [(<N> left)]`, after `local` in local mode. Logs: a `force` outcome line
@@ -442,11 +456,16 @@ Ticket spawns are not forced and
 not routed, but they count like routed children: each turn of an overseer or
 of the fixer counts toward its member's `dailyCap`, and it holds a slot of its
 member while pending (60 s) or listed running. The policy refuses a ticket
-spawn on a member at its `dailyCap` or without a free slot (no health probe):
-a review attempt then does not start (the second one runs on the fallback
-member); with neither member left the merge review fails closed (`error`
-`review-unavailable`, the detail names the cap) and the merge is refused, and
-a fixer does not start (`revise`). The agent reports through the submit tool only: a verdict
+spawn, without waiting, on a member that is blocked after a provider error
+(`<member> is blocked until <time>`), at its `dailyCap`, down or busy by its
+health probe (`is down (its health check fails)`, `has no free slot (its
+server is busy)`; only a member with `health`) or without a free slot, the
+same checks a routed spawn passes (local mode L8; a fixer under a force skips
+them, as a forced spawn does): a review attempt then does not start (the
+second one runs on the fallback member); with neither member left the merge
+review fails closed (`error` `review-unavailable`, the detail names each
+member's cause) and the merge is refused, and a fixer does not start
+(`revise`). The agent reports through the submit tool only: a verdict
 (`summary`, `verdict`, `findings` with id, category, target, criterion,
 blocking) checked against its JSON schema and the rules (no code fence, unique
 ids, every target in the diff or plan under review); an invalid one goes back with the
@@ -759,6 +778,147 @@ tick rule), `core/local/plans.ts` (the store), `core/local/planflow.ts`
 (`plan_request`, `amend_plan`), `core/local/plantools.ts` (the tools),
 `core/local/planguard.ts` (the guards), plan-bound parts of
 `core/local/worktree.ts` and `core/local/merge.ts`.
+
+**Reference (milestone L8).** What the paragraphs above introduce, in one
+place.
+
+*Switch and components.* `mode` (`"default"` or `"local"`) switches local mode;
+`localMode.enable` sets it. `hints`, `worktrees`, `mergeGate` and `plans` each
+have `enabled` (`"auto"`: on in local mode only; `"on"`; `"off"`). The overseer
+has no switch: it serves what needs it (steer reviews, the merge review, the
+fixer, the plans). `force` works in both modes. The *active set* (`activeSet`,
+`packages/task-router/core/local/mode.ts`) decides the tools and the section
+lines: `worktrees` and `mergeGate` by their switches (the merge gate does not
+need worktrees), `plans` only while both are active too.
+
+| Active | Tools | Line of the `## Local mode` section |
+|---|---|---|
+| `worktrees` and `mergeGate` | `start_branch`, `request_merge` | "Code changes happen on branches: start_branch, then edit and commit in its worktree (absolute paths), then request_merge. You cannot merge, push or commit to a main branch; the router blocks it." |
+| `worktrees` only | `start_branch` | "Code changes happen on branches: start_branch, then edit and commit in its worktree (absolute paths)." |
+| `mergeGate` only | `request_merge` | "Merge into a main branch only with request_merge. You cannot merge, push or commit to a main branch; the router blocks it." |
+| `plans` | `plan_request`, `amend_plan` | "A request that needs more than one branch starts with plan_request. Follow the plan file, tick only your task's checkbox, and change the plan only with amend_plan." (after the branch line) |
+
+`/force` is registered in both modes, `task_verdict` as before; the overseer's
+submit tools (`submit_verdict`, `submit_plan`) are child tools of its agents
+only.
+
+*Settings* (`<agentDir>/task-router/settings.json`, design §3.0.1; the
+defaults are `defaults()` in `packages/task-router/core/settings.ts`, the rules
+`packages/task-router/core/local/settings.ts`). A bad value is reported once at
+`session_start` as `<path>: <why>; default kept`. Counts are positive integers,
+but `overseer.budget`, `overseer.steerBudget`, `overseer.resubmits` and
+`mergeGate.fixerRounds` may be 0; member references and their efforts are
+checked only while a local component can run.
+
+| Key | Default | Unit, values | Effect |
+|---|---|---|---|
+| `mode` | `"default"` | `"default"`, `"local"` | local mode (L1) |
+| `hints.enabled` | `"auto"` | `"auto"`, `"on"`, `"off"` | the hint engine (L3) |
+| `hints.identicalCalls` | 3 | calls | `identical-call` |
+| `hints.noChangeWrites` | 4 | writes | `no-change-writes` |
+| `hints.alternations` | 2 | alternations | `alternation` |
+| `hints.repeatedErrors` | 2 | failures in a row | `repeated-error` |
+| `hints.errorSimilarity` | 0.92 | trigram Jaccard, (0, 1] | `repeated-error` |
+| `hints.churnEdits` | 3 | writes of one path | `churn` |
+| `hints.churnTurns` | 4 | turns | `churn` |
+| `hints.checkFailures` | 2 | failed check runs in a row | `check-failing` |
+| `hints.contextPercent` | 85 | % of the context window, (0, 100] | `context-stall` |
+| `hints.stallTurns` | 25 | turns | `context-stall` |
+| `hints.contextSoftTokens` | 32000 | tokens | `context-soft` |
+| `hints.cooldownCalls` | 5 | calls | quiet time of one trip |
+| `hints.persistTrips` | 2 | detections after the first | escalation or steer review |
+| `hints.steer` | `"on"` | `"on"`, `"off"` | steer reviews instead of the escalation |
+| `overseer.member` | `"opus"` | an enabled member | the reviews' member |
+| `overseer.effort` | `"high"` | an effort of that member | |
+| `overseer.fallbackMember` | `"sonnet"` | an enabled member | a failed or over-budget attempt |
+| `overseer.fallbackEffort` | `"xhigh"` | an effort of that member | |
+| `overseer.budget` | 15 | spawns on `overseer.member` per session branch, ≥ 0 | then the fallback member |
+| `overseer.steerBudget` | 3 | steer reviews per session branch, ≥ 0 | then the escalation |
+| `overseer.timeoutSec` | 900 | seconds per attempt | |
+| `overseer.resubmits` | 2 | invalid submissions sent back, ≥ 0 | |
+| `overseer.tools` | `["read", "grep", "find", "ls"]` | pi tools, none of `bash`, `edit`, `write` | plus the submit tool |
+| `worktrees.enabled` | `"auto"` | `"auto"`, `"on"`, `"off"` | `start_branch` (L5) |
+| `worktrees.root` | `"../{repo}.worktrees"` | path; `{repo}` = the repository's directory name, relative to the repository root | where worktrees go |
+| `worktrees.branchPrefix` | `"lm/"` | string | branch names |
+| `worktrees.removeAfterMerge` | `true` | bool | cleanup after a merge |
+| `mergeGate.enabled` | `"auto"` | `"auto"`, `"on"`, `"off"` | `request_merge`, the git guard (L6) |
+| `mergeGate.mainBranches` | `["main", "master"]` | branch names, non-empty | the first that exists is main |
+| `mergeGate.maxDiffLines` | 150 | changed lines | `size` |
+| `mergeGate.maxDiffFiles` | 6 | files | `size` |
+| `mergeGate.extraChecks` | `[]` | commands | run after the branch check |
+| `mergeGate.redRun` | `true` | bool | the check at the base |
+| `mergeGate.rejectionsBeforeFixer` | 2 | rejections | the fixer starts |
+| `mergeGate.fixerMember` | `"sonnet"` | an enabled member | |
+| `mergeGate.fixerEffort` | `"high"` | an effort of that member | |
+| `mergeGate.fixerRounds` | 1 | fixer rounds, ≥ 0 (0: no fixer) | then `blocked` |
+| `mergeGate.push` | `false` | bool | push main after a merge |
+| `mergeGate.remote` | `"origin"` | remote name | |
+| `plans.enabled` | `"auto"` | `"auto"`, `"on"`, `"off"` | `plan_request`, `amend_plan` (L7; needs both above) |
+| `plans.dir` | `"docs/plans"` | path relative to the repository root | plan files |
+| `plans.taskFiles` | 2 | files | the plan author's target per task |
+| `plans.taskLines` | 60 | changed lines | the plan author's target per task |
+| `plans.splitFiles` | 3 | files | `over-size` trip, paths per task, a task branch's merge |
+| `plans.splitLines` | 100 | changed lines | `over-size` trip, a task branch's merge |
+| `plans.milestoneTasks` | 5 | tasks | per milestone |
+| `plans.milestoneLines` | 250 | changed lines | a milestone branch's merge |
+| `plans.taskTurns` | 12 | main-session turns | `over-budget` |
+| `plans.rounds` | 2 | rejections | author rounds; amendments per trigger before the rewrite |
+| `plans.regression` | `"milestone"` | `"milestone"`, `"plan"`, `"off"` | checks of merged tasks at a merge |
+| `plans.publicApiGlobs` | `[]` | globs | a change there needs the whole-plan review |
+| `force.model` | `""` | a member or `provider/id`; `""` = no force | the settings force (L2) |
+| `force.thinkingLevel` | `""` | `""` or an effort | |
+
+The router's shared `checkTimeoutSec` (900, seconds) bounds every check the
+merge gate and the plans run, and `riskGlobs` marks risky paths for the
+`risky-path` trip and the merge reviewer.
+
+*Session entries* (`pi.appendEntry`, rebuilt at `session_start` from the
+session branch; never in the model's context):
+
+| customType | data |
+|---|---|
+| `task-router/force` | `{model, thinkingLevel?, scope: "session" \| "next", remaining?, source: "command"}` or `{cleared: true}` |
+| `task-router/budget` | `{opusUsed, steerUsed}`, one per change |
+| `task-router/review` | `{reviewId, role, member, commit?, verdict, approved?, ts}`, one per submitted verdict or skeleton |
+| `task-router/branch` | `{repo, branch, worktree, base, state, rejections, fixerRuns, fixer?, goal?, check?, plan?: {slug, id}, files?, handmade?}`, one per change (`keep: true` on an update in place); `state` `active`, `merged`, `abandoned`, `fixer` or `blocked` |
+| `task-router/approval` | `{repo, branch, commit, tree, reviewId}` |
+| `task-router/main-ref` | `{repo, branch, sha}`, the last main tip the router knows |
+| `task-router/plan` | `{slug, repo, file, skeletonHash, approvedBy, triggers: [{id, kind, task?, open, rejected?}]}` |
+
+A steer review's result reaches the main session as a displayed message of
+type `task-router/steer`.
+
+*Events* (the outcome log, text-free; `packages/token-meter/LOGS.md` has the
+keys and one example line each): `force`, `hint`, `review`, `merge`,
+`gatebypass` and `plan`; a forced `spawn` adds `forced`, `forceSource`,
+`routedModel` and `routedEffort`, a ticket `spawn` adds `ticket` and opens no
+verdict slot.
+
+*Result codes* (`status: <status> (<reason>)`; only `error` is an error result):
+
+| Tool | Status | Reasons |
+|---|---|---|
+| `request_merge` | `merged`, `refused`, `revise`, `fixer`, `error` | `main-branch`, `dirty`, `behind`, `fixer-running`, `abandoned`, `blocked`, `size`, `scope`, `check`, `main-dirty`, `plan-changed`, `no-worktree`, `review-unavailable`, `aborted`, `git` |
+| `plan_request` | `approved`, `refused`, `error` | `grounding`, `slug`, `main-dirty`, `invalid`, `broken-check`, `author-unavailable`, `aborted`, `git` |
+| `amend_plan` | `approved`, `rejected`, `refused`, `error` | `no-plan`, `plan-changed`, `trigger`, `evidence`, `checked`, `invalid`, `broken-check`, `main-dirty`, `review-unavailable`, `author-unavailable`, `aborted`, `git` |
+
+*Failure modes.*
+
+| Situation | What happens |
+|---|---|
+| a setting is invalid | reported once at `session_start` (`<path>: <why>; default kept`); `plans = "on"` without both `worktrees` and `mergeGate` is `plans: needs worktrees and mergeGate; off` |
+| `force.model` cannot be resolved | reported at `session_start`; the settings force stays inactive |
+| a forced spawn cannot run | rejected; the text names the force and how to end it (above) |
+| no spawn API (`spawnPolicyApi` < 2) in local mode | one warning at `session_start` ("task-router: local mode needs actor-subagents with spawnPolicyApi ≥ 2; merges are refused and plans are unavailable"); `request_merge` fails closed (`review-unavailable`), `plan_request` answers `author-unavailable`, steer falls back to the escalation; the git guard still blocks |
+| an overseer's member and its fallback are blocked, capped, down or full | the review does not run: `request_merge` and `amend_plan` answer `error` `review-unavailable`, `plan_request` `author-unavailable` (the detail names each cause); a fixer does not start (`revise`) |
+| an agent the router's policy did not place takes a ticket | killed with a warning; the attempt is an `error`, neither charged nor retried |
+| a branch's worktree is gone | the branch becomes `abandoned` at `session_start` |
+| a fixer did not survive a restart | its branch is `active` again ("the fixer … of … did not survive the restart"); a restored fixer is killed ("killed the restored fixer …: a restored agent runs without the router's git guard") |
+| the actor restores routed children after a restart | in local mode, with routing and the router's policy on, the main session kills each child its policy did not place this session, at `session_start` or when the actor announces it, with the warning "task-router: killed the restored subagent(s) …: the actor restores a routed child without the router's tool guard and cwd; branches and worktrees stay"; not at a reload (its children kept their guards), never in a child session, and default mode keeps them (L8) |
+| main moved outside the gate | `gatebypass` line, a warning and a `<router-hint trip="gatebypass">`; nothing is reverted |
+| a hook of the hint engine fails | reported once (`task-router: hint engine: …`); the tool result is unchanged |
+
+#### Scout gate, dependencies and checks
 
 **Scout gate (Group 6, 2026-10-28).** Haiku at medium scored 0.646 against
 Sonnet high's 0.917 (threshold 0.825, H6.4; two runs per task and arm), so

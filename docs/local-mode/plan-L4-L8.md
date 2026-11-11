@@ -1115,7 +1115,7 @@ message). Open notes, for L6 or later:
 
 ### L8 Close-out
 
-#### L8.T1 Module contract complete `[ ] todo`
+#### L8.T1 Module contract complete `[x] done`
 - **Files**: `docs/pi-economics.md` (taskRouter: one local-mode subsection — switch, components and `activeSet`, settings table for every §3.0.1 key with default and unit, tools `start_branch`/`request_merge`/`plan_request`/`amend_plan`, `/force`, session entries, events, failure modes; actorSubagents and Patched upstreams consistent). **Check**: `chk leak boundary`.
 
 #### L8.T2 `LOGS.md` examples, verified (D58) `[ ] todo`
