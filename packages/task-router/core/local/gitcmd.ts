@@ -3,7 +3,9 @@
 // directories' current branches, which the caller resolves (`gitDirs` → `branchOf`). The shell grammar is approximated for
 // what can move a ref: quotes, escapes, operators, groups, redirections, heredocs, comments, substitutions and `-c` strings.
 // What it cannot read (a computed word, nesting deeper than 2) is unknown or throws; `safeClassify` turns a throw into a block
-// for a command with a `git` token and an allow for every other (LD8).
+// for a command with a `git` token and an allow for every other (LD8). Review F6: a git program the parser cannot attribute to a
+// git call it read (a runner it does not know, a pipe into a shell, a `-c` value, a git alias) blocks a command with a git token
+// too (`strays`, UNKNOWN_SUB).
 import { basename, isAbsolute, relative, resolve } from "node:path";
 
 /** Stands for the computed part of a word (a variable, a substitution, `~`): `a$X` is `a` + DYN. The classifier cannot read it. */
@@ -15,8 +17,9 @@ export type Seg = { argv: string[]; dir: string | undefined };
 // ── lexer ──
 type Word = { t: "w"; v: string; subs: string[] };
 type Op = { t: "op"; v: string };
-/** A redirection's target: no word of the command, but its substitutions run. */
-type Redir = { t: "r"; subs: string[] };
+/** A redirection's target: no word of the command, but its substitutions run. `text`: the target's value, a heredoc's body
+ *  (filled when the body is read), which the command may run (`bash <<< 'git …'`; review F6). */
+type Redir = { t: "r"; subs: string[]; text: string };
 type Tok = Word | Op | Redir;
 
 const SPACE = new Set([" ", "\t"]);
@@ -27,7 +30,7 @@ const SPECIAL = new Set(["?", "#", "@", "*", "!", "$", "-"]);
 class Lex {
   i = 0;
   toks: Tok[] = [];
-  private heredocs: { delim: string; tabs: boolean }[] = [];
+  private heredocs: { delim: string; tabs: boolean; quoted: boolean; r: Redir }[] = [];
   readonly s: string;
   constructor(s: string) { this.s = s; }
   private fail(why: string): never { throw new Error(`cannot parse the command: ${why}`); }
@@ -67,8 +70,9 @@ class Lex {
     this.i += op.length;
     if (op === "<<" || op === "<<-") {
       while (SPACE.has(s[this.i] ?? "")) this.i++;
-      const w = this.readWord();
-      this.heredocs.push({ delim: w.raw.replace(/['"\\]/g, ""), tabs: op === "<<-" });
+      const w = this.readWord(), r: Redir = { t: "r", subs: [], text: "" };
+      this.toks.push(r);
+      this.heredocs.push({ delim: w.raw.replace(/['"\\]/g, ""), tabs: op === "<<-", quoted: /['"\\]/.test(w.raw), r });
       return;
     }
     this.redirect();
@@ -77,17 +81,34 @@ class Lex {
   private redirect(): void {
     while (SPACE.has(this.s[this.i] ?? "")) this.i++;
     if (this.i >= this.s.length || META.has(this.s[this.i]!)) this.fail("a redirection without a target");
-    this.toks.push({ t: "r", subs: this.readWord().subs });
+    const w = this.readWord();
+    this.toks.push({ t: "r", subs: w.subs, text: w.v });
   }
-  /** After a newline: the pending heredocs' bodies, line by line up to each delimiter. */
+  /** After a newline: the pending heredocs' bodies, line by line up to each delimiter, into their redirections; an unquoted
+   *  delimiter's body expands, so its substitutions run (review F6). */
   private bodies(): void {
     for (const h of this.heredocs.splice(0)) {
+      const lines: string[] = [];
       for (;;) {
-        if (this.i >= this.s.length) return;
+        if (this.i >= this.s.length) break;
         const end = this.s.indexOf("\n", this.i), line = this.s.slice(this.i, end < 0 ? undefined : end);
         this.i = end < 0 ? this.s.length : end + 1;
         if ((h.tabs ? line.replace(/^\t+/, "") : line) === h.delim) break;
+        lines.push(line);
       }
+      h.r.text = lines.join("\n");
+      if (!h.quoted) new Lex(h.r.text).expand(h.r.subs);
+    }
+  }
+  /** The substitutions of a text that expands like a double-quoted word without the quotes (an unquoted heredoc's body). */
+  expand(subs: string[]): void {
+    const s = this.s;
+    while (this.i < s.length) {
+      const c = s[this.i]!;
+      if (c === "\\") { this.i += 2; continue; }
+      if (c === "`") { subs.push(this.backtick()); continue; }
+      if (c === "$" && this.dollar(subs, true) !== undefined) continue;
+      this.i++;
     }
   }
   private word(): void {
@@ -211,8 +232,22 @@ class Lex {
 }
 
 // ── simple commands ──
-/** Reserved words that may start a command; they are dropped. */
-const KEYWORDS = new Set(["{", "}", "!", "if", "then", "else", "elif", "fi", "do", "done", "while", "until"]);
+/** Reserved words that may start a command; they are dropped (`function <name>` too). */
+const KEYWORDS = new Set(["{", "}", "!", "if", "then", "else", "elif", "fi", "do", "done", "while", "until", "coproc"]);
+/** Review F6: commands that never run a word as a command, so a `git` among their words is text (a pattern, a message). Every
+ *  other command may (`watch`, `find -exec`, `nix develop -c`, `ssh`, `su -c`, an interpreter): a git word there is a stray. */
+const NON_RUNNERS = new Set(["echo", "printf", "cd", "pushd", "popd", "ls", "cat", "tac", "head", "tail", "less", "more", "wc",
+  "grep", "egrep", "fgrep", "rg", "ag", "which", "whereis", "type", "man", "help", "file", "stat", "du", "df", "tree", "mkdir",
+  "rmdir", "touch", "rm", "cp", "mv", "ln", "chmod", "readlink", "realpath", "basename", "dirname", "test", "[", "true", "false",
+  "read", "tee", "sort", "uniq", "cut", "tr", "diff", "cmp", "comm", "column", "nl", "fold", "od", "xxd", "jq", "unset"]);
+const DECLARE = new Set(["export", "declare", "typeset", "readonly", "local"]);
+/** A word holds a git program: one of its pieces (split at blanks, operators, quotes, `=`) is `git` or ends in `/git`. */
+const gitIn = (w: string): boolean => w.split(/[\s;&|()<>`'"{}=\u0000]+/).some((p) => p.slice(p.lastIndexOf("/") + 1) === "git");
+/** Git's environment that changes the repository or its configuration (a prefix assignment of GIT_DIR or GIT_WORK_TREE only
+ *  makes the directory unknown). */
+const GIT_ENV = /^GIT_(DIR|WORK_TREE|COMMON_DIR|CONFIG[A-Z0-9_]*)=/;
+/** Git subcommands that run a command given in their words (review F6). */
+const RUNS = new Set(["submodule", "bisect", "rebase"]);
 const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
 const ASSIGN = /^[A-Za-z_][A-Za-z0-9_]*=/;
 /** Wrappers that run their argument command (design §3.4.5, and a few more that do the same), with the options that take a
@@ -234,26 +269,37 @@ const at = (dir: string | undefined, t: string): string | undefined =>
 /** The command a simple command runs: assignments and wrappers stripped (git's environment variables and `env -C`, `sudo -D`
  *  change the directory), xargs' input as one computed word. An empty `argv`: nothing runs (`command -v`). */
 export function unwrap(argv0: readonly string[], dir0: string | undefined): { argv: string[]; dir: string | undefined } {
+  const { argv, dir } = unwrapped(argv0, dir0);
+  return { argv, dir };
+}
+/** `unwrap` with the words it stripped (`pre`: assignments and wrappers with their options). */
+function unwrapped(argv0: readonly string[], dir0: string | undefined): { argv: string[]; dir: string | undefined; pre: string[] } {
   let argv = [...argv0], dir = dir0;
+  const pre: string[] = [];
   for (;;) {
     while (argv.length && ASSIGN.test(argv[0]!)) {
       if (/^GIT_(DIR|WORK_TREE)=/.test(argv[0]!)) dir = undefined;
-      argv.shift();
+      pre.push(argv.shift()!);
     }
     const w = WRAPPERS[basename(argv[0] ?? "")];
-    if (!w || dyn(argv[0]!)) return { argv, dir };
+    if (!w || dyn(argv[0]!)) return { argv, dir, pre };
     const name = basename(argv[0]!);
     let i = 1;
     while (i < argv.length && argv[i]!.startsWith("-") && argv[i] !== "-") {
       const o = argv[i]!;
       if (o === "--") { i++; break; }
-      if (name === "command" && (o === "-v" || o === "-V")) return { argv: [], dir };
+      if (name === "command" && (o === "-v" || o === "-V")) return { argv: [], dir, pre: [] }; // runs nothing
       if (name === "env" && (o === "-S" || o.startsWith("--split-string"))) throw new Error("cannot parse the command: env -S");
+      if (name === "sudo" && (o === "-i" || o === "--login")) dir = undefined; // the target user's home
       const eq = o.indexOf("="), key = o.startsWith("--") && eq > 0 ? o.slice(0, eq) : o;
+      // Review F6: a short option with its value attached (`env -C/r`, `sudo -D/r`).
+      const attached = !o.startsWith("--") && o.length > 2 && w.arg?.includes(o.slice(0, 2)) ? o.slice(0, 2) : undefined;
+      if (attached !== undefined) { if (w.dir?.includes(attached)) dir = at(dir, o.slice(2)); i++; continue; }
       if (w.dir?.includes(key)) dir = at(dir, eq > 0 && o.startsWith("--") ? o.slice(eq + 1) : argv[i + 1] ?? DYN);
       i += w.arg?.includes(o) ? 2 : 1;
     }
     i += w.skip ?? 0;
+    pre.push(...argv.slice(0, i));
     argv = argv.slice(i);
     if (name === "xargs") argv.push(DYN);
   }
@@ -261,27 +307,41 @@ export function unwrap(argv0: readonly string[], dir0: string | undefined): { ar
 
 /** Splits `cmd` into simple commands with their directories (design §3.4.5): on unquoted `;`, `&&`, `||`, `|`, `&` and newlines;
  *  into `$(…)`, backticks, `<(…)` and the string of `bash|sh|zsh -c` or `eval`, up to depth 2 (deeper throws). A literal `cd`
- *  moves the rest of its list; one in a pipeline or a `( )` group, or before `&`, does not. Throws on what it cannot parse. */
-export function segments(cmd: string, cwd: string | undefined, depth = 0): Seg[] {
+ *  moves the rest of its list; one in a pipeline or a `( )` group, or before `&`, does not. Throws on what it cannot parse.
+ *  `strays` (review F6) collects the places where a git program may run that no git call read: see `strayOf`. */
+export function segments(cmd: string, cwd: string | undefined, depth = 0, strays?: string[]): Seg[] {
   const toks = new Lex(cmd).run();
   const out: Seg[] = [];
   const nest = (text: string, dir: string | undefined): Seg[] => {
     if (depth + 1 > 2) throw new Error("cannot parse the command: nested deeper than 2");
-    return segments(text, dir, depth + 1);
+    return segments(text, dir, depth + 1, strays);
   };
   let dir = cwd, listStart = cwd, prevPipe = false;
   const stack: { dir: string | undefined; listStart: string | undefined }[] = [];
-  let words: Word[] = [], subs: string[] = [];
+  let words: Word[] = [], subs: string[] = [], hidden: string[] = [];
+  /** A non-runner had git among its words (text): a later command that reads a pipe may run it (`echo 'git …' | sh`). */
+  let gitText = false;
   const finish = (next: string | undefined): void => {
     for (const t of subs) out.push(...nest(t, dir));
     let argv = words.map((w) => w.v);
-    while (argv.length && KEYWORDS.has(argv[0]!)) argv = argv.slice(1);
-    const inPipe = prevPipe || next === "|";
+    for (;;) {
+      if (argv[0] === "function") argv = argv.slice(2);
+      else if (argv.length && KEYWORDS.has(argv[0]!)) argv = argv.slice(1);
+      else break;
+    }
+    const inPipe = prevPipe || next === "|", hid = hidden;
     words = [];
     subs = [];
+    hidden = [];
     if (!argv.length) return;
     out.push({ argv, dir });
-    const u = unwrap(argv, dir), name = basename(u.argv[0] ?? "");
+    const x = unwrapped(argv, dir), u = { argv: x.argv, dir: x.dir }, name = basename(u.argv[0] ?? "");
+    if (strays) {
+      const why = strayOf(x, name, hid);
+      if (why === "text") gitText = true;
+      else if (why !== undefined) strays.push(why);
+      if (prevPipe && gitText && !NON_RUNNERS.has(name) && name !== "git") strays.push(`git text piped into ${name}`);
+    }
     if (SHELLS.has(name)) {
       const c = shellString(u.argv);
       if (c !== undefined) {
@@ -296,8 +356,15 @@ export function segments(cmd: string, cwd: string | undefined, depth = 0): Seg[]
   };
   for (const t of toks) {
     if (t.t === "w") { words.push(t); subs.push(...t.subs); continue; }
-    if (t.t === "r") { subs.push(...t.subs); continue; }
-    if (t.v === "(") { finish(undefined); stack.push({ dir, listStart }); listStart = dir; prevPipe = false; continue; }
+    if (t.t === "r") { subs.push(...t.subs); hidden.push(t.text); continue; }
+    if (t.v === "(") {
+      finish(undefined);
+      if (strays && prevPipe && gitText) strays.push("git text piped into a group");
+      stack.push({ dir, listStart });
+      listStart = dir;
+      prevPipe = false;
+      continue;
+    }
     if (t.v === ")") {
       finish(undefined);
       const top = stack.pop();
@@ -314,6 +381,37 @@ export function segments(cmd: string, cwd: string | undefined, depth = 0): Seg[]
   finish(undefined);
   if (stack.length) throw new Error("cannot parse the command: an unclosed (");
   return out;
+}
+/** Review F6 (LD8): why a simple command may run a git program that no git call read; "text" for a non-runner with git among
+ *  its words (only a command that reads it through a pipe may run it: `echo 'git …' | sh`), else undefined. A git call's own words are read, except a `-c` value or the
+ *  command a runner subcommand runs (`rebase --exec`, `submodule foreach`, `bisect run`); a non-runner's words are text; any
+ *  other command with a git word among its words or redirections (`watch git …`, `bash <<< 'git …'`) is a stray, as is a
+ *  computed command name, git's environment set by assignment (GIT_CONFIG_*) or `export GIT_DIR=…`. */
+function strayOf(x: { argv: string[]; pre: string[] }, name: string, hidden: readonly string[]): string | undefined {
+  if (x.pre.some((w) => GIT_ENV.test(w) && !/^GIT_(DIR|WORK_TREE)=/.test(w))) return "git's environment";
+  if (x.pre.some((w) => ASSIGN.test(w) && gitIn(w))) return "git in an assignment";
+  const a = x.argv, any = (ws: readonly string[]) => ws.some(gitIn);
+  if (!a.length) return undefined;
+  if (dyn(a[0]!)) return "a computed command";
+  if (name === "git") return gitStray(a);
+  if (SHELLS.has(name) && shellString(a) !== undefined) return undefined; // the string is read as a command (nested)
+  if (name === "eval") return undefined;
+  if (DECLARE.has(name)) return a.slice(1).some((w) => GIT_ENV.test(w)) ? "git's environment" : undefined;
+  const gitty = any(a) || any(hidden);
+  if (NON_RUNNERS.has(name)) return gitty ? "text" : undefined;
+  return gitty ? `git under ${name}` : undefined;
+}
+/** A git call's stray: a `-c` value that holds git (`core.editor`), or a runner subcommand's command (`rebase -x 'git …'`). */
+function gitStray(a: readonly string[]): string | undefined {
+  for (let i = 1; i < a.length; i++) {
+    const w = a[i]!;
+    if (w === "-c" || w === "--config-env") { if (gitIn(a[i + 1] ?? "")) return "git in a -c value"; i++; continue; }
+    if (w.startsWith("--config-env=") && gitIn(w)) return "git in a -c value";
+    if (GIT_ARG.has(w) || w === "--git-dir" || w === "--work-tree" || w === "-C") { i++; continue; }
+    if (w.startsWith("-")) continue;
+    return RUNS.has(w) && a.slice(i + 1).some(gitIn) ? `git run by git ${w}` : undefined;
+  }
+  return undefined;
 }
 /** `bash -lc 'x'`: the string a shell's `-c` runs, or undefined (a script, stdin). */
 function shellString(argv: readonly string[]): string | undefined {
@@ -338,30 +436,36 @@ function cdTarget(name: string, argv: readonly string[], dir: string | undefined
 }
 
 // ── git calls ──
-export type GitCall = { dir: string | undefined; sub: string; args: string[] };
+/** `config`: the `k=v` of its `-c` and `--config-env` options (review F6). */
+export type GitCall = { dir: string | undefined; sub: string; args: string[]; config?: string[] };
 /** Git's global options that take a value as the next word. */
 const GIT_ARG = new Set(["-c", "--namespace", "--super-prefix", "--config-env", "--list-cmds", "--exec-path"]);
 /** The git calls of `cmd` (design §3.4.5): wrappers and assignments stripped; `-C <dir>` (relative to the call's directory,
  *  repeatable) and `-c k=v` read; `--git-dir`/`--work-tree` (and GIT_DIR, GIT_WORK_TREE) make the directory unknown. */
-export function gitCalls(cmd: string, cwd: string): GitCall[] {
-  const out: GitCall[] = [];
-  for (const s of segments(cmd, cwd)) {
+export function gitCalls(cmd: string, cwd: string): GitCall[] { return analyse(cmd, cwd).calls; }
+/** The git calls of `cmd` and its strays (review F6): the places where a git program may run that no git call read. */
+export function analyse(cmd: string, cwd: string): { calls: GitCall[]; strays: string[] } {
+  const out: GitCall[] = [], strays: string[] = [];
+  for (const s of segments(cmd, cwd, 0, strays)) {
     const u = unwrap(s.argv, s.dir), a = u.argv;
     if (!a.length || dyn(a[0]!) || basename(a[0]!) !== "git") continue;
     let dir = u.dir, i = 1;
+    const config: string[] = [];
     while (i < a.length) {
       const w = a[i]!;
       if (w === "-C") { dir = a[i + 1] === undefined ? undefined : at(dir, a[i + 1]!); i += 2; continue; }
       if (w === "--git-dir" || w === "--work-tree") { dir = undefined; i += 2; continue; }
       if (w.startsWith("--git-dir=") || w.startsWith("--work-tree=")) { dir = undefined; i++; continue; }
+      if (w === "-c" || w === "--config-env") { config.push(a[i + 1] ?? DYN); i += 2; continue; }
+      if (w.startsWith("--config-env=")) { config.push(w.slice("--config-env=".length)); i++; continue; }
       if (GIT_ARG.has(w)) { i += 2; continue; }
       if (w.startsWith("-")) { i++; continue; }
       break;
     }
     if (i >= a.length) continue; // `git --version`: no subcommand
-    out.push({ dir, sub: a[i]!, args: a.slice(i + 1) });
+    out.push({ dir, sub: a[i]!, args: a.slice(i + 1), ...(config.length && { config }) });
   }
-  return out;
+  return { calls: out, strays };
 }
 /** The directories whose current branch `classify` needs (D43), once each. */
 export const gitDirs = (cmd: string, cwd: string): string[] => [...new Set(gitCalls(cmd, cwd).flatMap((c) => (c.dir ? [c.dir] : [])))];
@@ -370,9 +474,24 @@ export const gitDirs = (cmd: string, cwd: string): string[] => [...new Set(gitCa
 export const MERGE_REASON = (main: string): string => `merging into ${main} goes through request_merge`;
 export const UNKNOWN_DIR = "cannot tell the branch; run git with a literal -C <worktree>";
 export const UNCLASSIFIED = "router could not classify this git command; split it";
+/** Review F6: a git subcommand the classifier does not know (a user's alias, an external `git-x`) may move any ref. */
+export const UNKNOWN_SUB = "router does not know this git subcommand (an alias or an external command); run the git commands it stands for";
 type Branch = string | undefined | "unknown";
 /** The subcommands that write the current branch (design §3.4.5). */
 const ON_CURRENT = new Set(["merge", "pull", "rebase", "cherry-pick", "revert", "am", "commit", "reset"]);
+/** Review F6: the git subcommands the classifier knows: the ones `rule` reads, and the ones that move no branch (reads, the
+ *  index and the worktree, objects, tags, notes, the stash, configuration it reads). Any other (an alias, `git-x` on PATH,
+ *  `replay`, `subtree`, `fast-import`, `send-pack`, `for-each-repo`, …) is UNKNOWN_SUB. */
+const KNOWN = new Set([...ON_CURRENT, "push", "fetch", "branch", "checkout", "switch", "update-ref", "filter-branch", "worktree",
+  "symbolic-ref", "config", "add", "stage", "rm", "mv", "restore", "status", "log", "show", "diff", "diff-files", "diff-index", "diff-tree",
+  "diff-pairs", "range-diff", "shortlog", "whatchanged", "blame", "annotate", "grep", "describe", "name-rev", "rev-parse", "rev-list",
+  "merge-base", "merge-tree", "merge-file", "cherry", "show-branch", "show-ref", "for-each-ref", "ls-files", "ls-tree", "ls-remote",
+  "cat-file", "check-ignore", "check-attr", "check-mailmap", "check-ref-format", "var", "version", "help", "count-objects", "fsck",
+  "verify-commit", "verify-tag", "verify-pack", "archive", "bundle", "format-patch", "request-pull", "patch-id", "interpret-trailers",
+  "stripspace", "column", "mailinfo", "mailsplit", "apply", "stash", "tag", "notes", "clean", "sparse-checkout", "rerere", "reflog",
+  "gc", "prune", "repack", "maintenance", "pack-refs", "commit-graph", "multi-pack-index", "hash-object", "commit-tree", "mktree",
+  "mktag", "read-tree", "write-tree", "update-index", "checkout-index", "pack-objects", "index-pack", "unpack-objects",
+  "init", "clone", "remote", "submodule", "bisect", "credential", "last-modified", "url-parse", "format-rev", "repo"]);
 /** Per subcommand, the options whose value is the next word (so it is no positional). */
 const VALUED: Record<string, string[]> = {
   push: ["-o", "--push-option", "--repo", "--receive-pack", "--exec"],
@@ -382,7 +501,12 @@ const VALUED: Record<string, string[]> = {
   checkout: ["-b", "-B", "--orphan", "--conflict", "--pathspec-from-file"],
   switch: ["-c", "-C", "--create", "--force-create", "--orphan", "--conflict"],
   "update-ref": ["-m"],
+  worktree: ["-b", "-B", "--reason"],
+  "symbolic-ref": ["-m"],
+  config: ["--file", "-f", "--blob", "--type", "--default", "--comment"],
 };
+/** A remote's refspecs set by configuration (`-c remote.o.fetch=…:refs/heads/main`): fetch and push may then write a main. */
+const REMOTE_KEY = /^remote\..+\.(fetch|push|mirror)$/i;
 /** The subcommands whose words after `--` are paths (review F1); for every other the words after `--` are still refs and refspecs. */
 const PATHS_AFTER_DASHES = new Set(["checkout", "restore", "reset"]);
 /** The words that are no option and no option's value; for a path subcommand everything after `--` (`rest`) separately, for any
@@ -430,6 +554,9 @@ function rule(c: GitCall, cur: Branch, mains: readonly string[]): string | undef
   const first = (...xs: (string | undefined)[]): string | undefined => xs.find((x) => x !== undefined);
   const { sub, args } = c;
   if (dyn(sub)) return UNCLASSIFIED;
+  if (!KNOWN.has(sub)) return UNKNOWN_SUB;
+  if ((sub === "fetch" || sub === "pull" || sub === "push" || sub === "remote") && c.config?.some((kv) => dyn(kv) || REMOTE_KEY.test(kv.split("=")[0]!)))
+    return UNCLASSIFIED;
   const { pos } = positionals(sub, args);
   const mainOf = (dst: string): string => { const b = dstBranch(dst); return mains.includes(b) ? b : mains[0] ?? "main"; };
   /** A fetch refspec `src:dst` writes dst: into a main ref (any spelling, or a pattern over the branches) it is a merge; a
@@ -462,6 +589,13 @@ function rule(c: GitCall, cur: Branch, mains: readonly string[]): string | undef
     }
     case "checkout": { const b = valueOf(args, ["-B"]); return b === undefined ? undefined : named(b); }
     case "switch": { const b = valueOf(args, ["-C", "--force-create"]); return b === undefined ? undefined : named(b); }
+    case "worktree": { const b = pos[0] === "add" ? valueOf(args, ["-b", "-B"]) : undefined; return b === undefined ? undefined : named(b); }
+    case "symbolic-ref": return pos.length >= 2 || has(args, "d", ["--delete"]) ? first(...pos.map(named)) : undefined;
+    case "config": { // a write of a remote's refspecs (`git config [set|--add] remote.o.fetch v`); a read passes
+      const k = pos.findIndex((w) => dyn(w) || REMOTE_KEY.test(w));
+      const writes = pos.length > k + 1 || pos[0] === "set" || pos[0] === "unset" || has(args, "", ["--add", "--replace-all", "--unset", "--unset-all"]);
+      return k >= 0 && writes && pos[0] !== "get" ? UNCLASSIFIED : undefined;
+    }
     case "update-ref": {
       if (args.includes("--stdin")) return UNCLASSIFIED;
       const ref = pos[0];
@@ -491,13 +625,15 @@ function after(c: GitCall, cur: Branch, mains: readonly string[]): Branch {
  *  detached or none; "unknown": git could not tell in time); a directory not in it is unknown. A `checkout`/`switch` earlier in
  *  the command changes the branch for the later calls in its directory (and below it). */
 export function classify(cmd: string, cwd: string, mains: readonly string[], branches: ReadonlyMap<string, Branch>): string | undefined {
+  const { calls, strays } = analyse(cmd, cwd);
+  if (strays.length && hasGitToken(cmd)) return UNCLASSIFIED; // review F6, LD8: git the classifier did not read
   const moved: [string, Branch][] = [];
   const cur = (dir: string | undefined): Branch => {
     if (dir === undefined) return "unknown";
     const m = moved.filter(([d]) => inside(dir, d)).sort((a, b) => b[0].length - a[0].length)[0];
     return m ? m[1] : branches.has(dir) ? branches.get(dir) : "unknown";
   };
-  for (const c of gitCalls(cmd, cwd)) {
+  for (const c of calls) {
     const b = cur(c.dir), why = rule(c, b, mains);
     if (why !== undefined) return why;
     if (c.dir !== undefined && (c.sub === "checkout" || c.sub === "switch")) moved.push([c.dir, after(c, b, mains)]);
@@ -517,7 +653,11 @@ export function safeClassify(...a: Parameters<typeof classify>): string | undefi
 export function guardGit(cmd: string, cwd: string, mains: readonly string[], branchOf: (dir: string) => Promise<Branch>):
   string | undefined | Promise<string | undefined> {
   let dirs: string[];
-  try { dirs = gitDirs(cmd, cwd); } catch { return hasGitToken(cmd) ? UNCLASSIFIED : undefined; }
+  try {
+    const a = analyse(cmd, cwd);
+    if (a.strays.length && hasGitToken(cmd)) return UNCLASSIFIED;
+    dirs = [...new Set(a.calls.flatMap((c) => (c.dir ? [c.dir] : [])))];
+  } catch { return hasGitToken(cmd) ? UNCLASSIFIED : undefined; }
   if (!dirs.length) return safeClassify(cmd, cwd, mains, new Map());
   const read = (dir: string): Promise<[string, Branch]> =>
     Promise.resolve().then(() => branchOf(dir)).then((b): [string, Branch] => [dir, b], (): [string, Branch] => [dir, "unknown"]);

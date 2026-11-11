@@ -2,7 +2,7 @@
 // into simple commands with their directories, and the git calls among them.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DYN, MERGE_REASON, UNCLASSIFIED, UNKNOWN_DIR, classify, gitCalls, gitDirs, safeClassify, segments } from "../core/local/gitcmd.ts";
+import { DYN, MERGE_REASON, UNCLASSIFIED, UNKNOWN_DIR, UNKNOWN_SUB, classify, gitCalls, gitDirs, safeClassify, segments } from "../core/local/gitcmd.ts";
 
 const W = "/w";
 const argvs = (cmd: string, cwd = W) => segments(cmd, cwd).map((s) => s.argv);
@@ -214,4 +214,50 @@ test("safeClassify (LD8): a command that cannot be parsed is blocked when it has
   assert.equal(safeClassify("env -S 'git push' x", WT, MAINS, BR), UNCLASSIFIED);
   assert.equal(safeClassify("cat .git/x 'y", WT, MAINS, BR), undefined, ".git is no git token");
   assert.equal(safeClassify("git push origin main", WT, MAINS, BR), MERGE_REASON("main"));
+});
+
+// ── review F6: git subcommands, aliases and runners the classifier did not read ──
+test("classify (review F6): worktree add -b|-B <main>, symbolic-ref to a main and a remote's fetch refspec set by config are blocked", () => {
+  assert.equal(cls("git worktree add -B main /tmp/x lm/x", MAIN_DIR), MERGE_REASON("main"));
+  assert.equal(cls("git worktree add -f -B main /tmp/x lm/x"), MERGE_REASON("main"));
+  assert.equal(cls("git worktree add --force -b master ../y"), MERGE_REASON("master"));
+  assert.equal(cls("git symbolic-ref refs/heads/main refs/heads/lm/x", MAIN_DIR), MERGE_REASON("main"));
+  assert.equal(cls("git symbolic-ref HEAD refs/heads/main"), MERGE_REASON("main"));
+  for (const cmd of ["git -c remote.origin.fetch=+refs/heads/lm/x:refs/heads/main fetch origin", "git --config-env=remote.origin.push=P push",
+    "git config remote.origin.fetch +refs/heads/lm/x:refs/heads/main", "git config --add remote.origin.push HEAD:main", "git config set remote.o.mirror true"])
+    assert.equal(cls(cmd), UNCLASSIFIED, cmd);
+  for (const ok of ["git worktree add ../y main", "git worktree add -b lm/y ../y main", "git worktree remove ../y", "git symbolic-ref --short HEAD",
+    "git symbolic-ref HEAD", "git config user.name u", "git config --get remote.origin.fetch", "git config remote.origin.url", "git -c user.name=u commit -m x"])
+    assert.equal(cls(ok), undefined, ok);
+});
+
+test("classify (review F6): an alias or another subcommand the classifier does not know is blocked", () => {
+  for (const cmd of ["git -c alias.m=merge m lm/x", "git ci -m x", "git lfs migrate import --everything", "git subtree merge --prefix=x lm/x",
+    "git replay --onto main lm/x", "git for-each-repo --config=r merge lm/x", "git send-pack origin main"])
+    assert.equal(cls(cmd), UNKNOWN_SUB, cmd);
+});
+
+/** Git behind a construct or runner the parser does not read, each a merge into main (MAIN_DIR) run from the worktree. */
+const STRAY = ["function f { git -C /r/x merge lm/x; }; f", "coproc git -C /r/x merge lm/x", "watch git -C /r/x merge lm/x",
+  "parallel git -C /r/x merge ::: lm/x", "find . -name x -exec git -C /r/x commit -m y \\;", "nix develop -c git -C /r/x merge lm/x",
+  "nix-shell --run 'git -C /r/x merge lm/x'", "flock /tmp/l git -C /r/x merge lm/x", "doas git -C /r/x merge lm/x", "su -c 'git -C /r/x merge lm/x'",
+  "setsid git -C /r/x merge lm/x", "ssh h git -C /r/x merge lm/x", "echo 'git -C /r/x merge lm/x' | bash", "bash <<< 'git -C /r/x merge lm/x'",
+  "cat <<EOF | sh\ngit -C /r/x merge lm/x\nEOF", "bash <<EOF\ngit -C /r/x merge lm/x\nEOF", "$(which git) -C /r/x merge lm/x", "\"$G\" -C /r/x merge lm/x; echo git",
+  "git -c core.editor='git -C /r/x merge lm/x' commit", "git rebase --exec 'git -C /r/x merge lm/x' lm/y", "git rebase -x 'git -C /r/x merge lm/x' lm/y",
+  "git submodule foreach 'git -C /r/x merge lm/x'", "git bisect run git -C /r/x merge lm/x", "GIT_EDITOR='git -C /r/x merge lm/x' git commit",
+  "export GIT_DIR=/r/x/.git; git merge lm/x", "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.fetch GIT_CONFIG_VALUE_0=x:refs/heads/main git fetch origin",
+  "make GIT='git -C /r/x merge lm/x'", "xargs -a f sh"];
+
+test("classify (review F6, LD8): git the parser cannot attribute to a git call it read is blocked (the command has a git token)", () => {
+  for (const cmd of STRAY.filter((c) => c !== "xargs -a f sh")) assert.notEqual(cls(cmd), undefined, cmd);
+  for (const cmd of ["watch git status", "parallel git status ::: a", "nix develop -c git log", "echo git log | sh", "su -c 'git status'"])
+    assert.equal(cls(cmd), UNCLASSIFIED, `${cmd}: fails closed even when the git call would pass`);
+  assert.equal(cls("xargs -a f sh"), undefined, "no git token: open (LD8)");
+  assert.equal(cls("env -C/r/x git merge lm/x"), MERGE_REASON("main"), "an attached option value is read");
+  assert.equal(cls("sudo -D/r/x git merge lm/x"), MERGE_REASON("main"));
+  assert.equal(cls("f() { git -C /r/x merge lm/x; }; f"), MERGE_REASON("main"));
+  for (const ok of ["git commit -m 'fix the git hook'", "git log | grep git", "cat > notes.md <<EOF\ngit push origin main\nEOF", "which git", "type git",
+    "ls ~/git", "cd ~/git/x && git status", "git status && npm test", "make && git diff", "git log --format=%s | head -3", "echo $(git rev-parse HEAD)",
+    "git commit -F - <<EOF\nmerge git x\nEOF", "command -v git && git status", "GIT_PAGER=cat git log", "printf '%s\\n' 'git push origin main' > notes.md", "rg -n 'git push' docs | sort", "nohup git -C /r/x.worktrees/lm--x log &"])
+    assert.equal(cls(ok), undefined, ok);
 });
