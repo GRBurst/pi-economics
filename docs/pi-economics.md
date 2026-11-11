@@ -306,7 +306,7 @@ out) is read by the package's settings test and by the `module-eval` case
 components `hints`, `worktrees`, `mergeGate` and `plans`, each with
 `enabled = "auto" | "on" | "off"` (default `"auto"`: on in local mode, off in
 default mode), the `overseer` that serves them (no switch of its own), and `force` (below); L1 validates them (a bad value is reported and its
-default kept); `hints` works since L3 and the overseer since L4 (below), the others do nothing yet. The keys, their defaults and
+default kept); `hints` works since L3, the overseer since L4 and `worktrees` since L5 (below); `mergeGate` and `plans` do nothing yet. The keys, their defaults and
 the messages are in `packages/task-router/core/settings.ts` and
 `packages/task-router/core/local/settings.ts`. In local mode:
 
@@ -385,11 +385,25 @@ calls (`tool_call`, `tool_result`, `turn_end`) and keeps a ring of the last
 - `context-soft`: the context crosses `contextSoftTokens` (32000) tokens; it
   fires again only after the context has dropped below;
 - `context-stall`: the context is at or above `contextPercent` (85) % for
-  `stallTurns` (25) turns without a tree change.
+  `stallTurns` (25) turns without a tree change;
+- `check-failing` (with a worktree, below): the active branch's check command
+  (a bash call whose whitespace-normalised command equals it; a non-zero exit is
+  an error result in pi 1.4) failed `checkFailures` (2) times in a row; other
+  calls between the runs do not reset the count, a passing run does and is
+  progress (counted within the ring: failures that left it are forgotten);
+- `over-size` (with a worktree, below): after a successful `edit` or `write`
+  inside the active worktree, its diff against the branch's base (committed,
+  staged and unstaged changes, plus untracked files: their lines are counted
+  through the file system, binary or over 4 MB as 0) has more than
+  `plans.splitLines` (100) changed lines (added plus deleted) or
+  `plans.splitFiles` (3) files. The diff is a git process (5 s; a timeout or a
+  failure means no trip), so it runs after the call, one at a time, and the
+  hint goes into the next result;
+- `outside-worktree`: the write guard (below) blocked a write. It is logged, not
+  delivered as a hint (the block's reason is the message).
 
 A tree change (an `edit` or `write` that changed its file's hash) is progress;
-a file that cannot be hashed does not count. `check-failing` (`checkFailures`)
-and `over-size` arrive with worktrees and plans (L5). The tool result of the
+a file that cannot be hashed does not count. The tool result of the
 call that tripped gets one more text block,
 `<router-hint trip="<trip>" n="<count>"><fixed text></router-hint>`; a trip found
 at `turn_end` goes into the next result. The same trip then stays quiet for
@@ -463,6 +477,54 @@ line carries `ticket` and opens no verdict slot (`packages/token-meter/LOGS.md`)
 The code: `packages/task-router/core/local/overseer.ts` (tickets, the run,
 the prompts), `core/local/schema.ts`, `core/local/verdict.ts`,
 `core/local/steer.ts`.
+
+**Worktrees (milestone L5).** With `worktrees` on (local mode, or `worktrees.enabled
+= "on"`) the main session makes its code changes on branches in git worktrees.
+The tool `start_branch` takes `slug` (`[a-z0-9-]{1,40}`), `goal` and `check` (each
+at most 300 characters, both required), optionally `repo` (an absolute path in the
+repository; default: the session's cwd) and `plan` (refused until plans exist:
+`plans are not active`; give a slug or a plan, not both). It validates everything
+first (a failure changes nothing), then makes the branch `<worktrees.branchPrefix><slug>` (`lm/`)
+at the tip of the first existing branch in `mergeGate.mainBranches` in the worktree
+`<worktrees.root>/<branch with / as -->` (`../{repo}.worktrees`; `{repo}` is the repository's
+directory name, a relative root resolves against the repository root), and returns
+`{branch, worktree, base, check}` as text and as `details` (`base` is the commit
+the branch was made at); an error comes back as an error result with git's stderr
+tail (a branch that git could not add is not left behind). The same slug again
+re-activates the branch (a branch that is `merged`, `fixer` or `blocked` is refused;
+one whose worktree disappeared is `abandoned`, and starting it again fails because
+the branch exists). The newest started branch whose state is `active` is the
+*active worktree*; the section line of the prompt says "Code changes happen on
+branches: start_branch, then edit and commit in its worktree (absolute paths)."
+While one is active:
+
+- an `edit` or `write` whose resolved path is inside the main checkout (the
+  worktree that has a main branch checked out) and in no linked worktree is
+  blocked: "write in the worktree <dir>; use absolute paths under it" (bash is not
+  parsed); one `hint` line per block (`trip` `outside-worktree`, `count` the blocks
+  since the last write that passed). The guard reads facts that `start_branch`
+  and `session_start` refresh, and answers at once;
+- a card without `cwd` gets the worktree as its `cwd`, and the child session
+  starts there (`PolicyResult.cwd`); a card's own `cwd` is the child's directory
+  too (local mode only: default mode leaves both as they were), the verify gate
+  runs the check there, and a `read-only+files` child's relative paths resolve
+  under it;
+- the steer overseer (above) gets the branch's goal and check and the focal diff
+  (at most 80 lines, then `… <n> more lines`; untracked files as `untracked file
+  <path> (<n> lines)`) after the call lines, reads the worktree by its absolute path
+  (its own cwd stays the main checkout, LD14), and its findings must name a path a
+  record wrote or the diff changed.
+
+Branches are session entries (`task-router/branch`, one per change) and are rebuilt
+at `session_start`, where a branch whose worktree is no longer registered or is
+prunable becomes `abandoned` (one entry; `start_branch` waits for this).
+`cleanupBranch` (`git worktree remove`, then `git branch -d`) is what a merge calls;
+a failure is the hint `cleanup failed: <git's tail>` and changes nothing else. Git
+runs through `packages/task-router/core/local/git.ts` (an argv runner with a
+process-group timeout, and the port); the tests run real git in temporary
+repositories (`git` is a `nativeCheckInputs` of the package). The code:
+`core/local/worktree.ts` (names, `startBranch`, the guard, cleanup),
+`core/local/branches.ts` (the store), `core/local/branchtool.ts` (the tool).
 
 **Scout gate (Group 6, 2026-10-28).** Haiku at medium scored 0.646 against
 Sonnet high's 0.917 (threshold 0.825, H6.4; two runs per task and arm), so
@@ -606,7 +668,7 @@ points into `src`.
 | `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's two `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
 | `retry` | the patched pi-retry's vitest suite (300 tests) on the shared npm lock, and the greps that pin the free-cap patch and the inline print/json route |
 | `typecheck-retry` | `tsc --strict` over `retry.ts` and `src/`; the tests stay out (one upstream test and the free-cap patch's own test do not type-check; vitest runs them) |
-| `task-router` | the router's own tests (`node --test`, 631), run when it builds; includes the redesign's golden grid against its frozen oracle, under the today fixture and under the defaults (the oracle with the default deltas) |
+| `task-router` | the router's own tests (`node --test`, 743), run when it builds; includes the redesign's golden grid against its frozen oracle, under the today fixture and under the defaults (the oracle with the default deltas) |
 | `typecheck-task-router` | `tsc --strict` over `index.ts`, `core/` and `test/` |
 | `iface-subagents-task-router`, `iface-experiments-task-router` | the router's copies of `__subagentsApi_v1` and `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`) are satisfied by the providers' types |
 | `iface-policy-task-router` | the router's copy of the spawn policy's result (`PolicyResult` in `core/api.ts`: tool guard, `childTools`, `cwd`) is satisfied by the actor's type |
@@ -620,7 +682,7 @@ points into `src`.
 | `pi-install-smoke` | `pi install ./pkg` offline: settings entry, `pi list`, every manifest extension loads, the router warns once, experiments stays inert (AC1) |
 | `pi-git-route` | the npm step of a git install (`--omit=dev --legacy-peer-deps`) is a no-op offline (AC10) |
 | `pi-install-actor` | the package next to the patched actor: no warning, `task_verdict` registered and active (AC5) |
-| `pi-install-local` | the same with the router's settings `{"mode": "local"}`: the router finds the spawn API (no warning), `task_verdict` registered; a control run without the actor prints the spawn-API warning (local mode L4) |
+| `pi-install-local` | the same with the router's settings `{"mode": "local"}`: the router finds the spawn API (no warning), `task_verdict` and `start_branch` registered; a control run without the actor prints the spawn-API warning (local mode L4) |
 | `pi-install-duplicate` | the package next to the Nix links: one `loaded twice` per component, exactly one bound copy (the actor warnings of task-router and cache-lifecycle appear once), no tool conflict, pi's skill loader reports the collision (AC7) |
 | `pi-install-scope-replaced`, `pi-install-scope-both` | the package in two scopes of a trusted project (user `pi install` plus `.pi/settings.json`): where the project entry replaces the user's package, no `loaded twice` and one bound copy; where a second copy joins it, one `loaded twice` per component and one bound copy (AC7, review M1) |
 | `pi-install-subset` | the README's filter loads only the listed extensions (AC4) |

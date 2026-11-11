@@ -864,7 +864,7 @@ message). Open notes, for L6 or later:
 - **Files**: `core/local/steer.ts`, `test/local-steer.test.ts`. **Depends**: L5.T12.
 - **RED**: with an active branch, `steerInput` gains `Goal:`, `Check:` and `Diff (≤ 80 lines):` (pinned on fake-git output); targets add the branch's changed files (D33). **Check**: fast runner.
 
-#### L5.T14 Package check, docs, close `[ ] todo`
+#### L5.T14 Package check, docs, close `[x] done`
 - **Files**: `checks/pi-package/local.nix` (`start_branch` in `tools`), `docs/pi-economics.md` (worktrees settings, `start_branch`, write guard, child cwd, `outside-worktree`, trips). **Check**: `chk pi-install-local leak boundary`; sweep KG-R, KG-L, KG-M, KG-P.
 
 ### L6 Merge gate
