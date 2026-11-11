@@ -1128,6 +1128,24 @@ message). Open notes, for L6 or later:
 #### L8.T4 README `[x] done`
 - **Files**: `README.md` ("Without Nix" prerequisites row: local mode needs the spawn-api patch; component table). **Check**: `chk module-eval` (`readme-package` case), `chk leak boundary`.
 
+#### L8 deviations (before T5)
+- Three code items beyond T1–T4, each test first in its own commit. (1) A forced spawn the member cannot take is
+  rejected with a text that names the force and how to end it (`forceRejection`, `core/force.ts`; `resolveLeg` takes an
+  optional `explain`): ``force <m> (/force): <cause>; `/force off` clears it`` or, for the settings force, ``force <m>
+  (settings `force.model`): <cause>; an empty `force.model` … clears it, `/force <m>` overrides it for this session``
+  (the L2 text said "leave `model` unset"). (2) Restored routed children (open from the L6 fixes): in local mode, with
+  routing and the router's policy on, the main session kills every agent its policy did not place in this process,
+  listed at `session_start` (not on reason `reload`) or announced later by a `spawn` event of the actor's restore, with
+  the warning `restoredText` (`core/local/install.ts`); `core/shell.ts` passes `placed(name)`; restored fixers stay F4's;
+  branches and worktrees stay; default mode and child sessions are unchanged. (3) Ticket spawns (overseer, merge review,
+  fixer) pass the routed spawn's provider block and health probe in `ticketRoom` (`core/policy.ts`, now async): blocked,
+  down or busy is unavailable, so the fallback / fail-closed path (`review-unavailable`, `author-unavailable`, fixer
+  `revise`) applies; a forced fixer still skips it (D47).
+- T1 keeps the milestone paragraphs and adds a heading `#### Local mode` before them and a reference block (switch and
+  active set, settings table, tools and section lines, session entries, events, result codes, failure modes) after
+  the plans, then `#### Scout gate, dependencies and checks`. T3 also fixes AC-O1's overseer cwd (LD14) and §2.1's
+  overseer "toggle". T4 pins the README's local-mode sentence in `readme-package` (seen red).
+
 #### L8.T5 Final sweep and manual runbook `[ ] todo`
 - Every check (AGENTS.md loop); §12 runbook steps 1–4; record results in the task's status line. Optional (OQ17): `pi-analyse` sections for hints, reviews, merges — a separate plan (Q20).
 
