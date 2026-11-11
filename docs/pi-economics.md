@@ -560,8 +560,11 @@ Opus last (`packages/task-router/core/local/merge.ts`):
    `(repo, branch, commit, tree)`; a new commit needs a new review;
 7. review: the `merge` overseer (above) in the main checkout, the worktree by
    its absolute path; its input is the goal, the summary, the check runs, the
-   red run, risky paths and the numstat and diff (at most `maxDiffLines`
-   lines). An overseer that cannot run (no spawn API, both attempts failed) is
+   red run, risky paths and the numstat and the whole diff. The diff is never
+   cut: its budget is 8 × (`maxDiffLines` + `maxDiffFiles`) lines, enough for
+   any diff the size step lets through with git's 3 context lines; a longer
+   one, or none while the numstat shows changes, fails the review closed
+   (`error`). An overseer that cannot run (no spawn API, both attempts failed) is
    `error` `review-unavailable`; an abort of the tool call kills it, `error`
    `aborted`. A rejection counts (`rejections`) and answers `revise` with the
    findings;

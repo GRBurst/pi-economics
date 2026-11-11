@@ -160,6 +160,7 @@ await mainSession("contract-main-2", "contract-child-2", 0.25);
   const started = await gate.f.callTool("start_branch", { slug: "contract", goal: "g", check: "true" }, gctx);
   assert.ok(!started.isError, `start_branch: ${JSON.stringify(started.details)}`);
   fg.commit(started.details.worktree);
+  fg.diffs.set("/r", "diff --git a/f b/f\n+f"); // the review reads a diff (an empty one with changes fails closed: review F9)
   const merged = await gate.f.callTool("request_merge", { summary: "s" }, gctx);
   assert.equal(merged.details.status, "merged", JSON.stringify(merged.details));
   const refused = await gate.f.callTool("request_merge", { branch: "main" }, gctx);

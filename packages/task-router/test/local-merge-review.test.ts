@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { APPROVAL_TYPE, RED_TEXT, reviewInput } from "../core/local/merge.ts";
+import { APPROVAL_TYPE, diffBudget, RED_TEXT, reviewInput } from "../core/local/merge.ts";
 import { findingLine } from "../core/local/verdict.ts";
 import { finding, mergeRig, REVISE, reviewRig } from "./merge-rig.ts";
 import type { Ok } from "./overseer-rig.ts";
@@ -89,7 +89,56 @@ test("the review run: role merge, cwd the main checkout, the worktree, commit an
   assert.equal((await a.submit.check({ ...REVISE, findings: [finding("F1", true, "other.ts")] })).ok, false);
   const base = m.mainSha();
   assert.equal(a.input, reviewInput({ goal: "add x for the users", summary: "adds x", checks: [{ cmd: "true", exit: 0, output: "" }], red: "skipped",
-    risky: [], stat: [{ path: "x.ts", added: 1, deleted: 0 }], base, commit: c, diff: m.r.git(["diff", base, c]), maxLines: 150 }));
+    risky: [], stat: [{ path: "x.ts", added: 1, deleted: 0 }], base, commit: c, diff: m.r.git(["diff", base, c]), maxLines: diffBudget(m.settings.mergeGate) }));
+  assert.equal(diffBudget(m.settings.mergeGate), 1248, "review F9: 8 × (150 lines + 6 files)");
+});
+
+// Review F9: a diff the size gate lets through reaches the review whole; one that cannot fit fails the review closed.
+function sixFiles(m: ReturnType<typeof mergeRig>, wt: string, lines = 3): string {
+  for (let i = 1; i <= 6; i++) writeFileSync(join(wt, `f${i}.ts`), Array.from({ length: lines }, (_, k) => `line ${k} of f${i}`).join("\n") + "\n");
+  m.r.git(["-C", wt, "add", "-A"]);
+  m.r.git(["-C", wt, "commit", "-qm", "six files"]);
+  return m.r.git(["-C", wt, "rev-parse", "HEAD"]);
+}
+
+test("review F9: a near-limit diff (18 changed lines in 6 files, maxDiffLines 20) reaches the review uncut", async () => {
+  const m = mergeRig({ settings: { mergeGate: { redRun: false, maxDiffLines: 20, maxDiffFiles: 6 } } });
+  const rec = await m.start("x");
+  const c = sixFiles(m, rec.worktree);
+  writeFileSync(join(m.r.dir, "scratch"), "keeps the merge off\n");
+  await m.merge();
+  assert.equal(m.reviews.length, 1);
+  const whole = m.r.git(["diff", m.mainSha(), c]);
+  assert.ok(whole.split("\n").length > 20, "the diff is longer than maxDiffLines");
+  const input = m.reviews[0]!.input;
+  assert.ok(input.endsWith(`\n${whole}`), input.split("\n").slice(-3).join(" | "));
+  assert.ok(!input.split("\n").some((l) => l.startsWith("… ")), "no cut marker");
+});
+
+test("review F9: a diff longer than the review's budget fails the review closed (no review, main unchanged)", async () => {
+  const m = mergeRig({ settings: { mergeGate: { redRun: false, maxDiffLines: 20, maxDiffFiles: 6 } } });
+  m.r.commit("big.ts", Array.from({ length: 400 }, (_, k) => `line ${k}`).join("\n") + "\n", "big");
+  m.r.git(["config", "diff.context", "1000"]); // every line of big.ts becomes context
+  const rec = await m.start("x");
+  m.r.commit("big.ts", Array.from({ length: 400 }, (_, k) => (k === 200 ? "changed" : `line ${k}`)).join("\n") + "\n", "one line", rec.worktree);
+  const before = m.mainSha();
+  const r = await m.merge();
+  assert.equal(m.reviews.length, 0, "no review of a cut diff");
+  assert.equal(r.status, "error");
+  assert.equal(r.reason, "review-unavailable");
+  assert.match(r.detail, /diff/);
+  assert.equal(m.mainSha(), before);
+});
+
+test("review F9: a diff git cannot produce (empty, while numstat shows changes) fails closed as a git error, no review", async () => {
+  const m = mergeRig({ settings: { mergeGate: { redRun: false } } });
+  const rec = await m.start("x");
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  m.git.diff = async () => "";
+  const r = await m.merge();
+  assert.equal(m.reviews.length, 0);
+  assert.equal(r.status, "error");
+  assert.equal(r.reason, "git");
 });
 
 test("reviewInput: the S27 text", () => {

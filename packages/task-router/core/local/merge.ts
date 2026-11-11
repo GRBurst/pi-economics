@@ -108,6 +108,12 @@ export const reviewInput = (x: ReviewFacts): string => [
   `Diff ${x.base}..${x.commit} (≤ ${x.maxLines} lines):`,
   ...(x.diff ? [x.diff] : []),
 ].join("\n");
+/** The review's diff budget in lines (review F9): never below what the size gate lets through. With git's default 3 context
+ *  lines a changed line adds at most a hunk header and 6 context lines, and a file at most 8 header lines (diff --git, two
+ *  mode lines, index, ---, +++, two "\ No newline"). A diff past it is not cut: the review fails closed. */
+export const diffBudget = (g: { maxDiffLines: number; maxDiffFiles: number }): number => 8 * g.maxDiffLines + 8 * g.maxDiffFiles;
+/** `Git.diff` marks a cut text by a last line `… N more lines`; no diff line starts with `…`. */
+const cutDiff = (d: string): boolean => /^… \d+ more lines$/.test(d.slice(d.lastIndexOf("\n") + 1));
 /** What `revise` tells the author (Q18). */
 export const REVISE_TEXT = "the review asks for changes: fix the blocking findings, commit, then call request_merge again";
 
@@ -272,9 +278,14 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
   let reviewId = p.approvals.find(key);
   if (reviewId === undefined) {
     // ── 8 review: the merge overseer in the main checkout, the worktree by its absolute path (LD14) ──
-    const globs = riskGlobsOf(s), paths = st.map((f) => f.path);
+    const globs = riskGlobsOf(s), paths = st.map((f) => f.path), budget = diffBudget(g);
+    const diff = await git.diff(repo, main.sha, commit, budget);
+    if (cutDiff(diff)) { // review F9: the review never approves hunks it did not see
+      return done("error", "review-unavailable", `${reasonText("review-unavailable", {})}: the diff ${main.name}..${commit.slice(0, 7)} is longer than the review's ${budget} lines`, commit);
+    }
+    if (diff === "" && st.length > 0) return gitError(`cannot read the diff ${main.name}..${commit}`, commit);
     const text = reviewInput({ goal: rec?.goal, summary: input.summary, checks, red, risky: paths.filter((f) => globs.some((x) => globMatch(x, f))),
-      stat: st, base: main.sha, commit, diff: await git.diff(repo, main.sha, commit, g.maxDiffLines), maxLines: g.maxDiffLines });
+      stat: st, base: main.sha, commit, diff, maxLines: budget });
     const out = await p.overseer.run({ role: "merge", input: text, cwd: p.branches.facts.mainCheckout.get(repo) ?? repo, worktree: wt.dir,
       submit: verdictSubmit(new Set(paths)), commit, branch, signal: p.signal });
     if (!out.ok) {
