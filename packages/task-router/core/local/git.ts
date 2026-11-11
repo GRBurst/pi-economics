@@ -127,7 +127,7 @@ export function createGit(run: GitRun): Git {
     async branchDelete(repo, branch, force = false) { return res(await run(["branch", force ? "-D" : "-d", branch], repo, SHORT_MS)); },
     async diffStat(dir, base) {
       try {
-        const diff = await run(["-c", "core.quotepath=off", "diff", "--numstat", "--no-renames", base, "--"], dir, STAT_MS);
+        const diff = await run(["diff", "-z", "--numstat", "--no-renames", base, "--"], dir, STAT_MS);
         const others = await run(["ls-files", "--others", "--exclude-standard", "-z"], dir, STAT_MS);
         if (diff.exit !== 0 || others.exit !== 0) return [];
         return [...parseNumstat(diff.out), ...others.out.split("\0").filter((p) => p !== "").map((p) => ({ path: p, added: untrackedLines(join(dir, p)), deleted: 0 }))];
@@ -148,7 +148,7 @@ export function createGit(run: GitRun): Git {
     },
     async isAncestor(repo, a, b) { const r = await run(["merge-base", "--is-ancestor", a, b], repo, SHORT_MS); return r.exit === 0; },
     async numstat(repo, a, b) {
-      const r = await run(["-c", "core.quotepath=off", "diff", "--numstat", "--no-renames", `${a}...${b}`, "--"], repo, STAT_MS);
+      const r = await run(["diff", "-z", "--numstat", "--no-renames", `${a}...${b}`, "--"], repo, STAT_MS);
       return r.exit === 0 ? parseNumstat(r.out) : undefined;
     },
     tree: (repo, commit) => line(["rev-parse", "--verify", "--quiet", `${commit}^{tree}`], repo),
@@ -220,23 +220,18 @@ export function parseWorktrees(porcelain: string): Wt[] {
   }
   return out;
 }
-/** `git diff --numstat` lines (`<added>\t<deleted>\t<path>`); a binary file (`-\t-`) counts as a file with 0/0; a rename
- *  (`a => b`, `dir/{a => b}/f`) names the new path. Lines of another shape are dropped. */
+/** `git diff -z --numstat` records (`<added>\t<deleted>\t<path>\0`): the path is raw, never quoted or rewritten, so ` => `,
+ *  braces, tabs and newlines are part of a name (review L7 F1: the scope check reads every real path). A binary file (`-\t-`)
+ *  counts as a file with 0/0. The callers pass `--no-renames`; a rename record (`<added>\t<deleted>\t\0<old>\0<new>\0`) still
+ *  names both sides. Records of another shape are dropped. */
 export function parseNumstat(text: string): Stat {
-  const out: Stat = [];
-  for (const l of text.split("\n")) {
-    const m = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(l);
+  const out: Stat = [], fields = text.split("\0");
+  for (let i = 0; i < fields.length; i++) {
+    const m = /^(\d+|-)\t(\d+|-)\t([^]*)$/.exec(fields[i]!);
     if (!m) continue;
-    out.push({ path: renamedTo(m[3]!), added: m[1] === "-" ? 0 : Number(m[1]), deleted: m[2] === "-" ? 0 : Number(m[2]) });
+    const added = m[1] === "-" ? 0 : Number(m[1]), deleted = m[2] === "-" ? 0 : Number(m[2]);
+    const paths = m[3] !== "" ? [m[3]!] : fields.slice(i + 1, (i += 2) + 1);
+    for (const path of paths) if (path !== "") out.push({ path, added, deleted });
   }
   return out;
 }
-const renamedTo = (p: string): string => {
-  const b = /^(.*)\{(.*) => (.*)\}(.*)$/.exec(p);
-  if (b) {
-    const joined = `${b[1]}${b[3]}${b[4]}`.replace(/\/{2,}/g, "/");
-    return b[1] === "" && b[3] === "" ? joined.replace(/^\//, "") : joined;
-  }
-  const i = p.indexOf(" => ");
-  return i < 0 ? p : p.slice(i + 4);
-};

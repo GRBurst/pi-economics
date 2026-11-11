@@ -115,7 +115,7 @@ test("parseWorktrees: main checkout, linked, detached, locked, prunable, bare", 
   assert.deepEqual(parseWorktrees("garbage\n\n"), []);
 });
 
-test("parseNumstat: counts per path; binary files count as a file with 0/0; renames name the new path", () => {
+test("parseNumstat (-z): counts per raw path; binary files count as a file with 0/0; ` => `, braces, tabs and newlines are part of the name", () => {
   const text = [
     "3\t1\tsrc/a.ts",
     "-\t-\tlogo.png",
@@ -123,16 +123,26 @@ test("parseNumstat: counts per path; binary files count as a file with 0/0; rena
     "2\t2\told.ts => new.ts",
     "5\t0\t{ => lib}/d.ts",
     "1\t4\twith space.txt",
+    "1\t0\tnew\nline\tand tab.ts",
     "",
-  ].join("\n");
+  ].join("\0");
   assert.deepEqual(parseNumstat(text), [
     { path: "src/a.ts", added: 3, deleted: 1 },
     { path: "logo.png", added: 0, deleted: 0 },
-    { path: "src/new/c.ts", added: 0, deleted: 0 },
-    { path: "new.ts", added: 2, deleted: 2 },
-    { path: "lib/d.ts", added: 5, deleted: 0 },
+    { path: "src/{old => new}/c.ts", added: 0, deleted: 0 },
+    { path: "old.ts => new.ts", added: 2, deleted: 2 },
+    { path: "{ => lib}/d.ts", added: 5, deleted: 0 },
     { path: "with space.txt", added: 1, deleted: 4 },
+    { path: "new\nline\tand tab.ts", added: 1, deleted: 0 },
   ]);
   assert.deepEqual(parseNumstat(""), []);
-  assert.deepEqual(parseNumstat("not a line\n"), []);
+  assert.deepEqual(parseNumstat("not a record\0"), []);
+});
+
+test("review L7 F1: parseNumstat (-z) of a rename record names both sides", () => {
+  assert.deepEqual(parseNumstat(["2\t1\t", "lib/old.ts", "src/a.ts", "1\t0\tb.ts", ""].join("\0")), [
+    { path: "lib/old.ts", added: 2, deleted: 1 },
+    { path: "src/a.ts", added: 2, deleted: 1 },
+    { path: "b.ts", added: 1, deleted: 0 },
+  ]);
 });

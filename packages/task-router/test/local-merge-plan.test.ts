@@ -5,7 +5,7 @@
 // the checks are the unit's from the plan, then extraChecks, then the merged tasks' per `plans.regression` (`regression`).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createPlanStore } from "../core/local/plans.ts";
 import { renderPlan, type Skeleton, skeletonHash } from "../core/local/plan.ts";
@@ -74,6 +74,20 @@ test("AC-M2 scope: a plan change that is no tick, or a tick of another task, is 
   y.work(wy, { "src/parse.ts": "export {};\n", [FILE]: y.tick(wy, "M1.T2") });
   assert.equal((await y.merge()).reason, "scope", "M1.T2 is not this branch's task");
   assert.equal(y.reviews.length + x.reviews.length, 0);
+});
+
+test("review L7 F1: a file named like a rename (` => `, braces) or holding a newline is outside the whitelist; nothing merges", async () => {
+  const x = rig({ plans: { splitFiles: 6 } });
+  const wt = await x.start("M1.T1");
+  const odd = ["src/{x => a.ts}", "lib/evil => src/a.ts", "src/a.ts\nsrc/parse.ts"];
+  for (const f of odd) mkdirSync(join(wt, f, ".."), { recursive: true });
+  const before = x.mainSha();
+  x.work(wt, { "src/parse.ts": "export {};\n", ...Object.fromEntries(odd.map((f) => [f, "x\n"])) });
+  const r = await x.merge();
+  assert.equal(r.reason, "scope", r.detail);
+  assert.equal(r.detail, `${reasonText("scope", {})}: ${odd.sort().join(", ")} (trigger t1 is open)`, "every odd name, as written; src/parse.ts is whitelisted");
+  assert.equal(x.reviews.length, 0);
+  assert.equal(x.mainSha(), before);
 });
 
 test("AC-M2 plan-changed: the skeleton at the commit differs from the approved one", async () => {

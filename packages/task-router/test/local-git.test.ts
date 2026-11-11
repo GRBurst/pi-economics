@@ -277,6 +277,21 @@ test("numstat(main...x): the branch's own changes, also after main moved on; a f
   assert.equal(await git.numstat(r.dir, "main", "nosuch"), undefined);
 });
 
+test("review L7 F1: numstat and diffStat read raw paths: ` => `, braces, spaces and newlines are part of a name; a rename gives both sides", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  r.commit("src/b.ts", "b\n");
+  const base = r.git(["rev-parse", "HEAD"]);
+  const odd = ["src/{x => a.ts}", "lib/evil => src/a.ts", "with space.ts", "src/a.ts\nsrc/c.ts", "tab\there.ts"];
+  for (const f of odd) { mkdirSync(join(r.dir, f, ".."), { recursive: true }); writeFileSync(join(r.dir, f), "1\n"); }
+  r.git(["mv", "src/b.ts", "src/c.ts"]);
+  r.git(["add", "-A"]);
+  r.git(["-c", "commit.gpgsign=false", "-c", "diff.renames=true", "commit", "-q", "-m", "odd names"]);
+  const want = [...odd, "src/b.ts", "src/c.ts"].sort();
+  assert.deepEqual((await git.numstat(r.dir, base, "HEAD"))?.map((s) => s.path).sort(), want);
+  assert.deepEqual((await git.diffStat(r.dir, base)).map((s) => s.path).sort(), want);
+});
+
 test("tree: a commit's tree; equal content, equal tree; unknown → undefined", async () => {
   const r = tempRepo();
   const git = createGit(gitRunner("git", r.env));
