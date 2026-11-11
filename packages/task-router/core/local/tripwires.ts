@@ -11,7 +11,7 @@ export type Trip = (typeof TRIPS)[number];
  *  or a missing file before a write); `turn` is the main session's turn number; `cmd` a bash command's first 200 characters,
  *  for the steer input only (plan D32). */
 export type CallRecord = { tool: string; key: string; isWrite: boolean; path?: string; hashBefore?: string; hashAfter?: string;
-  isError?: boolean; errSig?: string; turn: number; cmd?: string };
+  isError?: boolean; errSig?: string; turn: number; cmd?: string; norm?: string };
 
 /** The ring's length (§3.1.1). */
 export const windowSize = (h: HintSettings): number => 4 * h.identicalCalls + 8;
@@ -90,13 +90,13 @@ const churn = (r: CallRecord[], h: HintSettings): boolean => {
 export const riskGlobsOf = (s: Pick<RouterSettings, "riskGlobs" | "pathRules">): string[] =>
   [...s.riskGlobs, ...s.pathRules.filter((p) => p.level === "critical").map((p) => p.glob)];
 /** `globs` from `riskGlobsOf`; `seen`: the paths that already fired (the caller adds them); `rel`: a path as the globs see it. */
-export type Risk = { globs: string[]; seen: ReadonlySet<string>; rel(p: string): string };
+export type Risk = { globs: string[]; seen: ReadonlySet<string>; rel(p: string): string; checks?: readonly string[] };
 const riskyPath = (r: CallRecord[], risk: Risk): boolean => {
   const last = r[r.length - 1];
   return wrote(last) && !risk.seen.has(last.path!) && risk.globs.some((g) => globMatch(g, risk.rel(last.path!)));
 };
 
-/** The trips the main session's ring fires after its last record, in `TRIPS` order (check-failing and over-size: L5, plan D13). */
+/** The trips the main session's ring fires after its last record, in `TRIPS` order (`over-size` is the shell's: it needs git). */
 export function callTrips(ring: CallRecord[], h: HintSettings, risk: Risk): Trip[] {
   if (!ring.length) return [];
   const out: Trip[] = [];
@@ -105,6 +105,7 @@ export function callTrips(ring: CallRecord[], h: HintSettings, risk: Risk): Trip
   if (alternation(ring, h, changed)) out.push("alternation");
   if (repeatedError(ring, h)) out.push("repeated-error");
   if (churn(ring, h)) out.push("churn");
+  if (checkFailing(ring, h, risk.checks ?? [])) out.push("check-failing");
   if (riskyPath(ring, risk)) out.push("risky-path");
   return out;
 }
@@ -133,3 +134,33 @@ export function childTrips(ring: CallRecord[], h: HintSettings): Trip[] {
   if (alternation(ring, h, ch)) out.push("alternation");
   return out;
 }
+
+// ── check-failing (design §3.1.1, plan D41) ──
+/** A bash command as it is compared with a check: whitespace collapsed and trimmed. */
+export const normCmd = (cmd: string): string => cmd.trim().replace(/\s+/g, " ");
+/** A check is at most 300 characters (`start_branch`), so a longer command can be none and is not kept. */
+const MAX_NORM = 300;
+/** The record's `norm`: the normalised command of a bash call, when it is short enough to be a check. */
+export const normOf = (tool: string, input: unknown): string | undefined => {
+  const c = (input as { command?: unknown } | null | undefined)?.command;
+  if (tool !== "bash" || typeof c !== "string") return undefined;
+  const n = normCmd(c);
+  return n.length <= MAX_NORM ? n : undefined;
+};
+/** The record is a run of one of the `checks` (D41): a bash call whose normalised command equals a normalised check. */
+export const isCheckRun = (r: CallRecord, checks: readonly string[]): boolean =>
+  r.tool === "bash" && r.norm !== undefined && checks.some((c) => normCmd(c) === r.norm);
+/** A check run that exited 0 (pi 1.4 reports a non-zero exit as an error result, G1): progress. */
+export const checkPassed = (r: CallRecord, checks: readonly string[]): boolean => isCheckRun(r, checks) && r.isError !== true;
+/** The last record is a failing check run and the check runs failed `checkFailures` times in a row, other calls between them
+ *  not counting and a passing run resetting (counted within the ring: failures that left it are forgotten). */
+const checkFailing = (r: CallRecord[], h: HintSettings, checks: readonly string[]): boolean => {
+  if (!checks.length || !isCheckRun(r[r.length - 1], checks) || r[r.length - 1].isError !== true) return false;
+  let n = 0;
+  for (let i = r.length - 1; i >= 0; i--) {
+    if (!isCheckRun(r[i], checks)) continue;
+    if (r[i].isError !== true) break;
+    n++;
+  }
+  return n >= h.checkFailures;
+};

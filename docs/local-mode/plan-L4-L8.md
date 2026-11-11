@@ -850,7 +850,7 @@ message). Open notes, for L6 or later:
 - **RED** (temp repo): `cleanupBranch` removes dir and branch; a dirty worktree → returns `cleanup failed: <tail>`, throws nothing, merge state untouched; the worktree dir deleted → `refreshAbandoned` sets `abandoned` + entry; `start_branch` of the same slug afterwards → `isError` (branch exists).
 - **GREEN**: §3.3.4. **Check**: fast runner; `chk task-router`.
 
-#### L5.T11 `check-failing` (AC-H1) `[ ] todo`
+#### L5.T11 `check-failing` (AC-H1) `[x] done`
 - **Files**: `core/local/tripwires.ts` (detector; input `checks: string[]`), `core/local/install.ts` (active branch check; a passing check = progress), `test/local-tripwires.test.ts`. **Depends**: L5.T6.
 - **RED**: property over random bash sequences (the check with whitespace variants, other commands, pass/fail) vs a reference counter: fires exactly at the `checkFailures`-th consecutive failing check run (D41); a pass resets; P13 S11 text delivered.
 - **GREEN**: D41. **Check**: fast runner; `chk task-router`. **ACs**: AC-H1 (check-failing).

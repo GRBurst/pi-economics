@@ -21,7 +21,7 @@ import { refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
 import type { Budget, Tickets } from "./overseer.ts";
-import { callKey, callTrips, changed, contextSoft, contextStall, errSig, push, riskGlobsOf } from "./tripwires.ts";
+import { callKey, callTrips, changed, checkPassed, contextSoft, contextStall, errSig, normOf, push, riskGlobsOf } from "./tripwires.ts";
 import type { CallRecord, Trip } from "./tripwires.ts";
 
 type Pi = {
@@ -121,6 +121,8 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   const hash = d.hash ?? fileHash, detect = d.detect ?? callTrips;
   const engine = createHintEngine(h, s.plans);
   const globs = riskGlobsOf(s), seen = new Set<string>();
+  /** The command that proves the active branch (D41; a plan-bound branch carries its task's check the same way). */
+  const activeChecks = (): string[] => { const c = branches.active()?.check; return c ? [c] : []; };
   const pending = new Map<string, Omit<CallRecord, "turn">>(); // toolCallId → the call's record so far
   let ring: CallRecord[] = [], queue: Delivery[] = [];
   let turn = 0, call = 0, armed = true, stall = 0, progressed = false, shown = false, warned = false;
@@ -141,7 +143,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       const tool = String(e.toolName), isWrite = WRITERS.has(tool), p = e.input?.path;
       const path = isWrite && typeof p === "string" ? resolve(ctx?.cwd ?? process.cwd(), p) : undefined;
       pending.set(e.toolCallId, { tool, key: callKey(tool, e.input), isWrite, path, hashBefore: path === undefined ? undefined : hash(path),
-        cmd: cmdOf(tool, e.input) });
+        cmd: cmdOf(tool, e.input), norm: normOf(tool, e.input) });
     });
     return undefined;
   });
@@ -158,14 +160,15 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       const r: CallRecord = { ...rec, turn, isError, errSig: isError ? errSig(textOf(e.content)) : undefined,
         hashAfter: rec.path === undefined ? undefined : hash(rec.path) };
       ring = push(ring, r, h);
-      if (changed(r)) { // progress (plan D15): the persistence counts, the stall and the status suffix reset
+      const checks = activeChecks();
+      if (changed(r) || checkPassed(r, checks)) { // progress (plan D15; a passing check, D41): the persistence counts, the stall and the status suffix reset
         engine.progress();
         stall = 0;
         progressed = true;
         if (shown) { shown = false; d.onTrip?.(undefined); }
       }
       const cwd = ctx?.cwd ?? process.cwd();
-      trips.push(...detect(ring, h, { globs, seen, rel: (x) => relative(cwd, x) }));
+      trips.push(...detect(ring, h, { globs, seen, rel: (x) => relative(cwd, x), checks }));
       if (trips.includes("risky-path") && r.path !== undefined) seen.add(r.path); // once per path
     }
     trips.push(...soft(ctx));

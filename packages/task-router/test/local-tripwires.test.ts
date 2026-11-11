@@ -287,3 +287,73 @@ test("AC-H1 property: repeated-error and churn fire exactly where the reference 
   }
   for (const t of ["repeated-error", "churn"]) assert.ok((fired[t] ?? 0) > 5, `${t} fired ${fired[t] ?? 0} times: the generator is too weak`);
 });
+
+// --- L5.T11: check-failing (design §3.1.1, plan D41) ------------------------------------------------------------------
+
+import { checkPassed, isCheckRun, normCmd, normOf } from "../core/local/tripwires.ts";
+
+const CHECK = "npm test -- parse";
+const bash = (cmd: string, isError: boolean, turn = 0): CallRecord =>
+  ({ tool: "bash", key: `bash:${cmd}`, isWrite: false, turn, isError, cmd: cmd.slice(0, 200), norm: normOf("bash", { command: cmd }) });
+const withChecks = (checks: string[]): Risk => ({ ...NO_RISK, checks });
+
+test("normCmd and normOf: whitespace collapsed and trimmed; only a bash command of at most 300 normalised characters", () => {
+  assert.equal(normCmd("  npm   test\t--\nparse "), "npm test -- parse");
+  assert.equal(normOf("bash", { command: "  npm   test " }), "npm test");
+  assert.equal(normOf("read", { command: "npm test" }), undefined);
+  assert.equal(normOf("bash", { command: 5 }), undefined);
+  assert.equal(normOf("bash", {}), undefined);
+  assert.equal(normOf("bash", { command: "x".repeat(300) }), "x".repeat(300));
+  assert.equal(normOf("bash", { command: "x".repeat(301) }), undefined);
+});
+
+test("isCheckRun and checkPassed: the normalised command equals a check; a passing run is a pass", () => {
+  assert.ok(isCheckRun(bash("npm   test -- parse\n", true), [CHECK]));
+  assert.ok(!isCheckRun(bash("npm test -- parse && echo ok", true), [CHECK]));
+  assert.ok(!isCheckRun(bash("NPM test -- parse", true), [CHECK]));
+  assert.ok(!isCheckRun(bash("npm test -- parse", true), []));
+  assert.ok(!isCheckRun({ ...read("k"), norm: CHECK }, [CHECK]), "only bash");
+  assert.ok(isCheckRun(bash(CHECK, true), [`  npm test   -- parse `]), "the check is normalised too");
+  assert.equal(checkPassed(bash(CHECK, false), [CHECK]), true);
+  assert.equal(checkPassed(bash(CHECK, true), [CHECK]), false);
+  assert.equal(checkPassed(bash("ls", false), [CHECK]), false);
+  assert.equal(checkPassed({ ...bash(CHECK, false), isError: undefined }, [CHECK]), true, "no error flag: it passed");
+});
+
+test("AC-H1 check-failing: fires exactly when the last record is a failing check run and checkFailures failed in a row (a pass resets, other calls do not)", () => {
+  const rnd = seeded(41);
+  const ws = ["", " ", "\n", "  \t "];
+  const variant = () => `npm${ws[1 + rnd(3)]}test${ws[1 + rnd(3)]}--${ws[1 + rnd(3)]}parse${ws[rnd(4)]}`;
+  let fired = 0, quiet = 0;
+  for (const N of [1, 2, 3]) {
+    const h = { ...H, checkFailures: N };
+    for (let round = 0; round < 80; round++) {
+      let ring: CallRecord[] = [], failing = 0; // the reference: streaming over the history
+      for (let i = 1 + rnd(18); i > 0; i--) {
+        const k = rnd(6), isCheck = k < 3;
+        const r = isCheck ? bash(variant(), rnd(3) > 0) : k === 3 ? bash(`ls ${rnd(3)}`, rnd(2) === 0) : k === 4 ? read(`r${rnd(3)}`) : write(`w${rnd(2)}`, "h0", rnd(2) ? "h1" : "h0");
+        if (isCheck) failing = r.isError ? failing + 1 : 0;
+        ring = push(ring, r, h);
+        const expected = isCheck && r.isError === true && failing >= N;
+        assert.equal(callTrips(ring, h, withChecks([CHECK])).includes("check-failing"), expected, `N=${N} round ${round}: ${ring.map((x) => `${x.cmd ?? x.tool}:${x.isError ? "F" : "ok"}`).join(" | ")}`);
+        if (expected) fired++; else quiet++;
+      }
+    }
+  }
+  assert.ok(fired > 100 && quiet > 100, `${fired}/${quiet}`);
+});
+
+test("check-failing: pinned sequences; no check, a different command, and a check older than the window", () => {
+  const f = bash(CHECK, true), ok = bash(CHECK, false);
+  const run = (rs: CallRecord[], checks = [CHECK]) => callTrips(rs.reduce<CallRecord[]>((ring, r) => push(ring, r, H), []), H, withChecks(checks));
+  assert.deepEqual(run([f]).filter((t) => t === "check-failing"), []);
+  assert.deepEqual(run([f, f]).filter((t) => t === "check-failing"), ["check-failing"]);
+  assert.deepEqual(run([f, read("x"), edit0(), f]).filter((t) => t === "check-failing"), ["check-failing"], "other calls do not reset");
+  assert.deepEqual(run([f, ok, f]).filter((t) => t === "check-failing"), []);
+  assert.deepEqual(run([f, f, f]).filter((t) => t === "check-failing"), ["check-failing"], "and again at the third");
+  assert.deepEqual(run([f, f], []).filter((t) => t === "check-failing"), [], "no check, no trip");
+  assert.deepEqual(run([bash("npm test", true), bash("npm test", true)]).filter((t) => t === "check-failing"), [], "another command");
+  const aged = [f, ...Array.from({ length: windowSize(H) }, (_, i) => read(`k${i}`)), f];
+  assert.deepEqual(run(aged).filter((t) => t === "check-failing"), [], "the first failure left the ring: one failure in the window");
+});
+const edit0 = () => write("e", "h0", "h0");
