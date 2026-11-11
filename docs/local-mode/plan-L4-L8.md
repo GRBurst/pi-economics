@@ -260,7 +260,7 @@ inventory/keys tests; L6.T3 adds the default-mode `git push origin main` asserti
 | L4.T15 module-eval | (natural) assertion absent | `task-router-local-mode-needs-spawn-api` | [x] |
 | L4.T16 log-contract `review` | drop `log.review` | `log-contract` "outcomes: no review event" | [x] |
 | L4.T17 `pi-install-local` | build against the Actor without the spawn-api patch | `pi-install-local` (warning present) | [x] |
-| L5.T1 git in sandbox | remove `git` from `nativeCheckInputs` | `task-router` (exit 127) | [ ] |
+| L5.T1 git in sandbox | remove `git` from `nativeCheckInputs` | `task-router` (exit 127) | [x] |
 | L5.T6 default inventory | register `start_branch` unconditionally | P13 "default mode: inventory" | [ ] |
 | L5.T7 write guard property | `inside()` by string prefix without a separator (`/r/x` vs `/r/xy`) | "write guard property" | [ ] |
 | L5.T9 default mode keys | return `cwd` always | "default mode: no cwd key" | [ ] |
@@ -798,7 +798,7 @@ message). Open notes, for L6 or later:
 
 ### L5 Worktrees
 
-#### L5.T1 Git in the check sandbox, runner, temp repository `[ ] todo`
+#### L5.T1 Git in the check sandbox, runner, temp repository `[x] done`
 - **Files**: `packages/task-router/package.nix` (`git` argument, `nativeCheckInputs = [git]`), `core/local/git.ts` (`gitRunner`, `createGit` with `root`/`top`), `test/git-repo.ts` (`tempRepo`, D55), `test/local-git.test.ts`.
 - **Depends**: L4 done.
 - **RED**: "root": `tempRepo()` → `root(dir) === realpath(dir)`; "timeout": `git hash-object --stdin` with no stdin end and 100 ms → `{timedOut: true, exit: 124}`; "missing binary": `gitRunner("git-nosuch")` → exit 127. `chk task-router` FAILS (exit 127) until `nativeCheckInputs` (plant §11).

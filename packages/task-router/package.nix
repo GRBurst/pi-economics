@@ -4,6 +4,7 @@
   lib,
   stdenvNoCC,
   nodejs,
+  git,
 }: let
   manifest = lib.importJSON ./package.json;
 in
@@ -12,6 +13,8 @@ in
     inherit (manifest) version;
     src = lib.cleanSource ./.;
     nativeBuildInputs = [nodejs];
+    # The worktree and merge tests run real git in temporary repositories (test/git-repo.ts).
+    nativeCheckInputs = [git];
     dontBuild = true;
     doCheck = true;
     # pi loads the sources uncompiled with type stripping; node's test runner
