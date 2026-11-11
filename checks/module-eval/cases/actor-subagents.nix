@@ -96,7 +96,7 @@ in {
     a = (pe (eval ".pi/agent" {})).actorSubagents;
   in
     eq "drvPath" a.package.drvPath self.packages.x86_64-linux.actor-subagents.drvPath
-    ++ eq "spawnPolicyApi" (a.package.passthru.spawnPolicyApi or 0) 1;
+    ++ eq "spawnPolicyApi" (a.package.passthru.spawnPolicyApi or 0) 2;
 
   # (M2.6) The existence assertion probes the unpatched source and names the input.
   actor-subagents-missing = let

@@ -110,7 +110,7 @@ from `patches/pi-actor-subagents`: child prompt and spawn policy (the
 | Option | Default | Effect |
 |---|---|---|
 | `enable` | `false` | registry entry `actor-subagents` (link `<agentDir>/extensions/actor-subagents`, not loaded into children) and the settings file |
-| `package` | the flake's `packages/actor-subagents` | the patched source; its `passthru` carries `spawnPolicyApi` = 1, the version of `__subagentsApi_v1` it provides |
+| `package` | the flake's `packages/actor-subagents` | the patched source; its `passthru` carries `spawnPolicyApi` = 2, the version of `__subagentsApi_v1` it provides (1: the spawn policy; 2: also `spawn`/`kill`, child tools and cwd) |
 | `settings` | `{}` | merged into `<agentDir>/actor-subagents/settings.json` (`maxAgents`, `maxSpawnDepth`, `errorNoticeGraceMs`); `childExtensions` there is always the registry's, and setting it here is an assertion error |
 | `src` (internal) | set by `homeModules.default` from the input | the unpatched source the existence assertion probes |
 

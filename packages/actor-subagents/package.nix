@@ -1,4 +1,4 @@
-# pi-actor-subagents with two local patches, applied in this order (spec §2):
+# pi-actor-subagents with three local patches, applied in this order (spec §2):
 #
 # - child-prompt: upstream builds every child with `systemPromptOverride`, and
 #   in pi a custom system prompt drops the default `tools` and `rules`
@@ -11,6 +11,10 @@
 #   tools, tool guard), an optional `task` parameter, neutral model wording,
 #   send/list, childSessionId on spawn events, and a grace period before a
 #   child's transient error (429 under pi-retry) wakes its parent.
+# - spawn-api (spawnPolicyApi 2, local mode): optional `api.spawn` and
+#   `api.kill` for the router's own agents (quiet: no notices to the parent,
+#   no roster entry), per-child tools (`childTools`) and cwd from the policy,
+#   and tool guards that may answer with a Promise. `version` stays 1.
 #
 # The patch files keep the host's names, so the store paths, and with the
 # same nixpkgs the derivation, are the host's. A patch that no longer applies
@@ -29,6 +33,6 @@
   ];
 }).overrideAttrs (old: {
   # The version of __subagentsApi_v1 this build provides; taskRouter asserts
-  # it (spec §4.1). Through overrideAttrs: applyPatches refuses `passthru`.
-  passthru = (old.passthru or {}) // {spawnPolicyApi = 1;};
+  # it (spec §4.1): 1 for routing, 2 (the spawn-api patch) for local mode. Through overrideAttrs: applyPatches refuses `passthru`.
+  passthru = (old.passthru or {}) // {spawnPolicyApi = 2;};
 })
