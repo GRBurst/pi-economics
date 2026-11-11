@@ -169,15 +169,16 @@ export function createOverseer(d: OverseerDeps) {
     const done = new Promise<void>((res) => { wake = res; });
     const finish = (o: Settled<T>): void => { if (!settled) { settled = o; wake(); } };
     let invalid = 0;
-    /** A submission being checked (plan_request's red runs take real time): the deadline waits for it. */
-    let checking: Promise<unknown> | undefined;
+    /** A submission being checked (plan_request's red runs take real time): the deadline waits for it, and its time is `held`
+     *  off the clock (review L7 F9: the child's timeoutSec is its own time). */
+    let checking: Promise<unknown> | undefined, held = 0;
     const tool: ChildTool = {
       name: r.submit.name, description: r.submit.description, parameters: r.submit.parameters,
       async execute(x) {
         if (settled) return { text: "review closed", isError: true, terminate: true };
-        const pending = (checking = r.submit.check(x, no));
+        const from = d.now(), pending = (checking = r.submit.check(x, no));
         let c: Awaited<typeof pending>;
-        try { c = await pending; } finally { if (checking === pending) checking = undefined; }
+        try { c = await pending; } finally { held += d.now() - from; if (checking === pending) checking = undefined; }
         if (c.ok) { finish({ kind: "ok", value: c.value }); return { text: "recorded", terminate: true }; }
         const why = `invalid: ${c.reasons.join("; ")}`;
         if (++invalid <= (r.submit.resubmits ?? s.resubmits)) return { text: `${why}; resubmit`, isError: true };
@@ -215,7 +216,7 @@ export function createOverseer(d: OverseerDeps) {
         if (settled) break;
         const state = a.list().find((x) => x.name === name)?.state;
         if (state === undefined) finish({ kind: "error" });
-        else if (d.now() - t0 >= s.timeoutSec * 1000) {
+        else if (d.now() - t0 - held >= s.timeoutSec * 1000) {
           if (checking) await Promise.race([done, checking]).catch(() => undefined); // a submission made in time is judged first
           else finish({ kind: "timeout" });
         }

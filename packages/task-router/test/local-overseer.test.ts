@@ -341,6 +341,23 @@ test("review L7 F3: a check still running when its attempt dies settles before t
   assert.deepEqual(seen, [[1, 1], [2, 2]], "attempt 1's check ended before attempt 2 spawned");
 });
 
+test("review L7 F9: the clock stops while a submission is checked: a resubmit after a check longer than timeoutSec is judged", async () => {
+  const r = rig({ overseer: { timeoutSec: 60 } });
+  const v = verdictSubmit();
+  let n = 0;
+  const long = { ...v, check: async (x: unknown) => {
+    if (n++ > 0) return v.check(x);
+    r.h.clock.t += 120_000; // the red runs of the first submission take two minutes
+    return { ok: false as const, reasons: ["M1.T1: the check passes on the main tip"] };
+  } };
+  r.script.push(async () => r.tool().execute(VALID));
+  r.script.push(async () => r.tool().execute(VALID));
+  const res = await r.run({ submit: long });
+  assert.equal(res.ok, true, JSON.stringify(res));
+  assert.equal(r.h.a.apiSpawns.length, 1, "no timeout, no second attempt");
+  assert.equal(n, 2);
+});
+
 // L7.T17: plan_request's submit check runs the red runs (real processes); a submission arriving before the deadline is judged,
 // however long its check takes, and the poll waits for that check instead of the clock.
 test("a submission whose check is still running holds the deadline: its result counts", async () => {

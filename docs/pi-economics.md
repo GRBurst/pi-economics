@@ -471,7 +471,8 @@ blocking) checked against its JSON schema and the rules (no code fence, unique
 ids, every target in the diff or plan under review); an invalid one goes back with the
 reasons, at most `resubmits` (2) times. An agent that goes idle without
 submitting is reminded once, then the attempt fails; `timeoutSec` (900) bounds
-an attempt; a failed attempt (timeout, error, invalid) is retried once on
+an attempt, without the time its submissions are checked (a submission made
+in time is judged); a failed attempt (timeout, error, invalid) is retried once on
 `fallbackMember` at `fallbackEffort` (`sonnet`, `xhigh`), except a steer
 review. The agent is killed after each attempt. The router runs an overseer only while
 its own spawn policy is registered, and only that policy may take the ticket: an
@@ -690,7 +691,9 @@ cwd (`packages/task-router/core/local/planflow.ts`):
    cannot run (exit 126 or 127), that the git guard (above) blocks (it is not
    run), or that passes there (vacuous) goes back as a `check` finding; a
    worktree git cannot make fails the plan with `git` (as in `amend_plan`;
-   never a pass). Rejections count against `plans.rounds` (2), per overseer
+   never a pass). One round's red runs share `checkTimeoutSec` (900 s): a
+   check cut short by it, or not started, is a `check` finding as well.
+   Rejections count against `plans.rounds` (2), per overseer
    attempt (the fallback author starts afresh); after them a
    skeleton that is still invalid is `refused` `invalid`, a check that still
    cannot run `broken-check`, and a vacuous one is accepted with

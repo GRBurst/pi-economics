@@ -156,6 +156,32 @@ test("review L7 F6: a red run whose worktree git cannot make fails plan_request 
   assert.equal(x.plans.get("parser"), undefined);
 });
 
+test("review L7 F9: one round's red runs share checkTimeoutSec; a check cut short or not started is a finding, never a pass", async () => {
+  const x = planRig({ settings: { checkTimeoutSec: 10 } });
+  let t = 0;
+  const given: number[] = [];
+  x.ports.now = () => t;
+  x.ports.run = async (cmd, cwd, ms) => {
+    x.checks.push({ cmd, cwd });
+    given.push(ms);
+    const need = given.length <= 2 ? 6000 : 1000; // round 1's checks are slow, round 2's fast
+    if (ms < need) { t += ms; return { exit: 124, output: "", timedOut: true }; }
+    t += need;
+    return { exit: 1, output: "", timedOut: false };
+  };
+  const three = skeleton();
+  three.milestones[0]!.tasks.push({ id: "M1.T3", goal: "test it", files: ["test/a.test.ts"], forbidden: [], check: "false", dependsOn: ["M1.T2"] });
+  x.script.push([three, three]);
+  const first = x.replies.length;
+  const out = await planRequest(x.ports, INPUT, x.r.dir);
+  assert.deepEqual(given.slice(0, 2), [10000, 4000], "the second check gets what is left of the round");
+  assert.equal(x.checks.filter((c) => c.cmd === "false").length, 1, "M1.T3 did not start in round 1");
+  const reasons = x.replies[first]!.reasons!;
+  assert.ok(reasons.some((l) => l.includes("M1.T2") && l.includes("was not run to its end: the round's red runs share checkTimeoutSec (10 s)")), String(reasons));
+  assert.ok(reasons.some((l) => l.includes("M1.T3") && l.includes("was not run: the round's red runs share checkTimeoutSec (10 s)")), String(reasons));
+  assert.equal(out.status, "approved", out.detail);
+});
+
 test("AC-P3 validation errors count toward plans.rounds", async () => {
   const x = planRig();
   const bad = skeleton("test -f src/parse.ts", { files: ["src/gone.ts"] });
