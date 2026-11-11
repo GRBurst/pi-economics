@@ -16,7 +16,8 @@ import { createGit, gitRunner } from "./git.ts";
 import type { Git } from "./git.ts";
 import { block, createHintEngine } from "./hints.ts";
 import type { Delivery } from "./hints.ts";
-import { componentOn } from "./mode.ts";
+import { activeSet, componentOn } from "./mode.ts";
+import { guardGit, hasGitToken, UNCLASSIFIED } from "./gitcmd.ts";
 import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
@@ -116,7 +117,22 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       } catch { return undefined; }
     });
   };
-  if (!componentOn(s, "hints")) { guardWrites(); return handle; }
+  // The main session's git guard (design §3.4.5): `bash` and `powershell` calls that write a main branch are blocked. It fails
+  // closed for git only (LD8): a handler that throws on a command with a git token blocks it.
+  const guardMain = (): void => {
+    if (!activeSet(s).mergeGate) return;
+    const verdict = (why: string | undefined) => (why === undefined ? undefined : { block: true, reason: why });
+    pi.on("tool_call", (e, ctx) => {
+      const tool = String(e?.toolName), cmd = e?.input?.command;
+      if ((tool !== "bash" && tool !== "powershell") || typeof cmd !== "string") return undefined;
+      try {
+        if (d.isChild(ctx)) return undefined;
+        const r = guardGit(cmd, ctx?.cwd ?? process.cwd(), s.mergeGate.mainBranches, (dir) => git.branchOf(dir));
+        return r instanceof Promise ? r.then(verdict, () => verdict(UNCLASSIFIED)) : verdict(r);
+      } catch { return verdict(hasGitToken(cmd) ? UNCLASSIFIED : undefined); }
+    });
+  };
+  if (!componentOn(s, "hints")) { guardWrites(); guardMain(); return handle; }
   // A persistent trip runs a steer overseer instead of the escalation block while one can run (design §3.1.2, AC-H4).
   const steer = createSteer({ settings: s, overseer, git,
     branch: () => { const a = branches.active(); return a && { worktree: a.worktree, base: a.base, goal: a.goal, check: a.check }; },
@@ -208,6 +224,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     return { content: [...(Array.isArray(e.content) ? e.content : []), ...blocks.map((text) => ({ type: "text", text }))] };
   }));
   guardWrites();
+  guardMain();
   pi.on("turn_end", (_e, ctx) => {
     safe(() => {
       if (d.isChild(ctx)) return;

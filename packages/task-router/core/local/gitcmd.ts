@@ -497,3 +497,15 @@ export const hasGitToken = (cmd: string): boolean => /(^|[^A-Za-z0-9_.-])git($|[
 export function safeClassify(...a: Parameters<typeof classify>): string | undefined {
   try { return classify(...a); } catch { return hasGitToken(a[0]) ? UNCLASSIFIED : undefined; }
 }
+/** The git guard of one command (design §3.4.5, D43): the branch of every directory a git call runs in through `branchOf` (the
+ *  port's 2 s timeout answers "unknown"; a port that fails is an unknown directory too), then `safeClassify`. Synchronous when
+ *  no directory is needed (a command without git calls), so a plain command waits for nothing. Total. */
+export function guardGit(cmd: string, cwd: string, mains: readonly string[], branchOf: (dir: string) => Promise<Branch>):
+  string | undefined | Promise<string | undefined> {
+  let dirs: string[];
+  try { dirs = gitDirs(cmd, cwd); } catch { return hasGitToken(cmd) ? UNCLASSIFIED : undefined; }
+  if (!dirs.length) return safeClassify(cmd, cwd, mains, new Map());
+  const read = (dir: string): Promise<[string, Branch]> =>
+    Promise.resolve().then(() => branchOf(dir)).then((b): [string, Branch] => [dir, b], (): [string, Branch] => [dir, "unknown"]);
+  return Promise.all(dirs.map(read)).then((xs) => safeClassify(cmd, cwd, mains, new Map(xs)), () => UNCLASSIFIED);
+}
