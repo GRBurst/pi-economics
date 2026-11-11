@@ -43,6 +43,9 @@ export type Git = {
   /** The changes of the worktree `dir` against `base`: staged, unstaged and committed ones (`git diff --numstat base`) plus the
    *  untracked files, whose lines are counted through the file system (D42). Failing or timing out (5 s) gives []. */
   diffStat(dir: string, base: string): Promise<Stat>;
+  /** `git diff a [b]` in `dir` as text, cut to `maxLines` lines (the last says how many more); `b` undefined = the working tree,
+   *  whose untracked files follow as one `untracked file <path> (<n> lines)` line each. Failing or timing out (5 s) gives "". */
+  diff(dir: string, a: string, b: string | undefined, maxLines: number): Promise<string>;
 };
 /** A command that either gave its stdout or failed with the tail of its stderr (2048 characters). */
 export type Res = { ok: true; out: string } | { ok: false; err: string };
@@ -102,6 +105,19 @@ export function createGit(run: GitRun): Git {
         if (diff.exit !== 0 || others.exit !== 0) return [];
         return [...parseNumstat(diff.out), ...others.out.split("\0").filter((p) => p !== "").map((p) => ({ path: p, added: untrackedLines(join(dir, p)), deleted: 0 }))];
       } catch { return []; }
+    },
+    async diff(dir, a, b, maxLines) {
+      try {
+        const d = await run(["-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff", "--no-renames", ...(b === undefined ? [a] : [a, b]), "--"], dir, STAT_MS);
+        if (d.exit !== 0) return "";
+        const lines = d.out.split("\n");
+        if (lines.at(-1) === "") lines.pop();
+        if (b === undefined) {
+          const others = await run(["ls-files", "--others", "--exclude-standard", "-z"], dir, STAT_MS);
+          if (others.exit === 0) for (const p of others.out.split("\0").filter((x) => x !== "")) lines.push(`untracked file ${p} (${untrackedLines(join(dir, p))} lines)`);
+        }
+        return (lines.length > maxLines ? [...lines.slice(0, maxLines - 1), `… ${lines.length - (maxLines - 1)} more lines`] : lines).join("\n");
+      } catch { return ""; }
     },
     async dirty(dir) {
       const r = await run(["status", "--porcelain"], dir, ADD_MS);

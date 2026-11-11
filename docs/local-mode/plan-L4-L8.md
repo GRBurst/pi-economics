@@ -860,7 +860,7 @@ message). Open notes, for L6 or later:
 - **RED**: property: fires iff lines > `splitLines` ∨ files > `splitFiles`, not one line earlier; temp repo: an untracked 101-line file trips; a timed-out `diffStat` → no trip, no throw.
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-H1 (over-size).
 
-#### L5.T13 Steer input: diff, goal, check `[ ] todo`
+#### L5.T13 Steer input: diff, goal, check `[x] done`
 - **Files**: `core/local/steer.ts`, `test/local-steer.test.ts`. **Depends**: L5.T12.
 - **RED**: with an active branch, `steerInput` gains `Goal:`, `Check:` and `Diff (≤ 80 lines):` (pinned on fake-git output); targets add the branch's changed files (D33). **Check**: fast runner.
 

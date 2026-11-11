@@ -211,3 +211,37 @@ test("diffStat: a failing or timed-out git, a directory that is no repository �
   assert.deepEqual(await createGit(gitRunner("git", r.env)).diffStat(join(r.base, "missing"), "main"), []);
   assert.deepEqual(await createGit(gitRunner("git", r.env)).diffStat(r.dir, "nosuchbase"), []);
 });
+
+test("diff: the changes against base as text, cut to maxLines with a last line that counts the rest; untracked files follow as one line each", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  r.commit("a.ts", "one\ntwo\nthree\n", "a");
+  const base = r.git(["rev-parse", "HEAD"]);
+  assert.equal(await git.diff(r.dir, base, undefined, 80), "", "nothing changed");
+  writeFileSync(join(r.dir, "a.ts"), "one\nTWO\nthree\n");
+  writeFileSync(join(r.dir, "new one.ts"), "x\ny\n");
+  writeFileSync(join(r.dir, "bin.dat"), Buffer.from([0, 1]));
+  const text = await git.diff(r.dir, base, undefined, 80);
+  const lines = text.split("\n");
+  assert.ok(lines[0]!.startsWith("diff --git a/a.ts b/a.ts"), lines[0]);
+  assert.ok(lines.includes("-two") && lines.includes("+TWO"));
+  assert.deepEqual(lines.slice(-2), ["untracked file bin.dat (0 lines)", "untracked file new one.ts (2 lines)"]);
+  assert.ok(!text.includes("\u001b"), "no colour codes");
+  // the cut: at most maxLines lines, the last one counting what was left out
+  const cut = (await git.diff(r.dir, base, undefined, 4)).split("\n");
+  assert.equal(cut.length, 4);
+  assert.deepEqual(cut.slice(0, 3), lines.slice(0, 3));
+  assert.equal(cut[3], `… ${lines.length - 3} more lines`);
+  // two commits: a against b
+  r.commit("b.ts", "b\n", "b");
+  const second = await git.diff(r.dir, base, "HEAD", 80);
+  assert.ok(second.includes("+++ b/b.ts") && !second.includes("untracked file"), second);
+});
+
+test("diff: failing, timing out or throwing → \"\"", async () => {
+  const r = tempRepo();
+  assert.equal(await createGit(async () => ({ exit: 124, out: "x", err: "", timedOut: true })).diff(r.dir, "main", undefined, 80), "");
+  assert.equal(await createGit(async () => { throw new Error("boom"); }).diff(r.dir, "main", undefined, 80), "");
+  assert.equal(await createGit(gitRunner("git", r.env)).diff(r.dir, "nosuchbase", undefined, 80), "");
+  assert.equal(await createGit(gitRunner("git", r.env)).diff(join(r.base, "missing"), "main", undefined, 80), "");
+});

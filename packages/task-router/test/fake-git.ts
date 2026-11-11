@@ -21,6 +21,8 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
   const dirty = new Set<string>();
   /** worktree → what `diffStat` answers (an Error is thrown, as a misbehaving port might). */
   const stats = new Map<string, Stat | Error>();
+  /** worktree → what `diff` answers (cut to `maxLines`, as the real port does; an Error is thrown). */
+  const diffs = new Map<string, string | Error>();
   /** method → the error its next calls fail with (`{ok: false, err}`); `undefined` entries are ignored. */
   const fail = new Map<string, string>();
   const addRepo = (root: string, main = "main", sha = "a".repeat(40)): FakeRepo => {
@@ -80,6 +82,12 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
       return { ok: true, out: `Deleted branch ${branch}.` };
     },
     async dirty(dir) { return dirty.has(dir); },
+    async diff(dir, a, b, maxLines) {
+      calls.push(`diff ${dir} ${a} ${b ?? ""} ${maxLines}`);
+      const d = diffs.get(dir);
+      if (d instanceof Error) throw d;
+      return d === undefined ? "" : d.split("\n").slice(0, maxLines).join("\n");
+    },
     async diffStat(dir, base) {
       calls.push(`diffStat ${dir} ${base}`);
       const s = stats.get(dir);
@@ -87,6 +95,6 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
       return s ?? [];
     },
   };
-  return { git, repos, addRepo, calls, existing, dirty, fail, stats };
+  return { git, repos, addRepo, calls, existing, dirty, fail, stats, diffs };
 }
 export type FakeGit = ReturnType<typeof fakeGit>;

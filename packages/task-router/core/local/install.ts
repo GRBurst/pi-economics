@@ -118,7 +118,8 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   };
   if (!componentOn(s, "hints")) { guardWrites(); return handle; }
   // A persistent trip runs a steer overseer instead of the escalation block while one can run (design §3.1.2, AC-H4).
-  const steer = createSteer({ settings: s, overseer,
+  const steer = createSteer({ settings: s, overseer, git,
+    branch: () => { const a = branches.active(); return a && { worktree: a.worktree, base: a.base, goal: a.goal, check: a.check }; },
     send: (content) => pi.sendMessage?.({ customType: STEER_TYPE, content, display: true }, { deliverAs: "steer" }) });
   const hash = d.hash ?? fileHash, detect = d.detect ?? callTrips;
   const engine = createHintEngine(h, s.plans);
@@ -196,7 +197,9 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     const cwd = ctx?.cwd ?? process.cwd(), blocks: string[] = [];
     for (const x of out) {
       d.log.hint("main", x.trip, x.stage, x.n, d.sessionId());
-      if (x.stage === "steer" && steer.available()) steer.start(x.trip, x.n, ring.slice(-STEER_RECORDS), cwd, (p) => relative(cwd, p));
+      // A path as the steer input shows it: relative to the active worktree when inside it, else to the session's cwd.
+      const wt = branches.active()?.worktree;
+      if (x.stage === "steer" && steer.available()) steer.start(x.trip, x.n, ring.slice(-STEER_RECORDS), cwd, (p) => relative(wt !== undefined && inside(p, wt) ? wt : cwd, p));
       else blocks.push(block(x.trip, x.n, x.text));
     }
     shown = true;
