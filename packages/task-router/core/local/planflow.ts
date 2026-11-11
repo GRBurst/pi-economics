@@ -425,7 +425,7 @@ async function commitAmended(p: PlanPorts, c: AmendCtx, final: Skeleton, by: str
   for (const b of p.branches.all()) {
     if (b.plan?.slug !== c.slug || !["active", "fixer", "blocked"].includes(b.state)) continue;
     const u = unitFacts(final, b.plan.id);
-    if (u && canonical({ goal: b.goal, check: b.check, files: b.files }) !== canonical(u)) p.branches.put({ ...b, ...u });
+    if (u && canonical({ goal: b.goal, check: b.check, files: b.files }) !== canonical(u)) p.branches.update({ ...b, ...u }); // not made active (review F8)
   }
   return amendDone("approved", undefined, `plan amended: ${file} at ${made.out.slice(0, 7)}${adv.push}; trigger ${c.trigger} is closed`,
     { ...more, reviewId: by, commit: made.out });

@@ -250,3 +250,15 @@ test("review F11: an abort during the evidence command or a red run ends amend_p
     assert.equal(x.runs.length, 0, `${at}: no review`);
   }
 });
+
+test("review F8: an amendment rebinds a live branch without making it the active one", async () => {
+  const x = approved([], { ...SK, milestones: [{ ...SK.milestones[0]!, tasks: [T1, { ...T2, dependsOn: [] }] }] });
+  await start(x, "M1.T1");
+  await start(x, "M1.T2");
+  x.plans.open("parser", "over-budget", "M1.T1");
+  x.script.push([APPROVE]);
+  const r = await amendPlan(x.ports, amend({ changes: [{ op: "replace", id: "M1.T1", task: { ...T1, goal: "write the pure parser" } }] }), x.r.dir);
+  assert.equal(r.status, "approved", r.detail);
+  assert.equal(x.branches.get(x.r.dir, "lm/parser/M1.T1")!.goal, "write the pure parser");
+  assert.equal(x.branches.active()!.branch, "lm/parser/M1.T2");
+});
