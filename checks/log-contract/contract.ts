@@ -99,6 +99,15 @@ async function mainSession(sid: string, child: string, usd: number): Promise<voi
   tr.clock.t = clock.t;
   assert.ok(!("reject" in await tr.a.spawn({ name: again, task: card({ attemptOf: fail }) }, { sessionId: sid })), `${again}: spawn rejected`);
   tr.a.emit({ type: "spawn", name: again, by: "main", parent: "main", childSessionId: again, ts: clock.t });
+  // task-router in local mode (design §3.1): the main session repeats one call three times → a hint in its result, a hint line
+  const local = harness({ agentDir, settings: { mode: "local" } });
+  local.clock.t = clock.t;
+  const lctx = { sessionManager: { getSessionId: () => sid }, cwd: work, getContextUsage: () => ({ tokens: 1000, percent: 10 }) };
+  local.f.fire("session_start", {}, lctx);
+  for (let i = 0; i < 3; i++) {
+    local.f.fire("tool_call", { toolName: "read", toolCallId: `r${i}`, input: { path: "a.ts" } }, lctx);
+    local.f.fire("tool_result", { toolName: "read", toolCallId: `r${i}`, input: { path: "a.ts" }, content: [{ type: "text", text: "a" }], isError: false }, lctx);
+  }
   // guards
   expFire("message_end", { message: { role: "assistant" } }, sid);
   expFire("input", { text: "No, that's wrong, revert it", source: "interactive" }, sid);
@@ -130,7 +139,7 @@ for (const [name, lines] of Object.entries(logs)) {
   const old = lines.filter((l) => l.v !== 1);
   if (old.length) failures.push(`${name}: ${old.length} line(s) without schema version v=1, e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
 }
-for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
+for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force", "hint"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
 for (const e of ["correction", "rating", "peek-after-mask"]) if (!logs.guards.some((l) => l.event === e)) failures.push(`guards: no ${e} event`);
 
 // --- pi-analyse --check over the produced lines, then the full analysis

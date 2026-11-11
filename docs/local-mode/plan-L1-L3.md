@@ -211,7 +211,7 @@ failure, not a load error.
 | L2.T3 analyse filter | revert to `e?.event !== "spawn"` | `test/analyse.test.ts` › "session-level lines are no data-quality defect" | [x] |
 | L2.T6 log-contract `force` | comment out `log.force(...)` in `used()` and `set` | `log-contract` "outcomes: no force event" | [x] |
 | L3.T8 trip guard never blocks | make the trip guard return its hint text | "AC-H6 no child call is blocked" | [x] |
-| L3.T9 log-contract `hint` | drop the `log.hint` call in `installLocal` | `log-contract` "outcomes: no hint event" | [ ] |
+| L3.T9 log-contract `hint` | drop the `log.hint` call in `installLocal` | `log-contract` "outcomes: no hint event" | [x] |
 
 All other new tests are red by construction (the feature is absent); record the red in the task's status line.
 
@@ -860,7 +860,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   (composition keeps it); default mode → `toolGuard` of an `all` child is `undefined` (unchanged); a `kill` event drops its state.
 - **GREEN**: S13. **Check**: fast runner; `chk task-router typecheck-task-router router-golden`. **Keep green**: KG-R. **ACs**: AC-H6.
 
-#### L3.T9 Log contract over the real hint path `[ ] todo`
+#### L3.T9 Log contract over the real hint path `[x] done`
 - **Files**: `checks/log-contract/contract.ts`.
 - **Depends**: L3.T5, L3.T7.
 - **RED/plant**: a second harness `harness({agentDir, settings: {mode: "local"}})` in `mainSession`, three identical
