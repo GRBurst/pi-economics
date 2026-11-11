@@ -616,7 +616,7 @@ and a `<router-hint trip="gatebypass">` block in the next main tool result.
 Nothing is reverted, and `user_bash` is not watched (the wording is neutral:
 the router cannot tell who moved it).
 
-Logs: one `merge` line per `request_merge` call (`taskId` the branch,
+Logs: one `merge` line per `request_merge` call (`taskId` the branch, `""` when none is known or the argument is no branch name,
 `outcome` `merged`, `refused`, `revise`, `fixer` or `failed` (status
 `error`), optional `reason` (the code), `commit`, `nLines`, `nFiles`,
 `reviewId`, `pushed`) and the `gatebypass` line (`taskId` the main branch,

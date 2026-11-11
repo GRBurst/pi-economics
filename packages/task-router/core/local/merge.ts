@@ -197,12 +197,20 @@ export async function redRun(p: MergePorts, repo: string, base: string, check: s
   }
 }
 
+/** `name` passes `git check-ref-format --branch` (its rules, without git): the merge line logs only a branch name, never the
+ *  model's free text (review F10, AC-L2). */
+export const branchName = (name: string): boolean =>
+  name !== "" && name !== "@" && name.length <= 256 && !name.startsWith("-") && !name.startsWith("/") && !name.endsWith("/") &&
+  !name.endsWith(".") && !/[\x00-\x20\x7f~^:?*[\\]|\.\.|@\{|\/\//.test(name) &&
+  name.split("/").every((c) => !c.startsWith(".") && !c.endsWith(".lock"));
+
 /** `request_merge` (design §3.4.2). Total: an unexpected exception is a `git` error, and nothing after it runs. */
 export async function requestMerge(p: MergePorts, input: Input, cwd: string): Promise<MergeResult> {
   const seen: Seen = {};
   const r = await attempt(p, input, cwd, seen);
   try {
-    p.log?.({ branch: seen.branch ?? (typeof input.branch === "string" ? input.branch : ""), outcome: r.status === "error" ? "failed" : r.status,
+    const named = seen.branch ?? (typeof input.branch === "string" ? input.branch : "");
+    p.log?.({ branch: branchName(named) ? named : "", outcome: r.status === "error" ? "failed" : r.status,
       reason: r.reason, commit: r.commit, nLines: seen.nLines, nFiles: seen.nFiles, reviewId: r.reviewId, pushed: r.pushed });
   } catch { /* the line is best effort */ }
   return r;

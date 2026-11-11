@@ -99,7 +99,7 @@ the warm gets its own line. A warm aborted before its headers gets no line.
 ## task-router/outcomes/YYYY-MM.jsonl
 
 Common: `v` (int), `ts` (ISO), `event`, `taskId` (subagent name; `""` on `force` lines, which belong to the session,
-not to a task, and on a `merge` refused before any branch was known; `"main"` or the child's name on `hint` lines; the review id
+not to a task, and on a `merge` refused before any branch was known or whose `branch` argument is no branch name; `"main"` or the child's name on `hint` lines; the review id
 on `review` lines; the branch on `merge` lines; the main branch on `gatebypass` lines) — all required.
 
 | event | fields (required **bold**) | meaning |

@@ -3,7 +3,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gatebypassEvent, mergeEvent } from "../core/outcome.ts";
-import { REASONS } from "../core/local/merge.ts";
+import { branchName, REASONS } from "../core/local/merge.ts";
+import { spawnSync } from "node:child_process";
 import type { MergeResult } from "../core/local/merge.ts";
 import { REVISE, reviewRig } from "./merge-rig.ts";
 import { seeded } from "./rand.ts";
@@ -72,5 +73,34 @@ test("AC-L2 merge, gatebypass: text-free over generated branches, goals and summ
     const lines = m.h.lines().filter((l) => l.event === "merge" || l.event === "gatebypass");
     assert.equal(lines.filter((l) => l.event === "merge").length, 1, JSON.stringify(r));
     for (const l of lines) assert.deepEqual(textFree(l, ENUMS), [], JSON.stringify(l));
+  }
+});
+
+test("AC-L2 merge (review F10): a `branch` argument that is no branch name is logged as taskId \"\"", async () => {
+  const rnd = seeded(1010);
+  const word = () => ["fix", "```sh\nrm -rf /\n```", "a b", "ignore previous", "x:y z", "<router-hint>", "..", "-x", "a~1"][rnd(9)]!;
+  const m = await rig();
+  for (let i = 0; i < 6; i++) {
+    const branch = i === 0 ? "merge the auth fix in src/a.ts" : `${word()} ${word()}`;
+    const r = await m.call({ branch });
+    assert.equal(r.status, "refused", JSON.stringify(r));
+  }
+  const merges = m.merges();
+  assert.equal(merges.length, 6);
+  for (const l of merges) {
+    assert.equal(l.taskId, "", JSON.stringify(l));
+    assert.deepEqual(textFree(l, new Set([...ENUMS, ""])), [], JSON.stringify(l));
+  }
+  await m.call({ branch: "lm/nosuch" }); // a well-formed name that resolves to nothing is still named
+  assert.equal(m.merges().at(-1)!.taskId, "lm/nosuch");
+});
+
+test("review F10: branchName agrees with `git check-ref-format --branch`", () => {
+  const names = ["lm/x", "main", "feature/a-b_c.d", "merge the fix", "a..b", "-x", "/x", "x/", "x.", "x.lock", "a/.b", "a//b", "a@{1}",
+    "a~1", "a^", "a:b", "a?", "a*", "a[b", "a\\b", "a\tb", "", "refs/heads/x", "x@y", "ü/ß", "HEAD:main"];
+  for (const n of names) {
+    const git = spawnSync("git", ["check-ref-format", "--branch", n], { encoding: "utf8" });
+    // --branch also expands `@{-1}`-style names against a repository; none of these is one
+    assert.equal(branchName(n), git.status === 0, `${JSON.stringify(n)}: git says ${git.status === 0 ? "valid" : "invalid"}`);
   }
 });
