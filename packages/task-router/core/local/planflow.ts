@@ -108,7 +108,7 @@ async function request(p: PlanPorts, input: PlanInput, cwd: string): Promise<Pla
   const out = await p.overseer.run({ role: "plan-author", input: authorInput(s, input, files, await git.lsFiles(checkout, REPO_MAP)), cwd: checkout,
     submit: planSubmit(p, { repo, slug: input.slug, checkout, tip: main.sha }), signal: p.signal });
   if (p.signal?.aborted || (!out.ok && out.outcome === "aborted")) return done("error", "aborted", "aborted");
-  if (!out.ok) return done("error", "author-unavailable", `the plan author is unavailable (${out.outcome})`);
+  if (!out.ok) return done("error", "author-unavailable", `the plan author is unavailable (${out.outcome})${because(out.why)}`);
   if (!out.value.ok) return done("error", out.value.reason, `${AUTHOR_FAILED[out.value.reason]}: ${out.value.reasons.join("; ")}`);
   // ── 4 render, commit on main (D50: plumbing, then the merge's fast-forward path), record ──
   const sk = out.value.sk, reviewId = out.reviewId;
@@ -367,7 +367,7 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
     signal: p.signal });
   if (!out.ok) {
     return out.outcome === "aborted" ? amendDone("error", "aborted", "aborted", { trigger, full })
-      : amendDone("error", "review-unavailable", reasonText("review-unavailable", {}), { trigger, full });
+      : amendDone("error", "review-unavailable", reasonText("review-unavailable", {}) + because(out.why), { trigger, full });
   }
   // ── 4 approved: re-render, commit on main, record, close the trigger ──
   if (approve(out.value.findings)) return commitAmended(p, c, final, out.reviewId, { trigger, full });
@@ -385,7 +385,7 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
       limits(s), "Every new or changed task check must fail on the main tip and pass once the task is done.", "The plan:", text!].join("\n"),
     submit: planSubmit(p, { repo, slug, checkout, tip: main.sha, rewrite: { old, checked, milestone: mid } }) });
   if (p.signal?.aborted || (!author.ok && author.outcome === "aborted")) return amendDone("error", "aborted", "aborted", no);
-  if (!author.ok) return amendDone("error", "author-unavailable", `the plan author is unavailable (${author.outcome})`, no);
+  if (!author.ok) return amendDone("error", "author-unavailable", `the plan author is unavailable (${author.outcome})${because(author.why)}`, no);
   if (!author.value.ok) return amendDone("error", author.value.reason, `${AUTHOR_FAILED[author.value.reason]}: ${author.value.reasons.join("; ")}`, no);
   logPlan(p, { slug, action: "skeleton", trigger: trig.kind, nTasks: nTasks(author.value.sk), reviewId: author.reviewId });
   const r = await commitAmended(p, c, author.value.sk, author.reviewId, { trigger, full, findings });
@@ -394,6 +394,8 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
 
 /** The plan unit each task of `sk` runs on (design §3.3.1): its milestone when that is one branch, else the task. */
 const unitOf = (sk: Skeleton) => (t: Task): string => sk.milestones.find((m) => m.tasks.some((x) => x.id === t.id) && m.branch === "milestone")?.id ?? t.id;
+/** `: <why>` for an overseer that could not start (its members at their caps or without a free slot), else nothing. */
+const because = (why: string | undefined): string => (why ? `: ${why}` : "");
 const nTasks = (sk: Skeleton): number => sk.milestones.reduce((n, m) => n + m.tasks.length, 0);
 /** The `plan` line; best effort, it never fails a flow. */
 function logPlan(p: PlanPorts, i: PlanLogInput): void {

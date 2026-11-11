@@ -262,3 +262,11 @@ test("review F8: an amendment rebinds a live branch without making it the active
   assert.equal(x.branches.get(x.r.dir, "lm/parser/M1.T1")!.goal, "write the pure parser");
   assert.equal(x.branches.active()!.branch, "lm/parser/M1.T2");
 });
+
+test("caps: a review whose members are at their caps names why in the detail", async () => {
+  const x = approved();
+  x.plans.open("parser", "over-budget", "M1.T2");
+  x.ports.overseer = { ready: () => true, run: async () => ({ ok: false, outcome: "error", why: "opus reached its dailyCap (1)" }) };
+  const r = await amendPlan(x.ports, amend(), x.r.dir);
+  assert.deepEqual([r.status, r.reason, r.detail], ["error", "review-unavailable", "error: review unavailable: opus reached its dailyCap (1)"]);
+});

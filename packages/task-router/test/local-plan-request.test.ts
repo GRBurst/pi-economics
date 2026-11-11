@@ -219,3 +219,10 @@ test("review F11: an abort during a red run ends plan_request aborted; the red r
   assert.equal(x.mainSha(), before);
   assert.equal(x.plans.get("parser"), undefined);
 });
+
+test("caps: an author whose members are at their caps names why in the detail", async () => {
+  const x = planRig();
+  x.ports.overseer = { ready: () => true, run: async () => ({ ok: false, outcome: "error", why: "opus reached its dailyCap (1)" }) };
+  const r = await planRequest(x.ports, INPUT, x.r.dir);
+  assert.deepEqual([r.status, r.reason, r.detail], ["error", "author-unavailable", "the plan author is unavailable (error): opus reached its dailyCap (1)"]);
+});
