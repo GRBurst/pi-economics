@@ -6,7 +6,7 @@ import type { RouterSettings } from "../types.ts";
 import type { BranchRecord, BranchStore } from "./branches.ts";
 import type { Git, Stat } from "./git.ts";
 import type { createOverseer } from "./overseer.ts";
-import { refreshFacts } from "./worktree.ts";
+import { cleanupBranch, refreshFacts } from "./worktree.ts";
 import { verdictSubmit } from "./overseer.ts";
 import { approve, findingLine } from "./verdict.ts";
 import { riskGlobsOf } from "./tripwires.ts";
@@ -145,10 +145,16 @@ export async function redRun(p: MergePorts, repo: string, base: string, check: s
 
 /** `request_merge` (design §3.4.2). Total: an unexpected exception is a `git` error, and nothing after it runs. */
 export async function requestMerge(p: MergePorts, input: Input, cwd: string): Promise<MergeResult> {
-  try { return await pipeline(p, input, cwd); } catch (err) { return gitError((err as Error)?.message ?? String(err)); }
+  try {
+    // §3.4.3: a worktree whose HEAD moved after the approval is reviewed again from the start, once; a second move is an error.
+    for (let i = 0; i < 2; i++) { const r = await pipeline(p, input, cwd); if (r !== "moved") return r; }
+    return gitError("the worktree's HEAD moved during the merge; request again");
+  } catch (err) { return gitError((err as Error)?.message ?? String(err)); }
 }
 
-async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<MergeResult> {
+export const MAIN_REF_TYPE = "task-router/main-ref";
+
+async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<MergeResult | "moved"> {
   const s = p.settings, g = s.mergeGate, git = p.git;
   // ── 1 resolve: the repository, the branch (given, else the active one), its worktree, the main branch, the commit ──
   const active = p.branches.active() ?? p.branches.latest(["fixer", "blocked"]);
@@ -213,7 +219,33 @@ async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<Merge
     reviewId = out.reviewId;
     p.approvals.add(key, reviewId);
   }
-  // Step 9 follows (L6.T10); until then nothing merges.
-  return { ...gitError("merging follows in L6.T10", commit), reviewId };
-  return done("error", "review-unavailable", reasonText("review-unavailable", {}), commit);
+  // ── 9 merge: fast-forward only (LD7), so main's tree is the reviewed and checked one ──
+  if ((await git.sha(wt.dir, "HEAD")) !== commit) return "moved";
+  const there = (await git.worktrees(repo)).find((w) => w.branch === main.name && !w.prunable);
+  if (there) {
+    if (await git.dirty(there.dir)) return { ...refuse("main-dirty", { checkout: there.dir }, commit), reviewId };
+    const ff = await git.ffMerge(there.dir, commit);
+    if (!ff.ok) return { ...gitError(ff.err, commit), reviewId };
+  } else {
+    const moved = await git.updateRef(repo, `refs/heads/${main.name}`, commit, main.sha);
+    if (!moved.ok) return { ...gitError(moved.err, commit), reviewId };
+  }
+  let detail = `merged ${branch} into ${main.name} at ${commit.slice(0, 7)}`, pushed: boolean | undefined;
+  if (g.push) {
+    const pu = await git.push(repo, g.remote, main.name);
+    pushed = pu.ok;
+    detail += pu.ok ? `; pushed to ${g.remote}` : `; push to ${g.remote} failed: ${pu.err}`;
+  }
+  p.append(MAIN_REF_TYPE, { repo, branch: main.name, sha: commit });
+  // A branch the router knows becomes `merged` and is cleaned up; one made by hand without a record (D40) is left as it is.
+  const now = p.branches.get(repo, branch);
+  if (now) {
+    const merged: BranchRecord = { ...now, state: "merged" };
+    p.branches.put(merged);
+    if (s.worktrees.removeAfterMerge) {
+      const why = await cleanupBranch({ git, store: p.branches, settings: s }, merged, main.name);
+      if (why) detail += `; ${why}`;
+    }
+  }
+  return { status: "merged", detail, commit, reviewId, ...(pushed !== undefined && { pushed }) };
 }

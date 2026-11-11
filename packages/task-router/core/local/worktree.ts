@@ -109,12 +109,14 @@ export function writeGuard(x: { tool: string; input: unknown; cwd: string; activ
 
 // ── cleanup and abandoned branches (design §3.3.4) ──
 /** After a merge (the caller checks `removeAfterMerge`): `git worktree remove`, then `git branch -d`. A failure is a hint, never
- *  an exception, and changes no record: the merge stands. undefined = both gone. */
-export async function cleanupBranch(d: StartDeps, rec: BranchRecord): Promise<string | undefined> {
+ *  an exception, and changes no record: the merge stands. undefined = both gone. `main`: the main branch it was merged into; a
+ *  branch contained in it is deleted even when the repository's HEAD is elsewhere (`update-ref` merged it, L6.T10). */
+export async function cleanupBranch(d: StartDeps, rec: BranchRecord, main?: string): Promise<string | undefined> {
   try {
     const removed = await d.git.worktreeRemove(rec.repo, rec.worktree);
     if (!removed.ok) return `cleanup failed: ${removed.err}`;
-    const deleted = await d.git.branchDelete(rec.repo, rec.branch);
+    const contained = main !== undefined && (await d.git.isAncestor(rec.repo, `refs/heads/${rec.branch}`, `refs/heads/${main}`));
+    const deleted = await d.git.branchDelete(rec.repo, rec.branch, contained);
     await refreshFacts(d, rec.repo);
     return deleted.ok ? undefined : `cleanup failed: ${deleted.err}`;
   } catch (err) {

@@ -54,17 +54,20 @@ export function mergeRig(o: { settings?: Record<string, unknown> } = {}) {
   /** What the overseer answers, in order (default: approve); "fail" = an overseer that could not run. */
   const verdicts: Array<Verdict | "fail"> = [];
   const reviews: RunArgs<unknown>[] = [];
+  /** `review`: runs inside each review (a test changes the worktree meanwhile). */
+  const hooks: { review?: (a: RunArgs<unknown>) => void } = {};
   const overseer = {
     ready: () => true,
     async run<T>(a: RunArgs<T>): Promise<RunResult<T>> {
       reviews.push(a as RunArgs<unknown>);
+      hooks.review?.(a as RunArgs<unknown>);
       const v = verdicts.shift() ?? APPROVE;
       return v === "fail" ? { ok: false, outcome: "error" } : { ok: true, value: v as T, reviewId: `rv-${reviews.length}`, member: "opus", model: "anthropic/claude-opus-5-5" };
     },
   };
   const approvals = createApprovals(append);
   const c = common(r, git, store, settings, { overseer, approvals, append });
-  return { r, git, store, entries, settings, verdicts, reviews, overseer, approvals, ...c };
+  return { r, git, store, entries, settings, verdicts, reviews, hooks, overseer, approvals, ...c };
 }
 export type MergeRig = ReturnType<typeof mergeRig>;
 
