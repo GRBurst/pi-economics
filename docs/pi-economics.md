@@ -298,7 +298,7 @@ out) is read by the package's settings test and by the `module-eval` case
 components `hints`, `overseer`, `worktrees`, `mergeGate` and `plans`, each with
 `enabled = "auto" | "on" | "off"` (default `"auto"`: on in local mode, off in
 default mode), and `force` (below); L1 validates them (a bad value is reported and its
-default kept), but none of the components does anything yet. The keys, their defaults and
+default kept); `hints` works since L3 (below), the others do nothing yet. The keys, their defaults and
 the messages are in `packages/task-router/core/settings.ts` and
 `packages/task-router/core/local/settings.ts`. In local mode:
 
@@ -312,10 +312,10 @@ the messages are in `packages/task-router/core/settings.ts` and
   do most of the work yourself, spawn only for more ability, end the turn after
   a spawn; the card schema and one example). The orchestrator rule is off, even
   when an experiments arm sets `delegationRule`. Children still get no section.
-- The delegation nudge is off.
+- The delegation nudge is off; hints (below) replace it.
 - The status line `task-router` reads `local`, or `local (main: <model>)` when
   the main model is no local member's (set at `session_start` and on
-  `model_select`).
+  `model_select`), and adds `hint <trip>` after a hint until the next progress.
 
 With `mode = "default"` and every component `"auto"`, the router registers the
 same tools and hooks as before plus the `/force` command, the section is
@@ -354,6 +354,54 @@ forced `spawn` carries `forced: true`, `forceSource` and the routed
 counterfactual `routedModel`, `routedEffort` (`packages/token-meter/LOGS.md`).
 The code: `packages/task-router/core/force.ts`, `core/forceinstall.ts` and the
 force branch of `core/policy.ts`.
+
+**Hints (milestone L3).** With hints on (`hints.enabled = "auto"` in local
+mode, or `"on"` in either mode) the router watches the main session's tool
+calls (`tool_call`, `tool_result`, `turn_end`) and keeps a ring of the last
+`4 × identicalCalls + 8` calls: the tool, a hash of its input, and for `edit` and
+`write` the file's hash before and after. Pure detectors fire these trips (the
+`hints` settings, defaults in brackets):
+
+- `identical-call`: the same call `identicalCalls` (3) times with no tree change
+  in between;
+- `no-change-writes`: the last `noChangeWrites` (4) edits or writes left their
+  file unchanged;
+- `alternation`: two calls alternate `alternations` (2) times with no tree
+  change;
+- `repeated-error`: `repeatedErrors` (2) failures in a row of one tool whose
+  error texts (lowercased, digits masked) have a character-trigram Jaccard
+  similarity ≥ `errorSimilarity` (0.92);
+- `churn`: one path written `churnEdits` (3) times within `churnTurns` (4) turns;
+- `risky-path`: a write to a path that matches `riskGlobs` or a `critical`
+  `pathRules` glob, once per path;
+- `context-soft`: the context crosses `contextSoftTokens` (32000) tokens; it
+  fires again only after the context has dropped below;
+- `context-stall`: the context is at or above `contextPercent` (85) % for
+  `stallTurns` (25) turns without a tree change.
+
+A tree change (an `edit` or `write` that changed its file's hash) is progress;
+a file that cannot be hashed does not count. `check-failing` (`checkFailures`)
+and `over-size` arrive with worktrees and plans (L5). The tool result of the
+call that tripped gets one more text block,
+`<router-hint trip="<trip>" n="<count>"><fixed text></router-hint>`; a trip found
+at `turn_end` goes into the next result. The same trip then stays quiet for
+`cooldownCalls` (5) calls, but every detection counts: the `1 + persistTrips`-th
+(third) one without progress carries a fixed escalation instead ("Spawn a
+debug-design card for it; the router will route it to Sonnet or above."), and
+nothing is spawned (the steer overseer, `hints.steer`, arrives with L4).
+Children (local mode only): the router sees a routed child's calls, without
+results, through the spawn policy's `toolGuard`, composed in front of a
+profile's file guard, and checks `identical-call` and `alternation`. The child
+gets the hint as a message from `router`; when the trip persists, its parent
+gets one notice per trip (`[router] <child> looks stuck (<trip> ×<n>); consider
+killing it and respawning with attemptOf`). A hint never blocks a call; a hook
+that fails is reported once (`task-router: hint engine: …`) and leaves the
+result unchanged. Logs: a `hint` outcome line (`taskId` `"main"` or the child's
+name, `trip`, `stage` `hint`, `steer` or `parent`, optional `count` and
+`sessionId`; no text). The code: `packages/task-router/core/local/tripwires.ts`
+(detectors), `core/local/hints.ts` (texts, cooldown, persistence),
+`core/local/install.ts` (the main session), `core/local/childtrips.ts` and
+`composeGuards` in `core/toolguard.ts` (children).
 
 **Scout gate (Group 6, 2026-10-28).** Haiku at medium scored 0.646 against
 Sonnet high's 0.917 (threshold 0.825, H6.4; two runs per task and arm), so

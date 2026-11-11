@@ -867,7 +867,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   `tool_call`/`tool_result` pairs → one `hint` line; add `"hint"` to the required events; plant §11 → red; remove.
 - **Check**: `chk log-contract`. **Keep green**: KG-L. **ACs**: AC-L1 (real path).
 
-#### L3.T10 Docs and milestone close `[ ] todo`
+#### L3.T10 Docs and milestone close `[x] done`
 - **Files**: `docs/pi-economics.md` (taskRouter: hints, the trips shipped in L3 and their settings, cooldown/persistence,
   child hints, the `hint` event; that `check-failing`/`over-size` arrive with worktrees).
 - **Depends**: L3.T1–T9. **Check**: `chk leak boundary`; L3 sweep KG-R, KG-L, KG-M, KG-P.
