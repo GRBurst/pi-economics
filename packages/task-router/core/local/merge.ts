@@ -155,6 +155,9 @@ export type MergePorts = {
   /** Runs step 9's ref move, push and `main-ref` record while no bypass check runs (review F3: the gate's own move is never
    *  a bypass); absent: at once. */
   exclusive?<T>(f: () => Promise<T>): Promise<T>;
+  /** The fixer `name` no longer works on its branch (review F5: not listed, not this process's, or it ended before its record);
+   *  such a branch is active again. Absent: a fixer is gone only by its event. */
+  fixerGone?(name: string | undefined): boolean;
 };
 /** What the pipeline learned before it returned, for the `merge` line. */
 type Seen = { branch?: string; nLines?: number; nFiles?: number };
@@ -222,7 +225,13 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
   let main: { name: string; sha: string } | undefined;
   for (const name of g.mainBranches) { const sha = await git.sha(repo, name); if (sha !== undefined) { main = { name, sha }; break; } }
   if (!main) return gitError(`none of the main branches (${g.mainBranches.join(", ")}) exists in ${repo}`);
-  const rec = p.branches.get(repo, branch), x = { branch, main: main.name };
+  let rec = p.branches.get(repo, branch);
+  if (rec?.state === "fixer" && p.fixerGone?.(rec.fixer)) { // review F5: a vanished fixer gives the branch back
+    const { fixer: _gone, ...rest } = rec;
+    rec = { ...rest, state: "active" };
+    p.branches.put(rec);
+  }
+  const x = { branch, main: main.name };
   const isMain = g.mainBranches.includes(branch);
   const wt = isMain ? undefined : (await git.worktrees(repo)).find((w) => w.branch === branch && !w.prunable);
   if (!wt) { // a branch without a worktree: its state says more than its missing worktree

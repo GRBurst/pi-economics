@@ -10,7 +10,7 @@ import type { ApiEvent, SubagentsApiV1 } from "../api.ts";
 import type { ForcePort } from "../forceinstall.ts";
 import type { createOutcomeLog } from "../log.ts";
 import type { RouterSettings } from "../types.ts";
-import { createBranchStore } from "./branches.ts";
+import { BRANCH_TYPE, createBranchStore } from "./branches.ts";
 import { startBranchTool } from "./branchtool.ts";
 import type { RouterTool } from "./branchtool.ts";
 import { createGit, gitRunner } from "./git.ts";
@@ -110,6 +110,23 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     return p;
   };
   let ready: Promise<void> = Promise.resolve(), sizing: Promise<void> | undefined;
+  const warn = (text: string): void => {
+    try { if (mainCtx?.hasUI && mainCtx.ui?.notify) mainCtx.ui.notify(text, "warning"); else console.warn(text); } catch { /* best effort */ }
+  };
+  /** Review F4/F5. `stale`: fixers an earlier process spawned (named in the session's branch entries); the actor restores a
+   *  persisted agent without its ticket's guard, tools and cwd, so one listed here is killed on sight. `ended`: fixers of this
+   *  process whose report or death came before their branch record (the spawn race); they hold no branch. */
+  const stale = new Set<string>(), ended = new Set<string>();
+  const ours = (name: string): boolean => d.tickets.owner(name)?.role === "fixer";
+  const listed = (name: string): boolean => (d.api()?.list() ?? []).some((a) => a.name === name);
+  const killStale = (names: readonly unknown[]): void => {
+    const xs = names.filter((n): n is string => typeof n === "string" && stale.has(n) && !ours(n) && listed(n));
+    if (!xs.length) return;
+    void d.api()?.kill?.(xs).catch(() => []);
+    warn(`task-router: killed the restored fixer ${xs.join(", ")}: a restored agent runs without the router's git guard`);
+  };
+  /** A branch whose fixer this process did not spawn, or whose fixer is gone, is active again (review F5). */
+  const fixerGone = (name: string | undefined): boolean => name === undefined || !ours(name) || ended.has(name) || !listed(name);
   const handle = {
     overseer, budget, branches, approvals,
     start(ctx: any): void {
@@ -122,6 +139,19 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       branches.rebuild(entries);
       approvals.rebuild(entries);
       refs.rebuild(entries);
+      // Review F4/F5: fixers of an earlier process are killed when listed (now, or when the actor announces its restore), and
+      // their branches are active again.
+      for (const e of entries) {
+        const x = e as { customType?: unknown; data?: { fixer?: unknown } } | null;
+        if (x?.customType === BRANCH_TYPE && typeof x.data?.fixer === "string" && !ours(x.data.fixer)) stale.add(x.data.fixer);
+      }
+      for (const r of branches.all()) {
+        if (r.state !== "fixer" || !fixerGone(r.fixer)) continue;
+        const { fixer: _gone, ...rest } = r;
+        branches.put({ ...rest, state: "active" });
+        warn(`task-router: the fixer ${r.fixer ?? ""} of ${r.branch} did not survive the restart; the branch is active again`);
+      }
+      try { killStale((d.api()?.list() ?? []).map((a) => a.name)); } catch { /* best effort */ }
       // Off the event: branches whose worktree disappeared are abandoned (§3.3.4), then the guards' cached facts are refreshed for
       // every repository the session knows (plan D39). `start_branch` waits for it.
       const deps = { git, store: branches, settings: d.settings };
@@ -144,12 +174,20 @@ export function installLocal(pi: Pi, d: LocalDeps) {
      *  a fixer that reported (D46). Total. */
     onEvent(e: ApiEvent): void {
       try {
+        if (e.type === "pause" || e.type === "resume") killStale(e.names);
+        if (e.type === "spawn" || e.type === "turn") killStale([e.name]);
         if (e.type === "turn" && activeSet(d.settings).mergeGate) { void checkRefs(); return; }
         const name = e.type === "route" ? (e.to === "main" ? e.from : undefined) : e.type === "kill" || e.type === "error" ? e.name : undefined;
         if (name === undefined) return;
-        if (e.type === "kill" && d.tickets.owner(name)?.role === "fixer") d.tickets.forget(name);
+        const fixer = ours(name);
         const rec = branches.all().find((r) => r.state === "fixer" && r.fixer === name);
-        if (!rec) return;
+        if (!rec) {
+          // The spawn race (review F5): its report or death came before its branch record. Its ticket stays known, so the spawn
+          // still resolving counts it as routed; `ended` keeps it from holding the branch.
+          if (fixer) { ended.add(name); if (e.type === "route") void d.api()?.kill?.([name]).catch(() => []); }
+          return;
+        }
+        if (fixer) d.tickets.forget(name); // done with the branch: its later kill event finds no record and no ticket
         const { fixer: _gone, ...rest } = rec;
         branches.put({ ...rest, state: "active" });
         if (e.type === "route") void d.api()?.kill?.([name]).catch(() => []);
@@ -168,7 +206,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   if (activeSet(s).mergeGate) {
     pi.registerTool?.(requestMergeTool((signal) => ({ git, run: d.run ?? runCheck, overseer, branches, approvals, settings: s,
       append: (type, data) => { pi.appendEntry?.(type, data); refs.observe(type, data); }, tmp: () => join(tmpdir(), `task-router-red-${d.hex(6)}`), fixer: handle.fixer, log: (i) => d.log.merge(i),
-      exclusive, ...(signal && { signal }) }), () => ready));
+      exclusive, fixerGone, ...(signal && { signal }) }), () => ready));
   }
   // The main-checkout write guard (design §3.3.3). It blocks on purpose, so it is total itself: pi treats a throwing handler as a
   // block. Registered after the hint recorder's `tool_call` handler, so that call is recorded first.

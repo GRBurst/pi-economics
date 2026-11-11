@@ -137,3 +137,66 @@ test("fixerCard and fixerBrief: changed files ∪ finding targets, the branch ch
     "- fix F3",
   ].join("\n"));
 });
+
+// Review F5/F4: a fixer this process did not spawn. After a restart the branch's fixer is gone (or the actor restored it without
+// its ticket's guard and cwd): the branch is active again, and a restored fixer is killed, listed at session_start or announced
+// later (the actor pauses what it restores). In the same process a fixer that vanished without an event, or that reported before
+// its branch record, does not hold the branch either.
+/** request_merge through the registered tool (the shell's ports: the fixer's liveness). */
+const viaTool = async (m: ReturnType<typeof reviewRig>) =>
+  ((await m.h.f.tools.get("request_merge")!.execute("t", {}, undefined, undefined, m.ctx)) as { details: { status: string } }).details;
+const restarted = async (o: { listed?: boolean } = {}) => {
+  const m = await rejectedTwice();
+  const name = m.get().fixer!;
+  const agents = o.listed ? [{ name, parent: "main", sessionId: `s-${name}`, model: "m", thinkingLevel: "high" as const, state: "idle" as const }] : [];
+  const again = reviewRig({ repo: m.r, entries: m.h.f.entries.map((e) => ({ ...e })), agents });
+  await again.h.router.ready();
+  return { m, again, name, get: () => again.h.router.branches.get(m.r.dir, "lm/x")! };
+};
+
+test("review F5: after a restart a branch whose fixer is gone is active again; request_merge reviews it", async () => {
+  const x = await restarted();
+  assert.deepEqual([x.get().state, x.get().fixer, x.get().fixerRuns], ["active", undefined, 1]);
+  const res = await x.again.merge();
+  assert.equal(res.status, "merged", JSON.stringify(res));
+});
+
+test("review F4: a fixer the actor restored (listed at session_start, no ticket here) is killed; the branch is active", async () => {
+  const x = await restarted({ listed: true });
+  assert.deepEqual(x.again.h.a.killed, [x.name]);
+  assert.equal(x.get().state, "active");
+});
+
+test("review F4: a restored fixer announced after session_start (the actor's restore pause) is killed", async () => {
+  const x = await restarted();
+  x.again.h.a.agents.push({ name: x.name, parent: "main", sessionId: `s-${x.name}`, model: "m", thinkingLevel: "high", state: "idle" });
+  x.again.h.a.emit({ type: "pause", names: [x.name], ts: 0 });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(x.again.h.a.killed, [x.name]);
+});
+
+test("review F5: a fixer that vanished without an event does not hold the branch: request_merge reviews again", async () => {
+  const m = await rejectedTwice();
+  const name = m.get().fixer!;
+  m.h.a.agents.splice(m.h.a.agents.findIndex((a) => a.name === name), 1);
+  const res = await viaTool(m);
+  assert.equal(res.status, "merged", JSON.stringify(res));
+});
+
+test("review F5 (spawn race): a fixer that reports before its branch record is killed and does not hold the branch", async () => {
+  const m = reviewRig();
+  m.h.a.api.subscribe((e) => {
+    if (e.type === "spawn" && e.name.startsWith("fixer-")) m.h.a.emit({ type: "route", from: e.name, to: "main", preview: "done", buffered: false, ts: 0 });
+  });
+  const rec = await m.start("x", "true", "add x");
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  m.verdicts.push(REVISE, REVISE);
+  await m.merge();
+  const second = await m.merge();
+  assert.equal(second.status, "fixer", JSON.stringify(second));
+  const name = m.h.a.apiSpawns[2]!.args.name;
+  await new Promise((r) => setTimeout(r, 10));
+  assert.ok(m.h.a.killed.includes(name), "the fixer that reported is killed (D46)");
+  const res = await viaTool(m);
+  assert.equal(res.status, "merged", JSON.stringify(res));
+});

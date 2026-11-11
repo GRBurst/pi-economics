@@ -9,6 +9,7 @@ import type { Git } from "../core/local/git.ts";
 import { createApprovals, requestMerge } from "../core/local/merge.ts";
 import type { MergePorts } from "../core/local/merge.ts";
 import type { RunArgs, RunResult } from "../core/local/overseer.ts";
+import type { AgentInfo } from "../core/api.ts";
 import type { Finding, Verdict } from "../core/local/verdict.ts";
 import { startBranch } from "../core/local/worktree.ts";
 import { runCheck } from "../core/gate.ts";
@@ -76,11 +77,13 @@ export type MergeRig = ReturnType<typeof mergeRig>;
  *  and `entries`: a second session on the same repository, rebuilt from the first one's entries. */
 export function reviewRig(o: { settings?: Record<string, unknown>; repo?: TempRepo; entries?: Array<{ type: string; data: unknown }>;
   /** More of the session's ctx (a model registry for a settings force). */ ctx?: Record<string, unknown>;
-  /** false: the actor without the spawn API (design §3.0.4). */ apiExt?: boolean } = {}) {
+  /** false: the actor without the spawn API (design §3.0.4). */ apiExt?: boolean;
+  /** Agents the actor lists before session_start (restored from its roster). */ agents?: AgentInfo[] } = {}) {
   const r = o.repo ?? tempRepo();
   const git = createGit(gitRunner("git", r.env));
   const h = harness({ settings: { mode: "local", ...o.settings } as never, apiExt: o.apiExt ?? true, extra: { git } });
   h.f.entries.push(...(o.entries ?? []));
+  h.a.agents.push(...(o.agents ?? []));
   const ctx = { ...o.ctx, cwd: r.dir, sessionManager: { getSessionId: () => "s-main", getBranch: () => h.f.entries.map((e) => ({ type: "custom", customType: e.type, data: e.data })) } };
   h.f.fire("session_start", {}, ctx);
   const verdicts: Verdict[] = [];
