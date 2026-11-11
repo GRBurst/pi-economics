@@ -11,6 +11,7 @@ import type { ForcePort } from "../forceinstall.ts";
 import type { createOutcomeLog } from "../log.ts";
 import type { RouterSettings } from "../types.ts";
 import { BRANCH_TYPE, createBranchStore } from "./branches.ts";
+import type { BranchRecord } from "./branches.ts";
 import { startBranchTool } from "./branchtool.ts";
 import type { RouterTool } from "./branchtool.ts";
 import { createGit, gitRunner } from "./git.ts";
@@ -21,7 +22,7 @@ import { activeSet, componentOn } from "./mode.ts";
 import { gitGuard } from "./childguards.ts";
 import { composeGuards, type Guard, type SyncGuard } from "../toolguard.ts";
 import { createPlanStore } from "./plans.ts";
-import { planGuard, whitelistGuard } from "./planguard.ts";
+import { planGuard, touches, whitelistGuard } from "./planguard.ts";
 import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { bypassHint, bypassText, checkBypass, createApprovals, createMainRefs, requestMergeTool } from "./merge.ts";
@@ -261,16 +262,32 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       return r instanceof Promise ? r.then(verdict) : verdict(r);
     });
   };
-  // The main session's plan and whitelist guards (design §3.5.6, §3.5.5; AC-P5, AC-P7). Total, as the write guard.
+  // The main session's plan and whitelist guards (design §3.5.6, §3.5.5; AC-P5, AC-P7). Total, as the write guard. The same
+  // handler marks a turn that worked in the active plan-bound worktree (D54); its turn_end counts it toward plans.taskTurns, and
+  // the count past it opens over-budget (§3.5.5). The counts live for the session.
   const guardPlans = (): void => {
     if (!activeSet(s).plans) return;
+    const turns = new Map<string, number>();
+    let touched: BranchRecord | undefined;
     pi.on("tool_call", (e, ctx) => {
       try {
         if (d.isChild(ctx)) return undefined;
-        const cwd = ctx?.cwd ?? process.cwd(), tool = String(e?.toolName);
+        const cwd = ctx?.cwd ?? process.cwd(), tool = String(e?.toolName), a = branches.active();
+        if (a?.plan && !nested(e) && touches(e?.input, cwd, a.worktree)) touched = a;
         const why = handle.planGuard(cwd)!(tool, e?.input) ?? handle.whitelistGuard(cwd)!(tool, e?.input);
         return why === undefined ? undefined : { block: true, reason: why };
       } catch { return undefined; }
+    });
+    pi.on("turn_end", (_e, ctx) => {
+      try {
+        if (d.isChild(ctx)) return;
+        const t = touched;
+        touched = undefined;
+        if (!t?.plan) return;
+        const key = `${t.repo}\0${t.branch}`, n = (turns.get(key) ?? 0) + 1;
+        turns.set(key, n);
+        if (n > s.plans.taskTurns) plans.open(t.plan.slug, "over-budget", t.plan.id);
+      } catch { /* a count is best effort */ }
     });
   };
   // Bypass detection (design §3.4.6): every main `bash` result starts a read of the refs (a child's turn too, in onEvent); a

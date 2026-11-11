@@ -81,3 +81,11 @@ export function whitelistGuard(x: { tool: string; input: unknown; cwd: string; b
   const id = x.open(rec.plan.slug, rec.plan.id);
   return id === undefined ? `${rel} is outside the task's files; finish within them` : outsideText(rel, id);
 }
+
+/** D54 (OQ20): a main call counts its turn toward `plans.taskTurns` when its `path` is under the worktree or its bash `command`
+ *  names the worktree's path. */
+export function touches(input: unknown, cwd: string, worktree: string): boolean {
+  const i = input as { path?: unknown; command?: unknown } | null;
+  if (typeof i?.path === "string" && inside(resolve(cwd, i.path), worktree)) return true;
+  return typeof i?.command === "string" && i.command.includes(worktree);
+}

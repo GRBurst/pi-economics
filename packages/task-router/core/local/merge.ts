@@ -44,7 +44,8 @@ export const oversize = (st: Stat, s: RouterSettings, planFile?: string, tickOnl
   return z.lines > s.mergeGate.maxDiffLines || z.files > s.mergeGate.maxDiffFiles;
 };
 
-/** The model-facing text of a reason (Q18; pinned by test/local-merge-refuse.test.ts). `x` carries the values it names. */
+/** The model-facing text of a reason (Q18; pinned by test/local-merge-refuse.test.ts). `x` carries the values it names; `x.plan`
+ *  set: a plan-bound branch (L7.T13; a blocked one is restructured through amend_plan, design §3.4.4). */
 export function reasonText(r: MergeReason, x: Record<string, string>): string {
   switch (r) {
     case "main-branch": return `${x.branch} is a main branch; make a branch with start_branch and request its merge`;
@@ -52,7 +53,7 @@ export function reasonText(r: MergeReason, x: Record<string, string>): string {
     case "behind": return `${x.main} is not an ancestor of the branch; rebase onto ${x.main} in the worktree, then request again`;
     case "fixer-running": return `fixes were delegated to ${x.fixer}; wait for its report, then call request_merge`;
     case "abandoned": return `${x.branch} is abandoned; start a new branch`;
-    case "blocked": return `${x.branch} is blocked: the fixer's changes were rejected again; abandon the branch and start a new one with a smaller goal`;
+    case "blocked": return `${x.branch} is blocked: the fixer's changes were rejected again; ${x.plan === undefined ? "abandon the branch and start a new one with a smaller goal" : "restructure the task with amend_plan"}`;
     case "size": return `the branch changes ${x.lines} lines in ${x.files} files (at most ${x.maxLines} lines and ${x.maxFiles} files); split the branch`;
     case "scope": return "the branch changes files outside its plan task";
     case "check": return `\`${x.cmd}\` exit ${x.exit}${x.tail ? `\n${x.tail}` : ""}`;
@@ -309,17 +310,24 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
     p.branches.update(rec);
   }
   const x = { branch, main: main.name };
+  /** A blocked plan-bound branch (design §3.4.4): its text names amend_plan and the open remediation-failed trigger. */
+  const blockedOf = (r: MergeResult): MergeResult => {
+    const plan = rec?.plan;
+    if (r.reason !== "blocked" || !plan) return r;
+    const t = p.plans?.openTriggers(plan.slug).find((y) => y.kind === "remediation-failed" && y.task === plan.id);
+    return { ...r, detail: reasonText("blocked", { branch, plan: plan.slug }) + opened(t?.id) };
+  };
   const isMain = g.mainBranches.includes(branch);
   const wt = isMain ? undefined : (await git.worktrees(repo)).find((w) => w.branch === branch && !w.prunable);
   if (!wt) { // a branch without a worktree: its state says more than its missing worktree
     const why = refusal({ isMain, state: rec?.state, dirty: false, behind: false });
-    return refuse(why ?? "no-worktree", { ...x, fixer: rec?.fixer ?? "" });
+    return blockedOf(refuse(why ?? "no-worktree", { ...x, fixer: rec?.fixer ?? "" }));
   }
   const commit = await git.sha(wt.dir, "HEAD");
   if (commit === undefined) return gitError(`cannot read HEAD of ${wt.dir}`);
   // ── 2 refuse ──
   const why = refusal({ isMain, state: rec?.state, dirty: await git.dirty(wt.dir), behind: !(await git.isAncestor(repo, main.sha, commit)) });
-  if (why) return refuse(why, { ...x, worktree: wt.dir, fixer: rec?.fixer ?? "" }, commit);
+  if (why) return blockedOf(refuse(why, { ...x, worktree: wt.dir, fixer: rec?.fixer ?? "" }, commit));
   // ── plan-bound (L7): the plan at the commit has the approved skeleton ──
   let bound: Bound | undefined;
   if (rec?.plan && p.plans) {
@@ -402,7 +410,9 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
       // S28: a fixer round rejected again with fixerRounds used up blocks the branch; else the fixer after enough rejections.
       if (rej.fixerRuns >= g.fixerRounds && rej.fixerRuns > 0) {
         p.branches.update({ ...rej, state: "blocked" });
-        return { status: "refused", reason: "blocked", detail: reasonText("blocked", { branch }), ...answer };
+        // a plan-bound branch opens remediation-failed (design §3.4.4, §3.5.5)
+        const detail = bound ? reasonText("blocked", { branch, plan: bound.rec.slug }) + opened(p.plans?.open(bound.rec.slug, "remediation-failed", bound.id)) : reasonText("blocked", { branch });
+        return { status: "refused", reason: "blocked", detail, ...answer };
       }
       if (p.fixer && g.fixerRounds > 0 && rej.rejections >= g.rejectionsBeforeFixer) { // review F11: fixerRounds 0 = no fixer
         const card = fixerCard(paths, out.value.findings, rec?.check);

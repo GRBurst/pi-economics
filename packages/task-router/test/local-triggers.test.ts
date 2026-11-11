@@ -1,10 +1,16 @@
-// Local mode L7.T4 (design §3.0.2, §3.5.5; plan S29, D53): the plan store, its triggers, and the merged units a plan's
-// dependencies are read against.
+// Local mode L7.T4, L7.T13 (design §3.0.2, §3.5.5, §3.4.4; plan S29, D53, D54): the plan store, its triggers, the merged units a
+// plan's dependencies are read against, and the triggers opened by main turns (`over-budget`) and the fixer (`remediation-failed`).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { BranchRecord } from "../core/local/branches.ts";
-import type { PlanRecord, Skeleton } from "../core/local/plan.ts";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { BRANCH_TYPE, type BranchRecord } from "../core/local/branches.ts";
+import { renderPlan, skeletonHash, type PlanRecord, type Skeleton } from "../core/local/plan.ts";
 import { createPlanStore, mergedUnits, PLAN_TYPE } from "../core/local/plans.ts";
+import { startBranch } from "../core/local/worktree.ts";
+import { fakeGit } from "./fake-git.ts";
+import { harness } from "./harness.ts";
+import { mergeRig, REVISE } from "./merge-rig.ts";
 
 const rec = (o: Partial<PlanRecord> = {}): PlanRecord =>
   ({ slug: "parser", repo: "/r/x", file: "docs/plans/parser.md", skeletonHash: "a".repeat(64), approvedBy: "rv-1", triggers: [], ...o });
@@ -77,4 +83,77 @@ test("merged units: a merged task branch, a merged milestone branch with its tas
   assert.deepEqual([...mergedUnits(SK, "parser", [branch("other", "M2", "merged"), branch("parser", "M2", "blocked")])], []);
   const plain = { ...branch("parser", "M1.T1", "merged"), plan: undefined };
   assert.deepEqual([...mergedUnits(SK, "parser", [plain])], []);
+});
+
+// ── L7.T13 (design §3.5.5, §3.4.4; D54): over-budget by main turns, remediation-failed ──
+const WT = "/r/x.worktrees/lm--parser--M1.T1";
+/** A main session with the plan `parser` and its active branch lm/parser/M1.T1; `turn(...calls)` fires the calls and a turn_end. */
+function session(settings: Record<string, unknown>) {
+  const g = fakeGit({ repos: [{ root: "/r/x" }] });
+  void g.git.worktreeAdd("/r/x", WT, "lm/parser/M1.T1", "main");
+  const h = harness({ settings: { mode: "local", ...settings } as never, extra: { git: g.git } as never });
+  const bound: BranchRecord = { ...branch("parser", "M1.T1", "active"), worktree: WT, files: ["a"] };
+  const ctx = { cwd: "/r/x", sessionManager: { getSessionId: () => "s-main", getBranch: () => [
+    { type: "custom", customType: PLAN_TYPE, data: rec() }, { type: "custom", customType: BRANCH_TYPE, data: bound }] } };
+  h.f.fire("session_start", {}, ctx);
+  let n = 0;
+  const turn = (...calls: Array<[string, unknown]>): void => {
+    for (const [toolName, input] of calls) h.f.fire("tool_call", { toolName, toolCallId: `c${++n}`, input }, ctx);
+    h.f.fire("turn_end", {}, ctx);
+  };
+  const triggers = () => h.f.entries.filter((e: { type: string }) => e.type === PLAN_TYPE).map((e) => (e.data as PlanRecord).triggers).at(-1) ?? [];
+  return { h, turn, triggers };
+}
+
+for (const hints of ["on", "off"]) {
+  test(`over-budget: taskTurns + 1 main turns with a call in the active worktree open it; other turns do not count (hints ${hints})`, async () => {
+    const x = session({ hints: { enabled: hints }, plans: { taskTurns: 2 } });
+    await x.h.router.settled();
+    x.turn(["edit", { path: `${WT}/a`, edits: [] }]);
+    x.turn(["read", { path: "a" }], ["bash", { command: "ls /r/x" }]);
+    x.turn();
+    x.turn(["bash", { command: `cd ${WT} && npm test` }]);
+    assert.deepEqual(x.triggers(), [], "two counted turns");
+    x.turn(["read", { path: `${WT}/a` }], ["bash", { command: `git -C ${WT} status` }]);
+    assert.deepEqual(x.triggers(), [{ id: "t1", kind: "over-budget", task: "M1.T1", open: true }]);
+    x.turn(["read", { path: `${WT}/a` }]);
+    assert.equal(x.h.f.entries.filter((e: { type: string }) => e.type === PLAN_TYPE).length, 1, "opened once");
+  });
+}
+
+test("over-budget by turns: a slug branch (no plan) and plans off count nothing", async () => {
+  const x = session({ plans: { enabled: "off", taskTurns: 1 } });
+  await x.h.router.settled();
+  for (let i = 0; i < 3; i++) x.turn(["edit", { path: `${WT}/a`, edits: [] }]);
+  assert.deepEqual(x.triggers(), []);
+});
+
+const PSK: Skeleton = { invariants: [], milestones: [{ id: "M1", goal: "a parser", acceptance: [], branch: "task", dependsOn: [], tasks: [
+  { id: "M1.T1", goal: "write the parser", files: ["src/a.ts"], forbidden: [], check: "test -f src/a.ts", dependsOn: [] }] }] };
+
+test("remediation-failed: a plan-bound branch blocked by the fixer's last rejection opens it; the text names amend_plan", async () => {
+  const x = mergeRig();
+  const file = "docs/plans/parser.md";
+  x.r.commit("src/a.ts", "export {};\n");
+  x.r.commit(file, renderPlan({ slug: "parser", request: "add a parser" }, PSK, new Set()), "plan(parser): approved rv-0");
+  const plans = createPlanStore(x.ports.append);
+  plans.put(rec({ repo: x.r.dir, file, skeletonHash: skeletonHash(PSK) }));
+  x.ports.plans = plans;
+  const r = await startBranch({ git: x.git, store: x.store, settings: x.settings, plans }, { plan: { slug: "parser", id: "M1.T1" } }, x.r.dir);
+  assert.ok(r.ok);
+  writeFileSync(join(r.value.worktree, "src/a.ts"), "export const a = 1;\n");
+  x.r.git(["add", "-A"], r.value.worktree);
+  x.r.git(["-c", "commit.gpgsign=false", "commit", "-q", "-m", "work"], r.value.worktree);
+  x.store.put({ ...x.store.get(x.r.dir, "lm/parser/M1.T1")!, fixerRuns: 1, rejections: 2 }); // a fixer round ran
+  x.verdicts.push(REVISE);
+  const text = "lm/parser/M1.T1 is blocked: the fixer's changes were rejected again; restructure the task with amend_plan";
+  const blocked = await x.merge();
+  assert.deepEqual([blocked.status, blocked.reason, blocked.detail], ["refused", "blocked", `${text} (trigger t1 is open)`]);
+  assert.deepEqual(plans.get("parser")!.triggers, [{ id: "t1", kind: "remediation-failed", task: "M1.T1", open: true }]);
+  const again = await x.merge();
+  assert.deepEqual([again.reason, again.detail], ["blocked", `${text} (trigger t1 is open)`], "step 2 names the open trigger");
+  plans.close("parser", "t1");
+  assert.equal((await x.merge()).detail, text);
+  assert.equal(plans.get("parser")!.triggers.length, 1, "step 2 opens none");
+  assert.equal(x.reviews.length, 1);
 });

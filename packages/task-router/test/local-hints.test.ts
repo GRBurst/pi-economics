@@ -128,12 +128,12 @@ test("default mode: no hint hooks unless hints are on (OQ11); off in local mode 
   const today = names({});
   // L5.T7: the write guard (worktrees on in local mode) adds one tool_call hook of its own, L6.T3 the git guard (mergeGate on)
   // another, L6.T14 the bypass watch (mergeGate on) a tool_result hook, and L7.T10 the plan guard (plans active) a tool_call
-  // hook; with all off the hooks are today's.
+  // hook, L7.T13 its turn count a turn_end hook; with all off the hooks are today's.
   const off = { mode: "local", hints: { enabled: "off" } };
   assert.deepEqual(names({ ...off, worktrees: { enabled: "off" }, mergeGate: { enabled: "off" } }).filter((n) => n !== "model_select"), today);
   assert.deepEqual(names({ ...off, mergeGate: { enabled: "off" } }).filter((n) => n !== "model_select"), [...today, "tool_call"].sort());
   assert.deepEqual(names({ ...off, plans: { enabled: "off" } }).filter((n) => n !== "model_select"), [...today, "tool_call", "tool_call", "tool_result"].sort());
-  assert.deepEqual(names(off).filter((n) => n !== "model_select"), [...today, "tool_call", "tool_call", "tool_call", "tool_result"].sort());
+  assert.deepEqual(names(off).filter((n) => n !== "model_select"), [...today, "tool_call", "tool_call", "tool_call", "tool_result", "turn_end"].sort());
   const on = names({ hints: { enabled: "on" } });
   const extra = [...on];
   for (const n of today) extra.splice(extra.indexOf(n), 1);
