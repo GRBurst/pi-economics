@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { composeGuards } from "../core/toolguard.ts";
-import type { ToolGuard } from "../core/toolguard.ts";
+import type { SyncGuard } from "../core/toolguard.ts";
 
 test("composeGuards: nothing to compose → undefined", () => {
   assert.equal(composeGuards(), undefined);
@@ -24,7 +24,7 @@ test("composeGuards property: the first guard's block wins; every guard up to it
     // guard j blocks the tools in its table with "g<j>:<tool>"; some slots are undefined
     const tables = Array.from({ length: k }, () => (rnd(4) === 0 ? undefined : tools.filter(() => rnd(3) === 0)));
     const calls: number[] = [];
-    const guards: (ToolGuard | undefined)[] = tables.map((tb, j) => tb && ((tool: string, input: unknown) => {
+    const guards: (SyncGuard | undefined)[] = tables.map((tb, j) => tb && ((tool: string, input: unknown) => {
       calls.push(j);
       assert.deepEqual(input, { path: "a" });
       return tb.includes(tool) ? `g${j}:${tool}` : undefined;

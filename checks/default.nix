@@ -195,6 +195,17 @@ in {
       type = "SubagentsApiV1";
     };
   };
+  # (L4.T4) The other direction: the router's PolicyResult must fit the patched actor's
+  # (childTools, cwd, an async toolGuard; spawn-api patch).
+  iface-policy-task-router = iface.compare {
+    name = "policy-task-router";
+    provider = {
+      src = ../packages/task-router;
+      file = "core/api.ts";
+      type = "PolicyResult";
+    };
+    consumer = subagentsProvider // {type = "PolicyResult";};
+  };
   # (T2.1) The four components' runtime check of __subagentsApi_v1 (core/runtime-guard.ts,
   # identical in each package: runtime-guard-copies).
   iface-subagents-runtime-guard = iface.compare {

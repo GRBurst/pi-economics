@@ -4,7 +4,7 @@
 // never returns a string (a hint never blocks a call) and never throws (it runs on the actor's hot path, plan R4).
 import type { SubagentsApiV1 } from "../api.ts";
 import type { createOutcomeLog } from "../log.ts";
-import type { ToolGuard } from "../toolguard.ts";
+import type { SyncGuard } from "../toolguard.ts";
 import type { RouterSettings } from "../types.ts";
 import { block, createHintEngine } from "./hints.ts";
 import { callKey, childTrips, push } from "./tripwires.ts";
@@ -14,7 +14,7 @@ const WRITERS = new Set(["edit", "write"]);
 type State = { ring: CallRecord[]; call: number; engine: ReturnType<typeof createHintEngine>; told: Set<Trip> };
 
 export function createChildTrips(d: { settings: RouterSettings; api: () => SubagentsApiV1 | undefined; log: Pick<ReturnType<typeof createOutcomeLog>, "hint"> }): {
-  guard(child: string, parent: string): ToolGuard;
+  guard(child: string, parent: string): SyncGuard;
   forget(child: string): void;
 } {
   const h = d.settings.hints, states = new Map<string, State>();

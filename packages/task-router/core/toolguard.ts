@@ -9,10 +9,12 @@ const READ_ONLY = ["read", "grep", "find", "ls", "bash", "web_search", "web_fetc
 const WRITERS = ["write", "edit"];
 
 /** A spawn policy's `toolGuard` (core/api.ts `PolicyResult`): a string blocks the child's call with that reason. */
-export type ToolGuard = (tool: string, input: unknown) => string | undefined;
+export type Guard = (tool: string, input: unknown) => string | undefined | Promise<string | undefined>;
+/** A guard that answers at once (profile tools, trip wires): the ones `composeGuards` composes. */
+export type SyncGuard = (tool: string, input: unknown) => string | undefined;
 /** Guards in order (design §2.2.3, plan D19): each runs until one blocks; that block wins. No guard → undefined. */
-export const composeGuards = (...gs: (ToolGuard | undefined)[]): ToolGuard | undefined => {
-  const xs = gs.filter((g): g is ToolGuard => g !== undefined);
+export const composeGuards = (...gs: (SyncGuard | undefined)[]): SyncGuard | undefined => {
+  const xs = gs.filter((g): g is SyncGuard => g !== undefined);
   return xs.length ? (t, i) => {
     for (const g of xs) {
       const r = g(t, i);
@@ -27,7 +29,7 @@ export const composeGuards = (...gs: (ToolGuard | undefined)[]): ToolGuard | und
  * `read-only+files` → also write/edit, but only on card.files (it derives from READ_ONLY, so it keeps them too).
  * Card files resolve against the task's `cwd`; a tool call's path against the child's own cwd (`own`, the caller's).
  */
-export function toolsFor(p: Profile, c: Card, cwd: string, own = cwd): { tools?: string[]; toolGuard?: ToolGuard } {
+export function toolsFor(p: Profile, c: Card, cwd: string, own = cwd): { tools?: string[]; toolGuard?: SyncGuard } {
   if (p.tools === "all") return {};
   if (p.tools === "read-only") return { tools: READ_ONLY };
   const abs = (f: string, base = own) => normalize(isAbsolute(f) ? f : join(base, f));

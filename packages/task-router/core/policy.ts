@@ -18,7 +18,7 @@ import type { MemberState } from "./select.ts";
 import { cardRejection } from "./prompt.ts";
 import type { SkillPort } from "./profile.ts";
 import { composeGuards, toolsFor } from "./toolguard.ts";
-import type { ToolGuard } from "./toolguard.ts";
+import type { SyncGuard } from "./toolguard.ts";
 import { resolveCwd, verifyT0 } from "./verify.ts";
 import type { FsPort } from "./verify.ts";
 import type { Forced } from "./outcome.ts";
@@ -51,7 +51,7 @@ export type PolicyDeps = {
   /** The force override (design §3.6; plan D7): its owner is the shell; absent = never forced. */
   force?: ForcePort;
   /** A routed child's tripwire guard (design §3.1.3, plan S13): local mode with hints on; absent = none. */
-  childGuard?: (child: string, parent: string) => ToolGuard;
+  childGuard?: (child: string, parent: string) => SyncGuard;
 };
 
 const POLL_MS = 2000;
