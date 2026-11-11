@@ -25,3 +25,11 @@ export function opusLeft(s: RouterSettings, b: Budget): number | undefined {
   const n = s.overseer.budget - b.opusUsed;
   return n <= 3 ? Math.max(0, n) : undefined;
 }
+
+/** The components whose prompt lines and tools are present (design §2.3, plan S25). */
+export type Active = { worktrees: boolean; mergeGate: boolean; plans: boolean };
+/** Plan D40: `worktrees` and `mergeGate` by their switches (`mergeGate` does not need `worktrees`); `plans` needs both. */
+export const activeSet = (s: RouterSettings): Active => {
+  const worktrees = componentOn(s, "worktrees"), mergeGate = componentOn(s, "mergeGate");
+  return { worktrees, mergeGate, plans: componentOn(s, "plans") && worktrees && mergeGate };
+};

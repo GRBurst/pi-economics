@@ -9,9 +9,15 @@ import { relative, resolve } from "node:path";
 import type { SubagentsApiV1 } from "../api.ts";
 import type { createOutcomeLog } from "../log.ts";
 import type { RouterSettings } from "../types.ts";
+import { createBranchStore } from "./branches.ts";
+import { startBranchTool } from "./branchtool.ts";
+import type { RouterTool } from "./branchtool.ts";
+import { createGit, gitRunner } from "./git.ts";
+import type { Git } from "./git.ts";
 import { block, createHintEngine } from "./hints.ts";
 import type { Delivery } from "./hints.ts";
 import { componentOn } from "./mode.ts";
+import { refreshFacts } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
 import type { Budget, Tickets } from "./overseer.ts";
@@ -21,6 +27,7 @@ import type { CallRecord, Trip } from "./tripwires.ts";
 type Pi = {
   on(name: string, handler: (e: any, ctx: any) => unknown): void; appendEntry?(customType: string, data: unknown): void;
   sendMessage?(message: { customType: string; content: string; display: boolean }, options?: { deliverAs?: "steer" }): void;
+  registerTool?(tool: RouterTool): void;
 };
 export type LocalDeps = {
   settings: RouterSettings; log: Pick<ReturnType<typeof createOutcomeLog>, "hint" | "review">; isChild(ctx: any): boolean; sessionId(): string | undefined;
@@ -28,6 +35,8 @@ export type LocalDeps = {
   api(): SubagentsApiV1 | undefined; tickets: Tickets; hex(bytes: number): string; now(): number; sleep(ms: number): Promise<void>;
   /** The router's spawn policy is registered (review F1). */
   policyOn(): boolean;
+  /** The git port (default: the real one); a test seam. */
+  git?: Git;
   /** After every budget change and rebuild (the status line, design §2.5). */
   onBudget?(): void;
   /** A file's hash; undefined when it cannot be read (§3.1.4). Default: sha256 of its bytes. */
@@ -48,8 +57,9 @@ const nested = (e: any): boolean => typeof e?.parentToolCallId === "string";
 const textOf = (content: unknown): string =>
   Array.isArray(content) ? content.filter((c) => c?.type === "text" && typeof c.text === "string").map((c) => c.text).join("\n") : "";
 
-/** The overseer and its budget (design §3.2, D30); `start` rebuilds the budget from the branch (the shell's session_start).
- *  The hints are a no-op unless on (`hints.enabled`: "on", or "auto" in local mode). */
+/** The overseer and its budget (design §3.2, D30), the branches and `start_branch` (§3.3); `start` rebuilds the budget and the
+ *  branches from the session branch (the shell's session_start). The hints are a no-op unless on (`hints.enabled`: "on", or "auto"
+ *  in local mode); `start_branch` is registered when worktrees are on. */
 export function installLocal(pi: Pi, d: LocalDeps) {
   const budget: Budget = { opusUsed: 0, steerUsed: 0 };
   /** The main session's cwd, the main checkout (LD14; L6 may take L5's repository root instead). */
@@ -59,16 +69,23 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     policyOn: d.policyOn, warn: (text) => console.warn(text), base: () => base ?? process.cwd(),
     append: (type, data) => { pi.appendEntry?.(type, data); if (type === BUDGET_TYPE) d.onBudget?.(); },
   });
+  const git = d.git ?? createGit(gitRunner());
+  const branches = createBranchStore((type, data) => pi.appendEntry?.(type, data));
   const handle = {
-    overseer, budget,
+    overseer, budget, branches,
     start(ctx: any): void {
       if (typeof ctx?.cwd === "string") base = ctx.cwd;
       let branch: unknown;
       try { branch = ctx?.sessionManager?.getBranch?.(); } catch { branch = undefined; }
-      Object.assign(budget, budgetOf(Array.isArray(branch) ? branch : []));
+      const entries = Array.isArray(branch) ? branch : [];
+      Object.assign(budget, budgetOf(entries));
+      branches.rebuild(entries);
+      // The guards read cached facts (plan D39): refresh them for every repository the session knows, off the event.
+      for (const repo of new Set(branches.all().map((r) => r.repo))) void refreshFacts({ git, store: branches, settings: d.settings }, repo).catch(() => undefined);
     },
   };
   const s = d.settings, h = s.hints;
+  if (componentOn(s, "worktrees")) pi.registerTool?.(startBranchTool({ git, store: branches, settings: s }));
   if (!componentOn(s, "hints")) return handle;
   // A persistent trip runs a steer overseer instead of the escalation block while one can run (design §3.1.2, AC-H4).
   const steer = createSteer({ settings: s, overseer,

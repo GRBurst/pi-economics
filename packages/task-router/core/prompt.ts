@@ -1,6 +1,7 @@
 // The "Task cards" section of the main system prompt (spec §5.2.3): how to call spawn_subagent under the router.
 // `cardSchema` is the one source of the field list; rejections embed it too, because a child never sees the section.
 import { T0_KEYS, T2_VALUES } from "./card.ts";
+import type { Active } from "./local/mode.ts";
 import { BUILTIN_PROFILES } from "./profile.ts";
 import type { RouterSettings } from "./types.ts";
 
@@ -49,16 +50,18 @@ const LOCAL_EXAMPLE = {
   kind: "debug-design", files: ["src/a.ts"], check: "npm test -- a", acceptance: ["a() handles empty input"],
   t0: Object.fromEntries(T0_KEYS.map((k) => [k, true])), t2: [],
 };
+/** The branch line while worktrees are active and no merge gate is built (design §2.3, plan S25: L5; L6 and L7 add the others). */
+const BRANCH_ONLY = "Code changes happen on branches: start_branch, then edit and commit in its worktree (absolute paths).";
 /** The main session's section in local mode (design §2.3, LD3; text pinned by test/local-prompt.test.ts, AC-R3): rules, field
  *  names and one example, no strategy prose, no per-turn values (cache-stable). The branch and plan lines arrive with their
- *  components (L5, L6, L7; plan D4). */
-export function localSection(s: RouterSettings): string {
+ *  components (L5, L6, L7; plan D4) and follow `active` (the default: none); they sit after the sentence about the child's report. */
+export function localSection(s: RouterSettings, active: Active = { worktrees: false, mergeGate: false, plans: false }): string {
   return `## Local mode
 
 You do most of the work yourself. Spawn a subagent only when a task needs more ability than yours
 (design, security, concurrency, an unknown root cause) or when a <router-hint> says so. After spawning,
 end your turn; the child's report wakes you.
-<router-hint> notes report what the router measured. Act on them.
+${active.worktrees ? `${BRANCH_ONLY}\n` : ""}<router-hint> notes report what the router measured. Act on them.
 
 Task card (spawn_subagent \`task\`; do not set model or thinkingLevel):
 ${cardSchema(s)}

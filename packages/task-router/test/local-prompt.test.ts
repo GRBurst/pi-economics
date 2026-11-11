@@ -15,6 +15,9 @@ const fire = (h: ReturnType<typeof harness>, ctx: unknown = MAIN) => {
   return options.sections.task_cards;
 };
 
+/** Local mode with every component that adds section lines off (plan X31: the L1 literal stays, its input changes). */
+const BARE = { mode: "local", worktrees: { enabled: "off" }, mergeGate: { enabled: "off" }, plans: { enabled: "off" } } as never;
+
 /** The section as a model reads it (design §2.3 without the branch and plan lines, plan D4); the schema is spliced. */
 const PINNED = (schema: string) => `## Local mode
 
@@ -28,19 +31,37 @@ ${schema}
 {"kind":"debug-design","files":["src/a.ts"],"check":"npm test -- a","acceptance":["a() handles empty input"],"t0":{"bounded":true,"specified":true,"verifiable":true,"lowRisk":true,"small":true,"linear":true},"t2":[]}`;
 
 test("AC-R3 pinned text: local mode sets task_cards to the local section", () => {
-  const text = fire(harness({ settings: { mode: "local" } }));
+  const text = fire(harness({ settings: BARE }));
   assert.equal(text, PINNED(cardSchema(defaults())));
   assert.equal(text, localSection(parseSettings({ mode: "local" }).settings));
   assert.ok(text.includes(cardSchema(defaults())));
   assert.ok(!text.includes(ORCHESTRATOR_RULE));
-  assert.equal(fire(harness({ settings: { mode: "local" } })), text, "stable across sessions (cache)");
+  assert.equal(fire(harness({ settings: BARE })), text, "stable across sessions (cache)");
 });
 
 test("LD3: delegationRule on, local → localSection", () => {
   g.__piExperimentsApi_v1 = { version: 1, flag: (n: string, d: string) => (n === "delegationRule" ? "on" : d) };
-  const text = fire(harness({ settings: { mode: "local" } }));
+  const text = fire(harness({ settings: BARE }));
   assert.equal(text, PINNED(cardSchema(defaults())));
   assert.ok(!text.includes(ORCHESTRATOR_RULE));
+});
+
+const BRANCH_ONLY = "Code changes happen on branches: start_branch, then edit and commit in its worktree (absolute paths).";
+/** PINNED with the worktrees line after the sentence about the child's report. */
+const WITH_BRANCH = (schema: string) => PINNED(schema).replace("the child's report wakes you.\n", `the child's report wakes you.\n${BRANCH_ONLY}\n`);
+
+test("AC-R3 worktrees: with worktrees active (local mode) the section holds the branch line after the child sentence, nothing else changes", () => {
+  const text = fire(harness({ settings: { mode: "local", mergeGate: { enabled: "off" }, plans: { enabled: "off" } } as never }));
+  assert.equal(text, WITH_BRANCH(cardSchema(defaults())));
+  assert.equal(text, localSection(parseSettings({ mode: "local" }).settings, { worktrees: true, mergeGate: false, plans: false }));
+  assert.ok(text.includes(BRANCH_ONLY));
+  assert.ok(!text.includes("request_merge") && !text.includes("plan_request"), "no line about a tool that is not there");
+  assert.equal(localSection(parseSettings({ mode: "local" }).settings), PINNED(cardSchema(defaults())), "no active set: today's literal");
+});
+
+test("the section follows the active set: worktrees off → no branch line; default-mode settings with worktrees on → the card section", () => {
+  assert.equal(fire(harness({ settings: { mode: "local", worktrees: { enabled: "off" } } as never })), PINNED(cardSchema(defaults())));
+  assert.equal(fire(harness({ settings: { worktrees: { enabled: "on" } } as never })), cardSection(defaults(), false));
 });
 
 test("default mode section", () => {

@@ -22,7 +22,7 @@ import type { Runner } from "./gate.ts";
 import { createGuards } from "./guards.ts";
 import { createOutcomeLog } from "./log.ts";
 import { cardSection, localSection } from "./prompt.ts";
-import { isLocal, opusLeft, statusText } from "./local/mode.ts";
+import { activeSet, isLocal, opusLeft, statusText } from "./local/mode.ts";
 import { installLocal } from "./local/install.ts";
 import { createChildTrips } from "./local/childtrips.ts";
 import { createTickets, hasSpawnApi, NO_SPAWN_API } from "./local/overseer.ts";
@@ -66,6 +66,8 @@ export type Deps = {
   rng?: () => number; home?: string;
   /** The hint engine's file hash and call detectors (test seams, plan S12). */
   hash?: LocalDeps["hash"]; detect?: LocalDeps["detect"];
+  /** The git port of the worktree code (test seam; default: the real git). */
+  git?: LocalDeps["git"];
 };
 
 const VERDICTS = ["accepted", "partial", "rejected"] as const;
@@ -246,7 +248,7 @@ export function install(pi: PiLike, deps: Deps) {
   installNudge(pi, { settings, isChild, enabled: () => active && !isLocal(settings) });
   // Hints (design §3.1, plan S12): in local mode, or anywhere with hints "on"; the status line names the last hint (plan Q5).
   // The overseer (design §3.2) lives here too: its spawn line comes from `onEvent` (D26), its events from its own subscription.
-  const lm = installLocal(pi, { settings, log, isChild, sessionId: () => sessionId, hash: deps.hash, detect: deps.detect, onTrip: (t) => { hint = t; render(); },
+  const lm = installLocal(pi, { settings, log, isChild, sessionId: () => sessionId, hash: deps.hash, detect: deps.detect, git: deps.git, onTrip: (t) => { hint = t; render(); },
     api, tickets, hex, now: nowMs, sleep: pd.sleep, onBudget: render, policyOn: () => off.length > 0 });
   pi.on("before_agent_start", (e, ctx) => {
     track(ctx);
@@ -258,9 +260,9 @@ export function install(pi: PiLike, deps: Deps) {
     // Local mode (design §2.3, LD3): the main gets the local section and never the rule, whatever the arm says; a child that
     // loads the router anyway keeps today's section without the rule (plan D5).
     const local = isLocal(settings), child = isChild(ctx);
-    if (settings.routing) sections.task_cards = local && !child ? localSection(settings) : cardSection(settings, !local && settings.delegation.rule === "on" && !child);
+    if (settings.routing) sections.task_cards = local && !child ? localSection(settings, activeSet(settings)) : cardSection(settings, !local && settings.delegation.rule === "on" && !child);
     else delete sections.task_cards;
   });
 
-  return { log, settings, tickets, overseer: lm.overseer, budget: lm.budget };
+  return { log, settings, tickets, overseer: lm.overseer, budget: lm.budget, branches: lm.branches };
 }

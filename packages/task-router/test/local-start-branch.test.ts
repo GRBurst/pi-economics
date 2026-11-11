@@ -159,3 +159,71 @@ test("the repo parameter names the repository; the session cwd may be anywhere",
   const res = await start({ ...X, repo: r.dir }, base);
   assert.ok(res.ok && res.value.worktree === join(r.base, "repo.worktrees", "lm--x"));
 });
+
+// --- L5.T6: the start_branch tool, the active set, the section line (plan S25, D40, D48) ---------------------------------
+
+import { activeSet } from "../core/local/mode.ts";
+import { harness } from "./harness.ts";
+
+const SCHEMA = JSON.parse(`{ "type": "object", "additionalProperties": false,
+  "properties": {
+    "slug": { "type": "string", "pattern": "^[a-z0-9-]{1,40}$" },
+    "plan": { "type": "object", "required": ["slug", "id"], "properties": { "slug": {"type": "string"}, "id": {"type": "string"} } },
+    "goal": { "type": "string", "maxLength": 300 },
+    "check": { "type": "string", "maxLength": 300 },
+    "repo": { "type": "string", "description": "absolute path; default: the session cwd's repository" }
+  } }`);
+function toolRig(settings: Record<string, unknown> = { mode: "local" }, entries: unknown[] = []) {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const h = harness({ settings: settings as never, extra: { git } as never });
+  const ctx = { sessionManager: { getSessionId: () => "s-main", getBranch: () => entries }, cwd: r.dir };
+  h.f.fire("session_start", {}, ctx);
+  return { r, git, h, ctx };
+}
+
+test("start_branch: registered in local mode with the §3.3.2 schema; not in default mode; on or off by worktrees.enabled", () => {
+  const tool = toolRig().h.f.tools.get("start_branch");
+  assert.ok(tool);
+  assert.deepEqual(tool.parameters, SCHEMA);
+  assert.equal(toolRig({}).h.f.tools.has("start_branch"), false);
+  assert.equal(toolRig({ worktrees: { enabled: "on" } }).h.f.tools.has("start_branch"), true);
+  assert.equal(toolRig({ mode: "local", worktrees: { enabled: "off" } }).h.f.tools.has("start_branch"), false);
+});
+
+test("start_branch result (D48): the value as text and as details; no isError", async () => {
+  const { r, h, ctx } = toolRig();
+  const tip = r.git(["rev-parse", "main"]);
+  const res = await h.f.callTool("start_branch", X, ctx);
+  const value = { branch: "lm/x", worktree: join(r.base, "repo.worktrees", "lm--x"), base: tip, check: "true" };
+  assert.deepEqual(res, { content: [{ type: "text", text: JSON.stringify(value) }], details: value });
+  assert.deepEqual(h.f.entries.map((e) => e.type), ["task-router/branch"]);
+});
+
+test("start_branch error (D48): git's or the validator's message as text, details {status: error, reason}, isError", async () => {
+  const { h, ctx } = toolRig();
+  const res = await h.f.callTool("start_branch", { slug: "X_y", goal: "g", check: "c" }, ctx);
+  const reason = "slug must match ^[a-z0-9-]{1,40}$";
+  assert.deepEqual(res, { content: [{ type: "text", text: reason }], details: { status: "error", reason }, isError: true });
+  assert.deepEqual(h.f.entries, []);
+});
+
+test("the branch store is rebuilt at session_start from the session's entries", async () => {
+  const a = toolRig();
+  await a.h.f.callTool("start_branch", X, a.ctx);
+  const saved = a.h.f.entries.map((e) => ({ type: "custom", customType: e.type, data: e.data }));
+  const b = toolRig({ mode: "local" }, saved);
+  assert.deepEqual(b.h.router.branches.all().map((r) => [r.branch, r.state]), [["lm/x", "active"]]);
+  assert.equal(b.h.router.branches.active()!.goal, "g");
+});
+
+test("D40: activeSet — worktrees and mergeGate by their switches; plans only with both", () => {
+  const set = (o: Record<string, unknown>) => activeSet(parseSettings(o).settings);
+  assert.deepEqual(set({ mode: "local" }), { worktrees: true, mergeGate: true, plans: true });
+  assert.deepEqual(set({}), { worktrees: false, mergeGate: false, plans: false });
+  assert.deepEqual(set({ mode: "local", worktrees: { enabled: "off" } }), { worktrees: false, mergeGate: true, plans: false });
+  assert.deepEqual(set({ mode: "local", mergeGate: { enabled: "off" } }), { worktrees: true, mergeGate: false, plans: false });
+  assert.deepEqual(set({ mode: "local", plans: { enabled: "off" } }), { worktrees: true, mergeGate: true, plans: false });
+  assert.deepEqual(set({ mergeGate: { enabled: "on" } }), { worktrees: false, mergeGate: true, plans: false });
+  assert.deepEqual(set({ worktrees: { enabled: "on" }, mergeGate: { enabled: "on" }, plans: { enabled: "on" } }), { worktrees: true, mergeGate: true, plans: true });
+});

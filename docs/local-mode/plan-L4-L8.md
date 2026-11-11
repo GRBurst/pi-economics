@@ -261,7 +261,7 @@ inventory/keys tests; L6.T3 adds the default-mode `git push origin main` asserti
 | L4.T16 log-contract `review` | drop `log.review` | `log-contract` "outcomes: no review event" | [x] |
 | L4.T17 `pi-install-local` | build against the Actor without the spawn-api patch | `pi-install-local` (warning present) | [x] |
 | L5.T1 git in sandbox | remove `git` from `nativeCheckInputs` | `task-router` (exit 127) | [x] |
-| L5.T6 default inventory | register `start_branch` unconditionally | P13 "default mode: inventory" | [ ] |
+| L5.T6 default inventory | register `start_branch` unconditionally | P13 "default mode: inventory" | [x] |
 | L5.T7 write guard property | `inside()` by string prefix without a separator (`/r/x` vs `/r/xy`) | "write guard property" | [ ] |
 | L5.T9 default mode keys | return `cwd` always | "default mode: no cwd key" | [ ] |
 | L6.T2 AC-M1 allow corpus | block every `push` | "AC-M1 allow corpus" | [ ] |
@@ -824,7 +824,7 @@ message). Open notes, for L6 or later:
 - **RED** (temp repo): "AC-W1": `{slug: "x", goal: "g", check: "true"}` → branch `lm/x` at the main tip, worktree `<parent>/repo.worktrees/lm--x` (realpath), result `{branch, worktree, base, check}`; again → same result, worktree and branch lists unchanged. Failure table, each leaving worktrees, branches and entries unchanged: slug and plan; neither; slug `X_y`; no goal; no check; cwd outside a repo; no main branch; `plan` (`plans are not active`, until L7); target dir exists as a file → `isError` with git's stderr tail.
 - **GREEN**: §3.3.2. **Check**: fast runner; `chk task-router`. **ACs**: AC-W1.
 
-#### L5.T6 `start_branch` tool, active set, section lines (AC-R3 active) `[ ] todo`
+#### L5.T6 `start_branch` tool, active set, section lines (AC-R3 active) `[x] done`
 - **Files**: `core/local/install.ts` (register when `activeSet(s).worktrees`), `core/local/mode.ts` (`activeSet`), `core/prompt.ts` (`localSection(s, active)`, S25), `core/shell.ts`, `test/local-prompt.test.ts` (P13's "AC-R3 pinned text": input gains `worktrees/mergeGate/plans: {enabled: "off"}`, literal unchanged — X31), `test/local-start-branch.test.ts`.
 - **Depends**: L5.T5.
 - **RED**: tool registered in local mode, schema = §3.3.2; result text/`details` (D48); default mode: P13 inventory green (plant §11); "AC-R3 worktrees" pinned (`BRANCH_ONLY`); `mergeGate` off, worktrees on is what L5 ships.
