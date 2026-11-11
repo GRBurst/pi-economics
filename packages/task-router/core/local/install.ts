@@ -102,6 +102,13 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       found.push(b);
     }
   }).catch(() => undefined));
+  /** Review F3: the gate's step 9 (ref move, push, record) takes its turn on the same chain, so no check reads main between the
+   *  gate's move and its record. */
+  const exclusive = <T>(f: () => Promise<T>): Promise<T> => {
+    const p = bypassing.then(f);
+    bypassing = p.then(() => undefined, () => undefined);
+    return p;
+  };
   let ready: Promise<void> = Promise.resolve(), sizing: Promise<void> | undefined;
   const handle = {
     overseer, budget, branches, approvals,
@@ -161,7 +168,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   if (activeSet(s).mergeGate) {
     pi.registerTool?.(requestMergeTool((signal) => ({ git, run: d.run ?? runCheck, overseer, branches, approvals, settings: s,
       append: (type, data) => { pi.appendEntry?.(type, data); refs.observe(type, data); }, tmp: () => join(tmpdir(), `task-router-red-${d.hex(6)}`), fixer: handle.fixer, log: (i) => d.log.merge(i),
-      ...(signal && { signal }) }), () => ready));
+      exclusive, ...(signal && { signal }) }), () => ready));
   }
   // The main-checkout write guard (design §3.3.3). It blocks on purpose, so it is total itself: pi treats a throwing handler as a
   // block. Registered after the hint recorder's `tool_call` handler, so that call is recorded first.

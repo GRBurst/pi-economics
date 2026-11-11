@@ -152,6 +152,9 @@ export type MergePorts = {
   signal?: AbortSignal;
   /** The `merge` line (design §3.0.3), one per call; absent: none. */
   log?(i: MergeInput): void;
+  /** Runs step 9's ref move, push and `main-ref` record while no bypass check runs (review F3: the gate's own move is never
+   *  a bypass); absent: at once. */
+  exclusive?<T>(f: () => Promise<T>): Promise<T>;
 };
 /** What the pipeline learned before it returned, for the `merge` line. */
 type Seen = { branch?: string; nLines?: number; nFiles?: number };
@@ -294,21 +297,23 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
   // ── 9 merge: fast-forward only (LD7), so main's tree is the reviewed and checked one ──
   if ((await git.sha(wt.dir, "HEAD")) !== commit) return "moved";
   const there = (await git.worktrees(repo)).find((w) => w.branch === main.name && !w.prunable);
-  if (there) {
-    if (await git.dirty(there.dir)) return { ...refuse("main-dirty", { checkout: there.dir }, commit), reviewId };
-    const ff = await git.ffMerge(there.dir, commit);
-    if (!ff.ok) return { ...gitError(ff.err, commit), reviewId };
-  } else {
-    const moved = await git.updateRef(repo, `refs/heads/${main.name}`, commit, main.sha);
+  if (there && await git.dirty(there.dir)) return { ...refuse("main-dirty", { checkout: there.dir }, commit), reviewId };
+  const exclusive = p.exclusive ?? (<T>(f: () => Promise<T>) => f());
+  const step9 = await exclusive(async (): Promise<MergeResult | { detail: string; pushed?: boolean }> => {
+    const moved = there ? await git.ffMerge(there.dir, commit) : await git.updateRef(repo, `refs/heads/${main.name}`, commit, main.sha);
     if (!moved.ok) return { ...gitError(moved.err, commit), reviewId };
-  }
-  let detail = `merged ${branch} into ${main.name} at ${commit.slice(0, 7)}`, pushed: boolean | undefined;
-  if (g.push) {
-    const pu = await git.push(repo, g.remote, main.name);
-    pushed = pu.ok;
-    detail += pu.ok ? `; pushed to ${g.remote}` : `; push to ${g.remote} failed: ${pu.err}`;
-  }
-  p.append(MAIN_REF_TYPE, { repo, branch: main.name, sha: commit });
+    let detail = `merged ${branch} into ${main.name} at ${commit.slice(0, 7)}`, pushed: boolean | undefined;
+    if (g.push) {
+      const pu = await git.push(repo, g.remote, main.name);
+      pushed = pu.ok;
+      detail += pu.ok ? `; pushed to ${g.remote}` : `; push to ${g.remote} failed: ${pu.err}`;
+    }
+    p.append(MAIN_REF_TYPE, { repo, branch: main.name, sha: commit });
+    return { detail, ...(pushed !== undefined && { pushed }) };
+  });
+  if ("status" in step9) return step9;
+  let detail = step9.detail;
+  const pushed = step9.pushed;
   // A branch the router knows becomes `merged` and is cleaned up; one made by hand without a record (D40) is left as it is.
   const now = p.branches.get(repo, branch);
   if (now) {

@@ -149,3 +149,34 @@ test("AC-M6 (review F2): a repository start_branch registers is known from then 
   await m.result();
   assert.deepEqual(m.bypasses().map((l) => [l.repo, l.from, l.to]), [[basename(other.dir), from, to]]);
 });
+
+// Review F3: the gate's own fast-forward and push are no bypass, whatever check runs meanwhile.
+for (const step of ["ffMerge", "push"] as const) {
+  test(`AC-M6 (review F3): a child turn during the gate's ${step} writes no gatebypass line and no warning`, async () => {
+    const m = await (async () => {
+      const notes: Array<[string, string]> = [];
+      const x = reviewRig({ settings: { mergeGate: { push: true, redRun: false } },
+        ctx: { hasUI: true, ui: { notify: (t: string, l: string) => void notes.push([t, l]), setStatus: () => undefined } } });
+      return { ...x, notes };
+    })();
+    const remote = `${m.r.base}/remote.git`;
+    m.r.git(["init", "-q", "--bare", remote]);
+    m.r.git(["remote", "add", "origin", remote]);
+    await m.h.router.settled();
+    const rec = await m.start("x");
+    m.r.commit("x.ts", "x\n", "x", rec.worktree);
+    const orig = (m.git[step] as (...a: unknown[]) => Promise<unknown>).bind(m.git);
+    (m.git as any)[step] = async (...a: unknown[]) => {
+      const r = await orig(...a); // main has moved (ffMerge) or the push ran; the record comes after
+      m.h.a.emit({ type: "turn", name: "w1", ts: 0 });
+      await new Promise((res) => setTimeout(res, 300));
+      return r;
+    };
+    const r = await m.h.f.tools.get("request_merge")!.execute("t1", {}, undefined, undefined, m.ctx);
+    assert.equal((r as any).details.status, "merged", JSON.stringify((r as any).details));
+    m.h.a.emit({ type: "turn", name: "w1", ts: 0 });
+    await m.h.router.settled();
+    assert.deepEqual(m.h.lines().filter((l) => l.event === "gatebypass"), []);
+    assert.deepEqual(m.notes, []);
+  });
+}
