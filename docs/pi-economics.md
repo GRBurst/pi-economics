@@ -757,7 +757,8 @@ same open trigger for the same task is not opened twice. `amend_plan` takes
 "interface-break", evidenceCommand}`), `changes` (1–8 of `add` a task after
 `after` or as a new milestone, `replace` the task `id`, `remove` a task or
 milestone) and `reason`. It refuses: no plan record (`no-plan`), a plan file
-on the main tip that does not hold the approved skeleton (`plan-changed`), no
+on the main tip that does not hold the approved skeleton (`plan-changed`), a
+dirty main checkout (`main-dirty`, before any check or review runs), no
 open trigger ("no replan trigger is open; finish the task as planned") or an
 unknown one (`trigger`), a new trigger whose evidence command the git guard blocks or that exits 0
 in the active worktree or else the main checkout (`evidence`; one that fails opens the `interface-break`

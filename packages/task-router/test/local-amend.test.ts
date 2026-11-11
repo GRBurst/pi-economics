@@ -6,6 +6,7 @@
 // rejected, the findings return, and after plans.rounds rejections the plan author rewrites the milestone itself.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonical, parsePlan, renderPlan, type Skeleton, skeletonHash, type Task } from "../core/local/plan.ts";
 import { amendPlan, type AmendInput } from "../core/local/planflow.ts";
@@ -220,18 +221,19 @@ test("review L7 F5: an amended check that passes on the main tip is named to the
   const x = approved();
   x.plans.open("parser", "over-budget", "M1.T2");
   x.script.push([APPROVE]);
-  const tip = x.mainSha().slice(0, 7), note = `M1.T2: \`true\` exits 0 on main ${tip}, before the task is done (vacuous)`;
+  const note = (z: PlanRig) => `M1.T2: \`true\` exits 0 on main ${z.mainSha().slice(0, 7)}, before the task is done (vacuous)`;
+  const tip = note(x);
   const r = await amendPlan(x.ports, amend({ changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: "true" } }] }), x.r.dir);
   assert.equal(r.status, "approved", r.detail);
   assert.equal(x.runs[0]!.role, "delta");
-  assert.ok(String(x.runs[0]!.input).split("\n").includes(`Vacuous checks: ${note}`), String(x.runs[0]!.input));
-  assert.ok(r.detail.endsWith(`; vacuous checks: ${note}; the merge gate reports its red run as passed`), r.detail);
+  assert.ok(String(x.runs[0]!.input).split("\n").includes(`Vacuous checks: ${tip}`), String(x.runs[0]!.input));
+  assert.ok(r.detail.endsWith(`; vacuous checks: ${tip}; the merge gate reports its red run as passed`), r.detail);
   const y = approved();
   y.plans.open("parser", "over-budget", "M1.T2");
   y.script.push([REVISE]);
   const no = await amendPlan(y.ports, amend({ changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: "true" } }] }), y.r.dir);
   assert.equal(no.status, "rejected", no.detail);
-  assert.ok(no.detail.endsWith(`; vacuous checks: ${note}`), no.detail);
+  assert.ok(no.detail.endsWith(`; vacuous checks: ${note(y)}`), no.detail);
 });
 
 test("review L7 F6: an amended check whose red-run worktree git cannot make fails amend_plan with git; no review, main unchanged", async () => {
@@ -245,6 +247,21 @@ test("review L7 F6: an amended check whose red-run worktree git cannot make fail
   assert.equal(x.checks.length, 0, "no check ran");
   assert.equal(x.mainSha(), before);
   assert.deepEqual(x.plans.openTriggers("parser").map((t) => t.id), ["t1"]);
+});
+
+test("review L7 F7: a dirty main checkout refuses amend_plan before any red run or review (D51)", async () => {
+  const x = approved();
+  x.plans.open("parser", "over-budget", "M1.T2");
+  writeFileSync(join(x.r.dir, "src/b.ts"), "changed\n");
+  const r = await refused(x, amend({ changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: "true" } }] }));
+  assert.equal(r.reason, "main-dirty");
+  assert.ok(r.detail.includes(x.r.dir), r.detail);
+  assert.equal(x.checks.length, 0, "no red run");
+  const y = approved();
+  await start(y, "M1.T1");
+  writeFileSync(join(y.r.dir, "src/b.ts"), "changed\n");
+  assert.equal((await refused(y, amend({ trigger: { id: "new", kind: "interface-break", evidenceCommand: "false" } }))).reason, "main-dirty");
+  assert.deepEqual(y.plans.get("parser")!.triggers, [], "no trigger opened");
 });
 
 test("review F7: an amended check or an evidence command the git guard blocks is never run", async () => {

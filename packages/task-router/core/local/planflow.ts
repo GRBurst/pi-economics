@@ -328,6 +328,8 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   if (!parsed || skeletonHash(parsed.sk) !== rec.skeletonHash) {
     return refused("plan-changed", `the plan file ${rec.file} on ${main.name} does not hold the approved skeleton`);
   }
+  // review L7 F7: a dirty main checkout cannot take the amended plan (D51); refused before a trigger opens or a check runs
+  if (main.checkout && (await git.dirty(main.checkout))) return refused("main-dirty", reasonText("main-dirty", { checkout: main.checkout }));
   const old = parsed.sk;
   // ── 1 trigger: an open one, or a new interface-break whose evidence command fails in the active worktree ──
   const t = input.trigger;
