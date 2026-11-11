@@ -1,9 +1,9 @@
 # The research prompts
 
-The six Gemini Deep Research prompts behind the reports, as sent. Prompts 1–3 went out first; 4–6 after the
-decision to review plans and merges with Opus. The evidence rules at the end were meant for 4–6; the user's
-own prompt carried similar rules. Prompt 7 was added with `docs/local-mode/design.md` (its OQ10) and has not
-been sent yet; send it with the evidence rules appended.
+The eight Gemini Deep Research prompts behind the reports, as sent. Prompts 1–3 went out first; 4–6 after
+the decision to review plans and merges with Opus. The evidence rules at the end were meant for 4–6; the
+user's own prompt carried similar rules. Prompt 7 was added with `docs/local-mode/design.md` (its OQ10);
+prompts 7 and 8 went out with the evidence rules appended, and both reports are in.
 
 | Prompt | Report |
 |---|---|
@@ -13,7 +13,8 @@ been sent yet; send it with the evidence rules appended.
 | 4 | `two-tier-agent-planning-architecture.md` |
 | 5 | `agentic-plan-and-code-sizing.md` |
 | 6 | `frontier-model-plan-review-protocol.md` |
-| 7 | not yet run |
+| 7 | `coding-agent-loop-harness-research.md` |
+| 8 | `autonomous-merge-pipeline-size-limits.md` |
 
 ## 1. Open-weight routing models that run on a CPU
 
@@ -131,7 +132,58 @@ Questions:
 5. Repetition across a session: do repeated hints lose effect (habituation), and how should cooldowns or escalating severity be set?
 ```
 
-## Evidence rules (for prompts 4–7)
+## 8. Size limits for the autonomous merge pipeline
+
+```
+Research the concrete size limits that should govern an autonomous merge
+pipeline, for one specific model combination: a local open-weight executor
+(Qwen 3.8, 27B) and three Claude reviewer tiers (Opus 5.5, Sonnet 5.5,
+Haiku 5.5).
+
+Setting: a local coding agent runs Qwen 3.8 (27B, open-weight) on one
+consumer GPU with a single inference slot and does most work itself. Each
+unit of work is one git-worktree branch with a check command that must pass
+before a merge is requested. Before merging, one Claude model reviews the
+increment: it sees the unified diff, the check output, and the goal and
+acceptance criteria for the change. The pipeline enforces hard caps:
+maxDiffLines (currently 150 changed lines = added + deleted) and
+maxDiffFiles (currently 6 files) per branch, plus executor task budgets
+(100 lines / 3 files per task; 250 lines per milestone branch). I need
+evidence to set these caps for this exact combination.
+
+Questions:
+1. Executor capability (Qwen 3.8, 27B): what do benchmarks or trajectory
+   analyses report for Qwen 3.8 models as agentic coding executors —
+   success rate by patch size (files modified, lines changed), tool-turn
+   budget, and context limits? Cite every study that evaluated a Qwen 3.8
+   model (SWE-bench family, DeepSWE, Terminal-Bench, or similar), with the
+   exact numbers and the model size tested. Where only other Qwen 3.x sizes
+   were tested, say so explicitly and how far the result transfers to 27B.
+2. Reviewer collapse curves, per reviewer model: for Claude Opus 5.5,
+   Sonnet 5.5 and Haiku 5.5, evidence on defect detection (F1, precision,
+   recall) as a function of diff size — for these versions if evaluated,
+   else for the nearest published Claude version. For each: the size at
+   which recall drops sharply, the shape of the curve, and the setup
+   (synthetic mutations vs real PRs, single-file vs multi-file).
+3. Files vs lines: which governs review quality more — files changed or
+   lines changed? Evidence on multi-file diffs (cross-file context,
+   imports, interleaved refactoring) for each reviewer tier.
+4. Tier assignment: evidence that a cheaper reviewer (Haiku 5.5 class) is
+   sufficient for small diffs and a frontier reviewer (Opus 5.5) is only
+   worth it above a size or blast-radius threshold — and what that
+   threshold is.
+5. Rejection economics: how do rejection rate, finding counts and
+   false-positive rate of LLM reviewers behave as a function of diff size,
+   and what cap minimizes cost per accepted-and-correct merge?
+6. Concrete recommendation: for this setup (Qwen 3.8-27B executor;
+   Opus 5.5 as binding merge reviewer; Sonnet 5.5 as fallback), propose
+   (a) maxDiffLines, (b) maxDiffFiles, (c) the executor's per-task budget
+   (lines / files), and (d) the milestone cap — each with its evidence and
+   a confidence rating, and every number that rests on extrapolation
+   rather than direct evidence for these exact models flagged as such.
+```
+
+## Evidence rules (for prompts 4–8)
 
 ```
 Evidence rules:

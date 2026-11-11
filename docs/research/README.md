@@ -19,23 +19,26 @@ decision rests on it.
 | `two-tier-agent-planning-architecture.md` | Who writes the plan: the local model or Opus |
 | `agentic-plan-and-code-sizing.md` | Task, milestone and diff sizes; the plan as external memory; replanning |
 | `frontier-model-plan-review-protocol.md` | How Opus reviews a plan: input, checks, verdict format |
+| `coding-agent-loop-harness-research.md` | How a harness detects and breaks loops and stalls |
+| `autonomous-merge-pipeline-size-limits.md` | Size caps for the merge pipeline: lines and files per branch, reviewer collapse by model |
 
 ## Known problems
 
 - `two-tier-agent-planning-architecture.md`: the formulas behind lines 93 and
   111 show a minus where the stated results need a plus; kept as exported.
-- Spot checks of five load-bearing sources of the last three reports: all
-  exist; the diff-size result (arXiv 2606.15689, review F1 0.657 below 10
-  changed lines, 0.043 above 150) matches but tested Sonnet and Haiku, not
-  Opus; AgentCARD (arXiv 2606.20629) supports heterogeneous teams but not the
-  report's 36% inversion figure; the COPE abstract (arXiv 2506.11578) does not
-  support "a weaker plan degrades the executor"; the plan-review blog's
-  anecdote (11 of 12 models approved a check aimed at the wrong module)
-  matches, its precision and recall tables do not exist in the source.
+- Spot checks of five load-bearing sources of the three plan-authorship
+  reports: all exist; the diff-size result (arXiv 2606.15689, review F1
+  0.657 below 10 changed lines, 0.043 above 150) matches but tested Sonnet
+  and Haiku, not Opus; AgentCARD (arXiv 2606.20629) supports heterogeneous
+  teams but not the report's 36% inversion figure; the COPE abstract (arXiv
+  2506.11578) does not support "a weaker plan degrades the executor"; the
+  plan-review blog's anecdote (11 of 12 models approved a check aimed at
+  the wrong module) matches, its precision and recall tables do not exist
+  in the source.
 - No source compares a plan written by the local model and reviewed by Opus
   with a plan written by Opus.
 
 ## Findings
 
 - `findings-routing-orchestration-oversight.md`: the first three reports, and what local mode took from them.
-- `findings-plan-authorship.md`: the last three, on who writes the plan, with spot checks of their sources.
+- `findings-plan-authorship.md`: the three plan-authorship reports (rows 4–6), on who writes the plan, with spot checks of their sources.
