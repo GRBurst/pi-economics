@@ -32,7 +32,7 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
   /** `<remote> <branch> <commit>` per push; `remotes`: the remotes a push reaches. */
   const pushes: string[] = [];
   const remotes = new Set(["origin"]);
-  /** L7: repository → what `lsFiles` lists; commit → the file `commitFile` set in it. */
+  /** L7: repository → what `lsFiles` lists; commit → the file `commitFile` set in it (`show` finds the newest on a commit's line). */
   const tracked = new Map<string, string[]>();
   const blobs = new Map<string, { path: string; content: string }>();
   let shas = 0;
@@ -198,6 +198,12 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
       commits.set(sha, { parent, stat: [{ path, added, deleted: 0 }] });
       blobs.set(sha, { path, content });
       return { ok: true, out: sha };
+    },
+    async show(repo, rev, path) {
+      const c = resolveIn(repo, rev);
+      if (c === undefined) return undefined;
+      for (const x of line(c)) { const b = blobs.get(x); if (b?.path === path) return b.content; }
+      return undefined;
     },
   };
   /** A commit in the checkout that holds `dir` with the files it changed: its branch (or its detached HEAD) moves to it. */

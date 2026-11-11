@@ -71,6 +71,8 @@ export type Git = {
   /** D50: a commit on `parent` whose tree is `parent`'s with `path` set to `content`, built in a temporary index (plumbing),
    *  so the main checkout's index and files are never touched; no ref moves. `out` = the new commit. */
   commitFile(repo: string, parent: string, path: string, content: string, message: string): Promise<Res>;
+  /** The content of the file `path` at `rev` (a commit or branch; `git cat-file blob`); undefined for an unknown rev or path. */
+  show(repo: string, rev: string, path: string): Promise<string | undefined>;
 };
 /** A command that either gave its stdout or failed with the tail of its stderr (2048 characters). */
 export type Res = { ok: true; out: string } | { ok: false; err: string };
@@ -162,6 +164,10 @@ export function createGit(run: GitRun): Git {
     async lsFiles(repo, n) {
       const r = await run(["ls-files", "-z"], repo, STAT_MS);
       return r.exit === 0 ? r.out.split("\0").filter((p) => p !== "").slice(0, n) : [];
+    },
+    async show(repo, rev, path) {
+      const r = await run(["cat-file", "blob", `${rev}:${path}`], repo, STAT_MS);
+      return r.exit === 0 ? r.out : undefined;
     },
     async commitFile(repo, parent, path, content, message) {
       let tmp: string | undefined;

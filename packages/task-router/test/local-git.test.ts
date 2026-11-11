@@ -394,3 +394,16 @@ test("D50 commitFile: a commit on the tip whose tree differs only in that path; 
   assert.equal(again.ok && r.git(["diff", "--name-status", sha, again.out]), "M\tdocs/plans/p.md");
   assert.equal((await git.commitFile(r.dir, "0".repeat(40), "x", "x", "m")).ok, false);
 });
+
+test("show: a file at a commit or branch, byte for byte; an unknown path or commit is undefined", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const one = r.commit("docs/plans/p.md", "# Plan: p\n- [ ] M1.T1: a\n");
+  r.commit("docs/plans/p.md", "no newline");
+  writeFileSync(join(r.dir, "docs/plans/p.md"), "edited in the checkout\n");
+  assert.equal(await git.show(r.dir, one, "docs/plans/p.md"), "# Plan: p\n- [ ] M1.T1: a\n");
+  assert.equal(await git.show(r.dir, "main", "docs/plans/p.md"), "no newline", "the commit, not the working copy");
+  assert.equal(await git.show(r.dir, "main", "docs/plans/q.md"), undefined);
+  assert.equal(await git.show(r.dir, "0".repeat(40), "docs/plans/p.md"), undefined);
+  assert.equal(await git.show(r.dir, "main", "docs/plans"), undefined, "a directory is no file");
+});

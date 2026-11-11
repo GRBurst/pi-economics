@@ -106,7 +106,8 @@ async function planScenario(git: Git, repo: string): Promise<unknown[]> {
   const sha = c.ok ? c.out : "";
   return [c.ok, await git.isAncestor(repo, tip, sha), await git.numstat(repo, tip, sha), await git.sha(repo, "main") === tip,
     (await git.updateRef(repo, "refs/heads/main", sha, tip)).ok, await git.sha(repo, "main") === sha,
-    await git.grepWord(repo, "foo", ["a.ts", "b.ts", "missing.ts"]), (await git.commitFile(repo, "0".repeat(40), "x", "x", "m")).ok];
+    await git.grepWord(repo, "foo", ["a.ts", "b.ts", "missing.ts"]), (await git.commitFile(repo, "0".repeat(40), "x", "x", "m")).ok,
+    await git.show(repo, "main", "docs/plans/p.md"), await git.show(repo, tip, "docs/plans/p.md"), await git.show(repo, "0".repeat(40), "docs/plans/p.md")];
 }
 
 test("fake-git and real git agree on the plan scenario (L7.T5)", async () => {
@@ -116,5 +117,5 @@ test("fake-git and real git agree on the plan scenario (L7.T5)", async () => {
   const real = await planScenario(createGit(gitRunner("git", r.env)), r.dir);
   const f = fakeGit({ repos: [{ root: r.dir, sha: r.git(["rev-parse", "main"]) }] });
   assert.deepEqual(await planScenario(f.git, r.dir), real);
-  assert.deepEqual(real, [true, true, [{ path: "docs/plans/p.md", added: 2, deleted: 0 }], true, true, true, ["b.ts"], false]);
+  assert.deepEqual(real, [true, true, [{ path: "docs/plans/p.md", added: 2, deleted: 0 }], true, true, true, ["b.ts"], false, "# Plan: p\nline\n", undefined, undefined]);
 });
