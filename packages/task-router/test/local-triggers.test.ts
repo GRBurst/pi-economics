@@ -157,3 +157,18 @@ test("remediation-failed: a plan-bound branch blocked by the fixer's last reject
   assert.equal(plans.get("parser")!.triggers.length, 1, "step 2 opens none");
   assert.equal(x.reviews.length, 1);
 });
+
+test("reject counts an amendment's rejections on its trigger (L7.T15); the count survives a rebuild", () => {
+  const { s, entries } = store();
+  s.put(rec());
+  s.open("parser", "over-budget", "M1.T1");
+  assert.equal(s.reject("parser", "t1"), 1);
+  assert.equal(s.reject("parser", "t1"), 2);
+  assert.equal(s.reject("parser", "t9"), 0, "no such trigger");
+  assert.equal(s.reject("none", "t1"), 0);
+  const again = store().s;
+  again.rebuild(entries.map((e) => ({ ...e })));
+  assert.deepEqual(again.get("parser")!.triggers, [{ id: "t1", kind: "over-budget", task: "M1.T1", open: true, rejected: 2 }]);
+  again.rebuild([{ type: "custom", customType: PLAN_TYPE, data: { ...rec(), triggers: [{ id: "t1", kind: "regression", open: true, rejected: "2" }] } }]);
+  assert.equal(again.get("parser"), undefined, "a malformed count");
+});

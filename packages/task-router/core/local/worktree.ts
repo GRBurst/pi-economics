@@ -6,7 +6,7 @@ import type { Result, RouterSettings } from "../types.ts";
 import type { BranchRecord, BranchStore } from "./branches.ts";
 import type { Git, Wt } from "./git.ts";
 import { guardGit } from "./gitcmd.ts";
-import { parsePlan, skeletonHash } from "./plan.ts";
+import { parsePlan, type Skeleton, skeletonHash } from "./plan.ts";
 import { mergedUnits, type PlanStore } from "./plans.ts";
 
 export const SLUG = /^[a-z0-9-]{1,40}$/;
@@ -61,8 +61,7 @@ type Unit = { branch: string; goal: string; check: string; plan?: { slug: string
 
 /** A plan unit (design §3.3.2, AC-W2): the plan is approved (a record in this repository), its file on the main tip and in the
  *  main checkout has the approved skeleton hash, the unit is the one its milestone's `branch` names, not merged, and all it
- *  depends on is merged (a task also needs its milestone's dependencies). Reads only. A milestone branch's check runs its
- *  tasks' checks in order. */
+ *  depends on is merged (a task also needs its milestone's dependencies). Reads only. */
 async function planUnit(d: StartDeps, plans: PlanStore, slug: string, id: string, repo: string, main: { name: string; sha: string },
   wts: readonly Wt[]): Promise<Result<Unit>> {
   const rec = plans.get(slug);
@@ -85,13 +84,16 @@ async function planUnit(d: StartDeps, plans: PlanStore, slug: string, id: string
   if (merged.has(id)) return fail(`${id} is merged already`);
   const missing = [...m.dependsOn, ...(task?.dependsOn ?? [])].filter((x) => !merged.has(x));
   if (missing.length) return fail(`${id} depends on ${missing.join(", ")}, not merged yet`);
-  const tasks = task ? [task] : m.tasks;
-  const checks = tasks.map((t) => t.check);
-  return { ok: true, value: {
-    branch: branchName(d.settings.worktrees.branchPrefix, { plan: slug, id }), goal: (task ?? m).goal, plan: { slug, id },
-    check: checks.length === 1 ? checks[0]! : checks.map((c) => `(${c})`).join(" && "),
-    files: [...new Set(tasks.flatMap((t) => [...t.files, ...(t.create ?? [])]))],
-  } };
+  return { ok: true, value: { branch: branchName(d.settings.worktrees.branchPrefix, { plan: slug, id }), plan: { slug, id }, ...unitFacts(sk, id)! } };
+}
+/** A plan unit's branch facts: its goal, its check (a milestone branch runs its tasks' checks in order) and its whitelist (files
+ *  ∪ create); undefined for an id the plan does not have. An amendment (L7.T15) refreshes them on the unit's live branch. */
+export function unitFacts(sk: Skeleton, id: string): { goal: string; check: string; files: string[] } | undefined {
+  const m = sk.milestones.find((x) => x.id === id || x.tasks.some((t) => t.id === id));
+  if (!m) return undefined;
+  const task = m.tasks.find((t) => t.id === id), tasks = task ? [task] : m.tasks, checks = tasks.map((t) => t.check);
+  return { goal: (task ?? m).goal, check: checks.length === 1 ? checks[0]! : checks.map((c) => `(${c})`).join(" && "),
+    files: [...new Set(tasks.flatMap((t) => [...t.files, ...(t.create ?? [])]))] };
 }
 const readText = (p: string): string | undefined => { try { return readFileSync(p, "utf8"); } catch { return undefined; } };
 

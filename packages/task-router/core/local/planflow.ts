@@ -5,18 +5,23 @@
 // first startable unit.
 // L7.T14: `amend_plan` steps 1–2, the trigger (an open one, or an interface-break with failing evidence) and the validation of
 // the amended skeleton (its own findings only; checked tasks immutable).
+// L7.T15: steps 3–5, the review kind (delta or plan-review), the amendment committed on main, the rejections per trigger and the
+// plan author's rewrite once plans.rounds are spent. The new and changed tasks run red on the main tip, as at plan time.
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, join, normalize, posix, relative } from "node:path";
 import type { Runner } from "../gate.ts";
 import type { RouterSettings } from "../types.ts";
 import type { BranchStore } from "./branches.ts";
 import type { Git } from "./git.ts";
-import { advanceMain, type OverseerPort, reasonText } from "./merge.ts";
-import type { SubmitSpec } from "./overseer.ts";
-import { canonical, parsePlan, type PlanFs, renderPlan, type Skeleton, SKELETON_SCHEMA, skeletonHash, type Task, validateSkeleton } from "./plan.ts";
-import { findingLine, type Finding } from "./verdict.ts";
+import { globMatch } from "../glob.ts";
+import { advanceMain, type OverseerPort, reasonText, tailOf } from "./merge.ts";
+import { type SubmitSpec, verdictSubmit } from "./overseer.ts";
+import { check as schemaCheck } from "./schema.ts";
+import { canonical, parsePlan, type PlanFs, type PlanRecord, renderPlan, type Skeleton, SKELETON_SCHEMA, skeletonHash, type Task, type Trigger,
+  validateSkeleton } from "./plan.ts";
+import { approve, findingLine, type Finding } from "./verdict.ts";
 import { mergedUnits, type PlanStore } from "./plans.ts";
-import { refreshFacts } from "./worktree.ts";
+import { refreshFacts, unitFacts } from "./worktree.ts";
 
 export type PlanPorts = {
   git: Git; run: Runner; overseer: OverseerPort; branches: BranchStore; plans: PlanStore; settings: RouterSettings;
@@ -140,13 +145,14 @@ const AUTHOR_FAILED: Record<"invalid" | "broken-check", string> = {
   invalid: "the plan author's skeleton is still invalid after plans.rounds",
   "broken-check": "task checks still cannot run after plans.rounds",
 };
+const limits = ({ plans: l }: RouterSettings): string =>
+  `Limits: a task changes at most ${l.taskFiles} files and about ${l.taskLines} lines; its files and create name at most ${l.splitFiles} paths; `
+  + `a milestone has at most ${l.milestoneTasks} tasks and about ${l.milestoneLines} lines. Paths are relative to the repository root.`;
 /** The author's input (design §3.2.1): the request digest, the acceptance, the grounding, the limits, the repository map. */
 export function authorInput(s: RouterSettings, i: PlanInput, files: readonly string[], map: readonly string[]): string {
-  const l = s.plans;
   return [`Request: ${i.request}`, "Acceptance:", ...i.acceptance.map((a) => `- ${a}`),
     `Grounding files: ${files.join(", ")}`, `Grounding symbols: ${(i.symbols ?? []).join(", ") || "none"}`,
-    `Limits: a task changes at most ${l.taskFiles} files and about ${l.taskLines} lines; its files and create name at most ${l.splitFiles} paths; `
-      + `a milestone has at most ${l.milestoneTasks} tasks and about ${l.milestoneLines} lines. Paths are relative to the repository root.`,
+    limits(s),
     "Every task check must fail on the main tip and pass once the task is done.",
     `Repository map (the first ${REPO_MAP} tracked paths):`, ...map].join("\n");
 }
@@ -164,9 +170,9 @@ const redFinding = (r: RedExit, i: number, tip: string): Finding => ({
 });
 
 /** Each task's check on `tip` in its own detached temporary worktree (removed afterwards); a worktree git cannot make skips it. */
-async function redRuns(p: PlanPorts, repo: string, tip: string, sk: Skeleton): Promise<RedExit[]> {
+async function redRuns(p: PlanPorts, repo: string, tip: string, tasks: readonly Task[]): Promise<RedExit[]> {
   const out: RedExit[] = [];
-  for (const task of sk.milestones.flatMap((m) => m.tasks)) {
+  for (const task of tasks) {
     const dir = p.tmp();
     if (!(await p.git.worktreeAddDetached(repo, dir, tip)).ok) continue;
     try { out.push({ task, exit: (await p.run(task.check, dir, p.settings.checkTimeoutSec * 1000)).exit }); }
@@ -177,8 +183,9 @@ async function redRuns(p: PlanPorts, repo: string, tip: string, sk: Skeleton): P
 
 /** `submit_plan` (design §3.5.2 steps 2–3): validation, then the red runs. Within `plans.rounds` a failure goes back to the author as
  *  a resubmit; afterwards the submission is final: still invalid or broken fails the plan (D52), still vacuous is accepted with
- *  `vacuousCheck` on those tasks (LD9). */
-export function planSubmit(p: PlanPorts, x: { repo: string; checkout: string; tip: string }): SubmitSpec<Authored> {
+ *  `vacuousCheck` on those tasks (LD9). `rewrite` (design §3.5.4 step 5): the author rewrites one milestone of an approved plan;
+ *  only the rewrite's own findings count, and only its new or changed tasks run red. */
+export function planSubmit(p: PlanPorts, x: { repo: string; checkout: string; tip: string; rewrite?: Rewrite }): SubmitSpec<Authored> {
   const rounds = p.settings.plans.rounds;
   let round = 0;
   return {
@@ -187,18 +194,16 @@ export function planSubmit(p: PlanPorts, x: { repo: string; checkout: string; ti
       + "and passes after it. The router validates it and runs every check on the main tip; a finding comes back as a resubmit.",
     async check(input) {
       const last = ++round > rounds;
-      const v = validateSkeleton(input, p.settings, checkoutFs(x.checkout));
+      const v = x.rewrite ? validateRewrite(input, p.settings, checkoutFs(x.checkout), x.rewrite) : validateSkeleton(input, p.settings, checkoutFs(x.checkout));
       if (!v.ok) return last ? { ok: true, value: { ok: false, reason: "invalid", reasons: v.reasons } } : v;
-      const bad = (await redRuns(p, x.repo, x.tip, v.value)).filter((r) => failsRed(r.exit));
-      if (!bad.length) return { ok: true, value: { ok: true, sk: v.value } };
+      const tasks = x.rewrite ? changedTasks(x.rewrite.old, v.value) : v.value.milestones.flatMap((m) => m.tasks);
+      const bad = (await redRuns(p, x.repo, x.tip, tasks)).filter((r) => failsRed(r.exit));
+      if (!bad.length) return { ok: true, value: { ok: true, sk: x.rewrite ? marked(x.rewrite.old, v.value, new Set()) : v.value } };
       const lines = bad.map((r, i) => findingLine(redFinding(r, i, x.tip)));
       if (!last) return { ok: false, reasons: lines };
       const broken = bad.filter((r) => r.exit !== 0);
       if (broken.length) return { ok: true, value: { ok: false, reason: "broken-check", reasons: broken.map((r) => `${r.task.id}: \`${r.task.check}\` exit ${r.exit}`) } };
-      const vacuous = new Set(bad.map((r) => r.task.id));
-      const sk: Skeleton = { ...v.value, milestones: v.value.milestones.map((m) => ({ ...m,
-        tasks: m.tasks.map((t) => (vacuous.has(t.id) ? { ...t, vacuousCheck: true as const } : t)) })) };
-      return { ok: true, value: { ok: true, sk } };
+      return { ok: true, value: { ok: true, sk: marked(x.rewrite?.old, v.value, new Set(bad.map((r) => r.task.id))) } };
     },
   };
 }
@@ -208,7 +213,7 @@ export type AmendChange = { op: "add" | "replace" | "remove"; id?: string; after
 export type AmendInput = { slug: string; trigger: { id: string; kind?: "interface-break"; evidenceCommand?: string }; changes: AmendChange[];
   reason: string };
 export const AMEND_REASONS = ["no-plan", "plan-changed", "trigger", "evidence", "checked", "invalid", "broken-check", "main-dirty",
-  "review-unavailable", "aborted", "git"] as const;
+  "review-unavailable", "author-unavailable", "aborted", "git"] as const;
 export type AmendReason = (typeof AMEND_REASONS)[number];
 /** `trigger`: the trigger the amendment answers; `full`: the review was a plan-review; `findings`: a rejection's. */
 export type AmendResult = { status: "approved" | "rejected" | "refused" | "error"; reason?: AmendReason; detail: string; trigger?: string;
@@ -289,13 +294,14 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   const old = parsed.sk;
   // ── 1 trigger: an open one, or a new interface-break whose evidence command fails in the active worktree ──
   const t = input.trigger;
-  let trigger: string;
+  let trigger: string, evidence: string | undefined;
   if (t.id === "new") {
     const cmd = t.evidenceCommand;
     if (t.kind !== "interface-break" || typeof cmd !== "string" || !cmd.trim()) return refused("trigger", "a new trigger needs kind interface-break and an evidenceCommand");
     const a = p.branches.active(), dir = a && a.repo === repo ? a.worktree : checkout;
     const r = await p.run(cmd, dir, s.checkTimeoutSec * 1000);
     if (r.exit === 0) return refused("evidence", `the evidence command \`${cmd}\` exits 0 in ${dir}; an interface-break needs a command that fails`);
+    evidence = [`\`${cmd}\` exit ${r.exit} in ${dir}`, tailOf(r.output)].filter(Boolean).join("\n");
     trigger = p.plans.open(slug, "interface-break", a?.plan?.slug === slug ? a.plan.id : undefined)!;
   } else {
     const open = p.plans.openTriggers(slug);
@@ -307,14 +313,130 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   const applied = applyChanges(old, input.changes);
   if (applied.reasons.length) return refused("invalid", `the amended plan is invalid: ${applied.reasons.join("; ")}`, { trigger });
   const merged = mergedUnits(old, slug, p.branches.all());
-  for (const x of old.milestones.flatMap((m) => m.tasks)) {
-    if (!parsed.ticks.has(x.id) && !merged.has(x.id)) continue;
-    const now = taskOf(applied.sk, x.id);
-    if (!now || canonical(now) !== canonical(x)) return refused("checked", `${x.id} is checked (ticked or merged); it cannot change`, { trigger });
-  }
-  const fs = checkoutFs(checkout), before = validateSkeleton(bare(old), s, fs), known = new Set(before.ok ? [] : before.reasons);
-  const v = validateSkeleton(bare(applied.sk), s, fs);
-  const own = v.ok ? [] : v.reasons.filter((r) => !known.has(r));
+  const checked = new Set(old.milestones.flatMap((m) => m.tasks).map((x) => x.id).filter((id) => parsed.ticks.has(id) || merged.has(id)));
+  const amended = bare(applied.sk), stuck = checkedReasons(old, amended, checked);
+  if (stuck.length) return refused("checked", stuck.join("; "), { trigger });
+  const own = ownReasons(s, checkoutFs(checkout), old, amended);
   if (own.length) return refused("invalid", `the amended plan is invalid: ${own.join("; ")}`, { trigger });
-  return amendDone("error", "review-unavailable", reasonText("review-unavailable", {}), { trigger });
+  // the new and changed tasks' checks on the main tip, as at plan time (§3.5.2 step 3): one that cannot run refuses, a vacuous
+  // one is marked
+  const changed = changedTasks(old, amended), red = await redRuns(p, repo, main.sha, changed);
+  const broken = red.filter((r) => r.exit !== 0 && failsRed(r.exit));
+  if (broken.length) {
+    return refused("broken-check", `the amended checks cannot run: ${broken.map((r) => `${r.task.id}: \`${r.task.check}\` exit ${r.exit}`).join("; ")}`, { trigger });
+  }
+  const final = marked(old, amended, new Set(red.filter((r) => r.exit === 0).map((r) => r.task.id)));
+  // ── 3 review: plan-review for an interface-break, an amended task in publicApiGlobs, a milestone added or removed; else delta ──
+  const trig = p.plans.get(slug)!.triggers.find((x) => x.id === trigger)!;
+  const removed = old.milestones.flatMap((m) => m.tasks).filter((x) => !taskOf(final, x.id));
+  const olds = [...changed.flatMap((x) => taskOf(old, x.id) ?? []), ...removed];
+  const paths = [...olds, ...changed].flatMap((x) => [...x.files, ...(x.create ?? [])]);
+  const ms = (sk: Skeleton): string => sk.milestones.map((m) => m.id).sort().join(" ");
+  const full = trig.kind === "interface-break" || paths.some((f) => s.plans.publicApiGlobs.some((g) => globMatch(g, f))) || ms(old) !== ms(final);
+  const gone = new Set([...changed, ...removed].map((x) => x.id));
+  const dependants = final.milestones.flatMap((m) => m.tasks).filter((x) => !gone.has(x.id) && x.dependsOn.some((d) => gone.has(d)));
+  const c: AmendCtx = { rec, slug, request: requestOf(text!), trigger };
+  const head = [`Plan: ${slug} (${rec.file})`, triggerLine(trig), ...(evidence ? [`Evidence: ${evidence}`] : []), `Reason: ${oneLine(input.reason)}`];
+  const text2 = full ? [...head, "The plan with the amendment applied:", renderPlan({ slug, request: c.request }, final, kept(parsed, final))].join("\n")
+    : [...head, ...section("Old tasks", olds.map(taskLine)), ...section("Proposed tasks", changed.map(taskLine)),
+      ...section("Removed tasks", removed.map((x) => x.id)), ...section("Dependants", dependants.map(taskLine))].join("\n");
+  const out = await p.overseer.run({ role: full ? "plan-review" : "delta", input: text2, cwd: checkout, submit: verdictSubmit(new Set([rec.file, ...paths])),
+    signal: p.signal });
+  if (!out.ok) {
+    return out.outcome === "aborted" ? amendDone("error", "aborted", "aborted", { trigger, full })
+      : amendDone("error", "review-unavailable", reasonText("review-unavailable", {}), { trigger, full });
+  }
+  // ── 4 approved: re-render, commit on main, record, close the trigger ──
+  if (approve(out.value.findings)) return commitAmended(p, c, final, out.reviewId, { trigger, full });
+  // ── 5 rejected: the findings; after plans.rounds rejections for this trigger the plan author rewrites the milestone ──
+  const findings = out.value.findings.map(findingLine), n = p.plans.reject(slug, trigger), rounds = s.plans.rounds;
+  const no = { trigger, full, reviewId: out.reviewId, findings };
+  if (n < rounds) return amendDone("rejected", undefined, `the plan amendment was rejected (${n} of plans.rounds ${rounds}); answer the findings with a new amend_plan`, no);
+  const at = trig.task ?? input.changes.map((x) => x.id ?? x.task?.id).find((x): x is string => typeof x === "string");
+  const mid = (at && /^M\d+/.exec(at)?.[0]) || old.milestones[0]!.id;
+  const author = await p.overseer.run({ role: "plan-author", cwd: checkout, signal: p.signal,
+    input: [`Rewrite milestone ${mid} of the plan below: the amendments proposed for it were rejected ${n} times (plans.rounds).`, ...head.slice(1),
+      `Proposed changes: ${JSON.stringify(input.changes)}`, "Findings of the last review:", ...findings.map((x) => `- ${x}`),
+      `Keep the invariants, every other milestone and every checked task (${[...checked].join(", ") || "none"}) exactly as they are; submit the whole skeleton.`,
+      limits(s), "Every new or changed task check must fail on the main tip and pass once the task is done.", "The plan:", text!].join("\n"),
+    submit: planSubmit(p, { repo, checkout, tip: main.sha, rewrite: { old, checked, milestone: mid } }) });
+  if (!author.ok) {
+    return author.outcome === "aborted" ? amendDone("error", "aborted", "aborted", no)
+      : amendDone("error", "author-unavailable", `the plan author is unavailable (${author.outcome})`, no);
+  }
+  if (!author.value.ok) return amendDone("error", author.value.reason, `${AUTHOR_FAILED[author.value.reason]}: ${author.value.reasons.join("; ")}`, no);
+  const r = await commitAmended(p, c, author.value.sk, author.reviewId, { trigger, full, findings });
+  return r.status === "approved" ? { ...r, detail: `the amendment was rejected ${n} times; the plan author rewrote ${mid}: ${r.detail}` } : r;
 }
+
+type AmendCtx = { rec: PlanRecord; slug: string; request: string; trigger: string };
+/** Step 4: the amended plan rendered (the ticks of unchanged tasks kept) and committed on main through the merge's fast-forward
+ *  path (D50), recorded, its trigger closed, and the live branches of its units given their new goal, check and whitelist. */
+async function commitAmended(p: PlanPorts, c: AmendCtx, final: Skeleton, by: string, more: Partial<AmendResult>): Promise<AmendResult> {
+  const git = p.git, repo = c.rec.repo, file = c.rec.file;
+  const now = await mainOf(git, p.settings, repo);
+  if (!now) return amendDone("error", "git", `git failed: the main branch of ${repo} is gone`, more);
+  const text = await git.show(repo, now.sha, file), cur = text === undefined ? undefined : parsePlan(text);
+  if (!cur || skeletonHash(cur.sk) !== c.rec.skeletonHash) {
+    return amendDone("refused", "plan-changed", `the plan file ${file} on ${now.name} does not hold the approved skeleton`, more);
+  }
+  const made = await git.commitFile(repo, now.sha, file, renderPlan({ slug: c.slug, request: c.request }, final, kept(cur, final)), `plan(${c.slug}): amended ${by}`);
+  if (!made.ok) return amendDone("error", "git", `git failed: ${made.err}`, { ...more, reviewId: by });
+  const adv = await advanceMain(p, repo, now, made.out);
+  if (!adv.ok) {
+    return adv.reason === "main-dirty" ? amendDone("refused", "main-dirty", reasonText("main-dirty", { checkout: adv.checkout }), { ...more, reviewId: by })
+      : amendDone("error", "git", `git failed: ${adv.err}`, { ...more, reviewId: by });
+  }
+  p.plans.put({ ...p.plans.get(c.slug)!, skeletonHash: skeletonHash(final), approvedBy: by });
+  p.plans.close(c.slug, c.trigger);
+  for (const b of p.branches.all()) {
+    if (b.plan?.slug !== c.slug || !["active", "fixer", "blocked"].includes(b.state)) continue;
+    const u = unitFacts(final, b.plan.id);
+    if (u && canonical({ goal: b.goal, check: b.check, files: b.files }) !== canonical(u)) p.branches.put({ ...b, ...u });
+  }
+  return amendDone("approved", undefined, `plan amended: ${file} at ${made.out.slice(0, 7)}${adv.push}; trigger ${c.trigger} is closed`,
+    { ...more, reviewId: by, commit: made.out });
+}
+
+const same = (a: Task | undefined, b: Task | undefined): boolean => !!a && !!b && canonical(bareTask(a)) === canonical(bareTask(b));
+/** The tasks of `sk` that are new or differ from `old` (vacuous marks aside). */
+const changedTasks = (old: Skeleton, sk: Skeleton): Task[] => sk.milestones.flatMap((m) => m.tasks).filter((t) => !same(taskOf(old, t.id), t));
+/** The ticks of `cur` whose task `sk` keeps as it is. */
+const kept = (cur: { sk: Skeleton; ticks: ReadonlySet<string> }, sk: Skeleton): Set<string> =>
+  new Set([...cur.ticks].filter((id) => same(taskOf(cur.sk, id), taskOf(sk, id))));
+/** `vacuous` marked; a task `old` has unchanged keeps its mark; every other task bare. */
+const marked = (old: Skeleton | undefined, sk: Skeleton, vacuous: ReadonlySet<string>): Skeleton => ({ ...sk, milestones: sk.milestones.map((m) => ({ ...m,
+  tasks: m.tasks.map((t) => {
+    const was = old && taskOf(old, t.id), b = bareTask(t);
+    return vacuous.has(t.id) || (same(was, t) && was!.vacuousCheck) ? { ...b, vacuousCheck: true as const } : b;
+  }) })) });
+const checkedReasons = (old: Skeleton, sk: Skeleton, checked: ReadonlySet<string>): string[] =>
+  [...checked].filter((id) => !same(taskOf(old, id), taskOf(sk, id))).map((id) => `${id} is checked (ticked or merged); it cannot change`);
+/** The amended skeleton's own findings (design §3.2.4): those the approved one does not have against the same checkout (a task's
+ *  `create` that a merged branch made, say). */
+function ownReasons(s: RouterSettings, fs: PlanFs, old: Skeleton, sk: Skeleton): string[] {
+  const before = validateSkeleton(bare(old), s, fs), known = new Set(before.ok ? [] : before.reasons), v = validateSkeleton(bare(sk), s, fs);
+  return v.ok ? [] : v.reasons.filter((r) => !known.has(r));
+}
+/** An amendment the plan author writes (design §3.5.4 step 5): the approved plan, its checked tasks, the milestone to rewrite. */
+type Rewrite = { old: Skeleton; checked: ReadonlySet<string>; milestone: string };
+function validateRewrite(x: unknown, s: RouterSettings, fs: PlanFs, rw: Rewrite): { ok: true; value: Skeleton } | { ok: false; reasons: string[] } {
+  const schema = schemaCheck(SKELETON_SCHEMA, x);
+  if (schema.length) return { ok: false, reasons: schema };
+  const sk = x as Skeleton, only = `rewrite only ${rw.milestone}`, reasons: string[] = [];
+  const bareM = (m: Skeleton["milestones"][number]) => canonical({ ...m, tasks: m.tasks.map(bareTask) });
+  if (canonical(sk.invariants) !== canonical(rw.old.invariants)) reasons.push(`invariants changed; ${only}`);
+  for (const m of rw.old.milestones) {
+    const now = sk.milestones.find((y) => y.id === m.id);
+    if (m.id !== rw.milestone && (!now || bareM(now) !== bareM(m))) reasons.push(`${m.id} changed; ${only}`);
+  }
+  for (const m of sk.milestones) if (m.id !== rw.milestone && !rw.old.milestones.some((y) => y.id === m.id)) reasons.push(`${m.id} added; ${only}`);
+  reasons.push(...checkedReasons(rw.old, sk, rw.checked), ...ownReasons(s, fs, rw.old, sk));
+  return reasons.length ? { ok: false, reasons } : { ok: true, value: sk };
+}
+const oneLine = (t: string): string => t.replace(/\s+/g, " ").trim();
+/** A task as a review input shows it: one line of canonical JSON. */
+const taskLine = (t: Task): string => JSON.stringify(JSON.parse(canonical(bareTask(t))));
+const section = (title: string, xs: readonly string[]): string[] => (xs.length ? [`${title}:`, ...xs] : [`${title}: none`]);
+const triggerLine = (t: Trigger): string => `Trigger: ${t.id} ${t.kind}${t.task ? ` (task ${t.task})` : ""}`;
+const requestOf = (text: string): string => text.split("\n").find((l) => l.startsWith("Request: "))?.slice("Request: ".length) ?? "";

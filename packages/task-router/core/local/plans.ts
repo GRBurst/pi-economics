@@ -13,6 +13,8 @@ export type PlanStore = {
   /** The open trigger of this kind for this task, else a new one (`t<n>`, appended); undefined without that plan. */
   open(slug: string, kind: TriggerKind, task?: string): string | undefined;
   close(slug: string, id: string): void;
+  /** One more rejected amendment for the trigger (design §3.5.4 step 5); the count, 0 without that trigger. */
+  reject(slug: string, id: string): number;
   openTriggers(slug: string): Trigger[];
   /** Replaces everything with what the session entries (in order) say; entries that are not well-formed are ignored. */
   rebuild(entries: readonly unknown[]): void;
@@ -22,7 +24,7 @@ const isStr = (x: unknown): x is string => typeof x === "string";
 const readTrigger = (x: unknown): boolean => {
   const t = x as Record<string, unknown> | null;
   return !!t && typeof t === "object" && isStr(t.id) && TRIGGERS.includes(t.kind as TriggerKind)
-    && (t.task === undefined || isStr(t.task)) && typeof t.open === "boolean";
+    && (t.task === undefined || isStr(t.task)) && typeof t.open === "boolean" && (t.rejected === undefined || Number.isInteger(t.rejected));
 };
 /** A record as stored, or undefined when a field is missing or of the wrong type. */
 export function readPlan(x: unknown): PlanRecord | undefined {
@@ -51,6 +53,13 @@ export function createPlanStore(append: (customType: string, data: unknown) => v
     close(slug, id) {
       const r = plans.get(slug);
       if (r?.triggers.some((t) => t.id === id && t.open)) put({ ...r, triggers: r.triggers.map((t) => (t.id === id ? { ...t, open: false } : t)) });
+    },
+    reject(slug, id) {
+      const r = plans.get(slug), t = r?.triggers.find((x) => x.id === id);
+      if (!r || !t) return 0;
+      const n = (t.rejected ?? 0) + 1;
+      put({ ...r, triggers: r.triggers.map((x) => (x.id === id ? { ...x, rejected: n } : x)) });
+      return n;
     },
     openTriggers: (slug) => structuredClone(plans.get(slug)?.triggers.filter((t) => t.open) ?? []),
     rebuild(entries) {

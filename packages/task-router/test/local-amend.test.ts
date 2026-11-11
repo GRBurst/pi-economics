@@ -1,11 +1,13 @@
 // Local mode L7.T14–T15 (design §3.5.4, §3.5.5; AC-P6): `amend_plan` in a temporary repository. Step 1: the trigger must be
 // open; the one the model may open itself is `interface-break`, accepted iff its evidence command fails in the active
 // worktree. Step 2: the amended skeleton passes the rules of §3.2.4 (only the amendment's own findings count) and leaves
-// checked tasks (ticked or merged) as they are.
+// checked tasks (ticked or merged) as they are. Step 3: a delta review, or a plan-review for an interface-break, an amended
+// task in publicApiGlobs or a milestone added or removed. Steps 4–5: approved, the plan is re-rendered and committed on main;
+// rejected, the findings return, and after plans.rounds rejections the plan author rewrites the milestone itself.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { renderPlan, type Skeleton, skeletonHash, type Task } from "../core/local/plan.ts";
+import { canonical, parsePlan, renderPlan, type Skeleton, skeletonHash, type Task } from "../core/local/plan.ts";
 import { amendPlan, type AmendInput } from "../core/local/planflow.ts";
 import { startBranch } from "../core/local/worktree.ts";
 import { planRig, type PlanRig } from "./plan-rig.ts";
@@ -104,4 +106,112 @@ test("AC-P6 checked tasks (ticked or merged) cannot change", async () => {
   assert.equal((await refused(done, amend({ changes: [{ op: "remove", id: "M1.T2" }, { op: "remove", id: "M1.T1" }] }))).detail,
     "M1.T1 is checked (ticked or merged); it cannot change");
   assert.equal((await refused(done, amend({ changes: [{ op: "remove", id: "M1" }] }))).detail, "M1.T1 is checked (ticked or merged); it cannot change");
+});
+
+// ── L7.T15 (design §3.5.4 steps 3–5): the review kind, the applied amendment, the rounds ──
+const APPROVE = { verdict: "APPROVE", summary: "fine", findings: [] };
+const REVISE = { verdict: "REVISE", summary: "no", findings: [{ id: "F1", category: "plan", target: "M1.T2", defect: "too wide", evidence: "e", fix: "narrow it", blocking: true }] };
+/** The plan as main has it. */
+const onMain = (x: PlanRig) => parsePlan(x.r.git(["show", `main:${FILE}`]) + "\n")!;
+const WIDER = { ...T2, files: ["src/b.ts", "test/a.test.ts"] };
+/** A task as the review input shows it: one line of canonical JSON. */
+const line = (t: Task): string => JSON.stringify(JSON.parse(canonical(t)));
+
+test("AC-P6 review kind: a delta review by default; approved, the plan is re-rendered on main with the unchanged ticks", async () => {
+  const x = approved(["M1.T1"]);
+  x.r.commit("src/parse.ts", "export {};\n");
+  merged(x, "M1.T1");
+  const wt = await start(x, "M1.T2");
+  x.plans.open("parser", "over-budget", "M1.T2");
+  x.script.push([APPROVE]);
+  const before = x.mainSha();
+  const r = await amendPlan(x.ports, amend(), x.r.dir);
+  assert.equal(r.status, "approved", r.detail);
+  assert.deepEqual([r.full, r.trigger, r.reviewId], [false, "t1", "rv-1"]);
+  assert.deepEqual(x.runs.map((a) => a.role), ["delta"]);
+  const input = x.runs[0]!.input;
+  for (const part of ["Trigger: t1 over-budget (task M1.T2)", "Reason: the wiring needs the test", "Old tasks:", line(T2), "Proposed tasks:",
+    line(WIDER), "Dependants: none"]) assert.ok(input.split("\n").includes(part), `${part} in\n${input}`);
+  // committed on main (its parent the old tip), recorded, the trigger closed, the ticks of unchanged tasks kept
+  assert.equal(x.r.git(["rev-parse", "main^"]), before);
+  assert.equal(x.r.git(["log", "-1", "--format=%s", "main"]), "plan(parser): amended rv-1");
+  assert.equal(r.commit, x.mainSha());
+  const now = onMain(x);
+  assert.deepEqual(now.sk.milestones[0]!.tasks[1], WIDER);
+  assert.deepEqual([...now.ticks], ["M1.T1"]);
+  const rec = x.plans.get("parser")!;
+  assert.deepEqual([rec.skeletonHash, rec.approvedBy, rec.triggers], [skeletonHash(now.sk), "rv-1", [{ id: "t1", kind: "over-budget", task: "M1.T2", open: false }]]);
+  assert.equal(r.detail, `plan amended: ${FILE} at ${x.mainSha().slice(0, 7)}; trigger t1 is closed`);
+  // the live branch of the amended task takes its new whitelist and check
+  assert.deepEqual(x.branches.get(x.r.dir, "lm/parser/M1.T2")!.files, ["src/b.ts", "test/a.test.ts"]);
+  assert.equal(x.branches.get(x.r.dir, "lm/parser/M1.T2")!.worktree, wt);
+});
+
+test("AC-P6 review kind: plan-review for publicApiGlobs, an interface-break and an added milestone", async () => {
+  const cases: Array<[string, Record<string, unknown>, Partial<AmendInput>, string?]> = [
+    ["publicApiGlobs", { plans: { publicApiGlobs: ["src/b.*"] } }, {}],
+    ["interface-break", {}, { trigger: { id: "new", kind: "interface-break", evidenceCommand: "false" } }],
+    ["milestone added", {}, { changes: [{ op: "add", task: { ...T2, id: "M2.T1", files: ["test/a.test.ts"], check: "grep -q wire test/a.test.ts", dependsOn: [] } }] }],
+    ["delta", {}, {}, "delta"],
+  ];
+  for (const [name, settings, o, role = "plan-review"] of cases) {
+    const x = planRig({ settings });
+    x.r.commit(FILE, renderPlan({ slug: "parser", request: "add a parser" }, SK, new Set()), "plan(parser): approved rv-0");
+    x.plans.put({ slug: "parser", repo: x.r.dir, file: FILE, skeletonHash: skeletonHash(SK), approvedBy: "rv-0", triggers: [] });
+    x.plans.open("parser", "over-budget", "M1.T2");
+    x.script.push([APPROVE]);
+    const r = await amendPlan(x.ports, amend(o), x.r.dir);
+    assert.equal(r.status, "approved", `${name}: ${r.detail}`);
+    assert.deepEqual([x.runs.map((a) => a.role), r.full], [[role], role === "plan-review"], name);
+    if (role === "plan-review") assert.ok(x.runs[0]!.input.includes("\n# Plan: parser\n"), `${name}: the whole plan`);
+  }
+});
+
+test("AC-P6 rejected: the findings come back; the plan and the trigger stay", async () => {
+  const x = approved();
+  x.plans.open("parser", "over-budget", "M1.T2");
+  x.script.push([REVISE]);
+  const before = x.mainSha();
+  const r = await amendPlan(x.ports, amend(), x.r.dir);
+  assert.deepEqual([r.status, r.reason, r.trigger, r.full], ["rejected", undefined, "t1", false]);
+  assert.equal(r.findings?.length, 1);
+  assert.match(r.findings![0]!, /^F1 \[blocking\] plan M1\.T2: too wide/);
+  assert.equal(r.detail, "the plan amendment was rejected (1 of plans.rounds 2); answer the findings with a new amend_plan");
+  assert.equal(x.mainSha(), before);
+  assert.deepEqual(x.plans.openTriggers("parser").map((t) => [t.id, t.rejected]), [["t1", 1]]);
+});
+
+test("rounds exhausted: after plans.rounds rejections the plan author rewrites the milestone, applied without a review", async () => {
+  const x = approved();
+  x.plans.open("parser", "over-budget", "M1.T2");
+  x.script.push([REVISE], [REVISE]);
+  assert.equal((await amendPlan(x.ports, amend(), x.r.dir)).status, "rejected");
+  const T3 = { id: "M1.T3", goal: "test the wiring", files: ["test/a.test.ts"], forbidden: [], check: "grep -q wire test/a.test.ts", dependsOn: ["M1.T2"] };
+  const rewritten: Skeleton = { ...SK, milestones: [{ ...SK.milestones[0]!, tasks: [T1, T2, T3] }] };
+  const vacuousToo: Skeleton = { ...SK, milestones: [{ ...SK.milestones[0]!, tasks: [T1, T2, { ...T3, check: "true" }] }] };
+  x.script.push([{ ...SK, invariants: [] }, vacuousToo, rewritten]);
+  const r = await amendPlan(x.ports, amend(), x.r.dir);
+  assert.equal(r.status, "approved", r.detail);
+  assert.deepEqual(x.runs.map((a) => a.role), ["delta", "delta", "plan-author"]);
+  assert.ok(x.runs[2]!.input.includes("Rewrite milestone M1"), x.runs[2]!.input);
+  assert.deepEqual(x.replies.slice(-3).map((c) => c.ok), [false, false, true], "another milestone changed; a vacuous check; then accepted");
+  assert.match(x.replies.at(-3)!.reasons!.join("; "), /invariants changed; rewrite only M1/);
+  assert.deepEqual(x.checks.filter((c) => c.cmd.startsWith("grep -q wire")).length, 1, "only the new task's check ran red");
+  assert.equal(onMain(x).sk.milestones[0]!.tasks.length, 3);
+  assert.equal(x.r.git(["log", "-1", "--format=%s", "main"]), "plan(parser): amended rv-3");
+  assert.equal(x.plans.openTriggers("parser").length, 0);
+  assert.match(r.detail, /^the amendment was rejected 2 times; the plan author rewrote M1: plan amended: /);
+});
+
+test("an amended task whose check passes on the main tip is marked vacuous; one that cannot run is refused", async () => {
+  const x = approved();
+  x.plans.open("parser", "over-budget", "M1.T2");
+  x.script.push([APPROVE]);
+  const r = await amendPlan(x.ports, amend({ changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: "true" } }] }), x.r.dir);
+  assert.equal(r.status, "approved", r.detail);
+  assert.equal(onMain(x).sk.milestones[0]!.tasks[1]!.vacuousCheck, true);
+  const y = approved();
+  y.plans.open("parser", "over-budget", "M1.T2");
+  const no = await refused(y, amend({ changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: "no-such-command-x" } }] }));
+  assert.deepEqual([no.reason, no.detail], ["broken-check", "the amended checks cannot run: M1.T2: `no-such-command-x` exit 127"]);
 });

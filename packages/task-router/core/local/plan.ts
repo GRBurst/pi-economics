@@ -164,7 +164,7 @@ export function tickOnly(before: string, after: string): { ok: true; flipped: st
 export const TRIGGERS = ["non-whitelisted", "interface-break", "regression", "over-budget", "remediation-failed"] as const;
 export type TriggerKind = (typeof TRIGGERS)[number];
 /** `id`: `t<n>`, per plan (D53); `task`: the plan task it was opened for. */
-export type Trigger = { id: string; kind: TriggerKind; task?: string; open: boolean };
+export type Trigger = { id: string; kind: TriggerKind; task?: string; open: boolean; /** Rejected amendments (L7.T15). */ rejected?: number };
 /** `repo`: the repository's root (beyond design §3.0.2: a plan belongs to one repository); `file`: the plan file,
  *  relative to it; `approvedBy`: the approving review's id. */
 export type PlanRecord = { slug: string; repo: string; file: string; skeletonHash: string; approvedBy: string; triggers: Trigger[] };
