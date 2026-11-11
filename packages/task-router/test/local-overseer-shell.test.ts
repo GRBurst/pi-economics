@@ -66,3 +66,11 @@ test("status: the Opus budget once at most 3 are left (Q19), after a rebuild and
   assert.equal(statusText({ local: true, localModels: [], force: "force m high", opusLeft: 0, hint: "repeat-call" }),
     "local · force m high · opus 0 left · hint repeat-call");
 });
+
+test("review F5 (LD14): the shell's overseer defaults its cwd to the main session's (the main checkout)", async () => {
+  const h = harness({ settings: { mode: "local" }, apiExt: true });
+  h.f.fire("session_start", {}, { ...ctxOf(h).ctx, cwd: "/main" });
+  h.hooks.onSleep = () => { void (h.a.apiSpawns.at(-1)!.policy as Ok).childTools![0]!.execute(VALID); };
+  assert.equal((await h.router.overseer.run({ role: "merge", input: "review this", submit: verdictSubmit() })).ok, true);
+  assert.equal((h.a.apiSpawns[0]!.policy as Ok).cwd, "/main");
+});

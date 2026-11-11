@@ -1,6 +1,7 @@
 // Local mode L4 (design §3.2, plan S19–S20): the overseer. The router spawns it itself through the actor's spawn API
 // (spawnPolicyApi ≥ 2) with a ticket in `task`; its own spawn policy answers a known ticket first, single use, with the
 // ticket's model, cwd, read-only tools, the submit tool and a guard (D25). An unknown ticket falls through to card routing.
+import { isAbsolute, relative } from "node:path";
 import type { ChildTool, PolicyResult, SubagentsApiV1 } from "../api.ts";
 import type { Guard, SyncGuard } from "../toolguard.ts";
 import type { RouterSettings, ThinkingLevel } from "../types.ts";
@@ -66,13 +67,19 @@ export type SubmitSpec<T> = { name: "submit_verdict" | "submit_plan"; descriptio
 export type Budget = { opusUsed: number; steerUsed: number };
 export type RunResult<T> = { ok: true; value: T; reviewId: string; member: string; model: string }
                          | { ok: false; outcome: "timeout" | "error" | "invalid" | "skipped" | "aborted" };
-export type RunArgs<T> = { role: Role; input: string; cwd: string; submit: SubmitSpec<T>; commit?: string; branch?: string; signal?: AbortSignal };
+/** LD14 (review F5): `cwd` is the child session's (default `base()`, the main checkout), never inside `worktree`, the tree under
+ *  review, which the brief names by its absolute path: pi loads AGENTS.md and project settings from the cwd, and a branch must
+ *  not write its reviewer's instructions. */
+export type RunArgs<T> = { role: Role; input: string; cwd?: string; worktree?: string; submit: SubmitSpec<T>; commit?: string; branch?: string;
+  signal?: AbortSignal };
 export type OverseerDeps = {
   api(): SubagentsApiV1 | undefined; settings: RouterSettings; tickets: Tickets;
   /** The router's own spawn policy is registered (review F1): without it a ticket reaches no one, so nothing is spawned. */
   policyOn(): boolean;
   /** A one-line warning (a child the router's policy did not route). */
   warn(text: string): void;
+  /** The repository's main checkout (LD14): an overseer's default cwd. */
+  base(): string;
   /** Random hex of 2·bytes characters (review ids, D34). */
   hex(bytes: number): string;
   now(): number; sleep(ms: number): Promise<void>;
@@ -131,12 +138,20 @@ export function budgetOf(branch: readonly unknown[]): Budget {
 /** `unrouted` (review F1): the spawn succeeded, but not through the router's policy; logged as an `error`, never retried. */
 type Settled<T> = { kind: "ok"; value: T } | { kind: "timeout" | "error" | "invalid" | "aborted" | "unrouted" };
 type SpawnApi = SubagentsApiV1 & Required<Pick<SubagentsApiV1, "spawn" | "kill">>;
+/** `dir` is `root` or below it (both absolute). */
+const inside = (dir: string, root: string): boolean => { const p = relative(root, dir); return p !== ".." && !p.startsWith("../") && !isAbsolute(p); };
+/** LD14: the run with its cwd and brief, or why it may not start. */
+function placed<T>(r: RunArgs<T>, base: string): (RunArgs<T> & { cwd: string }) | string {
+  const cwd = r.cwd ?? base, wt = r.worktree;
+  if (!isAbsolute(cwd) || (wt !== undefined && (!isAbsolute(wt) || inside(cwd, wt)))) return `cwd ${cwd}, worktree ${wt ?? "none"}`;
+  return { ...r, cwd, ...(wt !== undefined && { input: `The worktree under review: ${wt} (read its files by this absolute path; your cwd is the main checkout).\n\n${r.input}` }) };
+}
 
 export function createOverseer(d: OverseerDeps) {
   let n = 0;
   /** One overseer child: spawn with a ticket, await its submit tool (reminder, timeout, events, abort), kill it. `charge`
    *  runs once the spawn succeeded (D30: an attempt that later times out still cost). */
-  async function attempt<T>(a: SpawnApi, r: RunArgs<T>, member: string, model: string, effort: ThinkingLevel, reviewId: string,
+  async function attempt<T>(a: SpawnApi, r: RunArgs<T> & { cwd: string }, member: string, model: string, effort: ThinkingLevel, reviewId: string,
     charge: () => void): Promise<Settled<T>> {
     const s = d.settings.overseer, name = `ovs-${r.role}-${++n}`;
     let settled: Settled<T> | undefined, wake!: () => void;
@@ -212,9 +227,14 @@ export function createOverseer(d: OverseerDeps) {
     /** The budget with the picks in flight counted as used (what the next pick sees). */
     budget,
     /** Design §3.2.2: two attempts (`steer` one), the second on the fallback member (D28); `invalid` is a failed attempt. */
-    async run<T>(r: RunArgs<T>): Promise<RunResult<T>> {
+    async run<T>(args: RunArgs<T>): Promise<RunResult<T>> {
       const a = d.api();
       if (!a || !hasSpawnApi(a) || !ready()) return { ok: false, outcome: "error" };
+      const r = placed(args, d.base());
+      if (typeof r === "string") {
+        d.warn(`task-router: an overseer runs in the main checkout with absolute paths (LD14); refused ${r}`);
+        return { ok: false, outcome: "error" };
+      }
       const s = d.settings.overseer;
       let last: "timeout" | "error" | "invalid" = "error";
       for (const no of r.role === "steer" ? [1] : [1, 2]) {

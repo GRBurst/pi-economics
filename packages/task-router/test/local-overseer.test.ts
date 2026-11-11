@@ -279,3 +279,29 @@ test("review F3: every role's prompt says no go-ahead comes and that the run end
     assert.ok(text.split("\n").includes(`No one answers you and no go-ahead comes: start at once, and end by calling ${tool}.`), role);
   }
 });
+
+test("review F5 (LD14): without a cwd the overseer starts in the main checkout; the worktree is named first in its brief", async () => {
+  const r = rig();
+  r.script.push(async () => void (await r.tool().execute(VALID)));
+  const res = await r.run({ cwd: undefined, worktree: "/repo/.worktrees/feat" });
+  assert.ok(res.ok);
+  const s = r.h.a.apiSpawns[0]!;
+  assert.equal((s.policy as Ok).cwd, "/repo");
+  assert.equal(s.args.message, "The worktree under review: /repo/.worktrees/feat (read its files by this absolute path; your cwd is the main checkout).\n\nreview this");
+});
+
+test("review F5 (LD14): a cwd inside the worktree under review, or a relative path, fails the run before any spawn", async () => {
+  for (const x of [{ cwd: "/repo/.worktrees/feat" }, { cwd: "/repo/.worktrees/feat/src" }, { cwd: "repo" }, { cwd: undefined, worktree: "wt" }]) {
+    const r = rig();
+    assert.deepEqual(await r.run({ worktree: "/repo/.worktrees/feat", ...x }), { ok: false, outcome: "error" }, JSON.stringify(x));
+    assert.equal(r.h.a.apiSpawns.length, 0);
+    assert.equal(r.warnings.length, 1);
+    assert.equal(r.warnings[0]!.startsWith("task-router: an overseer runs in the main checkout with absolute paths (LD14)"), true);
+  }
+  // A worktree next to the checkout, or a cwd that only shares a prefix with it, is fine.
+  for (const x of [{ cwd: "/repo", worktree: "/repo-wt/feat" }, { cwd: "/repo/.worktrees/feature", worktree: "/repo/.worktrees/feat" }]) {
+    const r = rig();
+    r.script.push(async () => void (await r.tool().execute(VALID)));
+    assert.equal((await r.run(x)).ok, true, JSON.stringify(x));
+  }
+});

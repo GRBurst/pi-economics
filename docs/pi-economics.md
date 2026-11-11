@@ -420,7 +420,11 @@ The spawn policy takes the ticket before anything else: the agent runs on
 `overseer.member` at `overseer.effort` (`opus`, `high`) with the read-only
 `overseer.tools` (`read`, `grep`, `find`, `ls`; `bash`, `edit` or `write` there is
 reported, `overseer.tools: <tool> can write; default kept`) plus one submit
-tool, and a guard refuses every other tool. Ticket spawns are not forced and
+tool, and a guard refuses every other tool. Its cwd is the repository's main
+checkout (the main session's cwd), never the worktree under review: pi loads
+`AGENTS.md` and project settings from the cwd, so the brief names the worktree
+by its absolute path instead, and a run with a cwd inside it is refused (LD14).
+Ticket spawns are not forced and
 not routed. The agent reports through the submit tool only: a verdict
 (`summary`, `verdict`, `findings` with id, category, target, criterion,
 blocking) checked against its JSON schema and the rules (no code fence, unique

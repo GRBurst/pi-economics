@@ -22,7 +22,7 @@ export function rig(o: { overseer?: Partial<OverseerSettings>; budget?: Partial<
   let k = 0, polls = 0;
   const d: OverseerDeps = {
     api: () => h.a.api, settings: h.router.settings, tickets: h.router.tickets, log: h.router.log,
-    policyOn: () => h.a.hasPolicy(), warn: (m) => void warnings.push(m),
+    policyOn: () => h.a.hasPolicy(), warn: (m) => void warnings.push(m), base: () => "/repo",
     hex: (n) => (++k).toString(16).padStart(2 * n, "0"),
     now: () => h.clock.t,
     sleep: async (ms) => {

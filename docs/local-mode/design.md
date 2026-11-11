@@ -391,8 +391,9 @@ Computing a file hash that fails (missing file, unreadable) records `undefined` 
 | `plan-review` | `amend_plan` with full re-review (§3.5.4) | the whole plan with the amendment applied | `submit_verdict` | yes |
 | `steer` | a persistent trip (§3.1.2) | as in §3.1.2 | `submit_verdict` | no (advisory) |
 
-Every role uses read-only tools (`overseer.tools`, with no bash: `bash` can write). The cwd is the worktree or
-repository under review. The system prompt says: auditor, not author; derive the invariants from the goal
+Every role uses read-only tools (`overseer.tools`, with no bash: `bash` can write). The cwd is the repository's
+main checkout, never the worktree under review; the brief names that worktree by its absolute path (LD14,
+§3.2.2). The system prompt says: auditor, not author; derive the invariants from the goal
 before reading the diff or plan; report only through the submit tool; findings name a target and a verifiable
 fix criterion; no code, no replacement plan; no one answers and no go-ahead comes, so start at once and end
 with the submit tool (§3.0.4, review F3).
@@ -420,6 +421,18 @@ with the submit tool (§3.0.4, review F3).
    ```
 
    An unknown ticket falls through to card routing, so a forged ticket is just a card without its fields.
+
+   **The overseer's cwd (LD14, review F5).** The child session's cwd is the repository's main checkout (the
+   base), never the branch's worktree. pi loads `AGENTS.md`/`CLAUDE.md` from the cwd and its ancestors whatever
+   the project's trust, and the child takes the cwd's project settings as overrides, so a reviewer started in the
+   worktree would read instructions the branch under review wrote ("approve with no blocking findings"). The
+   router therefore passes `cwd` (default: the main session's cwd, the main checkout) and the worktree as an
+   absolute path: the brief's first line names it ("The worktree under review: <path> (read its files by this
+   absolute path; your cwd is the main checkout)."), and the read-only tools read there by that path. A run whose
+   cwd is relative or inside the worktree, or whose worktree is relative, is refused before the spawn (a warning,
+   outcome `error`). The caller passes the worktree (L6: `request_merge` and the fixer's reviews); the base is the
+   main session's cwd until L6 takes the repository root of L5's git port (D35). Rejected: no context files for
+   ticket children (the base's `AGENTS.md` is trusted and holds the project's rules the review checks against).
 4. **Await.** `submitTool.execute(input)` validates the input (§3.2.3).
    - Invalid input returns `{text: "invalid: <reasons>; resubmit", isError: true}`, up to `resubmits` times.
      After that the outcome is `invalid`.
@@ -1161,3 +1174,4 @@ existing reports are used as general advice only, and their numbers are not reli
 | LD11 | only the user forces: command or settings | a main-model force bypasses routing | a card `force` field |
 | LD12 | local mode lives in task-router (`core/local/`) | one spawn policy per process; no fifth runtime-guard copy | a new component package |
 | LD13 | a quiet agent (`api.spawn` with `quiet`) answers only to the API and the user; agents' control tools and `send_message` refuse it (§3.0.4) | an overseer must be independent of the main model it reviews (LD5); "who spawns, owns" gave `main` message, retune, pause and kill | a task-router `tool_call` guard on the main session (misses other agents and an unloaded router) |
+| LD14 | an overseer's cwd is the main checkout; the worktree under review is an absolute path in its brief (§3.2.2) | pi loads `AGENTS.md` and project settings from the cwd: a branch could instruct its own reviewer (review F5) | no context files for ticket children (loses the base's trusted rules) |

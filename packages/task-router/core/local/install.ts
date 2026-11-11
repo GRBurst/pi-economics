@@ -52,14 +52,17 @@ const textOf = (content: unknown): string =>
  *  The hints are a no-op unless on (`hints.enabled`: "on", or "auto" in local mode). */
 export function installLocal(pi: Pi, d: LocalDeps) {
   const budget: Budget = { opusUsed: 0, steerUsed: 0 };
+  /** The main session's cwd, the main checkout (LD14; L6 may take L5's repository root instead). */
+  let base: string | undefined;
   const overseer = createOverseer({
     api: d.api, settings: d.settings, tickets: d.tickets, hex: d.hex, now: d.now, sleep: d.sleep, budget, log: d.log,
-    policyOn: d.policyOn, warn: (text) => console.warn(text),
+    policyOn: d.policyOn, warn: (text) => console.warn(text), base: () => base ?? process.cwd(),
     append: (type, data) => { pi.appendEntry?.(type, data); if (type === BUDGET_TYPE) d.onBudget?.(); },
   });
   const handle = {
     overseer, budget,
     start(ctx: any): void {
+      if (typeof ctx?.cwd === "string") base = ctx.cwd;
       let branch: unknown;
       try { branch = ctx?.sessionManager?.getBranch?.(); } catch { branch = undefined; }
       Object.assign(budget, budgetOf(Array.isArray(branch) ? branch : []));
