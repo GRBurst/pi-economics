@@ -17,6 +17,8 @@ import { globMatch } from "../glob.ts";
 import { check } from "./schema.ts";
 import type { Schema } from "./schema.ts";
 import { errorReply } from "./branchtool.ts";
+import { type Milestone, parsePlan, type PlanRecord, type Skeleton, skeletonHash, type Task, tickOnly } from "./plan.ts";
+import { mergedUnits, type PlanStore } from "./plans.ts";
 import type { RouterTool } from "./branchtool.ts";
 
 export const REASONS = ["main-branch", "dirty", "behind", "fixer-running", "abandoned", "blocked", "size", "scope",
@@ -164,6 +166,8 @@ export type MergePorts = {
   /** The fixer `name` no longer works on its branch (review F5: not listed, not this process's, or it ended before its record);
    *  such a branch is active again. Absent: a fixer is gone only by its event. */
   fixerGone?(name: string | undefined): boolean;
+  /** The approved plans while plans are active (L7); absent: a branch is merged as one without a plan. */
+  plans?: PlanStore;
 };
 /** What the pipeline learned before it returned, for the `merge` line. */
 type Seen = { branch?: string; nLines?: number; nFiles?: number };
@@ -249,6 +253,41 @@ export async function advanceMain(p: Pick<MergePorts, "git" | "settings" | "appe
   });
 }
 
+// ── plan-bound branches (L7; design §3.4.2 steps 3–6, §3.5.5) ──
+/** A plan-bound branch's plan at its commit: the record, the skeleton, the unit (its milestone, its tasks), the plan file's
+ *  change against the main tip (`tick`: tick-only and its flips; undefined: unchanged). */
+type Bound = { rec: PlanRecord; sk: Skeleton; id: string; milestone: Milestone; tasks: Task[]; file: string; changed: boolean; tick?: string[] };
+/** undefined: the plan at `commit` is missing or not the approved one (`plan-changed`). */
+async function boundOf(p: MergePorts, plans: PlanStore, repo: string, unit: { slug: string; id: string }, base: string, commit: string): Promise<Bound | undefined> {
+  const rec = plans.get(unit.slug);
+  const after = rec && await p.git.show(repo, commit, rec.file);
+  const parsed = after === undefined ? undefined : parsePlan(after);
+  if (!rec || after === undefined || !parsed || skeletonHash(parsed.sk) !== rec.skeletonHash) return undefined;
+  const milestone = parsed.sk.milestones.find((m) => m.id === unit.id || m.tasks.some((x) => x.id === unit.id));
+  if (!milestone) return undefined;
+  const task = milestone.tasks.find((x) => x.id === unit.id);
+  const before = await p.git.show(repo, base, rec.file);
+  const tick = before === undefined ? undefined : tickOnly(before, after);
+  return { rec, sk: parsed.sk, id: unit.id, milestone, tasks: task ? [task] : milestone.tasks, file: rec.file, changed: before !== after,
+    ...(tick?.ok && { tick: tick.flipped }) };
+}
+/** A plan-bound branch's size budget (§3.5.5 `over-budget`): a task branch `splitLines`/`splitFiles`, a milestone branch
+ *  `milestoneLines`; never above the merge gate's own limits. */
+const budgetOf = (s: RouterSettings, b: Bound | undefined): { lines: number; files: number } => {
+  const g = s.mergeGate;
+  if (!b) return { lines: g.maxDiffLines, files: g.maxDiffFiles };
+  return b.milestone.branch === "milestone" ? { lines: Math.min(g.maxDiffLines, s.plans.milestoneLines), files: g.maxDiffFiles }
+    : { lines: Math.min(g.maxDiffLines, s.plans.splitLines), files: Math.min(g.maxDiffFiles, s.plans.splitFiles) };
+};
+/** The merged tasks whose checks guard against a regression (`plans.regression`): of the unit's milestone or of the whole plan,
+ *  without the unit's own tasks, in plan order. */
+function regressionTasks(s: RouterSettings, b: Bound, branches: readonly BranchRecord[]): Task[] {
+  const merged = mergedUnits(b.sk, b.rec.slug, branches), own = new Set(b.tasks.map((x) => x.id));
+  const pool = s.plans.regression === "milestone" ? b.milestone.tasks : b.sk.milestones.flatMap((m) => m.tasks);
+  return pool.filter((x) => merged.has(x.id) && !own.has(x.id));
+}
+const opened = (id: string | undefined): string => (id === undefined ? "" : ` (trigger ${id} is open)`);
+
 async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): Promise<MergeResult | "moved"> {
   const s = p.settings, g = s.mergeGate, git = p.git;
   // ── 1 resolve: the repository, the branch (given, else the active one), its worktree, the main branch, the commit ──
@@ -281,30 +320,56 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
   // ── 2 refuse ──
   const why = refusal({ isMain, state: rec?.state, dirty: await git.dirty(wt.dir), behind: !(await git.isAncestor(repo, main.sha, commit)) });
   if (why) return refuse(why, { ...x, worktree: wt.dir, fixer: rec?.fixer ?? "" }, commit);
-  // ── 3 size ──
+  // ── plan-bound (L7): the plan at the commit has the approved skeleton ──
+  let bound: Bound | undefined;
+  if (rec?.plan && p.plans) {
+    bound = await boundOf(p, p.plans, repo, rec.plan, main.sha, commit);
+    if (!bound) return refuse("plan-changed", {}, commit);
+  }
+  /** Opens a trigger for this branch's unit; its id. */
+  const trigger = (b: Bound, kind: "non-whitelisted" | "over-budget" | "regression"): string | undefined => p.plans?.open(b.rec.slug, kind, b.id);
+  // ── 3 size (a tick-only plan change counts toward none; a plan-bound branch by its plan budget) ──
   const st = await git.numstat(repo, main.sha, commit);
   if (st === undefined) return gitError(`cannot diff ${main.name}...${commit}`, commit);
-  const z = sizeOf(st);
+  const z = sizeOf(st, bound?.file, bound?.tick !== undefined), lim = budgetOf(s, bound);
   seen.nLines = z.lines;
   seen.nFiles = z.files;
-  if (oversize(st, s)) {
-    return refuse("size", { lines: String(z.lines), files: String(z.files), maxLines: String(g.maxDiffLines), maxFiles: String(g.maxDiffFiles) }, commit);
+  if (z.lines > lim.lines || z.files > lim.files) {
+    const r = refuse("size", { lines: String(z.lines), files: String(z.files), maxLines: String(lim.lines), maxFiles: String(lim.files) }, commit);
+    return bound ? { ...r, detail: r.detail + opened(trigger(bound, "over-budget")) } : r;
   }
-  // ── 5 checks: the branch check, then mergeGate.extraChecks, in the worktree; the first failure refuses ──
+  // ── 4 scope (plan-bound): the unit's files ∪ create, or the plan file ticked for the unit's own tasks ──
+  if (bound) {
+    const allowed = new Set(bound.tasks.flatMap((x) => [...x.files, ...(x.create ?? [])]));
+    const own = new Set(bound.tasks.map((x) => x.id));
+    const out = st.map((f) => f.path).filter((f) => (f === bound!.file ? bound!.changed && !bound!.tick?.every((id) => own.has(id)) : !allowed.has(f)));
+    if (out.length) {
+      const r = refuse("scope", {}, commit);
+      return { ...r, detail: `${r.detail}: ${out.join(", ")}${opened(trigger(bound, "non-whitelisted"))}` };
+    }
+  }
+  // ── 5 checks: the branch check (a plan unit's from the plan), then mergeGate.extraChecks, then the merged tasks' checks per
+  //    plans.regression, in the worktree; the first failure refuses ──
   const checks: CheckRun[] = [];
   if (rec?.check) { // review F7: the branch check is the model's text; the git classifier reads it before the router runs it
     const why = await vetCheck({ git, store: p.branches, settings: s }, rec.check, wt.dir, branch);
     if (why !== undefined) return done("refused", "check", `the check \`${rec.check}\` was not run: ${why}`, commit);
   }
-  for (const cmd of [...(rec?.check ? [rec.check] : []), ...g.extraChecks]) {
+  const own = bound ? bound.tasks.map((x) => x.check) : rec?.check ? [rec.check] : [];
+  const earlier = bound && s.plans.regression !== "off" ? regressionTasks(s, bound, p.branches.all()) : [];
+  const runs = [...own.map((cmd) => ({ cmd })), ...g.extraChecks.map((cmd) => ({ cmd })), ...earlier.map((x) => ({ cmd: x.check, of: x.id }))];
+  for (const c of runs) {
     if (p.signal?.aborted) return aborted(commit); // review F11: Esc stops the checks, not only the review
-    const r = await p.run(cmd, wt.dir, s.checkTimeoutSec * 1000, p.signal);
+    const r = await p.run(c.cmd, wt.dir, s.checkTimeoutSec * 1000, p.signal);
     if (p.signal?.aborted) return aborted(commit);
-    checks.push({ cmd, exit: r.exit, output: tailOf(r.output) });
-    if (r.exit !== 0) return refuse("check", { cmd, exit: String(r.exit), tail: tailOf(r.output) }, commit);
+    checks.push({ cmd: c.cmd, exit: r.exit, output: tailOf(r.output) });
+    if (r.exit === 0) continue;
+    const no = refuse("check", { cmd: c.cmd, exit: String(r.exit), tail: tailOf(r.output) }, commit);
+    return "of" in c && bound ? { ...no, detail: `${no.detail}\n(a regression of ${c.of}; trigger ${trigger(bound, "regression")} is open)` } : no;
   }
-  // ── 6 red run (a branch without a plan; its own check only) ──
-  const red: Red = g.redRun && rec?.check ? await redRun(p, repo, main.sha, rec.check) : "skipped";
+  // ── 6 red run (a branch without a plan; its own check only). A plan unit's ran at plan time (§3.5.2): `vacuousCheck` ──
+  const red: Red = bound ? (bound.tasks.some((x) => x.vacuousCheck) ? "passed" : "failed")
+    : g.redRun && rec?.check ? await redRun(p, repo, main.sha, rec.check) : "skipped";
   if (p.signal?.aborted) return aborted(commit);
   // ── 7 approval reuse: (repo, branch, commit, tree) ──
   const tree = await git.tree(repo, commit);
@@ -319,7 +384,9 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
       return done("error", "review-unavailable", `${reasonText("review-unavailable", {})}: the diff ${main.name}..${commit.slice(0, 7)} is longer than the review's ${budget} lines`, commit);
     }
     if (diff === "" && st.length > 0) return gitError(`cannot read the diff ${main.name}..${commit}`, commit);
-    const text = reviewInput({ goal: rec?.goal, summary: input.summary, checks, red, risky: paths.filter((f) => globs.some((x) => globMatch(x, f))),
+    const goal = bound ? (bound.tasks.length === 1 && bound.tasks[0]!.id === bound.id ? bound.tasks[0]!.goal : bound.milestone.goal) : rec?.goal;
+    const invariants = bound ? [...bound.sk.invariants, ...bound.tasks.flatMap((x) => x.forbidden.map((f) => `${x.id} forbidden: ${f}`))].join("; ") : undefined;
+    const text = reviewInput({ goal, summary: input.summary, invariants, checks, red, risky: paths.filter((f) => globs.some((x) => globMatch(x, f))),
       stat: st, base: main.sha, commit, diff, maxLines: budget });
     const out = await p.overseer.run({ role: "merge", input: text, cwd: p.branches.facts.mainCheckout.get(repo) ?? repo, worktree: wt.dir,
       submit: verdictSubmit(new Set(paths)), commit, branch, signal: p.signal });
