@@ -118,3 +118,11 @@ test("without the plan store (plans off) a plan stays refused", async () => {
   const r = await startBranch({ ...x.d, plans: undefined }, { plan: { slug: "parser", id: "M1.T1" } }, x.r.dir);
   assert.deepEqual(r, { ok: false, errors: ["plans are not active"] });
 });
+
+test("review L7 F13: a plan file on main without a record in this session names the other session and the next step", async () => {
+  const x = approved();
+  x.plans.rebuild([]); // a new session: the record stayed in the one that made the plan
+  const next = `${FILE} on main was approved in another session (plan records stay in the session that made them); `
+    + "continue the plan there, or plan_request a new slug";
+  assert.equal(await refused(x, "M1.T1"), `no approved plan parser in ${x.r.dir} in this session: ${next}`);
+});

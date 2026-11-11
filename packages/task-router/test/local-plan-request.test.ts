@@ -42,6 +42,14 @@ test("AC-P1 a slug a plan already uses is refused", async () => {
   assert.equal(y.runs.length, 0);
 });
 
+test("review L7 F13: a slug whose plan file is on main without a record in this session names the other session", async () => {
+  const y = planRig();
+  y.r.commit("docs/plans/parser.md", "# Plan: parser\n");
+  const s = await planRequest(y.ports, INPUT, y.r.dir);
+  assert.deepEqual([s.status, s.reason, s.detail], ["refused", "slug", "the slug parser is used by docs/plans/parser.md on main, a plan of another session "
+    + "(plan records stay in the session that made them); continue the plan there, or choose another slug"]);
+});
+
 test("D51 a dirty main checkout is refused before authoring", async () => {
   const x = planRig();
   writeFileSync(join(x.r.dir, "src/b.ts"), "changed\n");

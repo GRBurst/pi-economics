@@ -1,13 +1,13 @@
 // Worktrees and branches (design §3.3; plan S22, S23): names, directories and containment (pure), and `startBranch`; the write
 // guard and the cleanup follow in later tasks.
 import { readFileSync, realpathSync } from "node:fs";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, posix, relative, resolve } from "node:path";
 import type { Result, RouterSettings } from "../types.ts";
 import type { BranchRecord, BranchStore } from "./branches.ts";
 import type { Git, Wt } from "./git.ts";
 import { guardGit } from "./gitcmd.ts";
 import { parsePlan, type Skeleton, skeletonHash } from "./plan.ts";
-import { mergedUnits, type PlanStore } from "./plans.ts";
+import { mergedUnits, otherSession, type PlanStore } from "./plans.ts";
 
 export const SLUG = /^[a-z0-9-]{1,40}$/;
 /** `<prefix><slug>`, or `<prefix><plan>/<id>` for a unit of a plan (design §3.3.1). */
@@ -65,7 +65,11 @@ type Unit = { branch: string; goal: string; check: string; plan?: { slug: string
 async function planUnit(d: StartDeps, plans: PlanStore, slug: string, id: string, repo: string, main: { name: string; sha: string },
   wts: readonly Wt[]): Promise<Result<Unit>> {
   const rec = plans.get(slug);
-  if (!rec || rec.repo !== repo) return fail(`no approved plan ${slug} in ${repo}; plan_request makes one`);
+  if (!rec || rec.repo !== repo) {
+    const file = posix.join(d.settings.plans.dir, `${slug}.md`);
+    if (!rec && (await d.git.show(repo, main.sha, file)) !== undefined) return fail(`no approved plan ${slug} in ${repo} in this session: ${otherSession(file, main.name)}`);
+    return fail(`no approved plan ${slug} in ${repo}; plan_request makes one`);
+  }
   const shown = await d.git.show(repo, main.sha, rec.file);
   if (shown === undefined) return fail(`the plan file ${rec.file} is not on ${main.name}`);
   const checkout = wts.find((w) => w.branch === main.name);

@@ -59,6 +59,14 @@ test("AC-P6 trigger: without an open trigger amend_plan is refused", async () =>
   assert.deepEqual(await refused(x, amend({ slug: "none" })), { status: "refused", reason: "no-plan", detail: "no approved plan none; plan_request makes one" });
 });
 
+test("review L7 F13: amend_plan of a plan whose record stayed in another session names that session and the next step", async () => {
+  const x = approved();
+  x.plans.rebuild([]);
+  const r = await refused(x, amend());
+  assert.deepEqual([r.reason, r.detail], ["no-plan", `no approved plan parser in this session: ${FILE} on main was approved in another session `
+    + "(plan records stay in the session that made them); continue the plan there, or plan_request a new slug"]);
+});
+
 test("AC-P6 evidence: a new interface-break is accepted iff its evidence command fails in the active worktree", async () => {
   const x = approved();
   const wt = await start(x, "M1.T1");

@@ -21,7 +21,7 @@ import { check as schemaCheck } from "./schema.ts";
 import { canonical, parsePlan, planBudget, type PlanFs, type PlanRecord, renderPlan, type Skeleton, SKELETON_SCHEMA, skeletonHash, type Task,
   type Trigger, validateSkeleton } from "./plan.ts";
 import { approve, findingLine, type Finding } from "./verdict.ts";
-import { mergedUnits, type PlanStore } from "./plans.ts";
+import { mergedUnits, otherSession, type PlanStore } from "./plans.ts";
 import { branchName, refreshFacts, unitFacts, vetCheck, worktreeDir } from "./worktree.ts";
 
 export type PlanPorts = {
@@ -93,6 +93,10 @@ async function request(p: PlanPorts, input: PlanInput, cwd: string): Promise<Pla
   const checkout = main.checkout ?? p.branches.facts.mainCheckout.get(repo) ?? repo;
   const file = posix.join(s.plans.dir, `${input.slug}.md`);
   if (p.plans.get(input.slug) || existsSync(join(checkout, file))) {
+    if (!p.plans.get(input.slug) && (await git.show(repo, main.sha, file)) !== undefined) { // review L7 F13
+      return done("refused", "slug", `the slug ${input.slug} is used by ${file} on ${main.name}, a plan of another session `
+        + "(plan records stay in the session that made them); continue the plan there, or choose another slug");
+    }
     return done("refused", "slug", `the slug ${input.slug} is used by a plan already; choose another`);
   }
   const misses: string[] = [], files: string[] = [];
@@ -326,12 +330,20 @@ export function applyChanges(sk: Skeleton, changes: readonly AmendChange[]): { s
   return { sk: out, reasons };
 }
 
-async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise<AmendResult> {
+async function amendment(p: PlanPorts, input: AmendInput, cwd: string): Promise<AmendResult> {
   const s = p.settings, git = p.git, slug = input.slug;
   const refused = (reason: AmendReason, detail: string, more: Partial<AmendResult> = {}) => amendDone("refused", reason, detail, more);
   // ── the plan: its record and its file on the main tip, with the approved skeleton ──
   const rec = p.plans.get(slug);
-  if (!rec) return refused("no-plan", `no approved plan ${slug}; plan_request makes one`);
+  if (!rec) {
+    // review L7 F13: a plan file on main whose record stayed in another session
+    const here = await git.root(cwd), m = here === undefined ? undefined : await mainOf(git, s, here);
+    const file = posix.join(s.plans.dir, `${slug}.md`);
+    if (here !== undefined && m && (await git.show(here, m.sha, file)) !== undefined) {
+      return refused("no-plan", `no approved plan ${slug} in this session: ${otherSession(file, m.name)}`);
+    }
+    return refused("no-plan", `no approved plan ${slug}; plan_request makes one`);
+  }
   const repo = rec.repo;
   await refreshFacts({ git, store: p.branches, settings: s }, repo);
   const main = await mainOf(git, s, repo);

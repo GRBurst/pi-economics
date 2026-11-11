@@ -788,6 +788,16 @@ findings; after `rounds` rejections for one trigger the plan author rewrites
 the trigger's milestone (only it; checked tasks unchanged), and the rewrite
 is applied without review.
 
+Known limit: a plan's record (`task-router/plan`), like a branch record,
+lives only in the session that made it; nothing rebuilds it from the plan
+file on main. In another session `start_branch {plan}` and `amend_plan`
+answer "no approved plan <slug> … in this session: <file> on main was
+approved in another session (plan records stay in the session that made
+them); continue the plan there, or plan_request a new slug", and
+`plan_request` refuses the slug the same way. Adopting the file at
+`session_start` would trust any parseable plan file on main as approved and
+still lack the merged units, which the branch records hold.
+
 Logs: one `plan` line per plan event (`taskId` the slug, `action` `skeleton`
 (an authored skeleton), `approve`, `trigger` (a new trigger), `amend` or
 `reject`, optional `trigger` (the kind), `nTasks`, `reviewId`, `full`), no
@@ -932,6 +942,8 @@ verdict slot.
 | an overseer's member and its fallback are blocked, capped, down or full | the review does not run: `request_merge` and `amend_plan` answer `error` `review-unavailable`, `plan_request` `author-unavailable` (the detail names each cause); a fixer does not start (`revise`) |
 | an agent the router's policy did not place takes a ticket | killed with a warning; the attempt is an `error`, neither charged nor retried |
 | a branch's worktree is gone | the branch becomes `abandoned` at `session_start` |
+| a plan made in another session | its record is not here (known limit): `start_branch {plan}` and `amend_plan` refuse with "… was approved in another session …; continue the plan there, or plan_request a new slug", `plan_request` refuses its slug |
+| git cannot make a red run's worktree | `plan_request` and `amend_plan` answer `error` `git` ("git failed: the red run of <id> has no worktree: …"); the check never counts as passed |
 | a fixer did not survive a restart | its branch is `active` again ("the fixer … of … did not survive the restart"); a restored fixer is killed ("killed the restored fixer …: a restored agent runs without the router's git guard") |
 | the actor restores routed children after a restart | in local mode, with routing and the router's policy on, the main session kills each child its policy did not place this session, at `session_start` or when the actor announces it, with the warning "task-router: killed the restored subagent(s) …: the actor restores a routed child without the router's tool guard and cwd; branches and worktrees stay"; not at a reload (its children kept their guards), never in a child session, and default mode keeps them (L8) |
 | main moved outside the gate | `gatebypass` line, a warning and a `<router-hint trip="gatebypass">`; nothing is reverted |

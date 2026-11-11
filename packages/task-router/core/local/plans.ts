@@ -77,6 +77,11 @@ export function createPlanStore(append: (customType: string, data: unknown) => v
   };
 }
 
+/** Review L7 F13: plan records stay in the session that made them (a known limit); the next step for a plan file `file` on the
+ *  main branch `main` that has no record in this session. */
+export const otherSession = (file: string, main: string): string =>
+  `${file} on ${main} was approved in another session (plan records stay in the session that made them); continue the plan there, or plan_request a new slug`;
+
 /** The plan's units its merged branches finished: a task branch its task; a milestone branch the milestone and its tasks;
  *  a milestone whose tasks all merged. */
 export function mergedUnits(sk: Skeleton, slug: string, branches: readonly BranchRecord[]): Set<string> {
