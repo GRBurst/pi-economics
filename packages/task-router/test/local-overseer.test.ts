@@ -3,7 +3,7 @@
 // and retries once on the fallback member. Driven by a scripted poll: each `sleep` runs the next scripted child action.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PROMPT } from "../core/local/overseer.ts";
+import { PROMPT, verdictSubmit } from "../core/local/overseer.ts";
 import { fakeApi } from "./fake-api.ts";
 import { finding, OPUS, rig, VALID, type Ok } from "./overseer-rig.ts";
 
@@ -314,4 +314,13 @@ test("review F5 (LD14): a cwd inside the worktree under review, or a relative pa
     r.script.push(async () => void (await r.tool().execute(VALID)));
     assert.equal((await r.run(x)).ok, true, JSON.stringify(x));
   }
+});
+
+test("L7.T7: a submit spec's own resubmits (plan_request: plans.rounds) stand for overseer.resubmits", async () => {
+  const r = rig({ overseer: { resubmits: 0 } });
+  const out: Array<{ text: string; isError?: boolean; terminate?: boolean }> = [];
+  for (let i = 0; i < 3; i++) r.script.push(async () => out.push(await r.tool().execute({ verdict: "APPROVE" })));
+  const res = await r.run({ role: "steer", submit: { ...verdictSubmit(), resubmits: 2 } });
+  assert.deepEqual(out.map((x) => [x.isError, x.terminate]), [[true, undefined], [true, undefined], [true, true]]);
+  assert.deepEqual(res, { ok: false, outcome: "invalid" });
 });

@@ -35,10 +35,12 @@ export function planRig(o: { settings?: Record<string, unknown> } = {}) {
       runs.push(a as RunArgs<unknown>);
       const subs = script.shift() ?? [];
       if (subs === "fail") return { ok: false, outcome: "error" };
+      let invalid = 0;
       for (const x of subs) {
         const c = await a.submit.check(x);
         replies.push(c);
         if (c.ok) return { ok: true, value: c.value, reviewId: `rv-${runs.length}`, member: "opus", model: "anthropic/claude-opus-5-5" };
+        if (++invalid > (a.submit.resubmits ?? settings.overseer.resubmits)) break;
       }
       return { ok: false, outcome: "invalid" };
     },

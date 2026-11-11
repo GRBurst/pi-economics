@@ -66,7 +66,8 @@ export const ticketPolicy = (t: Ticket): PolicyResult => ({
 });
 
 // ── Running an overseer (plan S20, design §3.2.2) ──
-export type SubmitSpec<T> = { name: "submit_verdict" | "submit_plan"; description: string; parameters: Schema;
+/** `resubmits`: the attempt's resubmits for invalid input, if not `overseer.resubmits` (`submit_plan`: `plans.rounds`, L7). */
+export type SubmitSpec<T> = { name: "submit_verdict" | "submit_plan"; description: string; parameters: Schema; resubmits?: number;
   check(input: unknown): Promise<{ ok: true; value: T } | { ok: false; reasons: string[] }> };
 export type Budget = { opusUsed: number; steerUsed: number };
 /** `why`: the spawn refusals of the attempts that did not start (a member at its dailyCap or without a free slot). */
@@ -174,7 +175,7 @@ export function createOverseer(d: OverseerDeps) {
         const c = await r.submit.check(x);
         if (c.ok) { finish({ kind: "ok", value: c.value }); return { text: "recorded", terminate: true }; }
         const why = `invalid: ${c.reasons.join("; ")}`;
-        if (++invalid <= s.resubmits) return { text: `${why}; resubmit`, isError: true };
+        if (++invalid <= (r.submit.resubmits ?? s.resubmits)) return { text: `${why}; resubmit`, isError: true };
         finish({ kind: "invalid" });
         return { text: `${why}; no resubmits left`, isError: true, terminate: true };
       },
