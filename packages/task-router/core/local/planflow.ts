@@ -354,7 +354,11 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   if (p.signal?.aborted) return amendDone("error", "aborted", "aborted", { trigger });
   const broken = red.filter(brokenRed);
   if (broken.length) return refused("broken-check", `the amended checks cannot run: ${broken.map(redLine).join("; ")}`, { trigger });
-  const final = marked(old, amended, new Set(red.filter((r) => r.blocked === undefined && r.exit === 0).map((r) => r.task.id)));
+  const passing = red.filter((r) => r.blocked === undefined && r.exit === 0);
+  const final = marked(old, amended, new Set(passing.map((r) => r.task.id)));
+  // review L7 F5: the reviewer and the model learn which amended checks pass on the main tip already (vacuous)
+  const vacuous = passing.map((r) => `${r.task.id}: \`${r.task.check}\` exits 0 on ${main.name} ${main.sha.slice(0, 7)}, before the task is done (vacuous)`).join("; ");
+  const vacNote = vacuous ? `; vacuous checks: ${vacuous}` : "";
   // ── 3 review: plan-review for an interface-break, an amended task in publicApiGlobs, a milestone added or removed; else delta ──
   const trig = p.plans.get(slug)!.triggers.find((x) => x.id === trigger)!;
   const removed = old.milestones.flatMap((m) => m.tasks).filter((x) => !taskOf(final, x.id));
@@ -365,7 +369,8 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   const gone = new Set([...changed, ...removed].map((x) => x.id));
   const dependants = final.milestones.flatMap((m) => m.tasks).filter((x) => !gone.has(x.id) && x.dependsOn.some((d) => gone.has(d)));
   const c: AmendCtx = { rec, slug, request: requestOf(text!), trigger };
-  const head = [`Plan: ${slug} (${rec.file})`, triggerLine(trig), ...(evidence ? [`Evidence: ${evidence}`] : []), `Reason: ${oneLine(input.reason)}`];
+  const head = [`Plan: ${slug} (${rec.file})`, triggerLine(trig), ...(evidence ? [`Evidence: ${evidence}`] : []), `Reason: ${oneLine(input.reason)}`,
+    ...(vacuous ? [`Vacuous checks: ${vacuous}`] : [])];
   const text2 = full ? [...head, "The plan with the amendment applied:", renderPlan({ slug, request: c.request }, final, kept(parsed, final))].join("\n")
     : [...head, ...section("Old tasks", olds.map(taskLine)), ...section("Proposed tasks", changed.map(taskLine)),
       ...section("Removed tasks", removed.map((x) => x.id)), ...section("Dependants", dependants.map(taskLine))].join("\n");
@@ -376,12 +381,15 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
       : amendDone("error", "review-unavailable", reasonText("review-unavailable", {}) + because(out.why), { trigger, full });
   }
   // ── 4 approved: re-render, commit on main, record, close the trigger ──
-  if (approve(out.value.findings)) return commitAmended(p, c, final, out.reviewId, { trigger, full });
+  if (approve(out.value.findings)) {
+    const r = await commitAmended(p, c, final, out.reviewId, { trigger, full });
+    return r.status === "approved" && vacuous ? { ...r, detail: `${r.detail}${vacNote}; the merge gate reports its red run as passed` } : r;
+  }
   // ── 5 rejected: the findings; after plans.rounds rejections for this trigger the plan author rewrites the milestone ──
   const findings = out.value.findings.map(findingLine), n = p.plans.reject(slug, trigger), rounds = s.plans.rounds;
   logPlan(p, { slug, action: "reject", trigger: trig.kind, reviewId: out.reviewId, full });
   const no = { trigger, full, reviewId: out.reviewId, findings };
-  if (n < rounds) return amendDone("rejected", undefined, `the plan amendment was rejected (${n} of plans.rounds ${rounds}); answer the findings with a new amend_plan`, no);
+  if (n < rounds) return amendDone("rejected", undefined, `the plan amendment was rejected (${n} of plans.rounds ${rounds}); answer the findings with a new amend_plan${vacNote}`, no);
   const at = trig.task ?? input.changes.map((x) => x.id ?? x.task?.id).find((x): x is string => typeof x === "string");
   const mid = (at && /^M\d+/.exec(at)?.[0]) || old.milestones[0]!.id;
   const author = await p.overseer.run({ role: "plan-author", cwd: checkout, signal: p.signal,

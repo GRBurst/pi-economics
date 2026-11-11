@@ -216,6 +216,24 @@ test("an amended task whose check passes on the main tip is marked vacuous; one 
   assert.deepEqual([no.reason, no.detail], ["broken-check", "the amended checks cannot run: M1.T2: `no-such-command-x` exit 127"]);
 });
 
+test("review L7 F5: an amended check that passes on the main tip is named to the delta reviewer and in the result", async () => {
+  const x = approved();
+  x.plans.open("parser", "over-budget", "M1.T2");
+  x.script.push([APPROVE]);
+  const tip = x.mainSha().slice(0, 7), note = `M1.T2: \`true\` exits 0 on main ${tip}, before the task is done (vacuous)`;
+  const r = await amendPlan(x.ports, amend({ changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: "true" } }] }), x.r.dir);
+  assert.equal(r.status, "approved", r.detail);
+  assert.equal(x.runs[0]!.role, "delta");
+  assert.ok(String(x.runs[0]!.input).split("\n").includes(`Vacuous checks: ${note}`), String(x.runs[0]!.input));
+  assert.ok(r.detail.endsWith(`; vacuous checks: ${note}; the merge gate reports its red run as passed`), r.detail);
+  const y = approved();
+  y.plans.open("parser", "over-budget", "M1.T2");
+  y.script.push([REVISE]);
+  const no = await amendPlan(y.ports, amend({ changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: "true" } }] }), y.r.dir);
+  assert.equal(no.status, "rejected", no.detail);
+  assert.ok(no.detail.endsWith(`; vacuous checks: ${note}`), no.detail);
+});
+
 test("review F7: an amended check or an evidence command the git guard blocks is never run", async () => {
   const bad = "git push origin HEAD:main";
   const x = approved();

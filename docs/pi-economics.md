@@ -764,7 +764,9 @@ an amended skeleton that is invalid (`invalid`) and amended checks that
 cannot run or that the git guard blocks (`broken-check`). Then a review: the whole plan (`plan-review`) for
 an `interface-break`, a changed task with a path in `publicApiGlobs` (`[]`),
 or a milestone added or removed; else the `delta` review (the trigger and its
-evidence, the old and the proposed tasks, the dependants). Approved: the plan
+evidence, the old and the proposed tasks, the dependants). An amended check
+that exits 0 on the main tip is marked `vacuousCheck`; both reviews get a
+"Vacuous checks:" line and the answer names it. Approved: the plan
 file is rendered again, keeping the ticks of unchanged tasks, committed
 (`plan(<slug>): amended <reviewId>`) and main advanced as above, the record
 gets the new hash, the trigger is closed and live branches of changed tasks
