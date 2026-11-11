@@ -13,11 +13,15 @@ import { block, createHintEngine } from "./hints.ts";
 import type { Delivery } from "./hints.ts";
 import { componentOn } from "./mode.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
+import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
 import type { Budget, Tickets } from "./overseer.ts";
 import { callKey, callTrips, changed, contextSoft, contextStall, errSig, push, riskGlobsOf } from "./tripwires.ts";
 import type { CallRecord, Trip } from "./tripwires.ts";
 
-type Pi = { on(name: string, handler: (e: any, ctx: any) => unknown): void; appendEntry?(customType: string, data: unknown): void };
+type Pi = {
+  on(name: string, handler: (e: any, ctx: any) => unknown): void; appendEntry?(customType: string, data: unknown): void;
+  sendMessage?(message: { customType: string; content: string; display: boolean }, options?: { deliverAs?: "steer" }): void;
+};
 export type LocalDeps = {
   settings: RouterSettings; log: Pick<ReturnType<typeof createOutcomeLog>, "hint" | "review">; isChild(ctx: any): boolean; sessionId(): string | undefined;
   /** The overseer's ports (plan S20): the actor API, the shell's tickets, random hex, the clock and its poll sleep. */
@@ -60,6 +64,9 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   };
   const s = d.settings, h = s.hints;
   if (!componentOn(s, "hints")) return handle;
+  // A persistent trip runs a steer overseer instead of the escalation block while one can run (design §3.1.2, AC-H4).
+  const steer = createSteer({ settings: s, budget, api: d.api, overseer,
+    send: (content) => pi.sendMessage?.({ customType: STEER_TYPE, content, display: true }, { deliverAs: "steer" }) });
   const hash = d.hash ?? fileHash, detect = d.detect ?? callTrips;
   const engine = createHintEngine(h, s.plans);
   const globs = riskGlobsOf(s), seen = new Set<string>();
@@ -82,7 +89,8 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       if (d.isChild(ctx) || typeof e?.toolCallId !== "string" || nested(e)) return;
       const tool = String(e.toolName), isWrite = WRITERS.has(tool), p = e.input?.path;
       const path = isWrite && typeof p === "string" ? resolve(ctx?.cwd ?? process.cwd(), p) : undefined;
-      pending.set(e.toolCallId, { tool, key: callKey(tool, e.input), isWrite, path, hashBefore: path === undefined ? undefined : hash(path) });
+      pending.set(e.toolCallId, { tool, key: callKey(tool, e.input), isWrite, path, hashBefore: path === undefined ? undefined : hash(path),
+        cmd: cmdOf(tool, e.input) });
     });
     return undefined;
   });
@@ -112,10 +120,16 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     trips.push(...soft(ctx));
     out.push(...engine.detected(trips, call));
     if (!out.length) return undefined;
-    for (const x of out) d.log.hint("main", x.trip, x.stage, x.n, d.sessionId());
+    const cwd = ctx?.cwd ?? process.cwd(), blocks: string[] = [];
+    for (const x of out) {
+      d.log.hint("main", x.trip, x.stage, x.n, d.sessionId());
+      if (x.stage === "steer" && steer.available()) steer.start(x.trip, x.n, ring.slice(-STEER_RECORDS), cwd, (p) => relative(cwd, p));
+      else blocks.push(block(x.trip, x.n, x.text));
+    }
     shown = true;
     d.onTrip?.(out[out.length - 1].trip);
-    return { content: [...(Array.isArray(e.content) ? e.content : []), ...out.map((x) => ({ type: "text", text: block(x.trip, x.n, x.text) }))] };
+    if (!blocks.length) return undefined;
+    return { content: [...(Array.isArray(e.content) ? e.content : []), ...blocks.map((text) => ({ type: "text", text }))] };
   }));
   pi.on("turn_end", (_e, ctx) => {
     safe(() => {

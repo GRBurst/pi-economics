@@ -8,9 +8,10 @@ export const TRIPS = ["identical-call", "no-change-writes", "alternation", "repe
   "over-size", "risky-path", "context-soft", "context-stall"] as const;
 export type Trip = (typeof TRIPS)[number];
 /** One tool call (§3.1.1): `hashBefore`/`hashAfter` are the target file's hashes around a write (undefined = the hash failed,
- *  or a missing file before a write); `turn` is the main session's turn number. */
+ *  or a missing file before a write); `turn` is the main session's turn number; `cmd` a bash command's first 200 characters,
+ *  for the steer input only (plan D32). */
 export type CallRecord = { tool: string; key: string; isWrite: boolean; path?: string; hashBefore?: string; hashAfter?: string;
-  isError?: boolean; errSig?: string; turn: number };
+  isError?: boolean; errSig?: string; turn: number; cmd?: string };
 
 /** The ring's length (§3.1.1). */
 export const windowSize = (h: HintSettings): number => 4 * h.identicalCalls + 8;
