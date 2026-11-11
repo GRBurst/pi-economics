@@ -302,7 +302,7 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
       submit: verdictSubmit(new Set(paths)), commit, branch, signal: p.signal });
     if (!out.ok) {
       const r: MergeReason = out.outcome === "aborted" ? "aborted" : "review-unavailable";
-      return done("error", r, reasonText(r, {}), commit);
+      return done("error", r, out.why ? `${reasonText(r, {})}: ${out.why}` : reasonText(r, {}), commit); // a cap or a full member (L4 note)
     }
     if (!approve(out.value.findings)) {
       // Review F8: a branch without a record (D40) gets a hand-made one, which holds its counts and is never active.

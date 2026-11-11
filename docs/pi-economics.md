@@ -439,7 +439,14 @@ checkout (the main session's cwd), never the worktree under review: pi loads
 `AGENTS.md` and project settings from the cwd, so the brief names the worktree
 by its absolute path instead, and a run with a cwd inside it is refused (LD14).
 Ticket spawns are not forced and
-not routed. The agent reports through the submit tool only: a verdict
+not routed, but they count like routed children: each turn of an overseer or
+of the fixer counts toward its member's `dailyCap`, and it holds a slot of its
+member while pending (60 s) or listed running. The policy refuses a ticket
+spawn on a member at its `dailyCap` or without a free slot (no health probe):
+a review attempt then does not start (the second one runs on the fallback
+member); with neither member left the merge review fails closed (`error`
+`review-unavailable`, the detail names the cap) and the merge is refused, and
+a fixer does not start (`revise`). The agent reports through the submit tool only: a verdict
 (`summary`, `verdict`, `findings` with id, category, target, criterion,
 blocking) checked against its JSON schema and the rules (no code fence, unique
 ids, every target in the diff or plan under review); an invalid one goes back with the

@@ -788,6 +788,13 @@ message). Open notes, for L6 or later:
   before the spawn and race it.
 - L4 Ticket spawns bypass member slots, health, blocks and the `dailyCap` counter (`shell.ts` counts only routed
   children); Opus overseer turns count toward no cap. Decide in L6 whether `overseer.budget` is the only cap.
+  **Decided in L6 (orchestrator, L6 review fix):** `overseer.budget` is not the only cap. Ticket spawns (overseers, the
+  merge review, the fixer) count toward their member's `dailyCap` (one per turn, as routed children; a forced fixer runs on
+  another model and counts toward none) and hold its slots (pending 60 s or listed running), which routed spawns see too.
+  The policy refuses a ticket spawn on a member at its cap or without a free slot; a review attempt then does not start
+  (attempt 2 on the fallback member), and with no member left the review fails closed (`error` `review-unavailable`, the
+  detail names the cap): the merge is refused. A fixer that cannot start answers `revise`. Health and blocks are still not
+  probed for ticket spawns (a failed spawn fails closed).
 - N2 Patch `child-tools.ts` `sessionCwd`: a relative policy `cwd` is accepted silently (the API says absolute;
   the router now refuses one before the spawn, LD14). Assert it or resolve it in the patch.
 - N3 `core/local/settings.ts` `WRITERS` (bash, edit, write) is a denylist: a consumer's child-extension tool that

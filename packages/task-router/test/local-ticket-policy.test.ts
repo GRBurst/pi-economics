@@ -6,6 +6,9 @@ import assert from "node:assert/strict";
 import type { ChildTool, PolicyResult } from "../core/api.ts";
 import { createTickets, overseerGuard, type Ticket } from "../core/local/overseer.ts";
 import { accepted, card, harness } from "./harness.ts";
+import { join } from "node:path";
+import { createMemberCounter } from "../core/counter.ts";
+import { memberState, PENDING_MS } from "../core/policy.ts";
 
 type Ok = Exclude<PolicyResult, { reject: string }>;
 type H = ReturnType<typeof harness>;
@@ -102,4 +105,62 @@ test("the fake API's spawn (ext) runs the policy as `by`, records it, lists the 
   assert.deepEqual(h.a.killed, ["ovs-merge-1"]);
   assert.equal(h.a.agents.length, 0);
   assert.equal(harness().a.api.spawn, undefined);
+});
+
+// ── The L4 open note, decided in L6 (orchestrator): ticket spawns (overseers, the merge review, the fixer) count toward
+// `dailyCap` and respect member slots, like routed children. ──
+const counterOf = (h: H) => createMemberCounter(join(h.agentDir, "task-router", "member-count.json"), () => new Date(h.clock.t));
+const apiSpawn = (h: H, name: string, t: Ticket) =>
+  h.a.api.spawn!({ name, systemPrompt: "s", message: "m", task: { ticket: h.router.tickets.issue(t) } }, { by: "main", quiet: true });
+
+test("caps: a ticket spawn on a member at its dailyCap is refused, its ticket spent; under the cap it runs", async () => {
+  const h = harness({ settings: { mode: "local", models: { opus: { dailyCap: 2 } } } as never, apiExt: true });
+  counterOf(h).bump("opus");
+  assert.equal((await apiSpawn(h, "ovs-merge-1", ticketOf(h))).ok, true, "1 of 2 used");
+  counterOf(h).bump("opus");
+  const r = await apiSpawn(h, "ovs-merge-2", ticketOf(h));
+  assert.equal(r.ok, false);
+  assert.match((r as { reason: string }).reason, /opus reached its dailyCap \(2\)/);
+  assert.equal(h.router.tickets.owner("ovs-merge-2"), undefined, "a refused ticket child is no owner");
+  assert.equal(h.a.agents.some((a) => a.name === "ovs-merge-2"), false);
+});
+
+test("caps: a ticket child's turns count toward its member's dailyCap; a forced ticket's do not (it runs on another model)", async () => {
+  const h = harness({ settings: { mode: "local", models: { opus: { dailyCap: 9 }, sonnet: { dailyCap: 9 } } } as never, apiExt: true });
+  assert.equal((await apiSpawn(h, "ovs-merge-1", ticketOf(h))).ok, true);
+  h.a.emit({ type: "turn", name: "ovs-merge-1", ts: 0 });
+  h.a.emit({ type: "turn", name: "ovs-merge-1", ts: 0 });
+  assert.equal(counterOf(h).today("opus"), 2);
+  const forced = ticketOf(h, { role: "fixer", member: "sonnet", model: OPUS, forced: { source: "command", routedModel: "anthropic/claude-sonnet-5-5", routedEffort: "high" } });
+  assert.equal((await apiSpawn(h, "fixer-abcdef", forced)).ok, true);
+  h.a.emit({ type: "turn", name: "fixer-abcdef", ts: 0 });
+  assert.equal(counterOf(h).today("sonnet"), 0);
+});
+
+test("slots: a ticket child holds a slot of its member (pending or running); a ticket spawn on a full member is refused", async () => {
+  const h = harness({ settings: { mode: "local", models: { opus: { slots: 1 } } } as never, apiExt: true });
+  assert.equal((await apiSpawn(h, "ovs-merge-1", ticketOf(h))).ok, true);
+  const full = await apiSpawn(h, "ovs-merge-2", ticketOf(h));
+  assert.equal(full.ok, false, "the first child is pending (just spawned)");
+  assert.match((full as { reason: string }).reason, /opus has no free slot \(1\)/);
+  h.clock.t += PENDING_MS + 1;
+  h.a.agents.find((a) => a.name === "ovs-merge-1")!.state = "running";
+  assert.equal((await apiSpawn(h, "ovs-merge-3", ticketOf(h))).ok, false, "a running child holds its slot");
+  h.a.agents.find((a) => a.name === "ovs-merge-1")!.state = "idle";
+  assert.equal((await apiSpawn(h, "ovs-merge-4", ticketOf(h))).ok, true, "an idle one past its pending time does not");
+});
+
+test("slots: routed spawns count the ticket children on a member (memberState)", async () => {
+  const h = harness({ settings: { mode: "local", models: { opus: { slots: 1 } } } as never, apiExt: true });
+  const m = { ...h.router.settings.models.opus!, name: "opus" } as never;
+  const tickets = createTickets(() => "0".repeat(32));
+  const d = { blocks: new Map(), counter: { today: () => 0 }, children: new Map(), tickets } as never;
+  assert.equal(memberState(d, m, new Map(), 1000).free, true);
+  tickets.take(tickets.issue(ticketOf(h)), "ovs-merge-1", "s-main", 1000);
+  assert.equal(memberState(d, m, new Map(), 1000).free, false, "a pending ticket child");
+  assert.equal(memberState(d, m, new Map([["ovs-merge-1", "running"]]), 1000 + PENDING_MS + 1).free, false, "a running ticket child");
+  assert.equal(memberState(d, m, new Map([["ovs-merge-1", "idle"]]), 1000 + PENDING_MS + 1).free, true);
+  tickets.take(tickets.issue(ticketOf(h, { member: "sonnet" })), "fixer-1", "s-main", 1000);
+  tickets.forget("ovs-merge-1");
+  assert.equal(memberState(d, m, new Map(), 1000).free, true, "another member's ticket child");
 });

@@ -146,6 +146,9 @@ export function install(pi: PiLike, deps: Deps) {
       if (kid) log.spawn({ taskId: e.name, card: UNROUTED_CARD, plan: unroutedPlan(kid, settings), arm: parentSession && armOf(parentSession), sessionId: e.childSessionId, parentSessionId: parentSession });
     }
     if (e.type === "turn" && c && settings.models[c.member]?.dailyCap !== undefined) counter.bump(c.member); // one request per turn, 429 retries included
+    // L4 note, decided in L6: a ticket child's turns count toward its member's cap too; a forced one runs on another model.
+    const tt = e.type === "turn" && !c ? tickets.owner(e.name) : undefined;
+    if (tt && !tt.forced && settings.models[tt.member]?.dailyCap !== undefined) counter.bump(tt.member);
     failover(e);
     gate(e);
     guards(e);

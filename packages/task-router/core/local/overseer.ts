@@ -17,8 +17,9 @@ export type TicketRole = Role | "fixer";
 export type Ticket = { role: TicketRole; reviewId: string; member: string; model: string; effort: ThinkingLevel; cwd: string;
   tools?: string[]; childTools: ChildTool[]; toolGuard?: Guard; briefAppend?: string;
   forced?: { source: "command" | "settings"; routedModel: string; routedEffort: ThinkingLevel };
-  /** Set by `take`: the spawning caller's session (the spawn line's `parentSessionId`). */
-  parentSession?: string };
+  /** Set by `take`: the spawning caller's session (the spawn line's `parentSessionId`) and when (ms; the child holds a
+   *  slot of `member` from then on while it is pending, like a routed child's reservation). */
+  parentSession?: string; takenAt?: number };
 
 /** `hex(bytes)`: a random hex string of 2·bytes characters (crypto in the shell, scripted in tests). */
 export function createTickets(hex: (bytes: number) => string) {
@@ -31,13 +32,15 @@ export function createTickets(hex: (bytes: number) => string) {
       return id;
     },
     /** Single use: the ticket of `id` once, remembered under the child's name with the caller's session. */
-    take(id: unknown, name: string, parentSession?: string): Ticket | undefined {
+    take(id: unknown, name: string, parentSession?: string, at?: number): Ticket | undefined {
       const t = typeof id === "string" ? open.get(id) : undefined;
       if (!t) return undefined;
       open.delete(id as string);
-      byName.set(name, { ...t, ...(parentSession !== undefined && { parentSession }) });
+      byName.set(name, { ...t, ...(parentSession !== undefined && { parentSession }), ...(at !== undefined && { takenAt: at }) });
       return t;
     },
+    /** The ticket children not forgotten yet, by name (their member's slots and daily cap count them). */
+    held: (): [string, Ticket][] => [...byName],
     /** The ticket a child was spawned with (its spawn line, its events). */
     owner: (name: string): Ticket | undefined => byName.get(name),
     forget(name: string): void { byName.delete(name); },
@@ -66,8 +69,9 @@ export const ticketPolicy = (t: Ticket): PolicyResult => ({
 export type SubmitSpec<T> = { name: "submit_verdict" | "submit_plan"; description: string; parameters: Schema;
   check(input: unknown): Promise<{ ok: true; value: T } | { ok: false; reasons: string[] }> };
 export type Budget = { opusUsed: number; steerUsed: number };
+/** `why`: the spawn refusals of the attempts that did not start (a member at its dailyCap or without a free slot). */
 export type RunResult<T> = { ok: true; value: T; reviewId: string; member: string; model: string }
-                         | { ok: false; outcome: "timeout" | "error" | "invalid" | "skipped" | "aborted" };
+                         | { ok: false; outcome: "timeout" | "error" | "invalid" | "skipped" | "aborted"; why?: string };
 /** LD14 (review F5): `cwd` is the child session's (default `base()`, the main checkout), never inside `worktree`, the tree under
  *  review, which the brief names by its absolute path: pi loads AGENTS.md and project settings from the cwd, and a branch must
  *  not write its reviewer's instructions. */
@@ -141,7 +145,7 @@ export function budgetOf(branch: readonly unknown[]): Budget {
   return last ? { opusUsed: last.data.opusUsed, steerUsed: last.data.steerUsed } : { opusUsed: 0, steerUsed: 0 };
 }
 /** `unrouted` (review F1): the spawn succeeded, but not through the router's policy; logged as an `error`, never retried. */
-type Settled<T> = { kind: "ok"; value: T } | { kind: "timeout" | "error" | "invalid" | "aborted" | "unrouted" };
+type Settled<T> = { kind: "ok"; value: T } | { kind: "timeout" | "invalid" | "aborted" | "unrouted" } | { kind: "error"; why?: string };
 type SpawnApi = SubagentsApiV1 & Required<Pick<SubagentsApiV1, "spawn" | "kill">>;
 /** `dir` is `root` or below it (both absolute). */
 const inside = (dir: string, root: string): boolean => { const p = relative(root, dir); return p !== ".." && !p.startsWith("../") && !isAbsolute(p); };
@@ -190,7 +194,7 @@ export function createOverseer(d: OverseerDeps) {
         toolGuard: overseerGuard([...s.tools, tool.name]) });
       const sp = await a.spawn({ name, systemPrompt: PROMPT[r.role], message: r.input, task: { ticket } }, { by: "main", quiet: true })
         .catch((err: Error) => ({ ok: false as const, reason: err.message }));
-      if (!sp.ok) { d.tickets.forget(name); return settled?.kind === "aborted" ? settled : { kind: "error" }; }
+      if (!sp.ok) { d.tickets.forget(name); return settled?.kind === "aborted" ? settled : { kind: "error", why: sp.reason }; }
       // Review F1: only the router's policy takes a ticket. A child it did not route (a foreign policy, none) may run with
       // every default tool and no guard, so it is killed before its first turn can act (fail closed), and nothing is charged.
       if (d.tickets.owner(name) === undefined) {
@@ -233,7 +237,8 @@ export function createOverseer(d: OverseerDeps) {
     budget,
     /** The merge fixer (design §3.4.4, D45–D47): a ticket on `fixerMember` at `fixerEffort` (or the active force), cwd the worktree,
      *  every tool with `toolGuard`, the card as its brief; not quiet, so its report and its death reach main. A child the router's
-     *  policy did not route is killed (review F1). No budget, no slot (D47). */
+     *  policy did not route is killed (review F1). No Opus budget (D47); like every ticket spawn it counts toward
+     *  `fixerMember`'s dailyCap and slots, and the policy refuses it on a capped or full member (L4 note, decided in L6). */
     async fixer(x: { worktree: string; reviewId: string; brief: string; message: string; toolGuard?: Guard }):
       Promise<{ ok: true; name: string } | { ok: false; reason: string }> {
       const a = d.api();
@@ -269,6 +274,7 @@ export function createOverseer(d: OverseerDeps) {
       }
       const s = d.settings.overseer;
       let last: "timeout" | "error" | "invalid" = "error";
+      const whys: string[] = [];
       for (const no of r.role === "steer" ? [1] : [1, 2]) {
         if (r.signal?.aborted) return { ok: false, outcome: "aborted" };
         const p = no === 1 ? pickMember(d.settings, r.role, budget()) : { member: s.fallbackMember, effort: s.fallbackEffort, fallback: "error" as const };
@@ -296,12 +302,12 @@ export function createOverseer(d: OverseerDeps) {
           commit: r.commit, branch: r.branch });
         if (o.kind === "aborted") return { ok: false, outcome: "aborted" };
         if (o.kind === "unrouted") return { ok: false, outcome: "error" }; // a second attempt would meet the same policy
-        if (o.kind !== "ok") { last = o.kind; continue; }
+        if (o.kind !== "ok") { last = o.kind; if (o.kind === "error" && o.why) whys.push(o.why); continue; }
         d.append(REVIEW_TYPE, { reviewId, role: r.role, member: p.member, ...(r.commit && { commit: r.commit }), verdict: o.value,
           ...(r.submit.name === "submit_verdict" && { approved: approve((o.value as Verdict).findings) }), ts: d.now() });
         return { ok: true, value: o.value, reviewId, member: p.member, model };
       }
-      return { ok: false, outcome: last };
+      return { ok: false, outcome: last, ...(whys.length && { why: [...new Set(whys)].join("; ") }) };
     },
   };
 }

@@ -7,6 +7,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { APPROVAL_TYPE, diffBudget, RED_TEXT, reviewInput } from "../core/local/merge.ts";
 import { findingLine } from "../core/local/verdict.ts";
+import { createMemberCounter } from "../core/counter.ts";
 import { finding, mergeRig, REVISE, reviewRig } from "./merge-rig.ts";
 import type { Ok } from "./overseer-rig.ts";
 
@@ -175,7 +176,7 @@ test("AC-O5: both attempts fail to spawn → error review-unavailable, main unch
   const m = await committed();
   m.h.a.control.spawnFail = "agent cap";
   const res = await m.merge();
-  assert.deepEqual([res.status, res.reason, res.detail], ["error", "review-unavailable", "error: review unavailable"], JSON.stringify(res));
+  assert.deepEqual([res.status, res.reason, res.detail], ["error", "review-unavailable", "error: review unavailable: agent cap"], JSON.stringify(res)); // with the spawn refusal (L4 note)
   assert.equal(m.h.a.apiSpawns.length, 2, "the first attempt and its fallback");
   assert.equal(m.mainSha(), m.before);
   assert.equal(m.h.f.entries.filter((e) => e.type === APPROVAL_TYPE).length, 0);
@@ -229,4 +230,47 @@ test("review F8: a hand-made branch rejected once is never active and is not cle
   assert.equal(res.status, "merged", JSON.stringify(res));
   assert.ok(existsSync(wt), "the worktree stays");
   assert.equal(m.r.git(["rev-parse", "--verify", "-q", "refs/heads/hand"]), m.mainSha(), "the branch stays");
+});
+
+// ── The L4 open note, decided in L6: ticket spawns count toward dailyCap and respect member slots; with no member left for
+// the review it fails closed and the merge is refused. ──
+const bump = (m: ReturnType<typeof reviewRig>, member: string): void =>
+  createMemberCounter(join(m.h.agentDir, "task-router", "member-count.json"), () => new Date(m.h.clock.t)).bump(member);
+
+test("caps: the overseer member and its fallback at their dailyCap: the review fails closed naming the cap; main unchanged", async () => {
+  const m = reviewRig({ settings: { models: { opus: { dailyCap: 1 }, sonnet: { dailyCap: 1 } }, mergeGate: { redRun: false } } });
+  bump(m, "opus"); bump(m, "sonnet");
+  const rec = await m.start("x");
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  const before = m.mainSha();
+  const r = await m.merge();
+  assert.deepEqual([r.status, r.reason], ["error", "review-unavailable"], JSON.stringify(r));
+  assert.match(r.detail, /opus reached its dailyCap \(1\)/);
+  assert.match(r.detail, /sonnet reached its dailyCap \(1\)/);
+  assert.equal(m.h.a.agents.length, 0, "no overseer ran");
+  assert.equal(m.mainSha(), before);
+});
+
+test("caps: the Opus member at its dailyCap: the review's first attempt does not start, the fallback reviews", async () => {
+  const m = reviewRig({ settings: { models: { opus: { dailyCap: 1 } }, mergeGate: { redRun: false } } });
+  bump(m, "opus");
+  const rec = await m.start("x");
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  const r = await m.merge();
+  assert.equal(r.status, "merged", JSON.stringify(r));
+  assert.deepEqual(m.h.a.apiSpawns.map((s) => s.result.ok), [false, true]);
+  assert.equal((m.h.a.apiSpawns[1]!.policy as Ok).model, m.h.router.settings.models.sonnet!.model);
+});
+
+test("caps: the fixer member at its dailyCap: no fixer starts; revise says why", async () => {
+  const m = reviewRig({ settings: { models: { sonnet: { dailyCap: 1 } }, mergeGate: { redRun: false } } });
+  bump(m, "sonnet");
+  const rec = await m.start("x");
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  m.verdicts.push(REVISE, REVISE);
+  await m.merge();
+  const r = await m.merge();
+  assert.equal(r.status, "revise", JSON.stringify(r));
+  assert.match(r.detail, /the fixer could not start: .*sonnet reached its dailyCap \(1\)/);
+  assert.equal(m.h.router.branches.get(m.r.dir, "lm/x")!.state, "active");
 });

@@ -134,7 +134,7 @@ test("spawn {ok: false} → attempt 2; both failing → {ok: false}", async () =
 
   const both = rig();
   both.h.a.control.spawnFail = "no";
-  assert.deepEqual(await both.run(), { ok: false, outcome: "error" });
+  assert.deepEqual(await both.run(), { ok: false, outcome: "error", why: "no" }); // the refusal, once (L4 note decided in L6)
   assert.equal(both.h.a.apiSpawns.length, 2);
   assert.deepEqual(both.entries, []);
 });
@@ -151,7 +151,7 @@ test("review F4: a spawn that fails before the policy took its ticket (a duplica
 
   const t = rig(), tickets: string[] = [];
   t.h.a.api.spawn = async (args) => { tickets.push((args.task as { ticket: string }).ticket); throw new Error("session creation failed"); };
-  assert.deepEqual(await t.run(), { ok: false, outcome: "error" });
+  assert.deepEqual(await t.run(), { ok: false, outcome: "error", why: "session creation failed" });
   assert.equal(tickets.length, 2);
   for (const [i, id] of tickets.entries()) assert.ok("reject" in await t.h.a.spawn({ name: `probe-${i}`, task: { ticket: id } }), `ticket ${i}`);
 });
@@ -223,7 +223,7 @@ test("review L5: concurrent runs reserve the Opus budget when they pick: with on
 test("review L5: a reservation whose spawn failed is released: the next run gets the last Opus review", async () => {
   const r = rig({ overseer: { budget: 1 } });
   r.h.a.control.spawnFail = "no";
-  assert.deepEqual(await r.run(), { ok: false, outcome: "error" });
+  assert.deepEqual(await r.run(), { ok: false, outcome: "error", why: "no" });
   r.h.a.control.spawnFail = undefined;
   r.on.each = async () => { await r.tool().execute(VALID); };
   const res = await r.run();

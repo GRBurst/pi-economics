@@ -71,8 +71,29 @@ export function memberState(d: PolicyDeps, m: Named, listed: Map<string, string>
   const blocked = (d.blocks.get(m.name) ?? 0) > now;
   const capped = m.dailyCap !== undefined && d.counter.today(m.name) >= m.dailyCap;
   const up = (m.health === undefined || h?.up === true) && !blocked && !capped;
-  const running = [...d.children].filter(([n, c]) => c.member === m.name && (listed.get(n) === "running" || c.reservedUntil > now)).length;
+  const running = load(d, m.name, listed, now);
   return { name: m.name, cost: m.cost, up, free: up && (m.slots === undefined || running < m.slots) && !(h?.busy ?? false) };
+}
+/** The children holding a slot of `member`: routed ones listed `running` or reserved, and ticket children (an overseer, the
+ *  fixer; L4 note, decided in L6) listed `running` or pending (taken less than PENDING_MS ago); a forced one runs on another
+ *  model and holds none. `except`: the child being placed. */
+function load(d: PolicyDeps, member: string, listed: Map<string, string>, now: number, except?: string): number {
+  const routed = [...d.children].filter(([n, c]) => c.member === member && (listed.get(n) === "running" || c.reservedUntil > now)).length;
+  const tickets = (d.tickets?.held() ?? []).filter(([n, t]) => n !== except && t.member === member && !t.forced &&
+    (listed.get(n) === "running" || (t.takenAt ?? -Infinity) + PENDING_MS > now)).length;
+  return routed + tickets;
+}
+/** Why the ticket child `name` may not start on its member (L4 note, decided in L6): the member's dailyCap is reached or its
+ *  slots are taken. Health is not probed: the router's own reviews and fixer fail closed on a spawn that fails instead. */
+function ticketRoom(d: PolicyDeps, member: string, name: string): string | undefined {
+  const m = d.settings.models[member];
+  if (!m) return undefined;
+  if (m.dailyCap !== undefined && d.counter.today(member) >= m.dailyCap) return `task-router: ${member} reached its dailyCap (${m.dailyCap}) today`;
+  if (m.slots !== undefined) {
+    const now = d.now(), listed = new Map((d.api()?.list() ?? []).map((a) => [a.name, a.state]));
+    if (load(d, member, listed, now, name) >= m.slots) return `task-router: ${member} has no free slot (${m.slots})`;
+  }
+  return undefined;
 }
 
 /** The selection of one leg (spec §4.5): probe the candidates with a `health` URL, pick (`pickMember`), else poll every
@@ -115,8 +136,12 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
   const reject = (errors: string[]) => ({ reject: errors.join("; ") });
   return async (args, caller: Caller) => {
     // D25 (design §3.2.2 step 3): the router's own spawn first, whatever routing and a force say; an unknown ticket is no card field.
-    const t = d.tickets?.take((args.task as { ticket?: unknown } | undefined)?.ticket, args.name, caller.sessionId);
-    if (t) return ticketPolicy(t);
+    const t = d.tickets?.take((args.task as { ticket?: unknown } | undefined)?.ticket, args.name, caller.sessionId, d.now());
+    if (t) {
+      const why = t.forced ? undefined : ticketRoom(d, t.member, args.name);
+      if (why !== undefined) { d.tickets!.forget(args.name); return { reject: why }; }
+      return ticketPolicy(t);
+    }
     if (!s.routing) return { model: args.model ?? caller.model, thinkingLevel: args.thinkingLevel ?? caller.thinkingLevel ?? "medium" };
     if (args.task === undefined) return { reject: cardRejection(s, "spawn_subagent needs a task card.") };
     const parsed = parseCard(args.task);
