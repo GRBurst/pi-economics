@@ -56,5 +56,10 @@ pkgs.runCommand "pi-actor-subagents-tests" {nativeBuildInputs = [pkgs.nodejs];} 
     exit 1
   fi
 
+  # The spawn-api patch's tests must be part of what ran, and index.ts must bind api.spawn/api.kill
+  # (spawnPolicyApi 2, local mode's overseers).
+  test -f spawn-api.test.ts
+  grep -q 'spawnApiDeps({ engine, spawnAgent' index.ts
+
   touch $out
 ''

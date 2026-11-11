@@ -25,6 +25,7 @@
   patches = [
     ../../patches/pi-actor-subagents/pi-actor-subagents-child-prompt.patch
     ../../patches/pi-actor-subagents/pi-actor-subagents-spawn-policy.patch
+    ../../patches/pi-actor-subagents/pi-actor-subagents-spawn-api.patch
   ];
 }).overrideAttrs (old: {
   # The version of __subagentsApi_v1 this build provides; taskRouter asserts
