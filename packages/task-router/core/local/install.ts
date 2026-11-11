@@ -39,7 +39,7 @@ type Pi = {
   registerTool?(tool: RouterTool): void;
 };
 export type LocalDeps = {
-  settings: RouterSettings; log: Pick<ReturnType<typeof createOutcomeLog>, "hint" | "review" | "gatebypass">; isChild(ctx: any): boolean; sessionId(): string | undefined;
+  settings: RouterSettings; log: Pick<ReturnType<typeof createOutcomeLog>, "hint" | "review" | "merge" | "gatebypass">; isChild(ctx: any): boolean; sessionId(): string | undefined;
   /** The overseer's ports (plan S20): the actor API, the shell's tickets, random hex, the clock and its poll sleep. */
   api(): SubagentsApiV1 | undefined; tickets: Tickets; hex(bytes: number): string; now(): number; sleep(ms: number): Promise<void>;
   /** The router's spawn policy is registered (review F1). */
@@ -153,7 +153,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   // request_merge (design §3.4.1) while the merge gate is active; one set of ports per call, with its AbortSignal (D49).
   if (activeSet(s).mergeGate) {
     pi.registerTool?.(requestMergeTool((signal) => ({ git, run: d.run ?? runCheck, overseer, branches, approvals, settings: s,
-      append: (type, data) => { pi.appendEntry?.(type, data); refs.observe(type, data); }, tmp: () => join(tmpdir(), `task-router-red-${d.hex(6)}`), fixer: handle.fixer,
+      append: (type, data) => { pi.appendEntry?.(type, data); refs.observe(type, data); }, tmp: () => join(tmpdir(), `task-router-red-${d.hex(6)}`), fixer: handle.fixer, log: (i) => d.log.merge(i),
       ...(signal && { signal }) }), () => ready));
   }
   // The main-checkout write guard (design §3.3.3). It blocks on purpose, so it is total itself: pi treats a throwing handler as a

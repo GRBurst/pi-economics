@@ -1,6 +1,7 @@
 // Outcome log events (spec §5.2.7, R2): allowlisted keys, bounded strings, no card or prompt text.
 import { createHash } from "node:crypto";
 import { basename, isAbsolute, join } from "node:path";
+import type { MergeReason } from "./local/merge.ts";
 import type { Role, TicketRole } from "./local/overseer.ts";
 import type { Trip } from "./local/tripwires.ts";
 import type { Card, LoggedPlan, Start, ThinkingLevel } from "./types.ts";
@@ -25,8 +26,8 @@ const KEYS = [
   "trip", "stage", "count",
   // local mode L4 (design §3.0.3): the review line; a ticket child's spawn line names its ticket role
   "role", "member", "outcome", "blocking", "findings", "fallback", "inconsistent", "attempt", "commit", "branch", "ticket",
-  // local mode L6 (design §3.0.3): the gatebypass line
-  "repo",
+  // local mode L6 (design §3.0.3): the merge and gatebypass lines
+  "nLines", "nFiles", "reviewId", "pushed", "repo",
 ];
 const MAX_STR = 256;
 const MAX_ITEMS = 20;
@@ -108,6 +109,13 @@ export const ticketSpawnEvent = (i: { now: Date; taskId: string; role: TicketRol
     workerTier: i.tier, workerEffort: i.effort, workerMember: i.member, workerModel: i.model, arm: i.arm, sessionId: i.sessionId, parentSessionId: i.parentSessionId,
     ...(i.forced ? { forced: true, forceSource: i.forced.source, routedModel: i.forced.routedModel, routedEffort: i.forced.routedEffort } : {}),
   });
+export type MergeOutcome = "merged" | "refused" | "revise" | "fixer" | "failed";
+export type MergeInput = { branch: string; outcome: MergeOutcome; reason?: MergeReason; commit?: string; nLines?: number; nFiles?: number;
+  reviewId?: string; pushed?: boolean };
+/** One `request_merge` call (design §3.0.3): `taskId` is the branch; the fixed reason code, never the detail text. */
+export const mergeEvent = (i: MergeInput & { now: Date }) =>
+  finish({ ...base("merge", i.now, i.branch), outcome: i.outcome, reason: i.reason, commit: i.commit, nLines: i.nLines, nFiles: i.nFiles,
+    reviewId: i.reviewId, pushed: i.pushed });
 /** Main moved outside the gate (design §3.4.6): `taskId` is the main branch, `from`/`to` its shas, `repo` the repository's
  *  basename, never a path (D35). */
 export const gatebypassEvent = (i: { now: Date; branch: string; from: string; to: string; repo?: string }) =>

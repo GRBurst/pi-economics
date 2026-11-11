@@ -4,6 +4,7 @@
 import { basename } from "node:path";
 import type { Runner } from "../gate.ts";
 import type { Card, RouterSettings } from "../types.ts";
+import type { MergeInput } from "../outcome.ts";
 import type { Finding } from "./verdict.ts";
 import type { BranchRecord, BranchStore } from "./branches.ts";
 import type { Git, Stat } from "./git.ts";
@@ -149,7 +150,11 @@ export type MergePorts = {
   /** Absent: no fixer, a rejection is always `revise`. */
   fixer?: FixerPort;
   signal?: AbortSignal;
+  /** The `merge` line (design §3.0.3), one per call; absent: none. */
+  log?(i: MergeInput): void;
 };
+/** What the pipeline learned before it returned, for the `merge` line. */
+type Seen = { branch?: string; nLines?: number; nFiles?: number };
 type Input = { branch?: string; summary?: string };
 /** A check the pipeline ran (step 5), for the review input (S27). */
 export type CheckRun = { cmd: string; exit: number; output: string };
@@ -182,16 +187,25 @@ export async function redRun(p: MergePorts, repo: string, base: string, check: s
 
 /** `request_merge` (design §3.4.2). Total: an unexpected exception is a `git` error, and nothing after it runs. */
 export async function requestMerge(p: MergePorts, input: Input, cwd: string): Promise<MergeResult> {
+  const seen: Seen = {};
+  const r = await attempt(p, input, cwd, seen);
+  try {
+    p.log?.({ branch: seen.branch ?? (typeof input.branch === "string" ? input.branch : ""), outcome: r.status === "error" ? "failed" : r.status,
+      reason: r.reason, commit: r.commit, nLines: seen.nLines, nFiles: seen.nFiles, reviewId: r.reviewId, pushed: r.pushed });
+  } catch { /* the line is best effort */ }
+  return r;
+}
+async function attempt(p: MergePorts, input: Input, cwd: string, seen: Seen): Promise<MergeResult> {
   try {
     // §3.4.3: a worktree whose HEAD moved after the approval is reviewed again from the start, once; a second move is an error.
-    for (let i = 0; i < 2; i++) { const r = await pipeline(p, input, cwd); if (r !== "moved") return r; }
+    for (let i = 0; i < 2; i++) { const r = await pipeline(p, input, cwd, seen); if (r !== "moved") return r; }
     return gitError("the worktree's HEAD moved during the merge; request again");
   } catch (err) { return gitError((err as Error)?.message ?? String(err)); }
 }
 
 export const MAIN_REF_TYPE = "task-router/main-ref";
 
-async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<MergeResult | "moved"> {
+async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): Promise<MergeResult | "moved"> {
   const s = p.settings, g = s.mergeGate, git = p.git;
   // ── 1 resolve: the repository, the branch (given, else the active one), its worktree, the main branch, the commit ──
   const active = p.branches.active() ?? p.branches.latest(["fixer", "blocked"]);
@@ -199,6 +213,7 @@ async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<Merge
   if (typeof input.branch === "string" && input.branch !== "") { repo = await git.root(cwd); branch = input.branch.replace(/^refs\/heads\//, ""); }
   else if (active) { repo = active.repo; branch = active.branch; }
   else return done("refused", "no-worktree", "no branch is given and none is active; start_branch makes one");
+  seen.branch = branch;
   if (repo === undefined) return gitError(`${cwd} is not in a git repository`);
   await refreshFacts({ git, store: p.branches, settings: s }, repo); // D39
   let main: { name: string; sha: string } | undefined;
@@ -219,8 +234,10 @@ async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<Merge
   // ── 3 size ──
   const st = await git.numstat(repo, main.sha, commit);
   if (st === undefined) return gitError(`cannot diff ${main.name}...${commit}`, commit);
+  const z = sizeOf(st);
+  seen.nLines = z.lines;
+  seen.nFiles = z.files;
   if (oversize(st, s)) {
-    const z = sizeOf(st);
     return refuse("size", { lines: String(z.lines), files: String(z.files), maxLines: String(g.maxDiffLines), maxFiles: String(g.maxDiffFiles) }, commit);
   }
   // ── 5 checks: the branch check, then mergeGate.extraChecks, in the worktree; the first failure refuses ──
