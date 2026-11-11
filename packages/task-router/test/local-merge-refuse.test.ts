@@ -159,3 +159,12 @@ test("checks that pass reach the red run (step 6); they run in the worktree", as
   assert.notEqual(res.reason, "check", JSON.stringify(res));
   assert.deepEqual(m.runs, [{ cmd: "test -f only-in-branch", cwd: m.rec.worktree }, { cmd: "true", cwd: m.rec.worktree }]);
 });
+
+test("review F7: a branch check the git classifier blocks is not run; refused check (a record from before start_branch checked it)", async () => {
+  const m = await checked("true");
+  const cmd = `true && git -C ${m.r.dir} merge --ff-only lm/x`;
+  m.store.put({ ...m.rec, check: cmd });
+  const res = await refused(m, "check");
+  assert.deepEqual(m.runs, [], "nothing ran");
+  assert.equal(res.detail, `the check \`${cmd}\` was not run: merging into main goes through request_merge`);
+});

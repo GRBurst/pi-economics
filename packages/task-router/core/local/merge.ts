@@ -9,7 +9,7 @@ import type { Finding } from "./verdict.ts";
 import type { BranchRecord, BranchStore } from "./branches.ts";
 import type { Git, Stat } from "./git.ts";
 import type { createOverseer } from "./overseer.ts";
-import { cleanupBranch, refreshFacts } from "./worktree.ts";
+import { cleanupBranch, refreshFacts, vetCheck } from "./worktree.ts";
 import { verdictSubmit } from "./overseer.ts";
 import { approve, findingLine, TASK_ID, targetPath } from "./verdict.ts";
 import { riskGlobsOf } from "./tripwires.ts";
@@ -254,6 +254,10 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
   }
   // ── 5 checks: the branch check, then mergeGate.extraChecks, in the worktree; the first failure refuses ──
   const checks: CheckRun[] = [];
+  if (rec?.check) { // review F7: the branch check is the model's text; the git classifier reads it before the router runs it
+    const why = await vetCheck({ git, store: p.branches, settings: s }, rec.check, wt.dir, branch);
+    if (why !== undefined) return done("refused", "check", `the check \`${rec.check}\` was not run: ${why}`, commit);
+  }
   for (const cmd of [...(rec?.check ? [rec.check] : []), ...g.extraChecks]) {
     const r = await p.run(cmd, wt.dir, s.checkTimeoutSec * 1000);
     checks.push({ cmd, exit: r.exit, output: tailOf(r.output) });

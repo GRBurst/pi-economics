@@ -230,3 +230,17 @@ test("D40: activeSet — worktrees and mergeGate by their switches; plans only w
   assert.deepEqual(set({ mergeGate: { enabled: "on" } }), { worktrees: false, mergeGate: true, plans: false });
   assert.deepEqual(set({ worktrees: { enabled: "on" }, mergeGate: { enabled: "on" }, plans: { enabled: "on" } }), { worktrees: true, mergeGate: true, plans: true });
 });
+
+// Review F7: the router runs the branch check itself (request_merge step 5, the red run), outside every hook; a check that could
+// move a main branch is refused by the git classifier before anything is made.
+test("review F7: a check the git classifier blocks is refused; nothing is made", async () => {
+  const { r, start, snapshot } = rig();
+  const before = await snapshot();
+  for (const check of [`npm test && git -C ${r.dir} merge --ff-only lm/x`, "git push origin HEAD:main", "git -c alias.m=merge m main"]) {
+    const res = await start({ slug: "x", goal: "g", check });
+    assert.equal(res.ok, false, check);
+    assert.match((res as { errors: string[] }).errors[0]!, /^check: /, check);
+  }
+  assert.equal(await snapshot(), before);
+  assert.equal((await start({ slug: "x", goal: "g", check: "npm test && git status" })).ok, true);
+});

@@ -5,6 +5,7 @@ import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { Result, RouterSettings } from "../types.ts";
 import type { BranchRecord, BranchStore } from "./branches.ts";
 import type { Git } from "./git.ts";
+import { guardGit } from "./gitcmd.ts";
 
 export const SLUG = /^[a-z0-9-]{1,40}$/;
 /** `<prefix><slug>`, or `<prefix><plan>/<id>` for a unit of a plan (design §3.3.1). */
@@ -46,6 +47,12 @@ export async function refreshFacts(d: StartDeps, repo: string): Promise<void> {
   else d.store.facts.mainCheckout.delete(repo);
 }
 
+/** Review F7: the router runs a branch check itself (request_merge step 5, the red run), outside every hook, so the git classifier
+ *  reads it first, in the worktree `dir` on `branch` (it may not exist yet). The classifier's reason when it blocks, else undefined. */
+export async function vetCheck(d: StartDeps, check: string, dir: string, branch?: string): Promise<string | undefined> {
+  return await guardGit(check, dir, d.settings.mergeGate.mainBranches, (x) => (branch !== undefined && x === dir ? Promise.resolve(branch) : d.git.branchOf(x)));
+}
+
 /** `start_branch` for a slug (design §3.3.2): validates everything first, so a failure changes nothing; an existing branch in a
  *  worktree is re-activated (idempotent; one in the state merged, fixer or blocked is refused); else `git worktree add -b`. A
  *  plan unit is L7's: until then `plan` is refused. */
@@ -71,6 +78,8 @@ export async function startBranch(d: StartDeps, input: unknown, cwd: string): Pr
   const known = d.store.get(repo, branch);
   const there = (await d.git.worktrees(repo)).find((w) => w.branch === branch && !w.prunable); // a prunable one has lost its directory
   const existed = (await d.git.sha(repo, branch)) !== undefined;
+  const why = await vetCheck(d, check, there?.dir ?? worktreeDir(d.settings.worktrees.root, repo, branch), branch);
+  if (why !== undefined) return fail(`check: ${why}`);
   let rec: BranchRecord;
   if (there) {
     if (known && known.state !== "active" && known.state !== "abandoned") return fail(`branch ${branch} is ${known.state}; start another`);
