@@ -35,7 +35,7 @@ import { tmpdir } from "node:os";
 import type { FixerPort } from "./merge.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
 import type { Budget, Tickets } from "./overseer.ts";
-import { callKey, callTrips, changed, checkPassed, contextSoft, contextStall, errSig, normOf, overSize, push, riskGlobsOf } from "./tripwires.ts";
+import { callKey, callTrips, changed, checkPassed, contextSoft, contextStall, errSig, normOf, overSize, push, riskGlobsOf, sizeBudget } from "./tripwires.ts";
 import type { CallRecord, Trip } from "./tripwires.ts";
 
 type Pi = {
@@ -373,7 +373,8 @@ export function installLocal(pi: Pi, d: LocalDeps) {
         again = false;
         const a = branches.active();
         if (!a) return;
-        if (overSize(await git.diffStat(a.worktree, a.base), s.plans)) queue.push(...engine.detected(["over-size"], call));
+        const size = sizeBudget(s, a); // review spot-check F6: the budget its merge enforces
+        if (overSize(await git.diffStat(a.worktree, a.base), size)) queue.push(...engine.detected(["over-size"], call, size));
       } while (again);
     })().catch(() => undefined).finally(() => { sizing = undefined; });
   };

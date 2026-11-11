@@ -408,9 +408,13 @@ calls (`tool_call`, `tool_result`, `turn_end`) and keeps a ring of the last
 - `over-size` (with a worktree, below): after a successful `edit` or `write`
   inside the active worktree, its diff against the branch's base (committed,
   staged and unstaged changes, plus untracked files: their lines are counted
-  through the file system, binary or over 4 MB as 0) has more than
+  through the file system, binary or over 4 MB as 0) has more than the
+  branch's size budget, the one its merge enforces: a task branch's
   `plans.splitLines` (100) changed lines (added plus deleted) or
-  `plans.splitFiles` (3) files. The diff is a git process (5 s; a timeout or a
+  `plans.splitFiles` (3) files, a milestone branch's `plans.milestoneLines`
+  and `mergeGate.maxDiffFiles`, a branch without a plan's `mergeGate.maxDiffLines`
+  (150) and `mergeGate.maxDiffFiles` (6), each never above the merge gate's;
+  the hint names that budget. The diff is a git process (5 s; a timeout or a
   failure means no trip), so it runs after the call, one at a time, and the
   hint goes into the next result;
 - `outside-worktree`: the write guard (below) blocked a write. It is logged, not
@@ -892,8 +896,8 @@ checked only while a local component can run.
 | `plans.dir` | `"docs/plans"` | path relative to the repository root | plan files |
 | `plans.taskFiles` | 2 | files | the plan author's target per task |
 | `plans.taskLines` | 60 | changed lines | the plan author's target per task |
-| `plans.splitFiles` | 3 | files | `over-size` trip, paths per task, a task branch's merge |
-| `plans.splitLines` | 100 | changed lines | `over-size` trip, a task branch's merge |
+| `plans.splitFiles` | 3 | files | `over-size` trip (task branches), paths per task, a task branch's merge |
+| `plans.splitLines` | 100 | changed lines | `over-size` trip (task branches), a task branch's merge |
 | `plans.milestoneTasks` | 5 | tasks | per milestone |
 | `plans.milestoneLines` | 250 | changed lines | a milestone branch's merge |
 | `plans.taskTurns` | 12 | main-session turns | `over-budget` |

@@ -13,12 +13,14 @@ const H = defaults().hints, P = defaults().plans;
 type Out = { content: { type: string; text: string }[] } | undefined;
 const lines = (n: number): Stat => [{ path: "a.ts", added: n, deleted: 0 }];
 
-function rig(o: { git?: (g: Git) => Git; active?: boolean } = {}) {
+/** The active branch is a plan task (`plan: null`: a branch without a plan; an id like `M1`: a milestone branch). */
+function rig(o: { git?: (g: Git) => Git; active?: boolean; plan?: { slug: string; id: string } | null; settings?: Record<string, unknown> } = {}) {
   const fake = fakeGit({ repos: [{ root: "/r/x" }] });
-  const h = harness({ settings: { mode: "local" } as never, extra: { git: o.git ? o.git(fake.git) : fake.git, hash: () => undefined } as never });
+  const h = harness({ settings: { mode: "local", ...o.settings } as never, extra: { git: o.git ? o.git(fake.git) : fake.git, hash: () => undefined } as never });
   const ctx = { ...MAIN, cwd: "/wt", getContextUsage: () => ({ tokens: 1000, percent: 10 }) };
   h.f.fire("session_start", {}, ctx);
-  if (o.active !== false) h.router.branches.put({ repo: "/r/x", branch: "lm/a", worktree: "/wt", base: "B", state: "active", rejections: 0, fixerRuns: 0, goal: "g", check: "true" });
+  if (o.active !== false) h.router.branches.put({ repo: "/r/x", branch: "lm/a", worktree: "/wt", base: "B", state: "active", rejections: 0, fixerRuns: 0, goal: "g", check: "true",
+    ...(o.plan !== null && { plan: o.plan ?? { slug: "p", id: "M1.T1" } }) });
   let n = 0;
   const pair = (tool: string, input: unknown, e: { isError?: boolean } = {}) => {
     const id = `t${++n}`;
@@ -101,4 +103,37 @@ test("one diff at a time: a write during a read leads to one more read afterward
   await settled();
   assert.equal(peak, 1);
   assert.equal(diffs().length, 2, "the first, and one more for the writes that came meanwhile");
+});
+
+// ── spot-check F6: the trip and its hint use the branch's own size budget (the one its merge enforces) ──
+const many = (n: number, files: number): Stat => Array.from({ length: files }, (_, i) => ({ path: `f${i}`, added: Math.floor(n / files) + (i < n % files ? 1 : 0), deleted: 0 }));
+/** One write in the worktree whose diff is `stat`; the hint block the next result carries, if any. */
+async function tripped(o: Parameters<typeof rig>[0], stat: Stat): Promise<string | undefined> {
+  const x = rig(o);
+  x.fake.stats.set("/wt", stat);
+  x.pair("edit", { path: "/wt/a.ts" });
+  await x.settled();
+  return x.pair("read", { path: "/wt/a.ts" })?.content[1]?.text;
+}
+const budget = (splitLines: number, splitFiles: number) => block("over-size", 1, HINT_TEXT["over-size"](H, { ...P, splitLines, splitFiles }));
+
+test("spot-check F6: a branch without a plan trips at the merge gate's size (150 lines, 6 files), and its hint says so", async () => {
+  assert.equal(await tripped({ plan: null }, many(120, 4)), undefined, "100 < 120 lines and 3 < 4 files, within the gate");
+  assert.equal(await tripped({ plan: null }, many(150, 6)), undefined, "exactly the gate");
+  assert.equal(await tripped({ plan: null }, many(151, 2)), budget(150, 6));
+  assert.equal(await tripped({ plan: null }, many(6, 7)), budget(150, 6));
+});
+
+test("spot-check F6: a milestone branch trips at planBudget(milestone): min(milestoneLines, maxDiffLines) lines, maxDiffFiles files", async () => {
+  const m = { slug: "p", id: "M1" };
+  assert.equal(await tripped({ plan: m }, many(150, 6)), undefined);
+  assert.equal(await tripped({ plan: m }, many(151, 2)), budget(150, 6));
+  assert.equal(await tripped({ plan: m, settings: { plans: { milestoneLines: 120 } } }, many(121, 2)), budget(120, 6));
+});
+
+test("spot-check F6: a task branch trips at planBudget(task), never above the merge gate", async () => {
+  assert.equal(await tripped({}, many(100, 3)), undefined);
+  assert.equal(await tripped({}, many(101, 2)), budget(100, 3));
+  assert.equal(await tripped({ settings: { mergeGate: { maxDiffLines: 80, maxDiffFiles: 2 } } }, many(81, 1)), budget(80, 2));
+  assert.equal(await tripped({ settings: { mergeGate: { maxDiffLines: 80, maxDiffFiles: 2 } } }, many(10, 3)), budget(80, 2));
 });

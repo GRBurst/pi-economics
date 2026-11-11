@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { globMatch } from "../glob.ts";
 import type { HintSettings, RouterSettings } from "../types.ts";
 import type { Stat } from "./git.ts";
+import { planBudget } from "./plan.ts";
 
 export const TRIPS = ["identical-call", "no-change-writes", "alternation", "repeated-error", "churn", "check-failing",
   "over-size", "risky-path", "context-soft", "context-stall", "outside-worktree"] as const;
@@ -169,5 +170,12 @@ const checkFailing = (r: CallRecord[], h: HintSettings, checks: readonly string[
 // ── over-size (design §3.1.1, plan D13, D42) ──
 /** After a write: the worktree's diff against its base holds more than `splitLines` changed lines (added + deleted) or more
  *  than `splitFiles` files (a binary or empty file counts as a file). The caller reads the diff (it needs git); this is the rule. */
+/** Spot-check F6: the size the active branch may grow to, the budget its merge enforces: a plan unit's `planBudget` (a milestone
+ *  branch's unit id is the milestone's, `M1`; a task's is `M1.T1`), else the merge gate's. In the keys `overSize` and the hint read. */
+export const sizeBudget = (s: RouterSettings, b: { plan?: { id: string } }): Pick<RouterSettings["plans"], "splitLines" | "splitFiles"> => {
+  const x = b.plan === undefined ? { lines: s.mergeGate.maxDiffLines, files: s.mergeGate.maxDiffFiles }
+    : planBudget(s, /^M\d+$/.test(b.plan.id) ? "milestone" : "task");
+  return { splitLines: x.lines, splitFiles: x.files };
+};
 export const overSize = (stat: Stat, p: Pick<RouterSettings["plans"], "splitLines" | "splitFiles">): boolean =>
   stat.length > p.splitFiles || stat.reduce((n, s) => n + s.added + s.deleted, 0) > p.splitLines;

@@ -27,12 +27,13 @@ export type Delivery = { trip: Trip; n: number; stage: "hint" | "steer"; text: s
 /** Plan D14: every detection counts toward persistence; the cooldown suppresses only the hint; the escalation (detection
  *  1 + persistTrips since progress) is never suppressed and starts the count again. */
 export function createHintEngine(h: HintSettings, p: RouterSettings["plans"]): {
-  detected(trips: Trip[], call: number): Delivery[];
+  /** `size`: the branch's own budget for the `over-size` text (spot-check F6); absent: `splitLines`/`splitFiles`. */
+  detected(trips: Trip[], call: number, size?: Pick<RouterSettings["plans"], "splitLines" | "splitFiles">): Delivery[];
   progress(): void;
 } {
   const count = new Map<Trip, number>(), lastHint = new Map<Trip, number>();
   return {
-    detected(trips, call) {
+    detected(trips, call, size) {
       const out: Delivery[] = [];
       for (const trip of trips) {
         const n = (count.get(trip) ?? 0) + 1;
@@ -45,7 +46,7 @@ export function createHintEngine(h: HintSettings, p: RouterSettings["plans"]): {
         const last = lastHint.get(trip);
         if (last !== undefined && call - last <= h.cooldownCalls) continue;
         lastHint.set(trip, call);
-        out.push({ trip, n, stage: "hint", text: HINT_TEXT[trip](h, p) });
+        out.push({ trip, n, stage: "hint", text: HINT_TEXT[trip](h, size ? { ...p, ...size } : p) });
       }
       return out;
     },
