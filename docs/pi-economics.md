@@ -751,7 +751,8 @@ Plan-bound branches have guards and their own merge rules:
   vacuous, else `failed`), and the reviewer gets the unit's goal and the
   invariants plus the tasks' `forbidden`. A fixer round rejected again
   blocks the branch, opens `remediation-failed` and says "restructure the
-  task with amend_plan".
+  task with amend_plan". A branch without a plan that changes an approved
+  plan's file is refused `plan-changed`.
 
 Triggers (`non-whitelisted`, `interface-break`, `regression`, `over-budget`,
 `remediation-failed`) are kept in the plan record with ids `t1`, `t2`, …; the

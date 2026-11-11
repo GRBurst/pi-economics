@@ -91,6 +91,24 @@ test("review L7 F1: a file named like a rename (` => `, braces) or holding a new
   assert.equal(x.mainSha(), before);
 });
 
+test("review L7 F11: a branch without a plan that changes an approved plan's file is refused plan-changed; no review, nothing merges", async () => {
+  const x = rig();
+  const s = await startBranch({ git: x.git, store: x.store, settings: x.settings, plans: x.plans }, { slug: "tidy", goal: "tidy up", check: "true" }, x.r.dir);
+  assert.ok(s.ok);
+  const before = x.mainSha();
+  x.work(s.value.worktree, { [FILE]: x.plan(s.value.worktree).replace("wire it", "wire it twice"), "src/b.ts": "export const wire = 2;\n" });
+  const r = await x.merge();
+  assert.deepEqual([r.status, r.reason, r.detail], ["refused", "plan-changed",
+    `the branch changes the approved plan file ${FILE}; a plan changes only through amend_plan (or a plan-bound branch's tick)`]);
+  assert.equal(x.reviews.length, 0);
+  assert.equal(x.mainSha(), before);
+  const y = rig();
+  const t = await startBranch({ git: y.git, store: y.store, settings: y.settings, plans: y.plans }, { slug: "tidy", goal: "tidy up", check: "true" }, y.r.dir);
+  assert.ok(t.ok);
+  y.work(t.value.worktree, { "src/b.ts": "export const wire = 2;\n" });
+  assert.equal((await y.merge()).status, "merged", "a branch that leaves the plan file alone merges");
+});
+
 test("AC-M2 plan-changed: the skeleton at the commit differs from the approved one", async () => {
   const x = rig();
   const wt = await x.start("M1.T1");

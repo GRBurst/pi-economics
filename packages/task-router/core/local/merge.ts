@@ -350,6 +350,14 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
       const r = refuse("scope", {}, commit);
       return { ...r, detail: `${r.detail}: ${out.join(", ")}${opened(trigger(bound, "non-whitelisted"))}` };
     }
+  } else if (p.plans) {
+    // review L7 F11: a branch without a plan never changes an approved plan's file (it would leave the plan plan-changed)
+    const files = new Set(p.plans.all().filter((r) => r.repo === repo).map((r) => r.file));
+    const hit = st.map((f) => f.path).filter((f) => files.has(f));
+    if (hit.length) {
+      return { ...refuse("plan-changed", {}, commit),
+        detail: `the branch changes the approved plan file ${hit.join(", ")}; a plan changes only through amend_plan (or a plan-bound branch's tick)` };
+    }
   }
   // ── 5 checks: the branch check (a plan unit's from the plan), then mergeGate.extraChecks, then the merged tasks' checks per
   //    plans.regression, in the worktree; the first failure refuses ──
