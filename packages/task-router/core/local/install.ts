@@ -5,7 +5,7 @@
 // result through unchanged.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import type { ApiEvent, SubagentsApiV1 } from "../api.ts";
 import type { ForcePort } from "../forceinstall.ts";
 import type { createOutcomeLog } from "../log.ts";
@@ -22,7 +22,10 @@ import { gitGuard } from "./childguards.ts";
 import type { Guard } from "../toolguard.ts";
 import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
-import { createApprovals } from "./merge.ts";
+import { createApprovals, requestMergeTool } from "./merge.ts";
+import { runCheck } from "../gate.ts";
+import type { Runner } from "../gate.ts";
+import { tmpdir } from "node:os";
 import type { FixerPort } from "./merge.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
 import type { Budget, Tickets } from "./overseer.ts";
@@ -42,6 +45,8 @@ export type LocalDeps = {
   policyOn(): boolean;
   /** The force override: the fixer runs under it (D47). */
   force?: ForcePort;
+  /** The merge checks' runner (default: runCheck); a test seam. */
+  run?: Runner;
   /** The git port (default: the real one); a test seam. */
   git?: Git;
   /** After every budget change and rebuild (the status line, design §2.5). */
@@ -125,6 +130,12 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   };
   const s = d.settings, h = s.hints;
   if (componentOn(s, "worktrees")) pi.registerTool?.(startBranchTool({ git, store: branches, settings: s }, () => ready));
+  // request_merge (design §3.4.1) while the merge gate is active; one set of ports per call, with its AbortSignal (D49).
+  if (activeSet(s).mergeGate) {
+    pi.registerTool?.(requestMergeTool((signal) => ({ git, run: d.run ?? runCheck, overseer, branches, approvals, settings: s,
+      append: (type, data) => pi.appendEntry?.(type, data), tmp: () => join(tmpdir(), `task-router-red-${d.hex(6)}`), fixer: handle.fixer,
+      ...(signal && { signal }) }), () => ready));
+  }
   // The main-checkout write guard (design §3.3.3). It blocks on purpose, so it is total itself: pi treats a throwing handler as a
   // block. Registered after the hint recorder's `tool_call` handler, so that call is recorded first.
   const guardWrites = (): void => {

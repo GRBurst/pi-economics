@@ -59,9 +59,28 @@ test("AC-R3 worktrees: with worktrees active (local mode) the section holds the 
   assert.equal(localSection(parseSettings({ mode: "local" }).settings), PINNED(cardSchema(defaults())), "no active set: today's literal");
 });
 
-test("the section follows the active set: worktrees off → no branch line; default-mode settings with worktrees on → the card section", () => {
-  assert.equal(fire(harness({ settings: { mode: "local", worktrees: { enabled: "off" } } as never })), PINNED(cardSchema(defaults())));
+test("the section follows the active set: worktrees and mergeGate off → no branch line; default-mode settings with worktrees on → the card section", () => {
+  assert.equal(fire(harness({ settings: { mode: "local", worktrees: { enabled: "off" }, mergeGate: { enabled: "off" } } as never })), PINNED(cardSchema(defaults())));
   assert.equal(fire(harness({ settings: { worktrees: { enabled: "on" } } as never })), cardSection(defaults(), false));
+});
+
+// L6.T13 (plan S25, Q17): the merge gate's lines.
+const BRANCH_FULL = `Code changes happen on branches: start_branch, then edit and commit in its worktree (absolute paths),
+then request_merge. You cannot merge, push or commit to a main branch; the router blocks it.`;
+const GATE_ONLY = "Merge into a main branch only with request_merge. You cannot merge, push or commit to a main branch; the router blocks it.";
+const WITH = (schema: string, line: string) => PINNED(schema).replace("the child's report wakes you.\n", `the child's report wakes you.\n${line}\n`);
+
+test("AC-R3 worktrees+mergeGate: the full branch line (design §2.3)", () => {
+  const text = fire(harness({ settings: { mode: "local", plans: { enabled: "off" } } as never }));
+  assert.equal(text, WITH(cardSchema(defaults()), BRANCH_FULL));
+  assert.equal(text, localSection(parseSettings({ mode: "local" }).settings, { worktrees: true, mergeGate: true, plans: false }));
+  assert.ok(!text.includes(BRANCH_ONLY + "\n"));
+});
+
+test("AC-R3 mergeGate only: the gate line", () => {
+  const text = fire(harness({ settings: { mode: "local", worktrees: { enabled: "off" } } as never }));
+  assert.equal(text, WITH(cardSchema(defaults()), GATE_ONLY));
+  assert.ok(!text.includes("start_branch"));
 });
 
 test("default mode section", () => {

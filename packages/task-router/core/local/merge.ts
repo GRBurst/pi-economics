@@ -12,6 +12,10 @@ import { verdictSubmit } from "./overseer.ts";
 import { approve, findingLine, TASK_ID, targetPath } from "./verdict.ts";
 import { riskGlobsOf } from "./tripwires.ts";
 import { globMatch } from "../glob.ts";
+import { check } from "./schema.ts";
+import type { Schema } from "./schema.ts";
+import { errorReply } from "./branchtool.ts";
+import type { RouterTool } from "./branchtool.ts";
 
 export const REASONS = ["main-branch", "dirty", "behind", "fixer-running", "abandoned", "blocked", "size", "scope",
   "check", "main-dirty", "plan-changed", "no-worktree", "review-unavailable", "aborted", "git"] as const;
@@ -298,4 +302,37 @@ async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<Merge
     }
   }
   return { status: "merged", detail, commit, reviewId, ...(pushed !== undefined && { pushed }) };
+}
+
+// ── the request_merge tool (design §3.4.1; plan D48, D49) ──
+/** Design §3.4.1, verbatim. */
+export const REQUEST_MERGE_SCHEMA = {
+  type: "object", additionalProperties: false,
+  properties: {
+    branch: { type: "string", description: "default: the active worktree's branch" },
+    summary: { type: "string", maxLength: 500, description: "what the branch does, for the reviewer" },
+  },
+} as const satisfies Schema;
+/** The tool's text (D48): `status: <s> (<reason>)`, the detail, one line per finding. */
+export const mergeText = (r: MergeResult): string =>
+  [`status: ${r.status}${r.reason ? ` (${r.reason})` : ""}`, r.detail, ...(r.findings ?? [])].join("\n");
+
+/** `request_merge` (main session only): `ports(signal)` gives the pipeline its ports for one call, `ready` the session_start work
+ *  it waits for. Invalid input is refused before anything runs; `isError` only for that and `status: "error"` (D48). */
+export function requestMergeTool(ports: (signal: AbortSignal | undefined) => MergePorts, ready: () => Promise<void> = async () => undefined): RouterTool {
+  return {
+    name: "request_merge",
+    label: "Request merge",
+    description: "Merge a branch into the main branch through the router's gate: refusals and the size limit first, then the checks, "
+      + "then an independent review; an approved branch is fast-forwarded. Default: the active worktree's branch. Commit first.",
+    parameters: REQUEST_MERGE_SCHEMA,
+    async execute(_id, params, signal, _update, ctx) {
+      const bad = check(REQUEST_MERGE_SCHEMA, params);
+      if (bad.length) return errorReply(`invalid input: ${bad.join("; ")}`);
+      await ready();
+      const sig = signal instanceof AbortSignal ? signal : undefined;
+      const r = await requestMerge(ports(sig), params as Input, typeof ctx?.cwd === "string" ? ctx.cwd : process.cwd());
+      return { content: [{ type: "text", text: mergeText(r) }], details: r, ...(r.status === "error" && { isError: true }) };
+    },
+  };
 }

@@ -50,8 +50,13 @@ const LOCAL_EXAMPLE = {
   kind: "debug-design", files: ["src/a.ts"], check: "npm test -- a", acceptance: ["a() handles empty input"],
   t0: Object.fromEntries(T0_KEYS.map((k) => [k, true])), t2: [],
 };
-/** The branch line while worktrees are active and no merge gate is built (design §2.3, plan S25: L5; L6 and L7 add the others). */
+/** The branch and gate lines by the active set (design §2.3, plan S25, Q17: pinned): both, worktrees only, the merge gate only. */
+const BRANCH_FULL = `Code changes happen on branches: start_branch, then edit and commit in its worktree (absolute paths),
+then request_merge. You cannot merge, push or commit to a main branch; the router blocks it.`;
 const BRANCH_ONLY = "Code changes happen on branches: start_branch, then edit and commit in its worktree (absolute paths).";
+const GATE_ONLY = "Merge into a main branch only with request_merge. You cannot merge, push or commit to a main branch; the router blocks it.";
+const branchLine = (a: Active): string | undefined =>
+  a.worktrees && a.mergeGate ? BRANCH_FULL : a.worktrees ? BRANCH_ONLY : a.mergeGate ? GATE_ONLY : undefined;
 /** The main session's section in local mode (design §2.3, LD3; text pinned by test/local-prompt.test.ts, AC-R3): rules, field
  *  names and one example, no strategy prose, no per-turn values (cache-stable). The branch and plan lines arrive with their
  *  components (L5, L6, L7; plan D4) and follow `active` (the default: none); they sit after the sentence about the child's report. */
@@ -61,7 +66,7 @@ export function localSection(s: RouterSettings, active: Active = { worktrees: fa
 You do most of the work yourself. Spawn a subagent only when a task needs more ability than yours
 (design, security, concurrency, an unknown root cause) or when a <router-hint> says so. After spawning,
 end your turn; the child's report wakes you.
-${active.worktrees ? `${BRANCH_ONLY}\n` : ""}<router-hint> notes report what the router measured. Act on them.
+${branchLine(active) ? `${branchLine(active)}\n` : ""}<router-hint> notes report what the router measured. Act on them.
 
 Task card (spawn_subagent \`task\`; do not set model or thinkingLevel):
 ${cardSchema(s)}
