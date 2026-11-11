@@ -244,3 +244,13 @@ test("review F7: a check the git classifier blocks is refused; nothing is made",
   assert.equal(await snapshot(), before);
   assert.equal((await start({ slug: "x", goal: "g", check: "npm test && git status" })).ok, true);
 });
+
+test("review F8: start_branch adopts a hand-made branch with a hand-made record: it becomes the router's and the active one", async () => {
+  const { r, store, start } = rig();
+  const wt = join(r.base, "hand-x");
+  r.git(["worktree", "add", "-q", "-b", "lm/x", wt]);
+  store.update({ repo: r.dir, branch: "lm/x", worktree: wt, base: "b", state: "active", rejections: 1, fixerRuns: 0, handmade: true });
+  const res = await start(X);
+  assert.equal(res.ok, true, JSON.stringify(res));
+  assert.deepEqual([store.active()?.branch, store.get(r.dir, "lm/x")!.handmade, store.get(r.dir, "lm/x")!.rejections], ["lm/x", undefined, 1]);
+});

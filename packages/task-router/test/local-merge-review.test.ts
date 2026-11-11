@@ -3,7 +3,7 @@
 // (repo, branch, commit, tree) only.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { APPROVAL_TYPE, RED_TEXT, reviewInput } from "../core/local/merge.ts";
 import { findingLine } from "../core/local/verdict.ts";
@@ -152,4 +152,32 @@ test("no spawn API (design §3.0.4): review-unavailable without a spawn, main un
   assert.deepEqual([res.status, res.reason, res.detail], ["error", "review-unavailable", "error: review unavailable"], JSON.stringify(res));
   assert.equal(m.h.a.apiSpawns.length, 0);
   assert.equal(m.mainSha(), m.before);
+});
+
+// Review F8: a rejection does not change which branch is active, and a hand-made branch (D40) the review rejected once is still
+// left alone after its merge (no cleanup) and never becomes the active branch.
+test("review F8: rejecting lm/x by name while lm/y is active keeps lm/y active", async () => {
+  const m = reviewRig();
+  const x = await m.start("x");
+  m.r.commit("x.ts", "x\n", "x", x.worktree);
+  await m.start("y");
+  m.verdicts.push(REVISE);
+  const res = await m.merge({ branch: "lm/x" });
+  assert.equal(res.status, "revise", JSON.stringify(res));
+  assert.equal(m.h.router.branches.active()!.branch, "lm/y");
+});
+
+test("review F8: a hand-made branch rejected once is never active and is not cleaned up after its merge", async () => {
+  const m = reviewRig();
+  const y = await m.start("y");
+  const wt = join(m.r.base, "hand");
+  m.r.git(["worktree", "add", "-q", "-b", "hand", wt]);
+  m.r.commit("h.ts", "h\n", "h", wt);
+  m.verdicts.push({ ...REVISE, findings: [finding("F1", true, "h.ts:1")] });
+  assert.equal((await m.merge({ branch: "hand" })).status, "revise");
+  assert.equal(m.h.router.branches.active()!.branch, y.branch);
+  const res = await m.merge({ branch: "hand" });
+  assert.equal(res.status, "merged", JSON.stringify(res));
+  assert.ok(existsSync(wt), "the worktree stays");
+  assert.equal(m.r.git(["rev-parse", "--verify", "-q", "refs/heads/hand"]), m.mainSha(), "the branch stays");
 });

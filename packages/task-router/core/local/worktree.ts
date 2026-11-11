@@ -83,7 +83,9 @@ export async function startBranch(d: StartDeps, input: unknown, cwd: string): Pr
   let rec: BranchRecord;
   if (there) {
     if (known && known.state !== "active" && known.state !== "abandoned") return fail(`branch ${branch} is ${known.state}; start another`);
-    rec = { ...(known ?? { repo, branch, base: main.sha, rejections: 0, fixerRuns: 0 }), worktree: there.dir, state: "active", goal, check };
+    // review F8: a hand-made record is adopted (the router's from now on)
+    const { handmade: _adopted, ...prior } = known ?? { repo, branch, base: main.sha, rejections: 0, fixerRuns: 0 };
+    rec = { ...prior, worktree: there.dir, state: "active", goal, check };
     const current = d.store.active();
     const same = known !== undefined && current?.repo === repo && current.branch === branch && current.goal === goal && current.check === check;
     if (!same) d.store.put(rec);

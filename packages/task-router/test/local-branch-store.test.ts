@@ -95,3 +95,51 @@ test("facts: the main checkout and the registered worktrees per repository start
   const { s } = store();
   assert.deepEqual([s.facts.mainCheckout.size, s.facts.worktrees.size], [0, 0]);
 });
+
+// Review F8: a rejection, a fixer's start, its report or death do not change which branch is active (start_branch does), and a
+// branch the router did not make (D40) is never the active one.
+test("review F8: update keeps a record's place in the active order; a rebuild agrees", () => {
+  const { s, entries } = store();
+  s.put(rec({ branch: "lm/a" }));
+  s.put(rec({ branch: "lm/b" }));
+  s.update(rec({ branch: "lm/a", rejections: 1 }));
+  assert.equal(s.active()!.branch, "lm/b");
+  assert.equal(s.get("/r/x", "lm/a")!.rejections, 1);
+  s.update(rec({ branch: "lm/b", state: "fixer", fixer: "fixer-1" }));
+  assert.equal(s.active()!.branch, "lm/a");
+  s.update(rec({ branch: "lm/b" })); // the fixer's report: lm/b is newer, so it is the active one again, as before
+  assert.equal(s.active()!.branch, "lm/b");
+  assert.deepEqual(entries.map((e) => e.type), Array(5).fill(BRANCH_TYPE));
+  const back = createBranchStore(() => assert.fail("rebuild appends nothing"));
+  back.rebuild(entries.map((e) => entry(e.data)));
+  assert.deepEqual(back.all(), s.all());
+  assert.equal(back.active()!.branch, "lm/b");
+  assert.deepEqual(back.get("/r/x", "lm/a"), rec({ branch: "lm/a", rejections: 1 }), "the record as stored, without the order mark");
+});
+
+test("review F8: update of an unknown record adds it; a hand-made record is never active() or latest()", () => {
+  const { s } = store();
+  s.update(rec({ branch: "hand", handmade: true }));
+  assert.equal(s.active(), undefined);
+  assert.equal(s.latest(["active"]), undefined);
+  s.update(rec({ branch: "hand", handmade: true, state: "fixer", fixer: "fixer-1" }));
+  assert.equal(s.latest(["fixer"]), undefined);
+  assert.equal(s.get("/r/x", "hand")!.handmade, true);
+  s.put(rec({ branch: "lm/a" }));
+  assert.equal(s.active()!.branch, "lm/a");
+});
+
+test("rebuild reproduces all() and active() over random puts and updates (review F8)", () => {
+  const rnd = seeded(2027);
+  for (let round = 0; round < 60; round++) {
+    const { s, entries } = store();
+    for (let i = 1 + rnd(25); i > 0; i--) {
+      const r = rec({ branch: `lm/${"abcd"[rnd(4)]}`, state: BRANCH_STATES[rnd(BRANCH_STATES.length)]!, rejections: rnd(4), ...(rnd(4) === 0 ? { handmade: true as const } : {}) });
+      if (rnd(2)) s.put(r); else s.update(r);
+    }
+    const back = createBranchStore(() => assert.fail("rebuild appends nothing"));
+    back.rebuild(entries.map((e) => entry(e.data)));
+    assert.deepEqual(back.all(), s.all(), `round ${round}`);
+    assert.deepEqual(back.active(), s.active(), `round ${round}`);
+  }
+});

@@ -200,3 +200,12 @@ test("review F5 (spawn race): a fixer that reports before its branch record is k
   const res = await viaTool(m);
   assert.equal(res.status, "merged", JSON.stringify(res));
 });
+
+test("review F8: the fixer's report gives its branch back without making it the active branch", async () => {
+  const m = await rejectedTwice();
+  const name = m.get().fixer!;
+  await m.start("y");
+  m.h.a.emit({ type: "route", from: name, to: "main", preview: "done", buffered: false, ts: 0 });
+  assert.equal(m.get().state, "active");
+  assert.equal(m.h.router.branches.active()!.branch, "lm/y");
+});

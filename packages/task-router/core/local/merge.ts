@@ -229,7 +229,7 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
   if (rec?.state === "fixer" && p.fixerGone?.(rec.fixer)) { // review F5: a vanished fixer gives the branch back
     const { fixer: _gone, ...rest } = rec;
     rec = { ...rest, state: "active" };
-    p.branches.put(rec);
+    p.branches.update(rec);
   }
   const x = { branch, main: main.name };
   const isMain = g.mainBranches.includes(branch);
@@ -282,12 +282,13 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
       return done("error", r, reasonText(r, {}), commit);
     }
     if (!approve(out.value.findings)) {
-      const now = p.branches.get(repo, branch) ?? { repo, branch, worktree: wt.dir, base: main.sha, state: "active" as const, rejections: 0, fixerRuns: 0 };
+      // Review F8: a branch without a record (D40) gets a hand-made one, which holds its counts and is never active.
+      const now = p.branches.get(repo, branch) ?? { repo, branch, worktree: wt.dir, base: main.sha, state: "active" as const, rejections: 0, fixerRuns: 0, handmade: true as const };
       const rej: BranchRecord = { ...now, rejections: now.rejections + 1 }, findings = out.value.findings.map(findingLine);
       const answer = { commit, reviewId: out.reviewId, findings };
       // S28: a fixer round rejected again with fixerRounds used up blocks the branch; else the fixer after enough rejections.
       if (rej.fixerRuns >= g.fixerRounds && rej.fixerRuns > 0) {
-        p.branches.put({ ...rej, state: "blocked" });
+        p.branches.update({ ...rej, state: "blocked" });
         return { status: "refused", reason: "blocked", detail: reasonText("blocked", { branch }), ...answer };
       }
       if (p.fixer && rej.rejections >= g.rejectionsBeforeFixer) {
@@ -295,13 +296,13 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
         const fx = await p.fixer({ worktree: wt.dir, reviewId: out.reviewId, brief: fixerBrief(card),
           message: fixerMessage({ branch, worktree: wt.dir, reviewId: out.reviewId, findings }) });
         if (fx.ok) {
-          p.branches.put({ ...rej, state: "fixer", fixer: fx.name, fixerRuns: rej.fixerRuns + 1 });
+          p.branches.update({ ...rej, state: "fixer", fixer: fx.name, fixerRuns: rej.fixerRuns + 1 });
           return { status: "fixer", detail: reasonText("fixer-running", { fixer: fx.name }), ...answer };
         }
-        p.branches.put(rej);
+        p.branches.update(rej);
         return { status: "revise", detail: `${REVISE_TEXT}; the fixer could not start: ${fx.reason}`, ...answer };
       }
-      p.branches.put(rej);
+      p.branches.update(rej);
       return { status: "revise", detail: REVISE_TEXT, ...answer };
     }
     reviewId = out.reviewId;
@@ -327,9 +328,10 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
   if ("status" in step9) return step9;
   let detail = step9.detail;
   const pushed = step9.pushed;
-  // A branch the router knows becomes `merged` and is cleaned up; one made by hand without a record (D40) is left as it is.
+  // A branch the router made becomes `merged` and is cleaned up; one made by hand (D40, with or without a hand-made record of its
+  // rejections) is left as it is (review F8).
   const now = p.branches.get(repo, branch);
-  if (now) {
+  if (now && !now.handmade) {
     const merged: BranchRecord = { ...now, state: "merged" };
     p.branches.put(merged);
     if (s.worktrees.removeAfterMerge) {

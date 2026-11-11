@@ -148,7 +148,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       for (const r of branches.all()) {
         if (r.state !== "fixer" || !fixerGone(r.fixer)) continue;
         const { fixer: _gone, ...rest } = r;
-        branches.put({ ...rest, state: "active" });
+        branches.update({ ...rest, state: "active" });
         warn(`task-router: the fixer ${r.fixer ?? ""} of ${r.branch} did not survive the restart; the branch is active again`);
       }
       try { killStale((d.api()?.list() ?? []).map((a) => a.name)); } catch { /* best effort */ }
@@ -189,7 +189,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
         }
         if (fixer) d.tickets.forget(name); // done with the branch: its later kill event finds no record and no ticket
         const { fixer: _gone, ...rest } = rec;
-        branches.put({ ...rest, state: "active" });
+        branches.update({ ...rest, state: "active" }); // review F8: the report does not make it the active branch
         if (e.type === "route") void d.api()?.kill?.([name]).catch(() => []);
       } catch { /* an event handler never throws */ }
     },
