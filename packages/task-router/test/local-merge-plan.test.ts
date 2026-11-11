@@ -179,8 +179,10 @@ test("review L7 F2: blocked → amend_plan replaces the task → start_branch re
   const behind = await x.merge();
   assert.equal(behind.reason, "behind", "the amendment moved main: the refusal says to rebase");
   x.r.git(["rebase", "-q", "main"], wt);
+  const reviews = x.reviews.length;
   const m = await x.merge();
   assert.equal(m.status, "merged", m.detail);
+  assert.equal(x.reviews.length, reviews + 1, "the rebased commit is a new approval key: it got a fresh review (spot-check F8)");
 });
 
 test("review L7 F2: an amendment that removes a blocked branch's task abandons the branch; one that answers its trigger unblocks it", async () => {
