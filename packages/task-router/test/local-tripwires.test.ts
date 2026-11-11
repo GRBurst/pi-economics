@@ -3,18 +3,24 @@
 // independently (streaming, over the whole history) on seeded random sequences; a tree change resets identical-call (AC-H3).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { callTrips, changed, errSig, push, stableJson, trigramJaccard, windowSize } from "../core/local/tripwires.ts";
-import type { CallRecord, Trip } from "../core/local/tripwires.ts";
+import { callTrips, changed, contextSoft, contextStall, errSig, push, riskGlobsOf, stableJson, trigramJaccard, windowSize } from "../core/local/tripwires.ts";
+import type { CallRecord, Risk, Trip } from "../core/local/tripwires.ts";
 import { defaults } from "../core/settings.ts";
 
 const H = defaults().hints;
-const trips = (ring: CallRecord[]): Trip[] => callTrips(ring, H);
+const NO_RISK: Risk = { globs: [], seen: new Set(), rel: (p) => p };
+const trips = (ring: CallRecord[], risk = NO_RISK): Trip[] => callTrips(ring, H, risk);
 const read = (key: string, turn = 0): CallRecord => ({ tool: "read", key, isWrite: false, turn });
 /** A write: `before`/`after` are the file hashes (undefined = the hash failed). */
 const write = (key: string, before: string | undefined, after: string | undefined, o: Partial<CallRecord> = {}): CallRecord =>
   ({ tool: "edit", key, isWrite: true, path: "/work/a.ts", hashBefore: before, hashAfter: after, turn: 0, ...o });
-/** Seeded LCG (as in test/verify.test.ts): reproducible sequences. */
-const lcg = (seed: number) => (n: number): number => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) % n);
+/** Seeded mulberry32 (an LCG's low bits cycle, so `% 2` would alternate): reproducible sequences, an integer in [0, n). */
+const seeded = (seed: number) => (n: number): number => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return (((t ^ (t >>> 14)) >>> 0) / 4294967296 * n) | 0;
+};
 
 test("stableJson: key order does not matter, values do; arrays keep their order", () => {
   assert.equal(stableJson({ a: 1, b: { c: [1, 2], d: "x" } }), stableJson({ b: { d: "x", c: [1, 2] }, a: 1 }));
@@ -133,7 +139,7 @@ const randomRecord = (rnd: (n: number) => number, turn: number): CallRecord => {
 };
 
 test("AC-H1 property: identical-call, no-change-writes and alternation fire exactly where the reference counters do", () => {
-  const rnd = lcg(20261002);
+  const rnd = seeded(20261002);
   const fired: Record<string, number> = {};
   for (let s = 0; s < 400; s++) {
     const len = 1 + rnd(windowSize(H));
@@ -152,4 +158,132 @@ test("AC-H1 property: identical-call, no-change-writes and alternation fire exac
     }
   }
   for (const t of ["identical-call", "no-change-writes", "alternation"]) assert.ok((fired[t] ?? 0) > 5, `${t} fired ${fired[t] ?? 0} times: the generator is too weak`);
+});
+
+// ---- L3.T2: repeated-error, churn, risky-path, context-soft, context-stall ----
+const ERR = {
+  foo: (line: number) => `TypeError: Cannot read properties of undefined (reading 'foo') at /work/src/a.ts:${line}:5`,
+  fooB: (line: number) => `TypeError: Cannot read properties of undefined (reading 'foo') at /work/src/b.ts:${line}:5`,
+  bar: (line: number) => `TypeError: Cannot read properties of undefined (reading 'bar') at /work/src/a.ts:${line}:5`,
+  enoent: (line: number) => `ENOENT: no such file or directory, open '/work/src/x${line}.ts'`,
+};
+const failing = (tool: string, key: string, text: string | undefined): CallRecord =>
+  ({ tool, key, isWrite: false, isError: true, ...(text === undefined ? {} : { errSig: errSig(text) }), turn: 0 });
+
+test("the error templates: one digit varying is the same signature; foo/fooB similar, foo/bar and foo/enoent not", () => {
+  assert.equal(errSig(ERR.foo(1)), errSig(ERR.foo(7)));
+  assert.ok(trigramJaccard(errSig(ERR.foo(1)), errSig(ERR.fooB(1))) >= H.errorSimilarity);
+  assert.ok(trigramJaccard(errSig(ERR.foo(1)), errSig(ERR.bar(1))) < H.errorSimilarity);
+  assert.ok(trigramJaccard(errSig(ERR.foo(1)), errSig(ERR.enoent(1))) < H.errorSimilarity);
+});
+
+test("AC-H1 repeated-error: threshold − 1 similar failures → none, the threshold → fires; another tool or error breaks it", () => {
+  const fs = Array.from({ length: H.repeatedErrors }, (_, i) => failing("bash", `bash:${i}`, ERR.foo(i)));
+  assert.deepEqual(trips(fs.slice(0, -1)), []);
+  assert.deepEqual(trips(fs), ["repeated-error"]);
+  assert.deepEqual(trips([failing("read", "read:0", ERR.foo(1)), failing("bash", "bash:1", ERR.foo(2))]), []);
+  assert.deepEqual(trips([failing("bash", "bash:0", ERR.foo(1)), failing("bash", "bash:1", ERR.bar(2))]), []);
+  assert.deepEqual(trips([failing("bash", "bash:0", undefined), failing("bash", "bash:1", undefined)]), []);
+});
+
+test("AC-H1 churn: threshold − 1 writes of one path within churnTurns turns → none, the threshold → fires; older turns do not count", () => {
+  const ws = Array.from({ length: H.churnEdits }, (_, i) => write(`edit:${i}`, `h${i}`, `h${i + 1}`, { turn: i }));
+  assert.deepEqual(trips(ws.slice(0, -1)), []);
+  assert.deepEqual(trips(ws), ["churn"]);
+  const spread = ws.map((w, i) => ({ ...w, turn: i * H.churnTurns }));
+  assert.deepEqual(trips(spread), []);
+  const failed = ws.map((w, i) => (i === 0 ? { ...w, isError: true } : w));
+  assert.deepEqual(trips(failed), []);
+});
+
+test("AC-H1 risky-path: a write under riskGlobs or a critical pathRules glob fires once per path; a high rule never", () => {
+  const s = { ...defaults(), pathRules: [{ glob: "infra/**", level: "critical" as const }, { glob: "docs/**", level: "high" as const }] };
+  const globs = riskGlobsOf(s);
+  assert.deepEqual(globs, [...defaults().riskGlobs, "infra/**"]);
+  const seen = new Set<string>();
+  const risk: Risk = { globs, seen, rel: (p) => p.replace(/^\/work\//, "") };
+  const at = (path: string, o: Partial<CallRecord> = {}) => write(`edit:${path}`, "h0", "h1", { path, ...o });
+  const run = (r: CallRecord): Trip[] => {
+    const t = trips([r], risk);
+    if (t.includes("risky-path")) seen.add(r.path!); // the engine's part (plan S10)
+    return t;
+  };
+  assert.deepEqual(run(at("/work/src/a.ts")), []);
+  assert.deepEqual(run(at("/work/docs/a.md")), []);
+  assert.deepEqual(run(at("/work/src/auth/login.ts", { isError: true })), []);
+  assert.deepEqual(run(read("read:/work/src/auth/login.ts")), []);
+  assert.deepEqual(run(at("/work/src/auth/login.ts")), ["risky-path"]);
+  assert.deepEqual(run(at("/work/src/auth/login.ts")), []);
+  assert.deepEqual(run(at("/work/infra/main.tf")), ["risky-path"]);
+  assert.deepEqual(run(at("/work/infra/main.tf")), []);
+});
+
+test("AC-H1 context-soft: fires on the first crossing, not again until the tokens fall below and cross again", () => {
+  const T = H.contextSoftTokens;
+  let armed = true;
+  const step = (t: number | undefined): boolean => { const x = contextSoft(armed, t, H); armed = x.armed; return x.fire; };
+  assert.deepEqual([T - 1, T, undefined].map(step), [false, false, false]);
+  assert.deepEqual([T + 1, T + 5000, T, T + 1].map(step), [true, false, false, false]);
+  assert.deepEqual([T - 1, T + 1, T + 2].map(step), [false, true, false]);
+});
+
+test("AC-H1 context-stall: fires at exactly stallTurns turns at ≥ contextPercent without progress; progress resets", () => {
+  let stall = 0;
+  const turn = (p: number | undefined, progress = false): boolean => { const x = contextStall(stall, progress, p, H); stall = x.stall; return x.fire; };
+  const hi = H.contextPercent;
+  for (let i = 0; i < H.stallTurns - 1; i++) assert.equal(turn(hi), false, `turn ${i}`);
+  assert.equal(turn(hi + 1), true);
+  for (let i = 0; i < H.stallTurns - 1; i++) assert.equal(turn(hi), false, `after the fire, turn ${i}`);
+  assert.equal(turn(hi, true), false); // progress: the count starts again
+  for (let i = 0; i < H.stallTurns - 1; i++) assert.equal(turn(hi), false, `after progress, turn ${i}`);
+  assert.equal(turn(hi - 1), false); // below the percent: no count
+  assert.equal(turn(undefined), false);
+  assert.equal(turn(hi), true);
+});
+
+/** repeated-error: the run of failures of one tool with similar signatures. */
+const refRepeated = (): Ref => {
+  let run = 0, prev: CallRecord | undefined;
+  return (r) => {
+    const counts = r.isError === true && r.errSig !== undefined;
+    run = !counts ? 0
+      : prev && run > 0 && prev.tool === r.tool && trigramJaccard(prev.errSig!, r.errSig!) >= H.errorSimilarity ? run + 1 : 1;
+    prev = r;
+    return run >= H.repeatedErrors;
+  };
+};
+/** churn: every successful write so far, by path and turn. */
+const refChurn = (): Ref => {
+  const ws: CallRecord[] = [];
+  return (r) => {
+    if (!(r.isWrite && !r.isError && r.path !== undefined)) return false;
+    ws.push(r);
+    return ws.filter((w) => w.path === r.path && w.turn > r.turn - H.churnTurns).length >= H.churnEdits;
+  };
+};
+
+test("AC-H1 property: repeated-error and churn fire exactly where the reference counters do", () => {
+  const rnd = seeded(4711);
+  const fired: Record<string, number> = {};
+  const texts = [ERR.foo, ERR.fooB, ERR.bar, ERR.enoent];
+  for (let s = 0; s < 400; s++) {
+    const len = 1 + rnd(windowSize(H));
+    const refs: [Trip, Ref][] = [["repeated-error", refRepeated()], ["churn", refChurn()]];
+    let ring: CallRecord[] = [], turn = 0;
+    for (let i = 0; i < len; i++) {
+      turn += rnd(3) === 0 ? 1 : 0;
+      const tool = ["bash", "read", "edit"][rnd(3)], isError = rnd(2) > 0;
+      const text = rnd(5) === 0 ? undefined : texts[rnd(texts.length)](rnd(10));
+      const base: CallRecord = { tool, key: `${tool}:${i}`, isWrite: tool === "edit", turn, isError, ...(isError && text !== undefined ? { errSig: errSig(text) } : {}) };
+      const r: CallRecord = base.isWrite ? { ...base, path: `/work/p${rnd(2)}.ts`, hashBefore: `h${i}`, hashAfter: `h${i + 1}` } : base;
+      ring = push(ring, r, H);
+      const got = trips(ring);
+      for (const [trip, ref] of refs) {
+        const want = ref(r);
+        assert.equal(got.includes(trip), want, `${trip}, sequence ${s}, record ${i}`);
+        if (want) fired[trip] = (fired[trip] ?? 0) + 1;
+      }
+    }
+  }
+  for (const t of ["repeated-error", "churn"]) assert.ok((fired[t] ?? 0) > 5, `${t} fired ${fired[t] ?? 0} times: the generator is too weak`);
 });

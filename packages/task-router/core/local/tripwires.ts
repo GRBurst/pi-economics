@@ -1,7 +1,8 @@
 // Tripwires (design §3.1.1, plan S10): pure, total detectors over a ring of call records. The main session's records
 // carry results and file hashes; a child's (§3.1.3) only its calls. No text is kept: a call is its tool and key.
 import { createHash } from "node:crypto";
-import type { HintSettings } from "../types.ts";
+import { globMatch } from "../glob.ts";
+import type { HintSettings, RouterSettings } from "../types.ts";
 
 export const TRIPS = ["identical-call", "no-change-writes", "alternation", "repeated-error", "churn", "check-failing",
   "over-size", "risky-path", "context-soft", "context-stall"] as const;
@@ -70,12 +71,54 @@ const alternation = (r: CallRecord[], h: HintSettings, ch: Changed): boolean => 
   return a !== b && t.every((x, j) => x.key === (j % 2 ? b : a)) && !t.some(ch);
 };
 
-/** The trips the main session's ring fires after its last record, in `TRIPS` order. */
-export function callTrips(ring: CallRecord[], h: HintSettings): Trip[] {
+/** The last `repeatedErrors` records are failures of the last record's tool with an error text, each similar to the next. */
+const repeatedError = (r: CallRecord[], h: HintSettings): boolean => {
+  const m = h.repeatedErrors, n = r.length, tool = r[n - 1].tool;
+  if (n < m) return false;
+  const t = r.slice(n - m);
+  return t.every((x) => x.isError === true && x.tool === tool && x.errSig !== undefined)
+    && t.every((x, j) => j === 0 || trigramJaccard(t[j - 1].errSig!, x.errSig!) >= h.errorSimilarity);
+};
+const wrote = (x: CallRecord): boolean => x.isWrite && x.isError !== true && x.path !== undefined;
+/** The last record wrote a path that `churnEdits` successful writes (itself included) wrote within the last `churnTurns` turns. */
+const churn = (r: CallRecord[], h: HintSettings): boolean => {
+  const last = r[r.length - 1];
+  return wrote(last) && r.filter((x) => wrote(x) && x.path === last.path && x.turn > last.turn - h.churnTurns).length >= h.churnEdits;
+};
+/** The risk rules a write is checked against (§3.1.1): `riskGlobs` and the globs of the `critical` path rules. */
+export const riskGlobsOf = (s: Pick<RouterSettings, "riskGlobs" | "pathRules">): string[] =>
+  [...s.riskGlobs, ...s.pathRules.filter((p) => p.level === "critical").map((p) => p.glob)];
+/** `globs` from `riskGlobsOf`; `seen`: the paths that already fired (the caller adds them); `rel`: a path as the globs see it. */
+export type Risk = { globs: string[]; seen: ReadonlySet<string>; rel(p: string): string };
+const riskyPath = (r: CallRecord[], risk: Risk): boolean => {
+  const last = r[r.length - 1];
+  return wrote(last) && !risk.seen.has(last.path!) && risk.globs.some((g) => globMatch(g, risk.rel(last.path!)));
+};
+
+/** The trips the main session's ring fires after its last record, in `TRIPS` order (check-failing and over-size: L5, plan D13). */
+export function callTrips(ring: CallRecord[], h: HintSettings, risk: Risk): Trip[] {
   if (!ring.length) return [];
   const out: Trip[] = [];
   if (identicalCall(ring, h, changed)) out.push("identical-call");
   if (noChangeWrites(ring, h)) out.push("no-change-writes");
   if (alternation(ring, h, changed)) out.push("alternation");
+  if (repeatedError(ring, h)) out.push("repeated-error");
+  if (churn(ring, h)) out.push("churn");
+  if (riskyPath(ring, risk)) out.push("risky-path");
   return out;
 }
+
+/** context-soft (§3.1.1), at every main tool result and turn end: fires when the tokens first exceed `contextSoftTokens`,
+ *  and is armed again once they fall below it (a fold). Unknown tokens change nothing. */
+export const contextSoft = (armed: boolean, tokens: number | undefined, h: HintSettings): { armed: boolean; fire: boolean } => {
+  if (typeof tokens !== "number") return { armed, fire: false };
+  if (armed && tokens > h.contextSoftTokens) return { armed: false, fire: true };
+  return { armed: armed || tokens < h.contextSoftTokens, fire: false };
+};
+/** context-stall (§3.1.1), at every turn end: turns at ≥ `contextPercent` without progress; fires at `stallTurns` and counts
+ *  again from 0. Progress this turn resets; a turn below the percent (or unknown) leaves the count. */
+export const contextStall = (stall: number, progress: boolean, percent: number | undefined, h: HintSettings): { stall: number; fire: boolean } => {
+  if (progress) return { stall: 0, fire: false };
+  if (typeof percent !== "number" || percent < h.contextPercent) return { stall, fire: false };
+  return stall + 1 >= h.stallTurns ? { stall: 0, fire: true } : { stall: stall + 1, fire: false };
+};

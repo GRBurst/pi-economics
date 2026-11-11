@@ -796,7 +796,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   written naively over the whole history (S10 definitions). "AC-H3": k, k, (changed write), k → no identical-call; k, k, k → fires.
 - **GREEN**: S10 (these parts). **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R. **ACs**: AC-H1 (3 trips), AC-H3.
 
-#### L3.T2 Remaining call and context detectors (AC-H1 part) `[ ] todo`
+#### L3.T2 Remaining call and context detectors (AC-H1 part) `[x] done`
 - **Files**: `core/local/tripwires.ts` (repeated-error, churn, risky-path, `contextSoft`, `contextStall` state functions), `test/local-tripwires.test.ts`.
 - **Depends**: L3.T1. **Parallel**: with L3.T3.
 - **RED**: per trip: threshold − 1 → none, threshold → fire; property against reference counters as in L3.T1 for
