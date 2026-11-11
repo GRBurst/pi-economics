@@ -122,14 +122,25 @@ const BLOCK_FORMS = ["push origin main", "push origin HEAD:main", "push origin +
 /** Each form × direct (cwd on main), -C, cd &&, bash -c, $(…). */
 const contexts = (f: string, on: string, off: string): [string, string][] => [
   [`git ${f}`, on], [`git -C ${on} ${f}`, off], [`cd ${on} && git ${f}`, off], [`bash -c 'git ${f}'`, on], [`echo $(git ${f})`, on]];
-const BLOCK = BLOCK_FORMS.flatMap((f) => contexts(f, MAIN_DIR, WT));
+/** Review F1: forms that name a main ref, so they move it from any branch: the words after `--` (git still reads them as refs
+ *  and refspecs), and every spelling of a branch ref (`heads/main`, `refs/heads/main`, `+main`, `HEAD:main`, `:main`, …). */
+const NAMED_FORMS = ["push origin -- HEAD:main", "push -- origin lm/x:main", "push origin --force -- HEAD:main", "push origin lm/x:heads/main",
+  "push origin heads/main", "push origin refs/heads/main", "push origin +main", "push origin +HEAD:main", "push origin :main",
+  "push origin :heads/main", "push origin x:refs/heads/main", "push origin main", "push origin -- main",
+  "update-ref -- refs/heads/main HEAD", "update-ref refs/heads/main HEAD", "update-ref -d -- refs/heads/main",
+  "branch -f -- main HEAD", "branch -D -- main", "branch -M -- lm/x main",
+  "fetch -- . HEAD:main", "fetch . lm/x:heads/main", "fetch . lm/x:refs/heads/main", "fetch . +lm/x:main", "fetch origin +refs/heads/*:refs/heads/*",
+  "pull -- . lm/x:main", "rebase -- lm/y main"];
+const BLOCK = [...BLOCK_FORMS.flatMap((f) => contexts(f, MAIN_DIR, WT)), ...NAMED_FORMS.flatMap((f) => contexts(f, WT, MAIN_DIR))];
 /** The same subcommands on the branch lm/x, read-only forms, and commands without git. */
 const ALLOW_FORMS = ["push origin lm/x", "push origin HEAD:lm/x", "push origin +x:refs/heads/lm/x", "push", "push -u origin HEAD",
   "merge main", "pull", "pull --rebase origin main", "rebase main", "cherry-pick c", "revert c", "am p", "commit -m x",
   "reset --hard main", "branch -f lm/y x", "branch -D lm/y", "branch -d lm/x", "checkout -B lm/y", "switch -C lm/y",
   "update-ref refs/heads/lm/y x", "status", "log --oneline", "diff main...HEAD", "show HEAD", "fetch", "fetch origin", "stash",
   "add -A", "checkout lm/y", "switch lm/y", "worktree list", "branch", "tag v1", "rev-parse HEAD", "push --tags",
-  "branch -dr origin/main", "checkout -- a.ts"];
+  "branch -dr origin/main", "checkout -- a.ts", "push origin -- lm/x", "push origin -- HEAD:lm/y", "branch -D -- lm/y", "log -- main",
+  "checkout lm/y -- a.ts", "diff main -- a.ts", "fetch origin -- main:refs/remotes/origin/main", "push origin main:lm/y",
+  "fetch origin +refs/heads/*:refs/remotes/origin/*"];
 const ALLOW: [string, string][] = [
   ...ALLOW_FORMS.flatMap((f) => contexts(f, WT, MAIN_DIR)),
   ...["status", "log", "diff", "show HEAD", "fetch origin", "branch -a", "stash list", "push origin lm/x"].map((f): [string, string] => [`git ${f}`, MAIN_DIR]),
@@ -191,7 +202,7 @@ test("classify: an unknown directory blocks the current-branch subcommands with 
 
 test("classify: a computed ref or subcommand is UNCLASSIFIED", () => {
   for (const cmd of ["git push origin $B", "git push origin HEAD:$(cat b)", "git branch -D $B", "git checkout -B \"$B\"", "git $SUB x",
-    "git update-ref --stdin", "echo main | xargs git push origin"])
+    "git update-ref --stdin", "echo main | xargs git push origin", "git fetch . \"$R\"", "git fetch -- . $R", "git pull origin $B"])
     assert.equal(cls(cmd), UNCLASSIFIED, cmd);
 });
 

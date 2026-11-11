@@ -383,12 +383,15 @@ const VALUED: Record<string, string[]> = {
   switch: ["-c", "-C", "--create", "--force-create", "--orphan", "--conflict"],
   "update-ref": ["-m"],
 };
-/** The words that are no option and no option's value; everything after `--` (`rest`) separately. */
+/** The subcommands whose words after `--` are paths (review F1); for every other the words after `--` are still refs and refspecs. */
+const PATHS_AFTER_DASHES = new Set(["checkout", "restore", "reset"]);
+/** The words that are no option and no option's value; for a path subcommand everything after `--` (`rest`) separately, for any
+ *  other the words after `--` are positionals too (`git push origin -- HEAD:main` pushes to main; review F1). */
 function positionals(sub: string, args: readonly string[]): { pos: string[]; rest: string[] | undefined } {
   const valued = VALUED[sub] ?? [], pos: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const w = args[i]!;
-    if (w === "--") return { pos, rest: args.slice(i + 1) };
+    if (w === "--") return PATHS_AFTER_DASHES.has(sub) ? { pos, rest: args.slice(i + 1) } : { pos: [...pos, ...args.slice(i + 1)], rest: undefined };
     if (w.startsWith("-") && w !== "-") { if (valued.includes(w)) i++; continue; }
     pos.push(w);
   }
@@ -408,6 +411,14 @@ function valueOf(args: readonly string[], opts: string[]): string | undefined {
   return undefined;
 }
 const short = (ref: string): string => ref.replace(/^refs\/heads\//, "");
+/** A push or fetch destination as git resolves it (review F1): `+` dropped, `refs/heads/x` and `heads/x` name the branch x. */
+const dstBranch = (ref: string): string => ref.replace(/^\+/, "").replace(/^(refs\/)?heads\//, "");
+/** A push or fetch destination writes a main branch: a main by name, or a pattern (`*`) under the branches. A destination still
+ *  under `refs/` after `dstBranch` (`refs/remotes/…`, `refs/tags/…`) is no branch. */
+const hitsMain = (dst: string, mains: readonly string[]): boolean => {
+  const b = dstBranch(dst);
+  return !b.startsWith("refs/") && (b.includes("*") || mains.includes(b));
+};
 
 /** One git call's verdict given its directory's current branch `cur`. */
 function rule(c: GitCall, cur: Branch, mains: readonly string[]): string | undefined {
@@ -420,9 +431,11 @@ function rule(c: GitCall, cur: Branch, mains: readonly string[]): string | undef
   const { sub, args } = c;
   if (dyn(sub)) return UNCLASSIFIED;
   const { pos } = positionals(sub, args);
-  /** A fetch refspec `src:dst` writes dst: into a main ref it is a merge. */
-  const fetched = (): string | undefined => first(...pos.filter((r) => !dyn(r) && r.includes(":"))
-    .map((r) => { const d = short(r.slice(r.lastIndexOf(":") + 1)); return mains.includes(d) ? MERGE_REASON(d) : undefined; }));
+  const mainOf = (dst: string): string => { const b = dstBranch(dst); return mains.includes(b) ? b : mains[0] ?? "main"; };
+  /** A fetch refspec `src:dst` writes dst: into a main ref (any spelling, or a pattern over the branches) it is a merge; a
+   *  computed refspec may name one. */
+  const fetched = (): string | undefined => pos.slice(1).some(dyn) ? UNCLASSIFIED : first(...pos.filter((r) => !dyn(r) && r.includes(":"))
+    .map((r) => { const d = r.slice(r.lastIndexOf(":") + 1); return hitsMain(d, mains) ? MERGE_REASON(mainOf(d)) : undefined; }));
   switch (sub) {
     case "filter-branch": return MERGE_REASON(mains[0] ?? "main");
     case "fetch": return fetched();
@@ -435,7 +448,8 @@ function rule(c: GitCall, cur: Branch, mains: readonly string[]): string | undef
       for (const r of specs) {
         if (dyn(r)) return UNCLASSIFIED;
         const x = r.replace(/^\+/, ""), dst = x.includes(":") ? x.slice(x.lastIndexOf(":") + 1) : x;
-        const why = dst.includes("*") ? MERGE_REASON(mains[0] ?? "main") : dst === "HEAD" || dst === "@" ? current() : named(dst);
+        const why = dst.includes("*") ? MERGE_REASON(mains[0] ?? "main") : dst === "HEAD" || dst === "@" ? current()
+          : hitsMain(dst, mains) ? MERGE_REASON(mainOf(dst)) : undefined;
         if (why !== undefined) return why;
       }
       return undefined;
