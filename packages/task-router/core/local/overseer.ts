@@ -200,8 +200,14 @@ export function createOverseer(d: OverseerDeps) {
   }
   /** The spawn API is there and the router's policy is registered (review F1). */
   const ready = (): boolean => { const a = d.api(); return !!a && hasSpawnApi(a) && d.policyOn(); };
+  // Review L5: an Opus pick is held from the pick to its charge (or its failed spawn), so concurrent runs cannot both take the
+  // last unit of `budget` or `steerBudget`.
+  const held = { opus: 0, steer: 0 };
+  const budget = (): Budget => ({ opusUsed: d.budget.opusUsed + held.opus, steerUsed: d.budget.steerUsed + held.steer });
   return {
     ready,
+    /** The budget with the picks in flight counted as used (what the next pick sees). */
+    budget,
     /** Design §3.2.2: two attempts (`steer` one), the second on the fallback member (D28); `invalid` is a failed attempt. */
     async run<T>(r: RunArgs<T>): Promise<RunResult<T>> {
       const a = d.api();
@@ -210,18 +216,23 @@ export function createOverseer(d: OverseerDeps) {
       let last: "timeout" | "error" | "invalid" = "error";
       for (const no of r.role === "steer" ? [1] : [1, 2]) {
         if (r.signal?.aborted) return { ok: false, outcome: "aborted" };
-        const p = no === 1 ? pickMember(d.settings, r.role, d.budget) : { member: s.fallbackMember, effort: s.fallbackEffort, fallback: "error" as const };
+        const p = no === 1 ? pickMember(d.settings, r.role, budget()) : { member: s.fallbackMember, effort: s.fallbackEffort, fallback: "error" as const };
         if (p === "skip") return { ok: false, outcome: "skipped" };
         const model = d.settings.models[p.member]?.model;
         if (!model) continue;
+        const steer = r.role === "steer" ? 1 : 0;
+        let holding = !p.fallback;
+        const unhold = (): void => { if (holding) { holding = false; held.opus -= 1; held.steer -= steer; } };
+        if (holding) { held.opus += 1; held.steer += steer; }
         const charge = (): void => {
           if (p.fallback) return;
+          unhold();
           d.budget.opusUsed += 1;
           if (r.role === "steer") d.budget.steerUsed += 1;
           d.append(BUDGET_TYPE, { opusUsed: d.budget.opusUsed, steerUsed: d.budget.steerUsed });
         };
         const reviewId = `rv-${d.hex(4)}`, t0 = d.now();
-        const o = await attempt(a, r, p.member, model, p.effort, reviewId, charge);
+        const o = await attempt(a, r, p.member, model, p.effort, reviewId, charge).finally(unhold);
         // The line's outcome: a verdict's approval (V2), else how the attempt ended; an aborted attempt is an `error`.
         const v = o.kind === "ok" && r.submit.name === "submit_verdict" ? o.value as Verdict : undefined;
         d.log.review({ reviewId, role: r.role, member: p.member, model, attempt: no, durationMs: d.now() - t0, fallback: p.fallback,

@@ -68,7 +68,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   const s = d.settings, h = s.hints;
   if (!componentOn(s, "hints")) return handle;
   // A persistent trip runs a steer overseer instead of the escalation block while one can run (design §3.1.2, AC-H4).
-  const steer = createSteer({ settings: s, budget, overseer,
+  const steer = createSteer({ settings: s, overseer,
     send: (content) => pi.sendMessage?.({ customType: STEER_TYPE, content, display: true }, { deliverAs: "steer" }) });
   const hash = d.hash ?? fileHash, detect = d.detect ?? callTrips;
   const engine = createHintEngine(h, s.plans);

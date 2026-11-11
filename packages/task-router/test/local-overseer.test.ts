@@ -208,6 +208,31 @@ test("AC-O4 property: k successful runs → opusUsed = min(k, budget)", async ()
   }
 });
 
+test("review L5: concurrent runs reserve the Opus budget when they pick: with one left, one runs on Opus, the other on the fallback", async () => {
+  const r = rig({ overseer: { budget: 1 } });
+  let release!: () => void;
+  r.h.a.control.spawnGate = new Promise((res) => { release = res; });
+  r.on.each = async () => { for (const s of r.h.a.apiSpawns) await (s.policy as Ok).childTools?.[0]?.execute(VALID); };
+  const both = Promise.all([r.run(), r.run()]);
+  release();
+  const res = await both;
+  assert.ok(res.every((x) => x.ok));
+  assert.deepEqual(r.h.a.apiSpawns.map((s) => (s.policy as Ok).model), [OPUS, SONNET]);
+  assert.deepEqual(r.d.budget, { opusUsed: 1, steerUsed: 0 });
+  assert.deepEqual(r.h.lines().filter((l) => l.event === "review").map((l) => l.fallback ?? null).sort(), ["budget", null]);
+});
+
+test("review L5: a reservation whose spawn failed is released: the next run gets the last Opus review", async () => {
+  const r = rig({ overseer: { budget: 1 } });
+  r.h.a.control.spawnFail = "no";
+  assert.deepEqual(await r.run(), { ok: false, outcome: "error" });
+  r.h.a.control.spawnFail = undefined;
+  r.on.each = async () => { await r.tool().execute(VALID); };
+  const res = await r.run();
+  assert.ok(res.ok && res.member === "opus");
+  assert.deepEqual(r.d.budget, { opusUsed: 1, steerUsed: 0 });
+});
+
 test("an Opus attempt that times out still counts (D30); attempt 2 on the fallback does not", async () => {
   const r = rig();
   r.on.each = async () => { if (r.h.a.apiSpawns.length === 2) await r.tool().execute(VALID); };
