@@ -89,16 +89,27 @@ export const verdictSubmit = (targets?: ReadonlySet<string>): SubmitSpec<Verdict
   check: async (x) => validateVerdict(x, targets),
 });
 
+/** The member for a run's first attempt (design §3.2.2 step 1): the Opus member while the budget lasts, else the fallback;
+ *  a `steer` is skipped instead (it also needs `steerBudget`). */
+export function pickMember(s: RouterSettings, role: Role, b: Budget):
+  { member: string; effort: ThinkingLevel; fallback?: "budget" } | "skip" {
+  const room = b.opusUsed < s.overseer.budget && (role !== "steer" || b.steerUsed < s.overseer.steerBudget);
+  if (room) return { member: s.overseer.member, effort: s.overseer.effort };
+  return role === "steer" ? "skip" : { member: s.overseer.fallbackMember, effort: s.overseer.fallbackEffort, fallback: "budget" };
+}
+
 /** Polls between the child's events (D27: the API has no idle event), the verify gate's interval. */
 const POLL_MS = 2000;
 export const REVIEW_TYPE = "task-router/review";
 type Settled<T> = { kind: "ok"; value: T } | { kind: "timeout" | "error" | "invalid" | "aborted" };
+type SpawnApi = SubagentsApiV1 & Required<Pick<SubagentsApiV1, "spawn" | "kill">>;
 
 export function createOverseer(d: OverseerDeps) {
   let n = 0;
-  /** One overseer child: spawn with a ticket, await its submit tool, kill it. */
-  async function attempt<T>(a: SubagentsApiV1 & Required<Pick<SubagentsApiV1, "spawn" | "kill">>, r: RunArgs<T>,
-    member: string, model: string, effort: ThinkingLevel, reviewId: string): Promise<Settled<T>> {
+  /** One overseer child: spawn with a ticket, await its submit tool (reminder, timeout, events, abort), kill it. `charge`
+   *  runs once the spawn succeeded (D30: an attempt that later times out still cost). */
+  async function attempt<T>(a: SpawnApi, r: RunArgs<T>, member: string, model: string, effort: ThinkingLevel, reviewId: string,
+    charge: () => void): Promise<Settled<T>> {
     const s = d.settings.overseer, name = `ovs-${r.role}-${++n}`;
     let settled: Settled<T> | undefined, wake!: () => void;
     const done = new Promise<void>((res) => { wake = res; });
@@ -116,28 +127,70 @@ export function createOverseer(d: OverseerDeps) {
         return { text: `${why}; no resubmits left`, isError: true, terminate: true };
       },
     };
-    const ticket = d.tickets.issue({ role: r.role, reviewId, member, model, effort, cwd: r.cwd, tools: s.tools, childTools: [tool],
-      toolGuard: overseerGuard([...s.tools, tool.name]) });
-    const sp = await a.spawn({ name, systemPrompt: PROMPT[r.role], message: r.input, task: { ticket } }, { by: "main", quiet: true })
-      .catch((err: Error) => ({ ok: false as const, reason: err.message }));
-    if (!sp.ok) { d.tickets.forget(name); return { kind: "error" }; }
-    while (!settled) await Promise.race([done, d.sleep(POLL_MS)]);
-    await a.kill([name]).catch(() => []);
-    d.tickets.forget(name);
-    return settled;
+    // D27: a `turn` event marks the child busy; `idle` in the list after it is one idle.
+    let busy = false, idles = 0;
+    const off = a.subscribe((e) => {
+      if (!("name" in e) || e.name !== name) return;
+      if (e.type === "turn") busy = true;
+      if (e.type === "kill" || e.type === "error") finish({ kind: "error" });
+    });
+    const abort = (): void => finish({ kind: "aborted" });
+    r.signal?.addEventListener("abort", abort, { once: true });
+    try {
+      const ticket = d.tickets.issue({ role: r.role, reviewId, member, model, effort, cwd: r.cwd, tools: s.tools, childTools: [tool],
+        toolGuard: overseerGuard([...s.tools, tool.name]) });
+      const sp = await a.spawn({ name, systemPrompt: PROMPT[r.role], message: r.input, task: { ticket } }, { by: "main", quiet: true })
+        .catch((err: Error) => ({ ok: false as const, reason: err.message }));
+      if (!sp.ok) { d.tickets.forget(name); return settled?.kind === "aborted" ? settled : { kind: "error" }; }
+      charge();
+      const t0 = d.now();
+      while (!settled) {
+        await Promise.race([done, d.sleep(POLL_MS)]);
+        if (settled) break;
+        const state = a.list().find((x) => x.name === name)?.state;
+        if (state === undefined) finish({ kind: "error" });
+        else if (d.now() - t0 >= s.timeoutSec * 1000) finish({ kind: "timeout" });
+        else if (busy && state === "idle") {
+          busy = false;
+          if (++idles > 1) finish({ kind: "error" });
+          else await a.send(name, `Submit with ${tool.name}.`, "router").catch(() => undefined);
+        }
+      }
+      await a.kill([name]).catch(() => []);
+      d.tickets.forget(name);
+      return settled;
+    } finally {
+      off();
+      r.signal?.removeEventListener("abort", abort);
+    }
   }
   return {
+    /** Design §3.2.2: two attempts (`steer` one), the second on the fallback member (D28); `invalid` is a failed attempt. */
     async run<T>(r: RunArgs<T>): Promise<RunResult<T>> {
       const a = d.api();
       if (!a || !hasSpawnApi(a)) return { ok: false, outcome: "error" };
-      const s = d.settings.overseer, member = s.member, model = d.settings.models[member]?.model;
-      if (!model) return { ok: false, outcome: "error" };
-      const reviewId = `rv-${d.hex(4)}`;
-      const o = await attempt(a, r, member, model, s.effort, reviewId);
-      if (o.kind !== "ok") return { ok: false, outcome: o.kind };
-      d.append(REVIEW_TYPE, { reviewId, role: r.role, member, ...(r.commit && { commit: r.commit }), verdict: o.value,
-        ...(r.submit.name === "submit_verdict" && { approved: approve((o.value as Verdict).findings) }), ts: d.now() });
-      return { ok: true, value: o.value, reviewId, member, model };
+      const s = d.settings.overseer;
+      let last: Exclude<Settled<T>["kind"], "ok"> = "error";
+      for (const no of r.role === "steer" ? [1] : [1, 2]) {
+        if (r.signal?.aborted) return { ok: false, outcome: "aborted" };
+        const p = no === 1 ? pickMember(d.settings, r.role, d.budget) : { member: s.fallbackMember, effort: s.fallbackEffort, fallback: "error" as const };
+        if (p === "skip") return { ok: false, outcome: "skipped" };
+        const model = d.settings.models[p.member]?.model;
+        if (!model) continue;
+        const charge = (): void => {
+          if (p.fallback) return;
+          d.budget.opusUsed += 1;
+          if (r.role === "steer") d.budget.steerUsed += 1;
+        };
+        const reviewId = `rv-${d.hex(4)}`;
+        const o = await attempt(a, r, p.member, model, p.effort, reviewId, charge);
+        if (o.kind === "aborted") return { ok: false, outcome: "aborted" };
+        if (o.kind !== "ok") { last = o.kind; continue; }
+        d.append(REVIEW_TYPE, { reviewId, role: r.role, member: p.member, ...(r.commit && { commit: r.commit }), verdict: o.value,
+          ...(r.submit.name === "submit_verdict" && { approved: approve((o.value as Verdict).findings) }), ts: d.now() });
+        return { ok: true, value: o.value, reviewId, member: p.member, model };
+      }
+      return { ok: false, outcome: last };
     },
   };
 }

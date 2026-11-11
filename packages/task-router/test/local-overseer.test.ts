@@ -18,6 +18,8 @@ const finding = (id: string) => ({ id, category: "correctness", target: "src/a.t
 function rig(o: { overseer?: Partial<OverseerSettings>; budget?: Partial<Budget> } = {}) {
   const h = harness({ settings: { mode: "local", ...(o.overseer && { overseer: o.overseer }) } as never, apiExt: true });
   const script: Step[] = [];
+  /** `each`: the child's action on a poll with no scripted step. */
+  const on: { each?: Step } = {};
   const entries: Array<{ type: string; data: any }> = [];
   let k = 0, polls = 0;
   const d: OverseerDeps = {
@@ -27,7 +29,8 @@ function rig(o: { overseer?: Partial<OverseerSettings>; budget?: Partial<Budget>
     sleep: async (ms) => {
       if (++polls > 10_000) throw new Error("runaway poll loop");
       h.clock.t += ms;
-      await script.shift()?.();
+      const step = script.shift();
+      await (step ? step() : on.each?.());
     },
     budget: { opusUsed: 0, steerUsed: 0, ...o.budget },
     append: (type, data) => entries.push({ type, data }),
@@ -37,7 +40,9 @@ function rig(o: { overseer?: Partial<OverseerSettings>; budget?: Partial<Budget>
   const tool = (i = -1) => (h.a.apiSpawns.at(i)!.policy as Ok).childTools![0]!;
   const run = (x: { role?: Role; signal?: AbortSignal } = {}) =>
     ov.run({ role: "merge", input: "review this", cwd: "/wt", submit: verdictSubmit(), ...x });
-  return { h, d, ov, script, entries, tool, run };
+  /** The i-th spawn's (last by default) name, model and effort as the policy answered. */
+  const spawned = (i = -1) => { const s = h.a.apiSpawns.at(i)!; const p = s.policy as Ok; return [s.args.name, p.model, p.thinkingLevel]; };
+  return { h, d, ov, script, on, entries, tool, spawned, run };
 }
 
 test("happy: one quiet spawn by main with a 32-hex ticket; a valid submit is recorded, the child killed, one review entry", async () => {
@@ -102,4 +107,141 @@ test("AC-O3 property: with resubmits r ∈ 0…3, submissions 1…r get '; resub
     assert.deepEqual(r.h.a.killed, ["ovs-steer-1"]);
     assert.deepEqual(r.entries, []);
   }
+});
+
+const SONNET = "anthropic/claude-sonnet-5-5";
+const turn = (r: ReturnType<typeof rig>, name: string) => r.h.a.emit({ type: "turn", name, ts: 0 });
+
+test("reminder: busy then idle → one 'Submit with submit_verdict.' from the router; a second idle fails the attempt → attempt 2 on the fallback", async () => {
+  const r = rig();
+  r.script.push(() => turn(r, "ovs-merge-1"));
+  r.script.push(() => assert.deepEqual(r.h.a.sent, [{ to: "ovs-merge-1", text: "Submit with submit_verdict.", from: "router" }]));
+  r.script.push(() => turn(r, "ovs-merge-1"));
+  r.script.push(async () => r.tool().execute(VALID));
+  const res = await r.run();
+  assert.equal(r.h.a.sent.length, 1);
+  assert.deepEqual(r.h.a.apiSpawns.map((s) => s.args.name), ["ovs-merge-1", "ovs-merge-2"]);
+  assert.deepEqual(r.spawned(), ["ovs-merge-2", SONNET, "xhigh"]);
+  assert.deepEqual(r.h.a.killed, ["ovs-merge-1", "ovs-merge-2"]);
+  assert.ok(res.ok);
+  assert.deepEqual([res.member, res.model], ["sonnet", SONNET]);
+});
+
+test("an idle child that never started a turn is not reminded", async () => {
+  const r = rig();
+  for (let i = 0; i < 5; i++) r.script.push(() => {});
+  r.script.push(async () => r.tool().execute(VALID));
+  assert.ok((await r.run()).ok);
+  assert.deepEqual(r.h.a.sent, []);
+});
+
+test("timeout: no submit within timeoutSec → killed, attempt 2", async () => {
+  const r = rig();
+  const t0 = r.h.clock.t;
+  r.on.each = async () => { if (r.h.a.apiSpawns.length === 2) await r.tool().execute(VALID); };
+  const res = await r.run();
+  assert.deepEqual(r.h.a.killed, ["ovs-merge-1", "ovs-merge-2"]);
+  assert.ok(res.ok);
+  assert.equal(res.member, "sonnet");
+  assert.ok(r.h.clock.t - t0 >= 900_000 && r.h.clock.t - t0 < 910_000, String(r.h.clock.t - t0));
+});
+
+test("a kill or error event, or the child gone from the list, fails the attempt", async () => {
+  const ends: Array<(r: ReturnType<typeof rig>) => void> = [
+    (r) => r.h.a.emit({ type: "kill", name: "ovs-merge-1", ts: 0 }),
+    (r) => r.h.a.emit({ type: "error", name: "ovs-merge-1", reason: "boom", ts: 0 }),
+    (r) => r.h.a.agents.splice(0, r.h.a.agents.length),
+  ];
+  for (const end of ends) {
+    const r = rig();
+    r.script.push(() => end(r));
+    r.script.push(async () => r.tool().execute(VALID));
+    const res = await r.run();
+    assert.deepEqual(r.h.a.apiSpawns.map((s) => s.args.name), ["ovs-merge-1", "ovs-merge-2"]);
+    assert.ok(res.ok && res.member === "sonnet");
+  }
+});
+
+test("spawn {ok: false} → attempt 2; both failing → {ok: false}", async () => {
+  const r = rig();
+  r.h.a.agents.push({ name: "ovs-merge-1", parent: "main", sessionId: "s-x", model: "m", thinkingLevel: undefined, state: "idle" });
+  r.script.push(async () => r.tool().execute(VALID));
+  const res = await r.run();
+  assert.deepEqual(r.h.a.apiSpawns.map((s) => s.result.ok), [false, true]);
+  assert.ok(res.ok && res.member === "sonnet");
+  assert.equal(r.h.router.tickets.owner("ovs-merge-1"), undefined);
+
+  const both = rig();
+  both.h.a.control.spawnFail = "no";
+  assert.deepEqual(await both.run(), { ok: false, outcome: "error" });
+  assert.equal(both.h.a.apiSpawns.length, 2);
+  assert.deepEqual(both.entries, []);
+});
+
+test("both attempts invalid → {ok: false, outcome: 'invalid'}; an invalid attempt 1 is retried (D28)", async () => {
+  const r = rig();
+  r.h.router.settings.overseer.resubmits = 0;
+  r.on.each = async () => { await r.tool().execute({}); };
+  assert.deepEqual(await r.run(), { ok: false, outcome: "invalid" });
+  assert.deepEqual(r.h.a.apiSpawns.map((s) => s.args.name), ["ovs-merge-1", "ovs-merge-2"]);
+});
+
+test("AC-O4: with opusUsed = budget the only spawn is on fallbackMember/fallbackEffort and opusUsed is unchanged", async () => {
+  const r = rig({ budget: { opusUsed: 15 } });
+  r.script.push(async () => r.tool().execute(VALID));
+  const res = await r.run();
+  assert.equal(r.h.a.apiSpawns.length, 1);
+  assert.deepEqual(r.spawned(), ["ovs-merge-1", SONNET, "xhigh"]);
+  assert.ok(res.ok && res.member === "sonnet");
+  assert.deepEqual(r.d.budget, { opusUsed: 15, steerUsed: 0 });
+});
+
+test("AC-O4 property: k successful runs → opusUsed = min(k, budget)", async () => {
+  for (const budget of [1, 2, 3]) for (let k = 0; k <= budget + 2; k++) {
+    const r = rig({ overseer: { budget } });
+    r.on.each = async () => { await r.tool().execute(VALID); };
+    for (let i = 0; i < k; i++) assert.ok((await r.run()).ok);
+    assert.equal(r.d.budget.opusUsed, Math.min(k, budget), `budget ${budget}, k ${k}`);
+    assert.deepEqual(r.h.a.apiSpawns.map((s) => (s.policy as Ok).model), [...Array(k)].map((_, i) => (i < budget ? OPUS : SONNET)));
+  }
+});
+
+test("an Opus attempt that times out still counts (D30); attempt 2 on the fallback does not", async () => {
+  const r = rig();
+  r.on.each = async () => { if (r.h.a.apiSpawns.length === 2) await r.tool().execute(VALID); };
+  assert.ok((await r.run()).ok);
+  assert.deepEqual(r.d.budget, { opusUsed: 1, steerUsed: 0 });
+});
+
+test("steer: steerUsed = steerBudget → skipped, no spawn; a steer spawn counts both; a failing steer gets no attempt 2", async () => {
+  const full = rig({ budget: { steerUsed: 3 } });
+  assert.deepEqual(await full.run({ role: "steer" }), { ok: false, outcome: "skipped" });
+  assert.equal(full.h.a.apiSpawns.length, 0);
+
+  const opusOut = rig({ budget: { opusUsed: 15 } });
+  assert.deepEqual(await opusOut.run({ role: "steer" }), { ok: false, outcome: "skipped" });
+  assert.equal(opusOut.h.a.apiSpawns.length, 0);
+
+  const ok = rig();
+  ok.script.push(async () => ok.tool().execute(VALID));
+  assert.ok((await ok.run({ role: "steer" })).ok);
+  assert.deepEqual(ok.d.budget, { opusUsed: 1, steerUsed: 1 });
+
+  const failing = rig();
+  failing.script.push(() => failing.h.a.emit({ type: "kill", name: "ovs-steer-1", ts: 0 }));
+  assert.deepEqual(await failing.run({ role: "steer" }), { ok: false, outcome: "error" });
+  assert.equal(failing.h.a.apiSpawns.length, 1);
+});
+
+test("abort: an aborted signal ends the run as aborted, kills the child, no attempt 2; aborted before the start → no spawn", async () => {
+  const r = rig();
+  const c = new AbortController();
+  r.script.push(() => c.abort());
+  assert.deepEqual(await r.run({ signal: c.signal }), { ok: false, outcome: "aborted" });
+  assert.equal(r.h.a.apiSpawns.length, 1);
+  assert.deepEqual(r.h.a.killed, ["ovs-merge-1"]);
+
+  const early = rig();
+  assert.deepEqual(await early.run({ signal: AbortSignal.abort() }), { ok: false, outcome: "aborted" });
+  assert.equal(early.h.a.apiSpawns.length, 0);
 });
