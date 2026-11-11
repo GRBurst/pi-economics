@@ -89,3 +89,17 @@ test("runCheck (real bash -lc): exit code, combined output, timeout kills", asyn
   const slow = await runCheck("sleep 5", tmpdir(), 200);
   assert.equal(slow.timedOut, true);
 });
+
+test("runCheck (review F11): an abort kills the check's process group at once; an aborted signal runs nothing", async () => {
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 100);
+  const t0 = Date.now();
+  const r = await runCheck("sleep 5", tmpdir(), 10_000, ac.signal);
+  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+  assert.notEqual(r.exit, 0);
+  assert.equal(r.timedOut, false);
+  const t1 = Date.now();
+  const again = await runCheck("sleep 5", tmpdir(), 10_000, ac.signal);
+  assert.ok(Date.now() - t1 < 500);
+  assert.notEqual(again.exit, 0);
+});

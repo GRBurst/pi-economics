@@ -178,6 +178,7 @@ const done = (status: MergeStatus, reason: MergeReason | undefined, detail: stri
   ({ status, ...(reason && { reason }), detail, ...(commit !== undefined && { commit }) });
 const refuse = (reason: MergeReason, x: Record<string, string>, commit?: string): MergeResult => done("refused", reason, reasonText(reason, x), commit);
 const gitError = (err: string, commit?: string): MergeResult => done("error", "git", reasonText("git", { err }), commit);
+const aborted = (commit: string): MergeResult => done("error", "aborted", reasonText("aborted", {}), commit);
 
 // ── step 6: the red run ──
 export type Red = "passed" | "failed" | "skipped";
@@ -190,7 +191,7 @@ export async function redRun(p: MergePorts, repo: string, base: string, check: s
   const add = await p.git.worktreeAddDetached(repo, dir, base);
   if (!add.ok) return "skipped";
   try {
-    const r = await p.run(check, dir, p.settings.checkTimeoutSec * 1000);
+    const r = await p.run(check, dir, p.settings.checkTimeoutSec * 1000, p.signal);
     return r.exit === 0 ? "passed" : "failed";
   } finally {
     await p.git.worktreeRemove(repo, dir, true);
@@ -273,12 +274,15 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
     if (why !== undefined) return done("refused", "check", `the check \`${rec.check}\` was not run: ${why}`, commit);
   }
   for (const cmd of [...(rec?.check ? [rec.check] : []), ...g.extraChecks]) {
-    const r = await p.run(cmd, wt.dir, s.checkTimeoutSec * 1000);
+    if (p.signal?.aborted) return aborted(commit); // review F11: Esc stops the checks, not only the review
+    const r = await p.run(cmd, wt.dir, s.checkTimeoutSec * 1000, p.signal);
+    if (p.signal?.aborted) return aborted(commit);
     checks.push({ cmd, exit: r.exit, output: tailOf(r.output) });
     if (r.exit !== 0) return refuse("check", { cmd, exit: String(r.exit), tail: tailOf(r.output) }, commit);
   }
   // ── 6 red run (a branch without a plan; its own check only) ──
   const red: Red = g.redRun && rec?.check ? await redRun(p, repo, main.sha, rec.check) : "skipped";
+  if (p.signal?.aborted) return aborted(commit);
   // ── 7 approval reuse: (repo, branch, commit, tree) ──
   const tree = await git.tree(repo, commit);
   if (tree === undefined) return gitError(`cannot read the tree of ${commit}`, commit);
@@ -310,7 +314,7 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
         p.branches.update({ ...rej, state: "blocked" });
         return { status: "refused", reason: "blocked", detail: reasonText("blocked", { branch }), ...answer };
       }
-      if (p.fixer && rej.rejections >= g.rejectionsBeforeFixer) {
+      if (p.fixer && g.fixerRounds > 0 && rej.rejections >= g.rejectionsBeforeFixer) { // review F11: fixerRounds 0 = no fixer
         const card = fixerCard(paths, out.value.findings, rec?.check);
         const fx = await p.fixer({ worktree: wt.dir, reviewId: out.reviewId, brief: fixerBrief(card),
           message: fixerMessage({ branch, worktree: wt.dir, reviewId: out.reviewId, findings }) });

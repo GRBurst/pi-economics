@@ -458,8 +458,8 @@ when its spawn fails. A submitted verdict is kept as a session entry
 review runs on the fallback member and a steer review is skipped. A pick of
 `overseer.member` holds its unit from the pick on, so reviews running at the
 same time cannot overrun the budget. These three counts (`budget`, `steerBudget`,
-`resubmits`) may be 0 (Opus never used, no steering, no resubmits); every other
-count is positive. The status
+`resubmits`) and `mergeGate.fixerRounds` may be 0 (Opus never used, no steering,
+no resubmits, no fixer); every other count is positive. The status
 line adds `opus <n> left` once three or fewer are left. Steer (`hints.steer = "on"`):
 when a trip persists (above), the router spawns a steer review instead of the
 escalation, with the trip and the last 12 calls (tool, target, result; no file
@@ -565,7 +565,7 @@ Opus last (`packages/task-router/core/local/merge.ts`):
    any diff the size step lets through with git's 3 context lines; a longer
    one, or none while the numstat shows changes, fails the review closed
    (`error`). An overseer that cannot run (no spawn API, both attempts failed) is
-   `error` `review-unavailable`; an abort of the tool call kills it, `error`
+   `error` `review-unavailable`; an abort of the tool call (Esc) kills it and any running check or red run, `error`
    `aborted`. A rejection counts (`rejections`) and answers `revise` with the
    findings;
 8. merge, fast-forward only: when the main branch is checked out in a
@@ -589,7 +589,8 @@ acceptance and the git guard composed in; the branch is `fixer`, main-session
 writes into it are blocked and `request_merge` answers `fixer-running` until
 the fixer reports to main (the router then kills it) or dies. A fixer round
 rejected again with `fixerRounds` (1) used up makes the branch `blocked`:
-abandon it and start a smaller one.
+abandon it and start a smaller one. `fixerRounds: 0` spawns no fixer (every
+rejection answers `revise`).
 
 Git guard: a `bash` or `powershell` call of the main session, of a routed
 child or of the fixer that would write a main branch is blocked with "merging

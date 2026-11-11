@@ -30,8 +30,8 @@ const ENUMS: [string, readonly string[], string?][] = [
 
 /** Number leaves of the local sections that are ranges, not counts: path, upper bound (the lower bound 0 is exclusive). */
 const RANGES: [string, number][] = [["hints.errorSimilarity", 1], ["hints.contextPercent", 100]];
-/** Counts that may be 0: Opus never used, no steering, no resubmits. */
-const ZERO_OK = ["overseer.budget", "overseer.steerBudget", "overseer.resubmits"];
+/** Counts that may be 0: Opus never used, no steering, no resubmits, no fixer (review F11). */
+const ZERO_OK = ["overseer.budget", "overseer.steerBudget", "overseer.resubmits", "mergeGate.fixerRounds"];
 const SECTIONS = ["hints", "overseer", "mergeGate", "plans"] as const;
 const isStr = (x: unknown): x is string => typeof x === "string";
 /** path, the list rule, its reason. */

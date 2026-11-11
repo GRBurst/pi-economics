@@ -90,3 +90,32 @@ test("D49: an abort during the review kills the overseer and answers aborted; ma
   assert.deepEqual(m.h.a.killed, [m.h.a.apiSpawns[0]!.args.name]);
   assert.equal(m.mainSha(), before);
 });
+
+test("review F11: Esc during the branch check kills it and answers aborted; no review, main unchanged", async () => {
+  const m = reviewRig();
+  const rec = await m.start("x", "sleep 5");
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  const before = m.mainSha(), ac = new AbortController();
+  setTimeout(() => ac.abort(), 200);
+  const t0 = Date.now();
+  const r = await m.h.f.tools.get("request_merge")!.execute("t1", {}, ac.signal, undefined, m.ctx);
+  const d = r.details as MergeResult;
+  assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
+  assert.deepEqual([d.status, d.reason], ["error", "aborted"], JSON.stringify(d));
+  assert.equal(m.h.a.apiSpawns.length, 0, "no review after an abort");
+  assert.equal(m.mainSha(), before);
+});
+
+test("review F11: Esc during the red run kills it and answers aborted; no review", async () => {
+  const m = reviewRig();
+  const rec = await m.start("x", "test -f x.ts || sleep 5"); // passes in the worktree, sleeps at the base
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 400);
+  const t0 = Date.now();
+  const r = await m.h.f.tools.get("request_merge")!.execute("t1", {}, ac.signal, undefined, m.ctx);
+  const d = r.details as MergeResult;
+  assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
+  assert.deepEqual([d.status, d.reason], ["error", "aborted"], JSON.stringify(d));
+  assert.equal(m.h.a.apiSpawns.length, 0);
+});

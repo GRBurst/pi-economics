@@ -107,10 +107,11 @@ const COUNTS = (["hints", "overseer", "mergeGate", "plans"] as const).flatMap((s
   Object.entries(defaults()[sec]).filter(([, v]) => typeof v === "number").map(([k]) => `${sec}.${k}`)).filter((p) => !RANGES.includes(p));
 const one = (path: string, v: unknown): Record<string, unknown> => { const [top, key] = path.split("."); return { [top]: { [key]: v } }; };
 
-/** The counts whose 0 means "none": Opus never used, no steering, no resubmits (they are non-negative; the others positive). */
-const ZERO = ["overseer.budget", "overseer.steerBudget", "overseer.resubmits"];
+/** The counts whose 0 means "none": Opus never used, no steering, no resubmits, no fixer (review F11) (they are non-negative;
+ *  the others positive). */
+const ZERO = ["overseer.budget", "overseer.steerBudget", "overseer.resubmits", "mergeGate.fixerRounds"];
 
-test("COUNT: every count must be a positive integer, except the overseer's three that may be 0", () => {
+test("COUNT: every count must be a positive integer, except the four that may be 0", () => {
   assert.ok(COUNTS.length >= 20, `${COUNTS.length} counts`);
   for (const p of ZERO) assert.ok(COUNTS.includes(p), p);
   for (const p of COUNTS) {

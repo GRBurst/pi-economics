@@ -201,8 +201,8 @@ Validation adds these to `problems`, which are shown once at `session_start`:
 - `enabled` is not one of `auto`/`on`/`off`.
 - `overseer.member`, `fallbackMember` or `fixerMember` is not an enabled member.
 - An effort is not offered by the member it names.
-- A count is ≤ 0, except `overseer.budget`, `steerBudget` and `resubmits`, which may be 0 (no Opus, no steering, no
-  resubmits) and are rejected below 0; or a percent or similarity is out of range.
+- A count is ≤ 0, except `overseer.budget`, `steerBudget`, `resubmits` and `mergeGate.fixerRounds`, which may be 0 (no
+  Opus, no steering, no resubmits, no fixer) and are rejected below 0; or a percent or similarity is out of range.
 - `mergeGate.mainBranches` is empty.
 - `force.model` cannot be resolved. This is checked at `session_start` with `ctx.modelRegistry`; the force stays
   inactive and the user is notified (§3.6).
@@ -669,7 +669,8 @@ branch"), and `request_merge` returns `fixer-running` until the fixer's report (
 its death. Qwen gets `status: "fixer"`: "fixes were delegated to <name>; wait for its report, then call
 request_merge".
 
-A fixer round that is rejected again and leaves `fixerRounds` exhausted marks the branch `blocked`.
+A fixer round that is rejected again and leaves `fixerRounds` exhausted marks the branch `blocked`. With `fixerRounds: 0`
+the router spawns no fixer: every rejection answers `revise` (review F11).
 
 - Plan-bound branch: the `remediation-failed` trigger opens, and the task can only be restructured through
   `amend_plan`.

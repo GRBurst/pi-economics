@@ -209,3 +209,14 @@ test("review F8: the fixer's report gives its branch back without making it the 
   assert.equal(m.get().state, "active");
   assert.equal(m.h.router.branches.active()!.branch, "lm/y");
 });
+
+test("review F11: fixerRounds 0 spawns no fixer; every rejection answers revise and the branch stays active", async () => {
+  const m = await rejectedTwice({ settings: { mergeGate: { fixerRounds: 0 } } });
+  assert.equal(m.second.status, "revise", JSON.stringify(m.second));
+  m.verdicts.push(REVISE);
+  const third = await m.merge();
+  assert.equal(third.status, "revise", JSON.stringify(third));
+  assert.equal(m.h.a.apiSpawns.length, 3, "three reviews, no fixer");
+  assert.ok(m.h.a.apiSpawns.every((s) => !s.args.name.startsWith("fixer-")));
+  assert.deepEqual([m.get().state, m.get().rejections, m.get().fixerRuns], ["active", 3, 0]);
+});
