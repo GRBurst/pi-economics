@@ -39,6 +39,8 @@ const LISTS: [string, (xs: unknown[]) => boolean, string][] = [
   ["mergeGate.extraChecks", (xs) => xs.every(isStr), "must be a list of strings"],
   ["plans.publicApiGlobs", (xs) => xs.every(isStr), "must be a list of strings"],
 ];
+/** pi's built-in tools that change files (`overseer.tools` may hold none of them). */
+const WRITERS = ["bash", "edit", "write"];
 /** A member reference and the effort paired with it. */
 const MEMBERS: [string, string][] = [
   ["overseer.member", "overseer.effort"], ["overseer.fallbackMember", "overseer.fallbackEffort"], ["mergeGate.fixerMember", "mergeGate.fixerEffort"],
@@ -60,6 +62,9 @@ export function validateLocal(s: RouterSettings, base: RouterSettings, problems:
     if (top !== undefined && !(v > 0 && v <= top)) reset(path, `must be a number in (0, ${top}]`);
   }
   for (const [path, ok, why] of LISTS) if (!ok(get(s, path) as unknown[])) reset(path, why);
+  // An overseer audits and must not write (design §3.2, P13 Q11): its tools are read-only.
+  const writer = s.overseer.tools.find((t) => WRITERS.includes(t));
+  if (writer !== undefined) reset("overseer.tools", `${writer} can write`);
   // Plan D2: member references only matter when a component that uses them can run; in default mode with every component
   // "auto" a blank Opus or Sonnet must not add a problem (G6, AC-N2).
   if (!isLocal(s) && !LOCAL_COMPONENTS.some((c) => s[c].enabled === "on")) return;

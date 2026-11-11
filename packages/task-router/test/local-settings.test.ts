@@ -159,6 +159,16 @@ test("LIST: mainBranches non-empty strings; tools non-empty; extraChecks and pub
   }
 });
 
+test("overseer.tools must not write (L4.T14): bash, edit or write is reported, its first one named, and the default kept", () => {
+  for (const [v, t] of [[["read", "bash"], "bash"], [["edit"], "edit"], [["write", "edit"], "write"]] as const) {
+    const r = parseSettings(one("overseer.tools", v));
+    assert.deepEqual(r.problems, [kept("overseer.tools", `${t} can write`)], JSON.stringify(v));
+    assert.deepEqual(r.settings.overseer.tools, defaults().overseer.tools);
+  }
+  const ok = parseSettings(one("overseer.tools", ["read", "search-ext"]));
+  assert.deepEqual([ok.problems, ok.settings.overseer.tools], [[], ["read", "search-ext"]]);
+});
+
 test("MEMBER: in local mode the overseer and fixer name enabled members and efforts on their ladders", () => {
   const blank = parseSettings({ mode: "local", models: { opus: { model: "" } } });
   assert.deepEqual(blank.problems.filter((l) => l.startsWith("overseer.")), [kept("overseer.member", '"opus" is not an enabled member')]);
