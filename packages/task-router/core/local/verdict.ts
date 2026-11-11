@@ -30,7 +30,7 @@ export const VERDICT_SCHEMA: Schema = {
   },
 };
 
-const TASK_ID = /^M[0-9]{1,2}(\.T[0-9]{1,2})?$/;
+export const TASK_ID = /^M[0-9]{1,2}(\.T[0-9]{1,2})?$/;
 const FENCE = "```";
 /** A target's path: `path[:line[-line]]` without the line part. */
 export const targetPath = (t: string) => t.replace(/:\d+(-\d+)?$/, "");

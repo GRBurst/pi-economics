@@ -98,11 +98,14 @@ export async function startBranch(d: StartDeps, input: unknown, cwd: string): Pr
  *  linked worktree is blocked, with the worktree to use instead. `worktrees` is git's list (it holds the main checkout, which
  *  is no exception: a worktree nested in the main checkout is). Total: a path that is no string or a tool that is no writer passes.
  *  The reason is a fixed sentence plus a path, never model text. */
-export function writeGuard(x: { tool: string; input: unknown; cwd: string; active?: BranchRecord; mainCheckout?: string; worktrees: readonly string[] }): string | undefined {
+export function writeGuard(x: { tool: string; input: unknown; cwd: string; active?: BranchRecord; mainCheckout?: string; worktrees: readonly string[];
+  /** The worktrees a fixer owns (design §3.4.4): no main-session write lands in them. */ fixerDirs?: readonly string[] }): string | undefined {
   if (x.tool !== "edit" && x.tool !== "write") return undefined;
   const raw = (x.input as { path?: unknown } | null | undefined)?.path;
-  if (typeof raw !== "string" || !x.active || !x.mainCheckout) return undefined;
+  if (typeof raw !== "string") return undefined;
   const p = resolve(x.cwd, raw);
+  if (x.fixerDirs?.some((d) => inside(p, d))) return "a fixer owns this branch";
+  if (!x.active || !x.mainCheckout) return undefined;
   if (!inside(p, x.mainCheckout) || x.worktrees.some((w) => w !== x.mainCheckout && inside(p, w))) return undefined;
   return `write in the worktree ${x.active.worktree}; use absolute paths under it`;
 }

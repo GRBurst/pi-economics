@@ -126,7 +126,7 @@ export function install(pi: PiLike, deps: Deps) {
     const t = e.type === "spawn" ? tickets.owner(e.name) : undefined;
     if (e.type === "spawn" && t) {
       log.ticketSpawn({ taskId: e.name, role: t.role, member: t.member, tier: settings.models[t.member]?.tier ?? "?", model: t.model, effort: t.effort,
-        arm: t.parentSession && armOf(t.parentSession), sessionId: e.childSessionId, parentSessionId: t.parentSession });
+        arm: t.parentSession && armOf(t.parentSession), sessionId: e.childSessionId, parentSessionId: t.parentSession, forced: t.forced });
     }
     if (e.type === "spawn" && c) {
       log.spawn({ taskId: e.name, card: c.card, plan: c.plan, start: c.start, arm: armOf(c.parentSession), sessionId: e.childSessionId, parentSessionId: c.parentSession, unresolved: c.unresolved, forced: c.forced });
@@ -149,6 +149,7 @@ export function install(pi: PiLike, deps: Deps) {
     failover(e);
     gate(e);
     guards(e);
+    lm.onEvent(e);
     if (e.type === "kill") { log.killed(e.name); children.delete(e.name); childTrips.forget(e.name); }
   };
   // The API may appear after this extension loads (load order), so connect at install and again at session_start.
@@ -250,7 +251,7 @@ export function install(pi: PiLike, deps: Deps) {
   // Hints (design §3.1, plan S12): in local mode, or anywhere with hints "on"; the status line names the last hint (plan Q5).
   // The overseer (design §3.2) lives here too: its spawn line comes from `onEvent` (D26), its events from its own subscription.
   const lm = installLocal(pi, { settings, log, isChild, sessionId: () => sessionId, hash: deps.hash, detect: deps.detect, git: deps.git, onTrip: (t) => { hint = t; render(); },
-    api, tickets, hex, now: nowMs, sleep: pd.sleep, onBudget: render, policyOn: () => off.length > 0 });
+    api, tickets, hex, now: nowMs, sleep: pd.sleep, onBudget: render, force: force.port, policyOn: () => off.length > 0 });
   pi.on("before_agent_start", (e, ctx) => {
     track(ctx);
     skills = e.systemPromptOptions?.skills ?? skills;
@@ -265,5 +266,5 @@ export function install(pi: PiLike, deps: Deps) {
     else delete sections.task_cards;
   });
 
-  return { log, settings, tickets, overseer: lm.overseer, budget: lm.budget, branches: lm.branches, approvals: lm.approvals, ready: lm.ready, settled: lm.settled };
+  return { log, settings, tickets, overseer: lm.overseer, budget: lm.budget, branches: lm.branches, approvals: lm.approvals, fixer: lm.fixer, ready: lm.ready, settled: lm.settled };
 }

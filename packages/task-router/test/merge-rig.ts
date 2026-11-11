@@ -74,22 +74,24 @@ export type MergeRig = ReturnType<typeof mergeRig>;
 /** The shell (harness, fake actor API with the spawn extension) on a temporary repository, after session_start with the
  *  session's cwd = the main checkout. A child submits the next scripted verdict (default: approve) at its first poll. `repo`
  *  and `entries`: a second session on the same repository, rebuilt from the first one's entries. */
-export function reviewRig(o: { settings?: Record<string, unknown>; repo?: TempRepo; entries?: Array<{ type: string; data: unknown }> } = {}) {
+export function reviewRig(o: { settings?: Record<string, unknown>; repo?: TempRepo; entries?: Array<{ type: string; data: unknown }>;
+  /** More of the session's ctx (a model registry for a settings force). */ ctx?: Record<string, unknown> } = {}) {
   const r = o.repo ?? tempRepo();
   const git = createGit(gitRunner("git", r.env));
   const h = harness({ settings: { mode: "local", ...o.settings } as never, apiExt: true, extra: { git } });
   h.f.entries.push(...(o.entries ?? []));
-  const ctx = { cwd: r.dir, sessionManager: { getSessionId: () => "s-main", getBranch: () => h.f.entries.map((e) => ({ type: "custom", customType: e.type, data: e.data })) } };
+  const ctx = { ...o.ctx, cwd: r.dir, sessionManager: { getSessionId: () => "s-main", getBranch: () => h.f.entries.map((e) => ({ type: "custom", customType: e.type, data: e.data })) } };
   h.f.fire("session_start", {}, ctx);
   const verdicts: Verdict[] = [];
   let answered = 0;
   h.hooks.onSleep = () => {
     if (h.a.apiSpawns.length <= answered) return;
     const s = h.a.apiSpawns[answered++]!;
-    if (s.result.ok) void (s.policy as Ok).childTools![0]!.execute(verdicts.shift() ?? APPROVE);
+    const submit = (s.policy as Ok | undefined)?.childTools?.[0]; // a fixer has no submit tool
+    if (s.result.ok && submit) void submit.execute(verdicts.shift() ?? APPROVE);
   };
   const append = (type: string, data: unknown): void => { h.f.entries.push({ type, data }); };
-  const c = common(r, git, h.router.branches, h.router.settings, { overseer: h.router.overseer, approvals: h.router.approvals, append });
+  const c = common(r, git, h.router.branches, h.router.settings, { overseer: h.router.overseer, approvals: h.router.approvals, append, fixer: h.router.fixer });
   return { r, git, h, ctx, verdicts, ...c };
 }
 export type ReviewRig = ReturnType<typeof reviewRig>;

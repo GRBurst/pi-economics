@@ -6,7 +6,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import type { SubagentsApiV1 } from "../api.ts";
+import type { ApiEvent, SubagentsApiV1 } from "../api.ts";
+import type { ForcePort } from "../forceinstall.ts";
 import type { createOutcomeLog } from "../log.ts";
 import type { RouterSettings } from "../types.ts";
 import { createBranchStore } from "./branches.ts";
@@ -22,6 +23,7 @@ import type { Guard } from "../toolguard.ts";
 import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { createApprovals } from "./merge.ts";
+import type { FixerPort } from "./merge.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
 import type { Budget, Tickets } from "./overseer.ts";
 import { callKey, callTrips, changed, checkPassed, contextSoft, contextStall, errSig, normOf, overSize, push, riskGlobsOf } from "./tripwires.ts";
@@ -38,6 +40,8 @@ export type LocalDeps = {
   api(): SubagentsApiV1 | undefined; tickets: Tickets; hex(bytes: number): string; now(): number; sleep(ms: number): Promise<void>;
   /** The router's spawn policy is registered (review F1). */
   policyOn(): boolean;
+  /** The force override: the fixer runs under it (D47). */
+  force?: ForcePort;
   /** The git port (default: the real one); a test seam. */
   git?: Git;
   /** After every budget change and rebuild (the status line, design §2.5). */
@@ -69,7 +73,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   let base: string | undefined;
   const overseer = createOverseer({
     api: d.api, settings: d.settings, tickets: d.tickets, hex: d.hex, now: d.now, sleep: d.sleep, budget, log: d.log,
-    policyOn: d.policyOn, warn: (text) => console.warn(text), base: () => base ?? process.cwd(),
+    policyOn: d.policyOn, force: d.force, warn: (text) => console.warn(text), base: () => base ?? process.cwd(),
     append: (type, data) => { pi.appendEntry?.(type, data); if (type === BUDGET_TYPE) d.onBudget?.(); },
   });
   const git = d.git ?? createGit(gitRunner());
@@ -100,6 +104,22 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     /** Resolves when no diff read is running or waiting (a test seam). */
     settled: async (): Promise<void> => { while (sizing) await sizing; await ready; },
     /** The git guard for a session in `cwd` (design §3.4.5) while the merge gate is on, else undefined: a routed child's. */
+    /** Spawns the fixer (design §3.4.4). */
+    fixer: ((x) => overseer.fixer({ ...x, toolGuard: handle.gitGuard(x.worktree) })) as FixerPort,
+    /** The fixer's report (a route fixer→main) or its death (kill, error) gives the branch back (design §3.4.4); the router kills
+     *  a fixer that reported (D46). Total. */
+    onEvent(e: ApiEvent): void {
+      try {
+        const name = e.type === "route" ? (e.to === "main" ? e.from : undefined) : e.type === "kill" || e.type === "error" ? e.name : undefined;
+        if (name === undefined) return;
+        if (e.type === "kill" && d.tickets.owner(name)?.role === "fixer") d.tickets.forget(name);
+        const rec = branches.all().find((r) => r.state === "fixer" && r.fixer === name);
+        if (!rec) return;
+        const { fixer: _gone, ...rest } = rec;
+        branches.put({ ...rest, state: "active" });
+        if (e.type === "route") void d.api()?.kill?.([name]).catch(() => []);
+      } catch { /* an event handler never throws */ }
+    },
     gitGuard: (cwd: string): Guard | undefined =>
       activeSet(d.settings).mergeGate ? gitGuard(d.settings.mergeGate.mainBranches, (dir) => git.branchOf(dir), cwd) : undefined,
   };
@@ -115,7 +135,8 @@ export function installLocal(pi: Pi, d: LocalDeps) {
         if (d.isChild(ctx)) return undefined;
         const tool = String(e?.toolName), active = branches.active();
         const reason = writeGuard({ tool, input: e?.input, cwd: ctx?.cwd ?? process.cwd(), active,
-          mainCheckout: active && branches.facts.mainCheckout.get(active.repo), worktrees: (active && branches.facts.worktrees.get(active.repo)) ?? [] });
+          mainCheckout: active && branches.facts.mainCheckout.get(active.repo), worktrees: (active && branches.facts.worktrees.get(active.repo)) ?? [],
+          fixerDirs: branches.all().filter((r) => r.state === "fixer").map((r) => r.worktree) });
         if (reason === undefined) {
           if (WRITERS.has(tool)) blocked = 0; // the count is of blocks since the last write that passed
           return undefined;

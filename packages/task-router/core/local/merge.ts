@@ -2,13 +2,14 @@
 // (cheap and deterministic first), runs the checks and the red run, reviews through the overseer (Opus last), then
 // fast-forwards main. Every git call goes through the port (core/local/git.ts), so a failure is a value, never an exception.
 import type { Runner } from "../gate.ts";
-import type { RouterSettings } from "../types.ts";
+import type { Card, RouterSettings } from "../types.ts";
+import type { Finding } from "./verdict.ts";
 import type { BranchRecord, BranchStore } from "./branches.ts";
 import type { Git, Stat } from "./git.ts";
 import type { createOverseer } from "./overseer.ts";
 import { cleanupBranch, refreshFacts } from "./worktree.ts";
 import { verdictSubmit } from "./overseer.ts";
-import { approve, findingLine } from "./verdict.ts";
+import { approve, findingLine, TASK_ID, targetPath } from "./verdict.ts";
 import { riskGlobsOf } from "./tripwires.ts";
 import { globMatch } from "../glob.ts";
 
@@ -104,6 +105,35 @@ export const reviewInput = (x: ReviewFacts): string => [
 /** What `revise` tells the author (Q18). */
 export const REVISE_TEXT = "the review asks for changes: fix the blocking findings, commit, then call request_merge again";
 
+// ── the fixer (design §3.4.4; plan S28) ──
+export type FixerCard = Pick<Card, "kind" | "files" | "check" | "acceptance" | "t0" | "t2">;
+/** The fixer's card: the changed files ∪ the findings' target paths (a plan task id is no path), the branch check, the
+ *  blocking findings' fix criteria; nothing claimed (t0 all false), no trigger. */
+export const fixerCard = (changed: readonly string[], findings: readonly Finding[], check?: string): FixerCard => ({
+  kind: "implement",
+  files: [...new Set([...changed, ...findings.map((f) => targetPath(f.target)).filter((t) => !TASK_ID.test(t))])],
+  ...(check !== undefined && { check }),
+  acceptance: findings.filter((f) => f.blocking).map((f) => f.fix),
+  t0: { bounded: false, specified: false, verifiable: false, lowRisk: false, small: false, linear: false }, t2: [],
+});
+/** The card as the fixer's brief (`briefAppend`; Q18). */
+export const fixerBrief = (c: FixerCard): string => [
+  "Task card (from the merge review; the router spawned you):",
+  `kind: ${c.kind}`,
+  `files: ${c.files.join(", ")}`,
+  ...(c.check !== undefined ? [`check: \`${c.check}\``] : []),
+  "acceptance (the review's blocking findings):",
+  ...c.acceptance.map((a) => `- ${a}`),
+].join("\n");
+/** The fixer's task (Q18): the branch, its worktree, the review's findings (V3 lines). */
+export const fixerMessage = (x: { branch: string; worktree: string; reviewId: string; findings: readonly string[] }): string =>
+  `The merge review ${x.reviewId} rejected the branch ${x.branch}. Fix it in its worktree ${x.worktree} (use absolute paths under it): ` +
+  "make the blocking findings' fix criteria hold, commit there, run the check, then report to main with send_message. " +
+  `Do not merge or push; main requests the merge again.\n\nFindings:\n${x.findings.join("\n")}`;
+/** Spawns the fixer in `worktree` (the shell's: a ticket through the actor's spawn API, D45–D47); its name, or why not. */
+export type FixerPort = (x: { worktree: string; reviewId: string; brief: string; message: string }) =>
+  Promise<{ ok: true; name: string } | { ok: false; reason: string }>;
+
 export type OverseerPort = Pick<ReturnType<typeof createOverseer>, "run" | "ready">;
 export type MergePorts = {
   git: Git; run: Runner; overseer: OverseerPort; branches: BranchStore; approvals: Approvals; settings: RouterSettings;
@@ -111,6 +141,8 @@ export type MergePorts = {
   append(customType: string, data: unknown): void;
   /** A fresh path for the red run's temporary worktree (it must not exist). */
   tmp(): string;
+  /** Absent: no fixer, a rejection is always `revise`. */
+  fixer?: FixerPort;
   signal?: AbortSignal;
 };
 type Input = { branch?: string; summary?: string };
@@ -213,8 +245,26 @@ async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<Merge
     }
     if (!approve(out.value.findings)) {
       const now = p.branches.get(repo, branch) ?? { repo, branch, worktree: wt.dir, base: main.sha, state: "active" as const, rejections: 0, fixerRuns: 0 };
-      p.branches.put({ ...now, rejections: now.rejections + 1 });
-      return { status: "revise", detail: REVISE_TEXT, commit, reviewId: out.reviewId, findings: out.value.findings.map(findingLine) };
+      const rej: BranchRecord = { ...now, rejections: now.rejections + 1 }, findings = out.value.findings.map(findingLine);
+      const answer = { commit, reviewId: out.reviewId, findings };
+      // S28: a fixer round rejected again with fixerRounds used up blocks the branch; else the fixer after enough rejections.
+      if (rej.fixerRuns >= g.fixerRounds && rej.fixerRuns > 0) {
+        p.branches.put({ ...rej, state: "blocked" });
+        return { status: "refused", reason: "blocked", detail: reasonText("blocked", { branch }), ...answer };
+      }
+      if (p.fixer && rej.rejections >= g.rejectionsBeforeFixer) {
+        const card = fixerCard(paths, out.value.findings, rec?.check);
+        const fx = await p.fixer({ worktree: wt.dir, reviewId: out.reviewId, brief: fixerBrief(card),
+          message: fixerMessage({ branch, worktree: wt.dir, reviewId: out.reviewId, findings }) });
+        if (fx.ok) {
+          p.branches.put({ ...rej, state: "fixer", fixer: fx.name, fixerRuns: rej.fixerRuns + 1 });
+          return { status: "fixer", detail: reasonText("fixer-running", { fixer: fx.name }), ...answer };
+        }
+        p.branches.put(rej);
+        return { status: "revise", detail: `${REVISE_TEXT}; the fixer could not start: ${fx.reason}`, ...answer };
+      }
+      p.branches.put(rej);
+      return { status: "revise", detail: REVISE_TEXT, ...answer };
     }
     reviewId = out.reviewId;
     p.approvals.add(key, reviewId);

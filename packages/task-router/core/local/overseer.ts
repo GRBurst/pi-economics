@@ -6,6 +6,7 @@ import type { ChildTool, PolicyResult, SubagentsApiV1 } from "../api.ts";
 import type { Guard, SyncGuard } from "../toolguard.ts";
 import type { RouterSettings, ThinkingLevel } from "../types.ts";
 import type { ReviewInput } from "../outcome.ts";
+import type { ForcePort } from "../forceinstall.ts";
 import type { Schema } from "./schema.ts";
 import { approve, inconsistent, VERDICT_SCHEMA, validateVerdict, type Verdict } from "./verdict.ts";
 
@@ -89,7 +90,11 @@ export type OverseerDeps = {
   append(customType: string, data: unknown): void;
   /** The outcome log's `review` line, one per attempt (design §3.0.3). */
   log: { review(i: ReviewInput): void };
+  /** The force override (design §3.6.3): the fixer runs under an active force (D47); overseers never do (AC-F6). */
+  force?: ForcePort;
 };
+/** The fixer's system prompt (Q18). */
+export const FIXER_PROMPT = "You fix a branch that a merge review rejected. Work only in the worktree you are given, change what the blocking findings name, commit there, and report to main. Nothing merges without a new review.";
 
 export const AUDITOR = `You are an auditor, not an author. Before reading the diff or plan, derive the invariants the goal implies; then check the work against them.
 Report only through the submit tool. Every finding names a target (path[:line] or a plan task id) and a fix criterion: a checkable condition, not code.
@@ -226,6 +231,33 @@ export function createOverseer(d: OverseerDeps) {
     ready,
     /** The budget with the picks in flight counted as used (what the next pick sees). */
     budget,
+    /** The merge fixer (design §3.4.4, D45–D47): a ticket on `fixerMember` at `fixerEffort` (or the active force), cwd the worktree,
+     *  every tool with `toolGuard`, the card as its brief; not quiet, so its report and its death reach main. A child the router's
+     *  policy did not route is killed (review F1). No budget, no slot (D47). */
+    async fixer(x: { worktree: string; reviewId: string; brief: string; message: string; toolGuard?: Guard }):
+      Promise<{ ok: true; name: string } | { ok: false; reason: string }> {
+      const a = d.api();
+      if (!a || !hasSpawnApi(a) || !ready()) return { ok: false, reason: "the actor's spawn API is not available" };
+      const g = d.settings.mergeGate, routed = d.settings.models[g.fixerMember]?.model;
+      if (!routed) return { ok: false, reason: `mergeGate.fixerMember ${g.fixerMember} is no member` };
+      const f = d.force?.active();
+      const model = f?.model ?? routed, effort = f?.thinkingLevel ?? g.fixerEffort, name = `fixer-${d.hex(3)}`;
+      const ticket = d.tickets.issue({ role: "fixer", reviewId: x.reviewId, member: g.fixerMember, model, effort, cwd: x.worktree, childTools: [],
+        ...(x.toolGuard && { toolGuard: x.toolGuard }), briefAppend: x.brief,
+        ...(f && { forced: { source: f.source, routedModel: routed, routedEffort: g.fixerEffort } }) });
+      try {
+        const sp = await a.spawn({ name, systemPrompt: FIXER_PROMPT, message: x.message, task: { ticket } }, { by: "main", quiet: false })
+          .catch((err: Error) => ({ ok: false as const, reason: err.message }));
+        if (!sp.ok) { d.tickets.forget(name); return { ok: false, reason: sp.reason }; }
+        if (d.tickets.owner(name) === undefined) {
+          await a.kill([name]).catch(() => []);
+          d.warn(`task-router: ${name} was not spawned through the task-router policy; killed`);
+          return { ok: false, reason: `${name} was not routed by the task-router policy` };
+        }
+        if (f) d.force?.used(name);
+        return { ok: true, name };
+      } finally { d.tickets.revoke(ticket); }
+    },
     /** Design §3.2.2: two attempts (`steer` one), the second on the fallback member (D28); `invalid` is a failed attempt. */
     async run<T>(args: RunArgs<T>): Promise<RunResult<T>> {
       const a = d.api();
