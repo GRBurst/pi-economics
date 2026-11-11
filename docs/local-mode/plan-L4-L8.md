@@ -1112,6 +1112,26 @@ message). Open notes, for L6 or later:
   (F7: author and amendment red runs, as in the unit's future worktree, then `broken-check`; the evidence command,
   `evidence`; the merge's plan and regression checks, `check`); Esc stops the plan red runs and the evidence command (F11);
   an amendment's rebind uses `update` (F8: the active branch stays); a plan overseer that cannot start names why (caps).
+- L7 review fixes (branch `local-mode/L7-fix`, rebased onto L8 da4981e; one commit per finding):
+  F1 `numstat`/`diffStat` read `git diff -z --numstat --no-renames` raw (`parseNumstat`; no ` => ` rewrite, both sides of a
+  rename are paths). F2 an approved amendment unblocks a `blocked` plan-bound branch whose unit it changed or whose
+  `remediation-failed` trigger it answers (`active`, counts 0, the answer names the `start_branch`), abandons one whose unit it
+  removed; `start_branch` of a blocked unit names `amend_plan` and the open trigger. F3 `SubmitSpec.check(input, attempt)`:
+  `plans.rounds` count per overseer attempt; a check still running when its attempt dies settles before the fallback.
+  F4 `planBudget` is the one budget of the author's limits, validation (a task's paths ≤ min(`splitFiles`, `maxDiffFiles`), a
+  milestone branch's ≤ `maxDiffFiles`) and the merge's size (lines min(`splitLines`|`milestoneLines`, `maxDiffLines`)); a
+  skeleton has no line estimate, so lines are told and merge-enforced only. F5 a vacuous amended check is named in the review
+  input ("Vacuous checks:") and the answer. F6 a red run git cannot make a worktree for ends the runs: `plan_request` and
+  `amend_plan` fail `git` (`Authored` reason `git`). F7 `amend_plan` refuses a dirty main checkout (`main-dirty`) before
+  its trigger, red runs and review. F8 the turn count of a branch restarts once the `over-budget` trigger it opened is closed
+  (not one trigger per turn). F9 the overseer holds its clock while a submission is checked (`timeoutSec` is the child's
+  own time); one round's red runs share `checkTimeoutSec` (a check gets what is left; one cut short or not started is a
+  `check` finding, `broken-check` after the rounds; `PlanPorts.now`). F10 an evidence command that exits 126/127 or times
+  out is refused `evidence`. F11 a branch without a plan that changes an approved plan's file is refused `plan-changed`.
+  F12 the git runner decodes stdout once (a multibyte character on a 64 kB chunk boundary). F13 not fixed, a known limit:
+  plan records (like branch records) live only in their session; rebuilding them from main's plan files would trust any
+  parseable file as approved and still lack the merged units. `start_branch {plan}`, `amend_plan` and `plan_request` name
+  the other session and the next step (`otherSession`, plans.ts); docs/pi-economics.md states the limit.
 
 ### L8 Close-out
 
