@@ -57,8 +57,9 @@ export type PolicyDeps = {
   /** The router's own spawns (design §3.2.2, plan S19): a known ticket in `task.ticket` is answered first. */
   tickets?: Tickets;
   /** Local mode (design §2.2 item 2, LD2): the active worktree's directory, the default `cwd` of a card without one; absent = none.
-   *  `gitGuard` (design §2.2 item 3, §3.4.5): the git guard of a child session in `cwd` while the merge gate is on. */
-  local?: { activeWorktree(): string | undefined; gitGuard?(cwd: string): Guard | undefined };
+   *  `guard`: the local guards of a child session in `cwd`: git (design §2.2 item 3, §3.4.5) while the merge gate is on, the plan
+   *  guard (§3.5.6) while plans are active. */
+  local?: { activeWorktree(): string | undefined; guard?(cwd: string): Guard | undefined };
 };
 
 const POLL_MS = 2000;
@@ -176,13 +177,13 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
       parent: caller.name, parentSession: caller.sessionId, card, plan, cwd, importance,
       ...(v.unresolved ? { unresolved: true as const } : {}), ...(sp.value.esc ? { esc: sp.value.esc } : {}),
     };
-    // Local mode (design §3.1.3, plan D19): the child's tripwires observe every call first and never block; then the git guard
-    // (§3.4.5, while the merge gate is on, in the child's own cwd), then toolsFor's guard; with neither, toolsFor's result stays.
+    // Local mode (design §3.1.3, plan D19): the child's tripwires observe every call first and never block; then the local guards
+    // (git §3.4.5 while the merge gate is on, plan §3.5.6 while plans are, in the child's own cwd), then toolsFor's guard; with neither, toolsFor's result stays.
     const own = local ? cwd : caller.cwd;
     const guarded = (t: ReturnType<typeof toolsFor>) => {
       const trips = isLocal(s) && componentOn(s, "hints") ? d.childGuard?.(args.name, caller.name) : undefined;
-      const git = d.local?.gitGuard?.(own);
-      return trips || git ? { ...t, toolGuard: composeGuards(trips, git, t.toolGuard) } : t;
+      const lg = d.local?.guard?.(own);
+      return trips || lg ? { ...t, toolGuard: composeGuards(trips, lg, t.toolGuard) } : t;
     };
     const result = (model: string, thinkingLevel: ThinkingLevel) => ({
       model, thinkingLevel, briefAppend: briefAppend(card, plan, v.t0.specified, prof.value, blocks.value, s.delegation.nudge !== "off"),

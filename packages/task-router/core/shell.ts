@@ -114,7 +114,7 @@ export function install(pi: PiLike, deps: Deps) {
     sleep: deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))),
     probe: createProbes({ fetch: deps.fetch ?? (globalThis.fetch as unknown as FetchLike), now: nowMs }), counter, blocks: new Map(),
     force: force.port, childGuard: (child, parent) => childTrips.guard(child, parent), tickets,
-    local: { activeWorktree: () => (componentOn(settings, "worktrees") ? lm.branches.active()?.worktree : undefined), gitGuard: (cwd) => lm.gitGuard(cwd) },
+    local: { activeWorktree: () => (componentOn(settings, "worktrees") ? lm.branches.active()?.worktree : undefined), guard: (cwd) => lm.childGuard(cwd) },
   };
   const policy = createPolicy(pd);
   const failover = createFailover({ ...pd, log });

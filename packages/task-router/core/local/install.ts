@@ -19,7 +19,9 @@ import { block, createHintEngine } from "./hints.ts";
 import type { Delivery } from "./hints.ts";
 import { activeSet, componentOn } from "./mode.ts";
 import { gitGuard } from "./childguards.ts";
-import type { Guard } from "../toolguard.ts";
+import { composeGuards, type Guard } from "../toolguard.ts";
+import { createPlanStore } from "./plans.ts";
+import { planGuard } from "./planguard.ts";
 import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { bypassHint, bypassText, checkBypass, createApprovals, createMainRefs, requestMergeTool } from "./merge.ts";
@@ -88,6 +90,12 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   const approvals = createApprovals((type, data) => pi.appendEntry?.(type, data));
   /** The last known main tips (design §3.4.6), rebuilt at `start`; a merge's record reaches them through the merge's append. */
   const refs = createMainRefs((type, data) => pi.appendEntry?.(type, data));
+  /** The approved plans (design §3.5), rebuilt at `start`. */
+  const plans = createPlanStore((type, data) => pi.appendEntry?.(type, data));
+  /** Every plan file in every checkout of its repository (the main checkout and the worktrees git lists, plan D39). */
+  const planFiles = (): string[] => plans.all().flatMap((r) =>
+    [...new Set([r.repo, ...(branches.facts.worktrees.get(r.repo) ?? [])])].map((dir) => join(dir, r.file)));
+  const readText = (abs: string): string | undefined => { try { return readFileSync(abs, "utf8"); } catch { return undefined; } };
   /** Bypass checks run off the event, one at a time; the line and the warning come when one finds a move, the hint waits for
    *  the next main tool result (plan D17, as over-size). `mainCtx`: the main session's last ctx, for the warning. */
   let bypassing: Promise<void> = Promise.resolve(), found: Bypass[] = [], mainCtx: any;
@@ -128,7 +136,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   /** A branch whose fixer this process did not spawn, or whose fixer is gone, is active again (review F5). */
   const fixerGone = (name: string | undefined): boolean => name === undefined || !ours(name) || ended.has(name) || !listed(name);
   const handle = {
-    overseer, budget, branches, approvals,
+    overseer, budget, branches, approvals, plans,
     start(ctx: any): void {
       if (typeof ctx?.cwd === "string") base = ctx.cwd;
       mainCtx = ctx;
@@ -152,12 +160,13 @@ export function installLocal(pi: Pi, d: LocalDeps) {
         warn(`task-router: the fixer ${r.fixer ?? ""} of ${r.branch} did not survive the restart; the branch is active again`);
       }
       try { killStale((d.api()?.list() ?? []).map((a) => a.name)); } catch { /* best effort */ }
+      plans.rebuild(entries);
       // Off the event: branches whose worktree disappeared are abandoned (§3.3.4), then the guards' cached facts are refreshed for
       // every repository the session knows (plan D39). `start_branch` waits for it.
       const deps = { git, store: branches, settings: d.settings };
       ready = (async () => {
         await refreshAbandoned(deps);
-        for (const repo of new Set(branches.all().map((r) => r.repo))) await refreshFacts(deps, repo);
+        for (const repo of new Set([...branches.all(), ...plans.all()].map((r) => r.repo))) await refreshFacts(deps, repo);
       })().catch(() => undefined);
       // Review F2: the main tips' baseline is read now (a repository without a record is recorded silently), so a move in the
       // session's first bash call is a bypass.
@@ -169,7 +178,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     settled: async (): Promise<void> => { while (sizing) await sizing; await ready; await bypassing; },
     /** The git guard for a session in `cwd` (design §3.4.5) while the merge gate is on, else undefined: a routed child's. */
     /** Spawns the fixer (design §3.4.4). */
-    fixer: ((x) => overseer.fixer({ ...x, toolGuard: handle.gitGuard(x.worktree) })) as FixerPort,
+    fixer: ((x) => overseer.fixer({ ...x, toolGuard: handle.childGuard(x.worktree) })) as FixerPort,
     /** The fixer's report (a route fixer→main) or its death (kill, error) gives the branch back (design §3.4.4); the router kills
      *  a fixer that reported (D46). Total. */
     onEvent(e: ApiEvent): void {
@@ -195,6 +204,11 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     },
     gitGuard: (cwd: string): Guard | undefined =>
       activeSet(d.settings).mergeGate ? gitGuard(d.settings.mergeGate.mainBranches, (dir) => git.branchOf(dir), cwd) : undefined,
+    /** The plan guard for a session in `cwd` (design §3.5.6) while plans are active, else undefined. */
+    planGuard: (cwd: string): Guard | undefined =>
+      activeSet(d.settings).plans ? (tool, input) => planGuard({ tool, input, cwd, files: planFiles(), read: readText }) : undefined,
+    /** A routed child's (and the fixer's) local guards in order: git, then the plan guard. */
+    childGuard: (cwd: string): Guard | undefined => composeGuards(handle.gitGuard(cwd), handle.planGuard(cwd)),
   };
   const s = d.settings, h = s.hints;
   // Review F2: a repository start_branch registers gets its baseline before the tool returns.
@@ -242,6 +256,17 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       return r instanceof Promise ? r.then(verdict) : verdict(r);
     });
   };
+  // The main session's plan guard (design §3.5.6, AC-P5). Total, as the write guard.
+  const guardPlans = (): void => {
+    if (!activeSet(s).plans) return;
+    pi.on("tool_call", (e, ctx) => {
+      try {
+        if (d.isChild(ctx)) return undefined;
+        const why = planGuard({ tool: String(e?.toolName), input: e?.input, cwd: ctx?.cwd ?? process.cwd(), files: planFiles(), read: readText });
+        return why === undefined ? undefined : { block: true, reason: why };
+      } catch { return undefined; }
+    });
+  };
   // Bypass detection (design §3.4.6): every main `bash` result starts a read of the refs (a child's turn too, in onEvent); a
   // main tool result delivers the hints found before it. Total: a failure adds nothing.
   const watchMain = (): void => {
@@ -258,7 +283,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       } catch { return undefined; }
     });
   };
-  if (!componentOn(s, "hints")) { guardWrites(); guardMain(); watchMain(); return handle; }
+  if (!componentOn(s, "hints")) { guardWrites(); guardMain(); guardPlans(); watchMain(); return handle; }
   // A persistent trip runs a steer overseer instead of the escalation block while one can run (design §3.1.2, AC-H4).
   const steer = createSteer({ settings: s, overseer, git,
     branch: () => { const a = branches.active(); return a && { worktree: a.worktree, base: a.base, goal: a.goal, check: a.check }; },
@@ -351,6 +376,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   }));
   guardWrites();
   guardMain();
+  guardPlans();
   watchMain();
   pi.on("turn_end", (_e, ctx) => {
     safe(() => {

@@ -75,8 +75,9 @@ test("AC-N3 default mode push: settings {} register no guard and block nothing",
   assert.deepEqual(dflt.g.calls.filter((c) => c.startsWith("branchOf")), []);
   const off = rig({ mode: "local", mergeGate: { enabled: "off" } });
   assert.deepEqual(await off.call("git push origin main"), []);
-  assert.deepEqual(off.h.f.hookNames().filter((n) => n === "tool_call").length + 1, rig().h.f.hookNames().filter((n) => n === "tool_call").length,
-    "the merge gate adds one tool_call hook");
+  const plansOff = rig({ mode: "local", plans: { enabled: "off" } });
+  assert.deepEqual(off.h.f.hookNames().filter((n) => n === "tool_call").length + 1, plansOff.h.f.hookNames().filter((n) => n === "tool_call").length,
+    "the merge gate adds one tool_call hook (plans off: L7.T10's plan guard needs the merge gate)");
 });
 
 test("git guard (OQ11): mergeGate \"on\" guards in default mode too", async () => {
