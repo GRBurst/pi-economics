@@ -1,7 +1,7 @@
 # Local mode: design and specification
 
-Status: implemented (L1–L8 on `main`, all flake checks green; the manual runbook in §12 is not yet run against a
-local Qwen server). Decisions marked **LD** are this document's. The user's decisions it builds
+Status: implemented (L1–L8 on `main`, all flake checks green). The manual runbooks (§12 of
+`plan-L1-L3.md` and of `plan-L4-L8.md`) are not yet run on a real host; gaps and limits: `limitations.md`. Decisions marked **LD** are this document's. The user's decisions it builds
 on (§1) are settled and are not reopened here. Research in `docs/research/` is general advice whose numbers are
 unreliable (`docs/research/README.md`). Every number below is a starting value, configurable and tuned with the
 meter, unless the text says otherwise.

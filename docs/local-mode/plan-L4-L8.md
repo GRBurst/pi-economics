@@ -1185,8 +1185,9 @@ message). Open notes, for L6 or later:
 
 #### L8.T5 Final sweep and manual runbook `[x] done` (sweep) · runbook open
 - Every check (AGENTS.md loop); §12 runbook steps 1–4; record results in the task's status line.
-- Result (main 1dfafb6): all 51 flake checks green; task-router 1055 node tests, token-meter 209. The §12 runbook
-  steps 1–4 are not run: they need a local Qwen server and Opus credentials outside the build sandbox. Optional (OQ17): `pi-analyse` sections for hints, reviews, merges — a separate plan (Q20).
+- Result (main 1dfafb6): all 51 flake checks green; task-router 1055 node tests, token-meter 209. The runbooks
+  (§12 here, steps 1–4; §12 of `plan-L1-L3.md`, steps 1–5) are not run: they need a local Qwen server and Opus
+  credentials outside the build sandbox. Open gaps: `docs/local-mode/limitations.md`. Optional (OQ17): `pi-analyse` sections for hints, reviews, merges — a separate plan (Q20).
 
 ## 15. Order and parallelism
 
