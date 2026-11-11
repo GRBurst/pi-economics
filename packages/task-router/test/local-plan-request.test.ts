@@ -164,30 +164,52 @@ test("review L7 F6: a red run whose worktree git cannot make fails plan_request 
   assert.equal(x.plans.get("parser"), undefined);
 });
 
-test("review L7 F9: one round's red runs share checkTimeoutSec; a check cut short or not started is a finding, never a pass", async () => {
-  const x = planRig({ settings: { checkTimeoutSec: 10 } });
+/** A fake clock and runner for a round of three slow checks: a check that needs more than its time is cut off at it (exit 124). */
+function slowRound(settings: Record<string, unknown>, need: (n: number) => number) {
+  const x = planRig({ settings });
   let t = 0;
   const given: number[] = [];
   x.ports.now = () => t;
   x.ports.run = async (cmd, cwd, ms) => {
     x.checks.push({ cmd, cwd });
     given.push(ms);
-    const need = given.length <= 2 ? 6000 : 1000; // round 1's checks are slow, round 2's fast
-    if (ms < need) { t += ms; return { exit: 124, output: "", timedOut: true }; }
-    t += need;
+    const n = need(given.length);
+    if (ms < n) { t += ms; return { exit: 124, output: "", timedOut: true }; }
+    t += n;
     return { exit: 1, output: "", timedOut: false };
   };
   const three = skeleton();
   three.milestones[0]!.tasks.push({ id: "M1.T3", goal: "test it", files: ["test/a.test.ts"], forbidden: [], check: "false", dependsOn: ["M1.T2"] });
+  return { x, given, three };
+}
+
+test("review spot-check F1: each red run has its own checkTimeoutSec; slow checks that together exceed one never fail the round", async () => {
+  const { x, given, three } = slowRound({ checkTimeoutSec: 10 }, () => 6000); // 18 s in all, each 6 s of 10
+  x.script.push([three]);
+  const out = await planRequest(x.ports, INPUT, x.r.dir);
+  assert.deepEqual(given, [10000, 10000, 10000], "every check gets the whole checkTimeoutSec");
+  assert.deepEqual(x.replies.map((y) => y.ok), [true], "round 1 accepts the skeleton");
+  assert.equal(out.status, "approved", out.detail);
+});
+
+test("review spot-check F1: plans.redRunSec caps a round's red runs together; a check cut short or not started is a finding, never a pass", async () => {
+  const { x, given, three } = slowRound({ checkTimeoutSec: 900, plans: { redRunSec: 10 } }, (n) => (n <= 2 ? 6000 : 1000)); // round 1's checks are slow, round 2's fast
   x.script.push([three, three]);
   const first = x.replies.length;
   const out = await planRequest(x.ports, INPUT, x.r.dir);
-  assert.deepEqual(given.slice(0, 2), [10000, 4000], "the second check gets what is left of the round");
+  assert.deepEqual(given.slice(0, 2), [10000, 4000], "the second check gets what is left of the round's cap, below its own checkTimeoutSec");
   assert.equal(x.checks.filter((c) => c.cmd === "false").length, 1, "M1.T3 did not start in round 1");
   const reasons = x.replies[first]!.reasons!;
-  assert.ok(reasons.some((l) => l.includes("M1.T2") && l.includes("was not run to its end: the round's red runs share checkTimeoutSec (10 s)")), String(reasons));
-  assert.ok(reasons.some((l) => l.includes("M1.T3") && l.includes("was not run: the round's red runs share checkTimeoutSec (10 s)")), String(reasons));
+  assert.ok(reasons.some((l) => l.includes("M1.T2") && l.includes("was not run to its end: the round's red runs share plans.redRunSec (10 s)")), String(reasons));
+  assert.ok(reasons.some((l) => l.includes("M1.T3") && l.includes("was not run: the round's red runs share plans.redRunSec (10 s)")), String(reasons));
   assert.equal(out.status, "approved", out.detail);
+});
+
+test("review spot-check F1: the author is told each check's time and the round's cap", () => {
+  const x = planRig({ settings: { checkTimeoutSec: 120, plans: { redRunSec: 600 } } });
+  const line = authorInput(x.settings, INPUT, ["src/a.ts"], []).split("\n").filter((l) => l.startsWith("Check time: "));
+  assert.deepEqual(line, ["Check time: each task check runs at most 120 s; all the checks of one round together at most 600 s (plans.redRunSec). "
+    + "A check cut short, or left unstarted by that cap, is a finding."]);
 });
 
 test("AC-P3 validation errors count toward plans.rounds", async () => {

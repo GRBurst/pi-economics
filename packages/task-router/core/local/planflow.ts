@@ -165,11 +165,15 @@ const limits = (s: RouterSettings): string => {
     + `and its branch merges at most ${task.lines} lines. A milestone has at most ${l.milestoneTasks} tasks; one with branch "milestone" is one branch: `
     + `its tasks' files and create name at most ${whole.files} paths together, and it merges at most ${whole.lines} lines. Paths are relative to the repository root.`;
 };
+/** Spot-check F1: how long the router lets the task checks run, so the author plans checks that finish (each has its own time; the
+ *  round's red runs have a cap together). */
+const checkTime = (s: RouterSettings): string => `Check time: each task check runs at most ${s.checkTimeoutSec} s; all the checks of one round together at most `
+  + `${s.plans.redRunSec} s (plans.redRunSec). A check cut short, or left unstarted by that cap, is a finding.`;
 /** The author's input (design §3.2.1): the request digest, the acceptance, the grounding, the limits, the repository map. */
 export function authorInput(s: RouterSettings, i: PlanInput, files: readonly string[], map: readonly string[]): string {
   return [`Request: ${i.request}`, "Acceptance:", ...i.acceptance.map((a) => `- ${a}`),
     `Grounding files: ${files.join(", ")}`, `Grounding symbols: ${(i.symbols ?? []).join(", ") || "none"}`,
-    limits(s),
+    limits(s), checkTime(s),
     "Every task check must fail on the main tip and pass once the task is done.",
     `Repository map (the first ${REPO_MAP} tracked paths):`, ...map].join("\n");
 }
@@ -207,20 +211,22 @@ const redFinding = (r: RedExit, i: number, tip: string): Finding => ({
  *  plan unit); a check it blocks is not run. */
 async function redRuns(p: PlanPorts, repo: string, tip: string, tasks: readonly Task[], slug: string, unit: (t: Task) => string): Promise<RedExit[]> {
   const out: RedExit[] = [], w = p.settings.worktrees, now = p.now ?? Date.now, full = p.settings.checkTimeoutSec * 1000;
-  // review L7 F9: the round's red runs share one checkTimeoutSec, counted from the first; a check gets what is left of it
-  const late = (cut: boolean) => `was not run${cut ? " to its end" : ""}: the round's red runs share checkTimeoutSec (${p.settings.checkTimeoutSec} s)`;
+  // review L7 F9, spot-check F1: each check has its own checkTimeoutSec; the round's red runs together have plans.redRunSec,
+  // counted from the first, and a check gets the lesser of its own time and what is left of the round's
+  const cap = p.settings.plans.redRunSec * 1000;
+  const late = (cut: boolean) => `was not run${cut ? " to its end" : ""}: the round's red runs share plans.redRunSec (${p.settings.plans.redRunSec} s)`;
   let end: number | undefined;
   for (const task of tasks) {
     if (p.signal?.aborted) break; // review F11: Esc stops the red runs
     const branch = branchName(w.branchPrefix, { plan: slug, id: unit(task) });
     const blocked = await vetCheck({ git: p.git, store: p.branches, settings: p.settings }, task.check, worktreeDir(w.root, repo, branch), branch);
     if (blocked !== undefined) { out.push({ task, exit: -1, blocked }); continue; }
-    const ms = end === undefined ? full : Math.min(full, end - now());
+    const ms = end === undefined ? Math.min(full, cap) : Math.min(full, end - now());
     if (ms <= 0) { out.push({ task, exit: -1, late: late(false) }); continue; }
     const dir = p.tmp();
     const made = await p.git.worktreeAddDetached(repo, dir, tip);
     if (!made.ok) { out.push({ task, exit: -1, git: made.err.trim() }); break; }
-    end ??= now() + full;
+    end ??= now() + cap;
     try {
       const r = await p.run(task.check, dir, ms, p.signal);
       out.push(r.timedOut && ms < full ? { task, exit: -1, late: late(true) } : { task, exit: r.exit });

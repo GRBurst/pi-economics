@@ -691,8 +691,10 @@ cwd (`packages/task-router/core/local/planflow.ts`):
    cannot run (exit 126 or 127), that the git guard (above) blocks (it is not
    run), or that passes there (vacuous) goes back as a `check` finding; a
    worktree git cannot make fails the plan with `git` (as in `amend_plan`;
-   never a pass). One round's red runs share `checkTimeoutSec` (900 s): a
-   check cut short by it, or not started, is a `check` finding as well.
+   never a pass). Each check has its own `checkTimeoutSec` (900 s); one
+   round's red runs together have `plans.redRunSec` (3600 s): a check cut
+   short by it, or not started, is a `check` finding as well. The author is
+   told both.
    Rejections count against `plans.rounds` (2), per overseer
    attempt (the fallback author starts afresh); after them a
    skeleton that is still invalid is `refused` `invalid`, a check that still
@@ -892,12 +894,13 @@ checked only while a local component can run.
 | `plans.milestoneLines` | 250 | changed lines | a milestone branch's merge |
 | `plans.taskTurns` | 12 | main-session turns | `over-budget` |
 | `plans.rounds` | 2 | rejections | author rounds; amendments per trigger before the rewrite |
+| `plans.redRunSec` | 3600 | seconds | the cap of one round's red runs together (each check has `checkTimeoutSec`) |
 | `plans.regression` | `"milestone"` | `"milestone"`, `"plan"`, `"off"` | checks of merged tasks at a merge |
 | `plans.publicApiGlobs` | `[]` | globs | a change there needs the whole-plan review |
 | `force.model` | `""` | a member or `provider/id`; `""` = no force | the settings force (L2) |
 | `force.thinkingLevel` | `""` | `""` or an effort | |
 
-The router's shared `checkTimeoutSec` (900, seconds) bounds every check the
+The router's shared `checkTimeoutSec` (900, seconds) bounds each check the
 merge gate and the plans run, and `riskGlobs` marks risky paths for the
 `risky-path` trip and the merge reviewer.
 

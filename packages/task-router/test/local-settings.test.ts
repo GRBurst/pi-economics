@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { defaults, parseSettings } from "../core/settings.ts";
 import { LOCAL_COMPONENTS, activeSet, componentOn } from "../core/local/mode.ts";
 
-/** Design §3.0.1's JSON, verbatim (`plans.regression` = "milestone"; plan Q12 adds "off" as a third value). */
+/** Design §3.0.1's JSON, verbatim (`plans.regression` = "milestone"; plan Q12 adds "off" as a third value),
+ *  plus `plans.redRunSec` (spot-check F1: the cap of a round's red runs; design §3.0.1 lists it too). */
 const DESIGN = JSON.parse(`{
   "mode": "default",
   "hints": {
@@ -35,7 +36,8 @@ const DESIGN = JSON.parse(`{
     "enabled": "auto", "dir": "docs/plans",
     "taskFiles": 2, "taskLines": 60, "splitFiles": 3, "splitLines": 100,
     "milestoneTasks": 5, "milestoneLines": 250, "taskTurns": 12,
-    "rounds": 2, "regression": "milestone", "publicApiGlobs": []
+    "rounds": 2, "regression": "milestone", "publicApiGlobs": [],
+    "redRunSec": 3600
   },
   "force": { "model": "", "thinkingLevel": "" }
 }`);

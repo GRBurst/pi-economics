@@ -133,6 +133,8 @@ export type MergeGateSettings = {
 export type PlanSettings = {
   enabled: Toggle; dir: string; taskFiles: number; taskLines: number; splitFiles: number; splitLines: number;
   milestoneTasks: number; milestoneLines: number; taskTurns: number; rounds: number;
+  /** Spot-check F1: the seconds one round of a plan's red runs may take together (each check has `checkTimeoutSec`). */
+  redRunSec: number;
   regression: "milestone" | "plan" | "off"; publicApiGlobs: string[];
 };
 

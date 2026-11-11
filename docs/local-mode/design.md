@@ -195,7 +195,8 @@ stay as they are. A force goes around `acceptModel` instead of changing it (§3.
     "enabled": "auto", "dir": "docs/plans",
     "taskFiles": 2, "taskLines": 60, "splitFiles": 3, "splitLines": 100,
     "milestoneTasks": 5, "milestoneLines": 250, "taskTurns": 12,
-    "rounds": 2, "regression": "milestone", "publicApiGlobs": []
+    "rounds": 2, "regression": "milestone", "publicApiGlobs": [],
+    "redRunSec": 3600
   },
   "force": { "model": "", "thinkingLevel": "" }
 }
