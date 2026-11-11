@@ -112,7 +112,7 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
   const reject = (errors: string[]) => ({ reject: errors.join("; ") });
   return async (args, caller: Caller) => {
     // D25 (design §3.2.2 step 3): the router's own spawn first, whatever routing and a force say; an unknown ticket is no card field.
-    const t = d.tickets?.take((args.task as { ticket?: unknown } | undefined)?.ticket, args.name);
+    const t = d.tickets?.take((args.task as { ticket?: unknown } | undefined)?.ticket, args.name, caller.sessionId);
     if (t) return ticketPolicy(t);
     if (!s.routing) return { model: args.model ?? caller.model, thinkingLevel: args.thinkingLevel ?? caller.thinkingLevel ?? "medium" };
     if (args.task === undefined) return { reject: cardRejection(s, "spawn_subagent needs a task card.") };

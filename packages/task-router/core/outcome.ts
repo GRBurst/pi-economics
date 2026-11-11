@@ -1,6 +1,7 @@
 // Outcome log events (spec §5.2.7, R2): allowlisted keys, bounded strings, no card or prompt text.
 import { createHash } from "node:crypto";
 import { isAbsolute, join } from "node:path";
+import type { Role, TicketRole } from "./local/overseer.ts";
 import type { Trip } from "./local/tripwires.ts";
 import type { Card, LoggedPlan, Start, ThinkingLevel } from "./types.ts";
 
@@ -22,6 +23,8 @@ const KEYS = [
   "action", "source", "model", "effort", "forced", "forceSource", "routedModel", "routedEffort",
   // local mode L3 (design §3.0.3): the hint line
   "trip", "stage", "count",
+  // local mode L4 (design §3.0.3): the review line; a ticket child's spawn line names its ticket role
+  "role", "member", "outcome", "blocking", "findings", "fallback", "inconsistent", "attempt", "commit", "branch", "ticket",
 ];
 const MAX_STR = 256;
 const MAX_ITEMS = 20;
@@ -85,6 +88,23 @@ export type HintStage = "hint" | "steer" | "parent";
 /** A hint (design §3.1.2, §3.0.3): `taskId` is "main" or the child's name; the trip and stage, never the hint's text. */
 export const hintEvent = (i: { now: Date; taskId: string; trip: Trip; stage: HintStage; count?: number; sessionId?: string }) =>
   finish({ ...base("hint", i.now, i.taskId), trip: i.trip, stage: i.stage, count: i.count, sessionId: i.sessionId });
+
+export type ReviewOutcome = "approve" | "revise" | "invalid" | "timeout" | "error";
+export type ReviewInput = { reviewId: string; role: Role; member: string; model: string; outcome: ReviewOutcome; attempt: number; durationMs: number;
+  fallback?: "budget" | "error"; findings?: number; blocking?: number; inconsistent?: boolean; commit?: string; branch?: string };
+/** One overseer attempt (design §3.0.3): `taskId` is the review id; the verdict's counts and flags, never its text. */
+export const reviewEvent = (i: ReviewInput & { now: Date }) =>
+  finish({
+    ...base("review", i.now, i.reviewId), role: i.role, member: i.member, model: i.model, outcome: i.outcome, attempt: i.attempt,
+    durationMs: i.durationMs, fallback: i.fallback, findings: i.findings, blocking: i.blocking, inconsistent: i.inconsistent,
+    commit: i.commit, branch: i.branch,
+  });
+/** A ticket child's spawn line (D26): no card, so no `cardHash`; kind `overseer` (a fixer: `implement`), `ticket` its role. */
+export const ticketSpawnEvent = (i: { now: Date; taskId: string; role: TicketRole; member: string; tier: string; model: string; effort: ThinkingLevel; sessionId?: string; parentSessionId?: string }) =>
+  finish({
+    ...base("spawn", i.now, i.taskId), kind: i.role === "fixer" ? "implement" : "overseer", ticket: i.role,
+    workerTier: i.tier, workerEffort: i.effort, workerMember: i.member, workerModel: i.model, sessionId: i.sessionId, parentSessionId: i.parentSessionId,
+  });
 
 export const serializeEvent = (e: OutcomeEvent): string => `${JSON.stringify(e)}\n`;
 

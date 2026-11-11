@@ -118,6 +118,12 @@ export function install(pi: PiLike, deps: Deps) {
   const gate = createGate({ ...pd, log, run: deps.run ?? runCheck });
   const onEvent = (e: ApiEvent): void => {
     const c = children.get((e as { name?: string }).name ?? "");
+    // D26: the router's own child (an overseer, a fixer) is no entry of `children`; its line has no verdict slot.
+    const t = e.type === "spawn" ? tickets.owner(e.name) : undefined;
+    if (e.type === "spawn" && t) {
+      log.ticketSpawn({ taskId: e.name, role: t.role, member: t.member, tier: settings.models[t.member]?.tier ?? "?", model: t.model, effort: t.effort,
+        sessionId: e.childSessionId, parentSessionId: t.parentSession });
+    }
     if (e.type === "spawn" && c) {
       log.spawn({ taskId: e.name, card: c.card, plan: c.plan, start: c.start, arm: armOf(c.parentSession), sessionId: e.childSessionId, parentSessionId: c.parentSession, unresolved: c.unresolved, forced: c.forced });
       if (c.esc) { // from the attempt state (D9): the failed attempt's entry may be gone (killed), its ranMember is not
@@ -129,7 +135,7 @@ export function install(pi: PiLike, deps: Deps) {
         });
       }
     }
-    if (e.type === "spawn" && !c && !settings.routing && e.name !== "main") { // nothing routed it, but the outcome log still knows the child
+    if (e.type === "spawn" && !c && !t && !settings.routing && e.name !== "main") { // nothing routed it, but the outcome log still knows the child
       const agents = api()?.list() ?? [];
       const kid = agents.find((a) => a.name === e.name);
       const parentSession = agents.find((a) => a.name === e.parent)?.sessionId;

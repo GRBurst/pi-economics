@@ -4,14 +4,17 @@
 import type { ChildTool, PolicyResult, SubagentsApiV1 } from "../api.ts";
 import type { Guard, SyncGuard } from "../toolguard.ts";
 import type { RouterSettings, ThinkingLevel } from "../types.ts";
+import type { ReviewInput } from "../outcome.ts";
 import type { Schema } from "./schema.ts";
-import { approve, VERDICT_SCHEMA, validateVerdict, type Verdict } from "./verdict.ts";
+import { approve, inconsistent, VERDICT_SCHEMA, validateVerdict, type Verdict } from "./verdict.ts";
 
 export type Role = "merge" | "plan-author" | "delta" | "plan-review" | "steer";
 export type TicketRole = Role | "fixer";
 export type Ticket = { role: TicketRole; reviewId: string; member: string; model: string; effort: ThinkingLevel; cwd: string;
   tools?: string[]; childTools: ChildTool[]; toolGuard?: Guard; briefAppend?: string;
-  forced?: { source: "command" | "settings"; routedModel: string; routedEffort: ThinkingLevel } };
+  forced?: { source: "command" | "settings"; routedModel: string; routedEffort: ThinkingLevel };
+  /** Set by `take`: the spawning caller's session (the spawn line's `parentSessionId`). */
+  parentSession?: string };
 
 /** `hex(bytes)`: a random hex string of 2·bytes characters (crypto in the shell, scripted in tests). */
 export function createTickets(hex: (bytes: number) => string) {
@@ -23,12 +26,12 @@ export function createTickets(hex: (bytes: number) => string) {
       open.set(id, t);
       return id;
     },
-    /** Single use: the ticket of `id` once, remembered under the child's name. */
-    take(id: unknown, name: string): Ticket | undefined {
+    /** Single use: the ticket of `id` once, remembered under the child's name with the caller's session. */
+    take(id: unknown, name: string, parentSession?: string): Ticket | undefined {
       const t = typeof id === "string" ? open.get(id) : undefined;
       if (!t) return undefined;
       open.delete(id as string);
-      byName.set(name, t);
+      byName.set(name, { ...t, ...(parentSession !== undefined && { parentSession }) });
       return t;
     },
     /** The ticket a child was spawned with (its spawn line, its events). */
@@ -67,6 +70,8 @@ export type OverseerDeps = {
   budget: Budget;
   /** `pi.appendEntry` (design §3.0.2). */
   append(customType: string, data: unknown): void;
+  /** The outcome log's `review` line, one per attempt (design §3.0.3). */
+  log: { review(i: ReviewInput): void };
 };
 
 export const AUDITOR = `You are an auditor, not an author. Before reading the diff or plan, derive the invariants the goal implies; then check the work against them.
@@ -182,8 +187,14 @@ export function createOverseer(d: OverseerDeps) {
           d.budget.opusUsed += 1;
           if (r.role === "steer") d.budget.steerUsed += 1;
         };
-        const reviewId = `rv-${d.hex(4)}`;
+        const reviewId = `rv-${d.hex(4)}`, t0 = d.now();
         const o = await attempt(a, r, p.member, model, p.effort, reviewId, charge);
+        // The line's outcome: a verdict's approval (V2), else how the attempt ended; an aborted attempt is an `error`.
+        const v = o.kind === "ok" && r.submit.name === "submit_verdict" ? o.value as Verdict : undefined;
+        d.log.review({ reviewId, role: r.role, member: p.member, model, attempt: no, durationMs: d.now() - t0, fallback: p.fallback,
+          outcome: o.kind === "ok" ? (v && !approve(v.findings) ? "revise" : "approve") : o.kind === "aborted" ? "error" : o.kind,
+          ...(v && { findings: v.findings.length, blocking: v.findings.filter((f) => f.blocking).length, ...(inconsistent(v) && { inconsistent: true }) }),
+          commit: r.commit, branch: r.branch });
         if (o.kind === "aborted") return { ok: false, outcome: "aborted" };
         if (o.kind !== "ok") { last = o.kind; continue; }
         d.append(REVIEW_TYPE, { reviewId, role: r.role, member: p.member, ...(r.commit && { commit: r.commit }), verdict: o.value,

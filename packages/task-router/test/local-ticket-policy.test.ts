@@ -73,7 +73,7 @@ test("routing off: the ticket is still honoured", async () => {
   assert.deepEqual(r.meta, { taskId: "rv-0000abcd", role: "merge" });
 });
 
-test("tickets: 32 hex from the source, single use, owner by name, forget", () => {
+test("tickets: 32 hex from the source, single use, owner by name with the caller's session, forget", () => {
   let n = 0;
   const t = createTickets((bytes) => (n++).toString(16).padStart(bytes * 2, "0"));
   const tk = { role: "steer", reviewId: "rv-1", member: "opus", model: OPUS, effort: "high", cwd: "/w", childTools: [] } as Ticket;
@@ -81,9 +81,9 @@ test("tickets: 32 hex from the source, single use, owner by name, forget", () =>
   assert.equal(id, "0".repeat(32));
   assert.equal(t.take(42, "a"), undefined);
   assert.equal(t.take("f".repeat(32), "a"), undefined);
-  assert.equal(t.take(id, "ovs-steer-1"), tk);
+  assert.equal(t.take(id, "ovs-steer-1", "s-main"), tk);
   assert.equal(t.take(id, "ovs-steer-2"), undefined);
-  assert.equal(t.owner("ovs-steer-1"), tk);
+  assert.deepEqual(t.owner("ovs-steer-1"), { ...tk, parentSession: "s-main" }); // the caller's session for the spawn line
   assert.equal(t.owner("ovs-steer-2"), undefined);
   t.forget("ovs-steer-1");
   assert.equal(t.owner("ovs-steer-1"), undefined);
