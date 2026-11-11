@@ -116,7 +116,8 @@ export function install(pi: PiLike, deps: Deps) {
     force: force.port, childGuard: (child, parent) => childTrips.guard(child, parent), tickets,
     local: { activeWorktree: () => (componentOn(settings, "worktrees") ? lm.branches.active()?.worktree : undefined), guard: (cwd) => lm.childGuard(cwd) },
   };
-  // L8: the names this process's policy accepted; a listed agent outside them was restored by the actor (installLocal, `placed`).
+  // L8: the names this instance's policy accepted (and, after a reload, the agents listed then); a listed agent outside them was
+  // restored by the actor (installLocal, `placed`).
   const placed = new Set<string>(), routed = createPolicy(pd);
   const policy: SpawnPolicy = async (args, caller) => {
     const r = await routed(args, caller);
@@ -234,6 +235,9 @@ export function install(pi: PiLike, deps: Deps) {
     active = hasSubagentsApiV1(a);
     if (active) { connect(); registerVerdict(); }
     else warnOnce(ctx, "actor:task-router", actorMissing("task-router", "task-router routing is off (no task_verdict, no task_cards, no nudge); the effort guard and fresh-on-cold stay on"));
+    // spot-check F5: at a reload the children listed (a pending record too) were placed by an earlier instance of this process; the
+    // spawn event of one still in flight reaches this instance, which must not take it for restored
+    if (e?.reason === "reload") for (const x of api()?.list() ?? []) placed.add(x.name);
     lm.restored(e?.reason); // L8: after the policy's registration
     if (connectError !== undefined) warnOnce(ctx, "spawn-policy:task-router", `task-router: no spawn policy: ${connectError}`);
     // Design §3.0.4: without the spawn API the overseer cannot run; the merge gate fails closed (L6).

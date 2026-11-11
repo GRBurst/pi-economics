@@ -93,3 +93,18 @@ test("spot-check F4: a child session's copy kills nothing: the actor takes one p
   await settle();
   assert.deepEqual(main.a.killed, []);
 });
+
+// ── spot-check F5: a spawn in flight across a reload ──
+test("spot-check F5: a child whose policy call ran before a /reload (its record is listed, pending) is not killed as restored when its spawn event arrives", async () => {
+  const { notes, ctx } = notesCtx();
+  const m = reviewRig({ agents: [agent("w1")], event: { reason: "reload" }, ctx });
+  await settle();
+  m.h.a.emit(spawned("w1")); // the attach of the spawn the old instance placed
+  await settle();
+  assert.deepEqual(m.h.a.killed, []);
+  assert.deepEqual(restoredNotes(notes), []);
+  m.h.a.agents.push(agent("w9")); // an agent that appears after the reload without this process's policy: restored
+  m.h.a.emit(spawned("w9"));
+  await settle();
+  assert.deepEqual(m.h.a.killed, ["w9"]);
+});
