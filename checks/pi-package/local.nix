@@ -2,8 +2,9 @@
 # {"mode":"local"} in the router's settings and the patched actor
 # (spawnPolicyApi 2, the spawn-api patch) installed after the package, the
 # router finds `api.spawn` and `api.kill` at session_start (no warning) and
-# registers task_verdict and, with worktrees on (L5), start_branch (the
-# probe, ./probe.ts, lists the tools at session_shutdown). A control run without the actor prints the warning: the
+# registers task_verdict and, with worktrees on (L5), start_branch, with the
+# merge gate on (L6), request_merge (the probe, ./probe.ts, lists the tools at
+# session_shutdown). A control run without the actor prints the warning: the
 # settings file is read, so the warning's absence above means something.
 {
   installed,
@@ -27,6 +28,7 @@ installed {
     [ -f probe.json ] || fail "the probe wrote nothing"
     jq -e '.tools | index("task_verdict") != null' probe.json >/dev/null || fail "no task_verdict among the tools: $(cat probe.json)"
     jq -e '.tools | index("start_branch") != null' probe.json >/dev/null || fail "no start_branch among the tools: $(cat probe.json)"
+    jq -e '.tools | index("request_merge") != null' probe.json >/dev/null || fail "no request_merge among the tools: $(cat probe.json)"
     pi remove ./actor >remove.log 2>&1 || { cat remove.log >&2; fail "pi remove ./actor failed"; }
     pi -p x --no-session </dev/null >control.all 2>&1 || true
     grep -qF 'task-router: local mode needs actor-subagents with spawnPolicyApi' control.all \

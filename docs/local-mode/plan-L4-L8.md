@@ -264,14 +264,14 @@ inventory/keys tests; L6.T3 adds the default-mode `git push origin main` asserti
 | L5.T6 default inventory | register `start_branch` unconditionally | P13 "default mode: inventory" | [x] |
 | L5.T7 write guard property | `inside()` by string prefix without a separator (`/r/x` vs `/r/xy`) | "write guard property" | [x] |
 | L5.T9 default mode keys | return `cwd` always | "default mode: no cwd key" | [x] |
-| L6.T2 AC-M1 allow corpus | block every `push` | "AC-M1 allow corpus" | [ ] |
-| L6.T3 AC-N3 | register the bash guard regardless of `mergeGate` | "AC-N3 default mode push" | [ ] |
-| L6.T4 AC-M7 | compose the git guard after the files guard returns early | "AC-M7" | [ ] |
-| L6.T9 AC-M4 binding | approval key without `commit` | "AC-M4" | [ ] |
-| L6.T10 ff only | `merge --no-ff` | "AC-M3" (tip ≠ reviewed commit) | [ ] |
-| L6.T14 AC-M6 | compare against the live ref instead of the record | "AC-M6" | [ ] |
-| L6.T16 contract `merge` | `reason: str` instead of `oneOf(REASONS)` | `test/contract.test.ts` › "merge reason" | [ ] |
-| L6.T17 log-contract `merge` | drop `log.merge` | `log-contract` | [ ] |
+| L6.T2 AC-M1 allow corpus | block every `push` | "AC-M1 allow corpus" | [x] |
+| L6.T3 AC-N3 | register the bash guard regardless of `mergeGate` | "AC-N3 default mode push" | [x] |
+| L6.T4 AC-M7 | compose the git guard after the files guard returns early | "AC-M7" | [x] |
+| L6.T9 AC-M4 binding | approval key without `commit` | "AC-M4" | [x] |
+| L6.T10 ff only | `merge --no-ff` | "AC-M3" (tip ≠ reviewed commit) | [x] |
+| L6.T14 AC-M6 | compare against the live ref instead of the record | "AC-M6" | [x] |
+| L6.T16 contract `merge` | `reason: str` instead of `oneOf(REASONS)` | `test/contract.test.ts` › "merge reason" | [x] |
+| L6.T17 log-contract `merge` | drop `log.merge` | `log-contract` | [x] |
 | L7.T2 AC-P4 | render keys unsorted | "AC-P4" (hash differs) | [ ] |
 | L7.T3 tick-only | allow `[x]`→`[ ]` | "AC-P5 untick blocked" | [ ] |
 | L7.T16 log-contract `plan` | drop `log.plan` | `log-contract` | [ ] |
@@ -869,88 +869,98 @@ message). Open notes, for L6 or later:
 
 ### L6 Merge gate
 
-#### L6.T1 Shell segments (`gitcmd`) `[ ] todo`
+#### L6.T1 Shell segments (`gitcmd`) `[x] done`
 - **Files**: `core/local/gitcmd.ts` (`segments`, `gitCalls`, `gitDirs`), `test/local-gitcmd.test.ts`. **Depends**: L5 done.
 - **RED**: table: quoting (`'a;b'`, `"a&&b"`), every operator, `$(git …)`, backticks, `bash -c 'cd x && git …'` (depth 2 recursed, depth 3 → unknown), `VAR=1 env nice git …`, `cd /a && git -C b …` → dir `/a/b`, `cd $X && git …` → dir undefined, `--git-dir=…` → undefined; unbalanced quote throws.
 - **GREEN**: S24 parsing. **Check**: fast runner; `chk task-router typecheck-task-router`.
 
-#### L6.T2 Classifier rules and corpus (AC-M1) `[ ] todo`
+#### L6.T2 Classifier rules and corpus (AC-M1) `[x] done`
 - **Files**: `core/local/gitcmd.ts` (`classify`, `safeClassify`), `test/local-gitcmd.test.ts`. **Depends**: L6.T1.
 - **RED**: block corpus generated = {push origin main, push origin HEAD:main, push origin +x:refs/heads/main, push --all, push --mirror, push --delete origin main, push (on main), merge x, pull, rebase x, cherry-pick c, revert c, am p, commit -m x, reset --hard x, branch -f main x, branch -D main, checkout -B main, switch -C main, update-ref refs/heads/main x, filter-branch …} × {direct (cwd on main), `-C <main dir>`, `cd <main dir> &&`, `bash -c '…'`, `echo $(…)`} (≥ 40); allow corpus = the same subcommands on `lm/x`, plus status/log/diff/show/fetch/`push origin lm/x`/`branch -d lm/x` and non-git commands (≥ 40). Every corpus block reason = `MERGE_REASON(main)` (X25); unknown dir → `UNKNOWN_DIR`; `safeClassify` of a throwing input: with `git` → `UNCLASSIFIED`, without → allow.
 - **GREEN**: S24 rules. **Check**: fast runner; `chk task-router`. **ACs**: AC-M1.
 
-#### L6.T3 Main bash guard (AC-N3 bash) `[ ] todo`
+#### L6.T3 Main bash guard (AC-N3 bash) `[x] done`
 - **Files**: `core/local/install.ts` (`tool_call` for `bash`/`powershell` when `activeSet(s).mergeGate`: `gitDirs` → `branchOf` (2 s; timeout = `"unknown"`) → `safeClassify`), `test/local-git-guard.test.ts`. **Depends**: L6.T2.
 - **RED**: local, fake-git main on `main`: `git push origin main` → `{block: true, reason}` naming `request_merge`; `git push origin lm/x` → `undefined`; `branchOf` timeout → `UNKNOWN_DIR` for `commit`; "AC-N3 default mode push": `{}` → `undefined` and no extra hook (plant §11); `{mergeGate: {enabled: "on"}}` in default mode → blocked (OQ11).
 - **Check**: fast runner; `chk task-router typecheck-task-router`. **ACs**: AC-N3 (bash), §3.4.5 main wiring.
 
-#### L6.T4 Child git guard, async `composeGuards` (AC-M7) `[ ] todo`
+#### L6.T4 Child git guard, async `composeGuards` (AC-M7) `[x] done`
 - **Files**: `core/toolguard.ts` (`composeGuards` async-aware, D44), `core/local/childguards.ts` (new: git guard for children), `core/policy.ts` (compose for routed children in local mode), `test/compose.test.ts` (new cases only), `test/local-git-guard.test.ts`. **Depends**: L6.T3.
 - **RED**: "AC-M7": a child spawned in local mode, `toolGuard("bash", {command: "git -C <wt> push origin HEAD:main"})` resolves to a reason naming `request_merge`; its `read` stays allowed; a `read-only+files` child keeps its files block (plant §11); P13 `compose.test.ts` cases green (sync results stay sync); property: async composition = first non-undefined in order.
 - **Check**: fast runner; `chk task-router typecheck-task-router`. **ACs**: AC-M7.
 
-#### L6.T5 Git port for merging `[ ] todo`
+#### L6.T5 Git port for merging `[x] done`
 - **Files**: `core/local/git.ts` (L6 methods), `test/local-git.test.ts`. **Depends**: L5.T3. **Parallel**: with L6.T1–T4.
 - **RED** (temp repo): `isAncestor`; `numstat(main...x)` equals the branch's own changes after main moved; `tree`; `worktreeAddDetached` + remove; `ffMerge` (fails on diverged); `updateRef` with a wrong `prev` fails; `push` to a local bare remote.
 - **Check**: fast runner; `chk task-router`.
 
-#### L6.T6 Pipeline steps 1–3 (AC-M2 part) `[ ] todo`
+#### L6.T6 Pipeline steps 1–3 (AC-M2 part) `[x] done`
 - **Files**: `core/local/merge.ts` (`resolve`, `refusal`, `oversize`, `reasonText`), `test/local-merge-refuse.test.ts`. **Depends**: L6.T5.
 - **RED**: `refusal` table over all `Facts` (order fixed, S26); "AC-M2 <code>" in a temp repo with a counting fake overseer for `main-branch`, `dirty`, `behind`, `abandoned`, `blocked`, `fixer-running` (state set in the store), `size` (151 lines, then 7 files), `no-worktree`: each → `status: "refused"`, that reason, 0 overseer calls, main sha unchanged; texts pinned.
 - **GREEN**: S26 steps 1–3. **Check**: fast runner; `chk task-router typecheck-task-router`. **ACs**: AC-M2 (steps 2–3).
 
-#### L6.T7 Step 5 checks (AC-M2 `check`) `[ ] todo`
+#### L6.T7 Step 5 checks (AC-M2 `check`) `[x] done`
 - **Files**: `core/local/merge.ts`, `test/local-merge-refuse.test.ts`. **Depends**: L6.T6.
 - **RED**: branch check `false` → `check`, detail has `exit 1` and the tail; `extraChecks: ["true", "exit 3"]` → `check` on the second; passing checks reach step 6; checks run with `cwd` = worktree (a check `test -f only-in-branch`).
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-M2 (check).
 
-#### L6.T8 Step 6 red run `[ ] todo`
+#### L6.T8 Step 6 red run `[x] done`
 - **Files**: `core/local/merge.ts`, `test/local-merge-redrun.test.ts`. **Depends**: L6.T7.
 - **RED**: check passes at base → the review input says `passed — the check may be vacuous`; fails at base → `failed as expected`; `redRun: false` → `skipped`, no temp worktree; the temp worktree is gone afterwards (also after a check timeout).
 - **Check**: fast runner; `chk task-router`.
 
-#### L6.T9 Steps 7–8: approvals and the merge review (AC-M4, AC-O1) `[ ] todo`
+#### L6.T9 Steps 7–8: approvals and the merge review (AC-M4, AC-O1) `[x] done`
 - **Files**: `core/local/merge.ts` (`Approvals` + `task-router/approval`, review input S27, targets = numstat paths), `test/local-merge-review.test.ts`. **Depends**: L6.T8, L4 done.
 - **RED**: "AC-O1": `request_merge` on a valid branch → exactly one `api.spawn` with `task.ticket`, ticket policy `cwd` = worktree, `childTools` `submit_verdict`. "AC-M4": approve c1 (fake child submits APPROVE) with merge stubbed off, commit c2, request → second review (spawn count 2), c1's approval unused; request again at c2 → no spawn (reuse); approvals rebuilt from entries in a new harness. Not approved → `revise` with V3 lines, `rejections` 1.
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-O1, AC-M4.
 
-#### L6.T10 Step 9: fast-forward, push, main-ref, cleanup (AC-M3) `[ ] todo`
+#### L6.T10 Step 9: fast-forward, push, main-ref, cleanup (AC-M3) `[x] done`
 - **Files**: `core/local/merge.ts`, `test/local-merge-ff.test.ts`. **Depends**: L6.T9.
 - **RED** (temp repo): "AC-M3": approved → main tip = reviewed commit (both: main checked out in W → `ff-only`; main not checked out → `update-ref`), state `merged`, `task-router/main-ref` entry, worktree and branch removed (`removeAfterMerge`); W dirty → `main-dirty`, main unchanged; `push: true` with a bare remote → `pushed: true`; HEAD moved after approval → re-review, not a merge.
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-M3.
 
-#### L6.T11 Fixer (AC-M5) `[ ] todo`
+#### L6.T11 Fixer (AC-M5) `[x] done`
 - **Files**: `core/local/merge.ts` (S28), `core/local/overseer.ts` (fixer ticket; force, D47), `core/local/worktree.ts` (fixer write block), `test/local-fixer.test.ts`. **Depends**: L6.T10.
 - **RED**: "AC-M5": second rejection → one `api.spawn` with the `fixerMember` model, `fixerEffort`, `cwd` = worktree, opts `quiet: false`, card brief listing the fix criteria; `request_merge` → `fixer-running`; main `edit` in that worktree → `a fixer owns this branch`; route fixer→main → state `active`, fixer killed; next rejection with `fixerRounds` 1 → `blocked`; then `request_merge` → `refused`/`blocked`; with a settings force the fixer spawn is forced (`forced: true`).
 - **Check**: fast runner; `chk task-router typecheck-task-router`. **ACs**: AC-M5.
 
-#### L6.T12 Review failure, budget, missing API (AC-O5, AC-O4) `[ ] todo`
+#### L6.T12 Review failure, budget, missing API (AC-O5, AC-O4) `[x] done`
 - **Files**: `core/local/merge.ts`, `test/local-merge-review.test.ts`. **Depends**: L6.T9.
 - **RED**: "AC-O5": `api.spawn` `{ok: false}` twice → `status: "error"`, `reason: "review-unavailable"`, detail `error: review unavailable`, main sha unchanged; "AC-O4": `opusUsed = budget` → the merge review spawns on `fallbackMember`, review line `fallback: "budget"`; no API extension → `review-unavailable` without spawning (fail closed).
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-O5, AC-O4 (merge).
 
-#### L6.T13 `request_merge` tool, rendering, abort, section `[ ] todo`
+#### L6.T13 `request_merge` tool, rendering, abort, section `[x] done`
 - **Files**: `core/local/install.ts` (register when `activeSet(s).mergeGate`; `execute(id, params, signal)` → D49), `core/prompt.ts` (`BRANCH_FULL`, `GATE_ONLY`), `test/local-prompt.test.ts`, `test/local-merge-tool.test.ts`. **Depends**: L6.T11, L6.T12.
 - **RED**: schema = §3.4.1; `details` = `MergeResult`, text = `status: <s> (<reason>)\n<detail>` + findings lines; `isError` only for `error`; abort mid-review → overseer killed, `aborted`; "AC-R3 worktrees+mergeGate" pinned (`BRANCH_FULL`), "mergeGate only" pinned (`GATE_ONLY`); default mode inventory green.
 - **Check**: fast runner; `chk task-router typecheck-task-router`. **ACs**: AC-R3 (gate lines).
 
-#### L6.T14 Bypass detection (AC-M6) `[ ] todo`
+#### L6.T14 Bypass detection (AC-M6) `[x] done`
 - **Files**: `core/local/merge.ts` (`MainRefs`, `checkBypass`), `core/local/install.ts` (after main `bash` results; on child `turn` events, queued for the next main `tool_result` per P13 D17), `test/local-bypass.test.ts`. **Depends**: L6.T10.
 - **RED**: "AC-M6" (temp repo): `git update-ref refs/heads/main <other>` outside the gate, then a `bash` result → one `gatebypass` line (`from`, `to`, `repo` basename), one `notify(…, "warning")` (`task-router: main moved outside the gate (<repo> <main> <from7>→<to7>)`), a `<router-hint trip="gatebypass">` block, record updated (a second result → nothing); first sight of a repo records silently; a merge through the gate → no line.
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-M6.
 
-#### L6.T15 `merge`/`gatebypass` builders (AC-L2) `[ ] todo`
+#### L6.T15 `merge`/`gatebypass` builders (AC-L2) `[x] done`
 - **Files**: `core/outcome.ts`, `core/log.ts`, `test/merge-log.test.ts`. **Depends**: L6.T13. **Parallel**: with L6.T16.
 - **RED**: shapes; one `merge` line per `request_merge` call (every status); `textFree` over lines from generated branches/details. **Check**: fast runner; `chk task-router`. **ACs**: AC-L2 (merge, gatebypass).
 
-#### L6.T16 Contract `merge`/`gatebypass` (AC-L1) `[ ] todo`
+#### L6.T16 Contract `merge`/`gatebypass` (AC-L1) `[x] done`
 - **Files**: token-meter `contract.ts`, tests, `LOGS.md`. **RED**: valid lines pass; `reason: "nope"` fails (plant §11); `gatebypass` without `to` fails; enums equal the router's (`REASONS`). **Check**: `chk token-meter typecheck-token-meter`. **ACs**: AC-L1.
 
-#### L6.T17 log-contract real path `[ ] todo`
+#### L6.T17 log-contract real path `[x] done`
 - **Files**: `checks/log-contract/contract.ts` (fake-git harness: one merged and one refused request, one bypass). **Depends**: L6.T15, L6.T16. **RED/plant**: required events += `merge`, `gatebypass`; drop `log.merge` → red. **Check**: `chk log-contract`.
 
-#### L6.T18 Package check, docs, close `[ ] todo`
+#### L6.T18 Package check, docs, close `[x] done`
 - **Files**: `checks/pi-package/local.nix` (`request_merge` in `tools`), `docs/pi-economics.md` (merge gate: settings, pipeline, refusal codes, fixer, guard, bypass, events). **Check**: `chk pi-install-local leak boundary`; sweep KG-R, KG-L, KG-M, KG-A, KG-P.
+
+#### L6 deviations
+- T8: the red run's base is main's tip at the request (the commit the branch merges onto), not the record's `base`.
+- T9: the merge overseer's cwd is the main checkout, `RunArgs.worktree` the worktree (LD14 supersedes "ticket cwd = worktree").
+- T14: the refs are read off the event (as over-size, D17): the `gatebypass` line and the warning come when the read ends,
+  the hint block on the next main tool result, not on the `bash` result itself (an awaited `tool_result` handler would hold
+  every bash result on git). T14 adds `gatebypassEvent`/`log.gatebypass`, T15 the `merge` builder.
+- T15/T16: one `merge` line per call includes a `no-worktree` refusal before any branch is known: `taskId: ""`, which the
+  contract accepts on `merge` as on `force`. The `REASONS` equality is in `checks/log-contract/contract.ts`, next to ROLES.
+- Open (L4 note): ticket spawns, the fixer included, still bypass member slots and `dailyCap`; not decided in L6.
 
 ### L7 Plans
 

@@ -306,7 +306,7 @@ out) is read by the package's settings test and by the `module-eval` case
 components `hints`, `worktrees`, `mergeGate` and `plans`, each with
 `enabled = "auto" | "on" | "off"` (default `"auto"`: on in local mode, off in
 default mode), the `overseer` that serves them (no switch of its own), and `force` (below); L1 validates them (a bad value is reported and its
-default kept); `hints` works since L3, the overseer since L4 and `worktrees` since L5 (below); `mergeGate` and `plans` do nothing yet. The keys, their defaults and
+default kept); `hints` works since L3, the overseer since L4, `worktrees` since L5 and `mergeGate` since L6 (below); `plans` does nothing yet. The keys, their defaults and
 the messages are in `packages/task-router/core/settings.ts` and
 `packages/task-router/core/local/settings.ts`. In local mode:
 
@@ -527,6 +527,102 @@ repositories (`git` is a `nativeCheckInputs` of the package). The code:
 `core/local/worktree.ts` (names, `startBranch`, the guard, cleanup),
 `core/local/branches.ts` (the store), `core/local/branchtool.ts` (the tool).
 
+**Merge gate (milestone L6).** With `mergeGate` on (local mode, or
+`mergeGate.enabled = "on"`) a branch reaches a main branch (the first of
+`mergeGate.mainBranches` that exists, `main`, `master`) only through the tool
+`request_merge`, registered for the main session. It takes `branch` (default:
+the active worktree's branch) and `summary` (at most 500 characters, for the
+reviewer) and answers with the text `status: <status> (<reason>)`, the detail
+and one line per finding, plus `details` `{status, reason?, detail, commit?,
+reviewId?, findings?, pushed?}`; only `status: "error"` and invalid input are
+error results. The section line of the prompt names it ("…, then
+request_merge. You cannot merge, push or commit to a main branch; the router
+blocks it."). The pipeline runs the cheap and deterministic steps first and
+Opus last (`packages/task-router/core/local/merge.ts`):
+
+1. resolve the repository, the branch, its worktree, the main branch and
+   `commit` (the worktree's `HEAD`);
+2. refuse: `main-branch` (the branch is a main branch), `abandoned`, `blocked`,
+   `fixer-running`, `dirty` (the worktree has uncommitted changes), `behind`
+   (main is not an ancestor: rebase onto it in the worktree); `no-worktree`
+   when no branch is given and none is active, or the branch has no worktree;
+3. size: the diff `main...commit` over `maxDiffLines` (150) changed lines or
+   `maxDiffFiles` (6) files is refused with `size` ("split the branch"), no
+   review;
+4. checks: the branch's check, then `extraChecks` (`[]`), in the worktree
+   (`checkTimeoutSec`); the first failure is refused with `check` and the
+   output's tail (40 lines, 4 kB);
+5. red run (`redRun`, on): the branch's check at the base in a detached
+   temporary worktree (removed afterwards); a check that passes there is
+   marked for the reviewer ("passed — the check may be vacuous"), it refuses
+   nothing;
+6. approval reuse: an approval (`task-router/approval`) holds for exactly
+   `(repo, branch, commit, tree)`; a new commit needs a new review;
+7. review: the `merge` overseer (above) in the main checkout, the worktree by
+   its absolute path; its input is the goal, the summary, the check runs, the
+   red run, risky paths and the numstat and diff (at most `maxDiffLines`
+   lines). An overseer that cannot run (no spawn API, both attempts failed) is
+   `error` `review-unavailable`; an abort of the tool call kills it, `error`
+   `aborted`. A rejection counts (`rejections`) and answers `revise` with the
+   findings;
+8. merge, fast-forward only: when the main branch is checked out in a
+   worktree, `git merge --ff-only` there (that checkout must be clean, else
+   `main-dirty`), otherwise `git update-ref` with the old value; a `HEAD` that
+   moved since the approval is reviewed again once. With `push` (off), `git
+   push <remote> <main>` (`origin`; a failed push is reported in the detail,
+   the merge stands). Then the main tip is recorded (`task-router/main-ref`),
+   the branch becomes `merged` and, with `worktrees.removeAfterMerge`, its
+   worktree and branch are removed. Git failures are `error` `git`.
+
+The refusal codes are `main-branch`, `dirty`, `behind`, `fixer-running`,
+`abandoned`, `blocked`, `size`, `scope`, `check`, `main-dirty`,
+`plan-changed`, `no-worktree`, `review-unavailable`, `aborted` and `git`
+(`scope` and `plan-changed` belong to plans, L7).
+
+Fixer: at `rejectionsBeforeFixer` (2) rejections the router spawns a fixer
+itself (a ticket, `fixerMember` at `fixerEffort`: `sonnet`, `high`; under a
+force, the forced model) in the worktree, with the blocking findings as its
+acceptance and the git guard composed in; the branch is `fixer`, main-session
+writes into it are blocked and `request_merge` answers `fixer-running` until
+the fixer reports to main (the router then kills it) or dies. A fixer round
+rejected again with `fixerRounds` (1) used up makes the branch `blocked`:
+abandon it and start a smaller one.
+
+Git guard: a `bash` or `powershell` call of the main session, of a routed
+child or of the fixer that would write a main branch is blocked with "merging
+into <main> goes through request_merge": `push` to a main branch (refspec,
+`--all`, `--mirror`, `--delete`, or no refspec on a main branch), `merge`,
+`pull`, `rebase`, `cherry-pick`, `revert`, `am`, `commit` or `reset` on a
+main branch, `branch -f|-M|-m|-D|-d <main>`, `checkout -B`, `switch -C`,
+`update-ref refs/heads/<main>`, and `filter-branch`. The classifier
+(`core/local/gitcmd.ts`) splits the command (operators, `$(…)`, `bash -c`),
+follows a literal `cd` and `git -C`, and asks git for the directory's branch
+(2 s). A current-branch subcommand in a directory it cannot tell is blocked
+("cannot tell the branch; run git with a literal -C <worktree>"); a command it
+cannot parse is blocked only when it contains `git` ("router could not
+classify this git command; split it"); everything else, git on other branches
+included, passes.
+
+Bypass detection: after every main-session `bash` result and every child's
+turn the router reads the main tip of each known repository (the session
+cwd's and every one with a branch record) and compares it with the recorded
+one; the first sight of a repository is recorded silently. A tip that moved
+outside the gate gives a `gatebypass` line, the warning `task-router: main
+moved outside the gate (<repo> <main> <from>→<to>)` and a new record at once,
+and a `<router-hint trip="gatebypass">` block in the next main tool result.
+Nothing is reverted, and `user_bash` is not watched (the wording is neutral:
+the router cannot tell who moved it).
+
+Logs: one `merge` line per `request_merge` call (`taskId` the branch,
+`outcome` `merged`, `refused`, `revise`, `fixer` or `failed` (status
+`error`), optional `reason` (the code), `commit`, `nLines`, `nFiles`,
+`reviewId`, `pushed`) and the `gatebypass` line (`taskId` the main branch,
+`from`, `to`, optional `repo`: the directory name), no free text
+(`packages/token-meter/LOGS.md`). The code: `core/local/merge.ts` (the
+pipeline, approvals, the fixer's brief, bypass detection, the tool),
+`core/local/gitcmd.ts` and `core/local/childguards.ts` (the guard),
+`core/local/install.ts` (the wiring).
+
 **Scout gate (Group 6, 2026-10-28).** Haiku at medium scored 0.646 against
 Sonnet high's 0.917 (threshold 0.825, H6.4; two runs per task and arm), so
 `lookup` keeps its floor: `profiles.lookup.minLevel` stays 2
@@ -580,7 +676,9 @@ record. The redesign's Groups 3–7 are closed; Group 6 re-recorded nothing.
 
 **Log contract.** `log-contract` runs the real code path of every log writer
 (token-meter, task-router, cache-lifecycle, experiments) into one agent dir and
-requires `pi-analyse --check` to pass and every report section to have data.
+requires `pi-analyse --check` to pass and every report section to have data;
+the merge gate runs there on the fake git (one merged and one refused request,
+one bypass), since the check has no git.
 
 Checks: `task-router`, `typecheck-task-router`, `iface-subagents-task-router`,
 `iface-experiments-task-router`, `iface-policy-task-router`, `router-golden`,
@@ -683,7 +781,7 @@ points into `src`.
 | `pi-install-smoke` | `pi install ./pkg` offline: settings entry, `pi list`, every manifest extension loads, the router warns once, experiments stays inert (AC1) |
 | `pi-git-route` | the npm step of a git install (`--omit=dev --legacy-peer-deps`) is a no-op offline (AC10) |
 | `pi-install-actor` | the package next to the patched actor: no warning, `task_verdict` registered and active (AC5) |
-| `pi-install-local` | the same with the router's settings `{"mode": "local"}`: the router finds the spawn API (no warning), `task_verdict` and `start_branch` registered; a control run without the actor prints the spawn-API warning (local mode L4) |
+| `pi-install-local` | the same with the router's settings `{"mode": "local"}`: the router finds the spawn API (no warning), `task_verdict`, `start_branch` and `request_merge` registered; a control run without the actor prints the spawn-API warning (local mode L4) |
 | `pi-install-duplicate` | the package next to the Nix links: one `loaded twice` per component, exactly one bound copy (the actor warnings of task-router and cache-lifecycle appear once), no tool conflict, pi's skill loader reports the collision (AC7) |
 | `pi-install-scope-replaced`, `pi-install-scope-both` | the package in two scopes of a trusted project (user `pi install` plus `.pi/settings.json`): where the project entry replaces the user's package, no `loaded twice` and one bound copy; where a second copy joins it, one `loaded twice` per component and one bound copy (AC7, review M1) |
 | `pi-install-subset` | the README's filter loads only the listed extensions (AC4) |
