@@ -54,3 +54,47 @@ test("fake-git: a path in the way, a scripted failure and the call log", async (
   assert.deepEqual(f.calls, ["worktreeAdd /r/x /w/in-the-way lm/a main", "branchDelete /r/x main"]);
   assert.equal(await f.git.root("/elsewhere"), undefined);
 });
+
+/** L6.T5: the merge port's scenario (no shas in the results: comparisons and booleans). `commit(dir, file)` makes one commit
+ *  in the checkout `dir` that adds `file` (one line) and returns its sha. */
+async function mergeScenario(git: Git, repo: string, wt: string, commit: (dir: string, file: string) => string): Promise<unknown[]> {
+  const seen: unknown[] = [];
+  const paths = async (a: string, b: string) => (await git.numstat(repo, a, b))?.map((s) => [s.path, s.added, s.deleted]);
+  seen.push((await git.worktreeAdd(repo, wt, "lm/x", "main")).ok);
+  const c1 = commit(wt, "x.ts");
+  seen.push(await paths("main", c1), await git.isAncestor(repo, "main", c1), await git.isAncestor(repo, c1, "main"));
+  commit(repo, "m.ts"); // main moves on
+  seen.push(await paths("main", c1), await git.isAncestor(repo, "main", c1), await paths("main", "nosuch"));
+  seen.push((await git.ffMerge(repo, c1)).ok); // diverged
+  seen.push((await git.tree(repo, c1)) !== undefined, (await git.tree(repo, c1)) === (await git.tree(repo, "lm/x")), await git.tree(repo, "nosuch"));
+  const tmp = `${wt}-red`;
+  seen.push((await git.worktreeAddDetached(repo, tmp, "main")).ok, await git.branchOf(tmp), (await git.sha(tmp, "HEAD")) === (await git.sha(repo, "main")));
+  seen.push((await git.worktreeRemove(repo, tmp, true)).ok, (await git.worktrees(repo)).length);
+  seen.push((await git.updateRef(repo, "refs/heads/main", c1, c1)).ok); // main is not at c1
+  const wt2 = `${wt}-2`;
+  seen.push((await git.worktreeAdd(repo, wt2, "lm/y", "main")).ok);
+  const c2 = commit(wt2, "y.ts");
+  seen.push((await git.ffMerge(repo, c2)).ok, (await git.sha(repo, "main")) === c2, (await git.sha(wt2, "HEAD")) === c2, (await git.sha(repo, "HEAD")) === c2);
+  seen.push((await git.updateRef(repo, "refs/heads/lm/x", c2, c1)).ok, (await git.sha(repo, "lm/x")) === c2, (await git.sha(wt, "HEAD")) === c2);
+  seen.push((await git.worktrees(repo)).map((w) => [w.branch, w.head === c2]));
+  return seen;
+}
+
+test("fake-git and real git agree on the merge scenario (L6.T5)", async () => {
+  const r = tempRepo();
+  const wt = join(r.base, "r.worktrees", "lm--x");
+  const real = await mergeScenario(createGit(gitRunner("git", r.env)), r.dir, wt, (dir, file) => r.commit(file, "1\n", file, dir));
+  const f = fakeGit({ repos: [{ root: r.dir }] });
+  const fake = await mergeScenario(f.git, r.dir, wt, (dir, file) => f.commit(dir, [{ path: file, added: 1, deleted: 0 }]));
+  assert.deepEqual(fake, real);
+  assert.ok(real.length > 20);
+});
+
+test("fake-git: push records the remote, the branch and its commit; an unknown remote and a scripted failure fail", async () => {
+  const f = fakeGit({ repos: [{ root: "/r/x" }] });
+  assert.equal((await f.git.push("/r/x", "origin", "main")).ok, true);
+  assert.deepEqual(f.pushes, [`origin main ${"a".repeat(40)}`]);
+  assert.equal((await f.git.push("/r/x", "nosuch", "main")).ok, false);
+  f.fail.set("push", "rejected");
+  assert.deepEqual(await f.git.push("/r/x", "origin", "main"), { ok: false, err: "rejected" });
+});

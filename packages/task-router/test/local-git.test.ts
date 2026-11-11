@@ -245,3 +245,101 @@ test("diff: failing, timing out or throwing → \"\"", async () => {
   assert.equal(await createGit(gitRunner("git", r.env)).diff(r.dir, "nosuchbase", undefined, 80), "");
   assert.equal(await createGit(gitRunner("git", r.env)).diff(join(r.base, "missing"), "main", undefined, 80), "");
 });
+
+// ── L6.T5: the port for merging (design §3.4.2; plan S21) ──
+test("isAncestor: a commit and its ancestors are, a diverged one is not; an unknown ref is not (no exception)", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const c1 = r.commit("a.ts", "a\n");
+  r.git(["branch", "side"]);
+  const c2 = r.commit("b.ts", "b\n");
+  assert.equal(await git.isAncestor(r.dir, c1, c2), true);
+  assert.equal(await git.isAncestor(r.dir, c2, c2), true);
+  assert.equal(await git.isAncestor(r.dir, c2, c1), false);
+  assert.equal(await git.isAncestor(r.dir, "main", "side"), false);
+  assert.equal(await git.isAncestor(r.dir, "side", "main"), true);
+  assert.equal(await git.isAncestor(r.dir, "nosuch", "main"), false);
+  assert.equal(await git.isAncestor(join(r.base, "missing"), "main", "main"), false);
+});
+
+test("numstat(main...x): the branch's own changes, also after main moved on; a failure is undefined", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const wt = join(r.base, "wt");
+  r.git(["worktree", "add", "-q", "-b", "lm/x", wt]);
+  r.commit("x.ts", "1\n2\n3\n", "x", wt);
+  r.commit("README", "r\nchanged\n", "main moves"); // on main, after the branch point
+  const x = r.git(["rev-parse", "lm/x"]);
+  assert.deepEqual(await git.numstat(r.dir, "main", x), [{ path: "x.ts", added: 3, deleted: 0 }]);
+  assert.deepEqual(await git.numstat(wt, "main", "HEAD"), [{ path: "x.ts", added: 3, deleted: 0 }]);
+  assert.deepEqual(await git.numstat(r.dir, "main", "main"), []);
+  assert.equal(await git.numstat(r.dir, "main", "nosuch"), undefined);
+});
+
+test("tree: a commit's tree; equal content, equal tree; unknown → undefined", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const c1 = r.commit("a.ts", "a\n");
+  assert.equal(await git.tree(r.dir, c1), r.git(["rev-parse", `${c1}^{tree}`]));
+  r.git(["-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "empty"]);
+  assert.equal(await git.tree(r.dir, "HEAD"), await git.tree(r.dir, c1));
+  assert.equal(await git.tree(r.dir, "nosuch"), undefined);
+});
+
+test("worktreeAddDetached: a detached worktree at the commit; worktreeRemove(force) removes it with untracked files in it", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const c1 = r.commit("a.ts", "a\n");
+  r.commit("b.ts", "b\n");
+  const tmp = join(r.base, "red");
+  assert.deepEqual(await git.worktreeAddDetached(r.dir, tmp, c1), { ok: true, out: "" });
+  assert.equal(await git.branchOf(tmp), undefined);
+  assert.equal(r.git(["rev-parse", "HEAD"], tmp), c1);
+  assert.equal(existsSync(join(tmp, "b.ts")), false);
+  writeFileSync(join(tmp, "build.out"), "x\n");
+  assert.equal((await git.worktreeRemove(r.dir, tmp)).ok, false, "without force a tree with untracked files stays");
+  assert.deepEqual(await git.worktreeRemove(r.dir, tmp, true), { ok: true, out: "" });
+  assert.equal(existsSync(tmp), false);
+  assert.deepEqual((await git.worktrees(r.dir)).map((w) => w.dir), [r.dir]);
+});
+
+test("ffMerge: fast-forwards the branch checked out in the directory; refuses a diverged commit and changes nothing", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const wt = join(r.base, "wt");
+  r.git(["worktree", "add", "-q", "-b", "lm/x", wt]);
+  const x = r.commit("x.ts", "x\n", "x", wt);
+  assert.equal((await git.ffMerge(r.dir, x)).ok, true);
+  assert.equal(r.git(["rev-parse", "main"]), x);
+  assert.equal(r.git(["rev-list", "--count", "main"]), "2", "no merge commit");
+  assert.equal(existsSync(join(r.dir, "x.ts")), true, "the main checkout's files follow");
+  r.git(["-C", wt, "reset", "-q", "--hard", "HEAD~1"]);
+  const y = r.commit("y.ts", "y\n", "y", wt); // diverged from main
+  const before = r.git(["rev-parse", "main"]);
+  assert.equal((await git.ffMerge(r.dir, y)).ok, false);
+  assert.equal(r.git(["rev-parse", "main"]), before);
+});
+
+test("updateRef: moves a ref from the expected old value; a wrong old value fails and changes nothing", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const c0 = r.git(["rev-parse", "main"]);
+  r.git(["branch", "side"]);
+  const c1 = r.commit("a.ts", "a\n");
+  assert.equal((await git.updateRef(r.dir, "refs/heads/side", c1, c1)).ok, false, "side is not at c1");
+  assert.equal(r.git(["rev-parse", "side"]), c0);
+  assert.deepEqual(await git.updateRef(r.dir, "refs/heads/side", c1, c0), { ok: true, out: "" });
+  assert.equal(r.git(["rev-parse", "side"]), c1);
+});
+
+test("push: the branch to a remote (a local bare repository); an unknown remote fails", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  const bare = join(r.base, "remote.git");
+  r.git(["init", "-q", "--bare", bare], r.base);
+  r.git(["remote", "add", "origin", bare]);
+  const c1 = r.commit("a.ts", "a\n");
+  assert.equal((await git.push(r.dir, "origin", "main")).ok, true);
+  assert.equal(r.git(["rev-parse", "main"], bare), c1);
+  assert.equal((await git.push(r.dir, "nosuch", "main")).ok, false);
+});

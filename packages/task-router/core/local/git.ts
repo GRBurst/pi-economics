@@ -36,7 +36,8 @@ export type Git = {
   worktrees(repo: string): Promise<Wt[]>;
   sha(repo: string, ref: string): Promise<string | undefined>;
   worktreeAdd(repo: string, dir: string, branch: string, base: string): Promise<Res>;
-  worktreeRemove(repo: string, dir: string): Promise<Res>;
+  /** `git worktree remove`; `force`: also a tree with changes or untracked files (the red run's temporary worktree). */
+  worktreeRemove(repo: string, dir: string, force?: boolean): Promise<Res>;
   /** `git branch -d` (refuses a branch with unmerged commits); `force`: `-D`. */
   branchDelete(repo: string, branch: string, force?: boolean): Promise<Res>;
   dirty(dir: string): Promise<boolean>;
@@ -46,6 +47,21 @@ export type Git = {
   /** `git diff a [b]` in `dir` as text, cut to `maxLines` lines (the last says how many more); `b` undefined = the working tree,
    *  whose untracked files follow as one `untracked file <path> (<n> lines)` line each. Failing or timing out (5 s) gives "". */
   diff(dir: string, a: string, b: string | undefined, maxLines: number): Promise<string>;
+  // ── merging (L6, design §3.4.2; plan S21) ──
+  /** `a` is `b` or an ancestor of it; false when git cannot tell (an unknown ref). */
+  isAncestor(repo: string, a: string, b: string): Promise<boolean>;
+  /** `git diff --numstat a...b`: the changes of `b` since its merge base with `a`; undefined when git fails (fail closed). */
+  numstat(repo: string, a: string, b: string): Promise<Stat | undefined>;
+  /** A commit's tree; undefined for an unknown commit. */
+  tree(repo: string, commit: string): Promise<string | undefined>;
+  /** `git worktree add --detach dir commit` (the red run's temporary worktree). */
+  worktreeAddDetached(repo: string, dir: string, commit: string): Promise<Res>;
+  /** `git merge --ff-only commit` in `dir` (the checkout that has the main branch); never a merge commit (LD7). */
+  ffMerge(dir: string, commit: string): Promise<Res>;
+  /** `git update-ref ref next prev`: moves `ref` only from `prev`. */
+  updateRef(repo: string, ref: string, next: string, prev: string): Promise<Res>;
+  /** `git push remote branch`. */
+  push(repo: string, remote: string, branch: string): Promise<Res>;
 };
 /** A command that either gave its stdout or failed with the tail of its stderr (2048 characters). */
 export type Res = { ok: true; out: string } | { ok: false; err: string };
@@ -96,7 +112,7 @@ export function createGit(run: GitRun): Git {
     },
     sha: (repo, ref) => line(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], repo),
     async worktreeAdd(repo, dir, branch, base) { return res(await run(["worktree", "add", "-q", "-b", branch, dir, base], repo, ADD_MS)); },
-    async worktreeRemove(repo, dir) { return res(await run(["worktree", "remove", dir], repo, ADD_MS)); },
+    async worktreeRemove(repo, dir, force = false) { return res(await run(["worktree", "remove", ...(force ? ["--force"] : []), dir], repo, ADD_MS)); },
     async branchDelete(repo, branch, force = false) { return res(await run(["branch", force ? "-D" : "-d", branch], repo, SHORT_MS)); },
     async diffStat(dir, base) {
       try {
@@ -119,6 +135,16 @@ export function createGit(run: GitRun): Git {
         return (lines.length > maxLines ? [...lines.slice(0, maxLines - 1), `… ${lines.length - (maxLines - 1)} more lines`] : lines).join("\n");
       } catch { return ""; }
     },
+    async isAncestor(repo, a, b) { const r = await run(["merge-base", "--is-ancestor", a, b], repo, SHORT_MS); return r.exit === 0; },
+    async numstat(repo, a, b) {
+      const r = await run(["-c", "core.quotepath=off", "diff", "--numstat", "--no-renames", `${a}...${b}`, "--"], repo, STAT_MS);
+      return r.exit === 0 ? parseNumstat(r.out) : undefined;
+    },
+    tree: (repo, commit) => line(["rev-parse", "--verify", "--quiet", `${commit}^{tree}`], repo),
+    async worktreeAddDetached(repo, dir, commit) { return res(await run(["worktree", "add", "-q", "--detach", dir, commit], repo, ADD_MS)); },
+    async ffMerge(dir, commit) { return res(await run(["merge", "--ff-only", "-q", commit], dir, ADD_MS)); },
+    async updateRef(repo, ref, next, prev) { return res(await run(["update-ref", ref, next, prev], repo, SHORT_MS)); },
+    async push(repo, remote, branch) { return res(await run(["push", "-q", remote, branch], repo, ADD_MS)); },
     async dirty(dir) {
       const r = await run(["status", "--porcelain"], dir, ADD_MS);
       return r.exit !== 0 || r.out.trim() !== ""; // a status that fails counts as dirty: nothing is removed or merged on it
