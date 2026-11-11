@@ -402,7 +402,8 @@ with the submit tool (§3.0.4, review F3).
 
 1. **Budget.** If `opusUsed < overseer.budget` (`steer`: also `steerUsed < steerBudget`), the member is
    `overseer.member`/`effort`. Otherwise it is `fallbackMember`/`fallbackEffort`, logged as `fallback: "budget"`
-   (`steer` is skipped instead).
+   (`steer` is skipped instead). The pick holds its unit until the spawn is charged or fails, so concurrent runs
+   see it as used and cannot overrun either budget (review L5).
 2. **Ticket.** The router creates a ticket (128-bit random, single use) and stores
    `{role, member, effort, cwd, tool, resolve, reject}` under it.
 3. **Spawn.**
@@ -421,6 +422,12 @@ with the submit tool (§3.0.4, review F3).
    ```
 
    An unknown ticket falls through to card routing, so a forged ticket is just a card without its fields.
+   That makes the router's own policy a precondition (review F1): the router runs an overseer only while its
+   policy is registered, and after a successful spawn it requires that its policy took the ticket. A child it
+   did not route (another extension's policy, or none) may have every default tool and no guard, so it is killed
+   at once, with a warning; the attempt is an `error` that is neither charged nor retried (fail closed). A
+   ticket no policy took (the spawn failed before the policy ran: a duplicate name, the agent cap) is revoked
+   (review F4).
 
    **The overseer's cwd (LD14, review F5).** The child session's cwd is the repository's main checkout (the
    base), never the branch's worktree. pi loads `AGENTS.md`/`CLAUDE.md` from the cwd and its ancestors whatever

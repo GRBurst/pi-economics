@@ -773,6 +773,29 @@ generated inputs put spaces and fences into every free text, so no free text can
 - **Files**: `docs/pi-economics.md` (actorSubagents: three patches, `spawn`/`kill`/`childTools`/`cwd`/`quiet`; taskRouter: overseer settings, budget, steer, `review` event, the warning, third assertion; Patched upstreams; Checks: `iface-policy-task-router`, `pi-install-local`), `README.md` l.16.
 - **Depends**: L4.T1–T17. **Check**: `chk leak boundary`; sweep KG-R, KG-L, KG-M, KG-A, KG-P.
 
+#### L4 review follow-up `[x] done`
+The review of L4 (0425d3e..a3ac7c0) found F1–F5 and low items L1–L5, N1–N3. Fixed: F1 (fail closed without the
+router's policy), F2 (LD13: a quiet agent answers only to the API and the user), F3 (a quiet child has no agent
+preamble; the prompts say to start at once), F4 (a ticket no policy took is revoked), F5 (LD14: the overseer runs in
+the main checkout; `RunArgs.worktree` names the tree under review; L6.T9/T11 pass it), L3 (quiet from the
+reservation), L5 (the Opus pick holds its unit), N1 (docs: a failed steer sends the escalation as the steer
+message). Open notes, for L6 or later:
+- L1 `overseer.ts` attempt: any `error` event ends the attempt at once, a transient 429 that pi-retry would recover
+  from included; the Opus unit is spent and the run falls back. Count an `error` only when the child is still idle
+  after the actor's error grace (`errorNoticeGraceMs`).
+- L2 `overseer.ts` attempt: `timeoutSec` starts after `api.spawn` resolves, and `a.spawn`/`a.kill` are unbounded;
+  a hung session creation leaves `run` pending (a steer's `running` stays true for the session). Start the deadline
+  before the spawn and race it.
+- L4 Ticket spawns bypass member slots, health, blocks and the `dailyCap` counter (`shell.ts` counts only routed
+  children); Opus overseer turns count toward no cap. Decide in L6 whether `overseer.budget` is the only cap.
+- N2 Patch `child-tools.ts` `sessionCwd`: a relative policy `cwd` is accepted silently (the API says absolute;
+  the router now refuses one before the spawn, LD14). Assert it or resolve it in the patch.
+- N3 `core/local/settings.ts` `WRITERS` (bash, edit, write) is a denylist: a consumer's child-extension tool that
+  writes passes the `overseer.tools` warning. Acceptable with the guard; the option text should say "read-only
+  tools only".
+- G6/G7 runbook step 1 (§12) on a real host: see the L4-fix report; until it is run, F3's effect on a real model
+  is unproven.
+
 ### L5 Worktrees
 
 #### L5.T1 Git in the check sandbox, runner, temp repository `[ ] todo`

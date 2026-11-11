@@ -433,18 +433,24 @@ reasons, at most `resubmits` (2) times. An agent that goes idle without
 submitting is reminded once, then the attempt fails; `timeoutSec` (900) bounds
 an attempt; a failed attempt (timeout, error, invalid) is retried once on
 `fallbackMember` at `fallbackEffort` (`sonnet`, `xhigh`), except a steer
-review. The agent is killed after each attempt; a submitted verdict is kept as a session entry
+review. The agent is killed after each attempt. The router runs an overseer only while
+its own spawn policy is registered, and only that policy may take the ticket: an
+agent it did not route is killed at once, with a warning, and the attempt is an
+`error` that is neither charged nor retried. A ticket no policy took is closed
+when its spawn fails. A submitted verdict is kept as a session entry
 (`task-router/review`). Budget (per session branch, session entries
 `task-router/budget`): each spawn on `overseer.member` counts against `budget`
 (15), a steer review also against `steerBudget` (3); with the budget spent a
-review runs on the fallback member and a steer review is skipped. The status
+review runs on the fallback member and a steer review is skipped. A pick of
+`overseer.member` holds its unit from the pick on, so reviews running at the
+same time cannot overrun the budget. The status
 line adds `opus <n> left` once three or fewer are left. Steer (`hints.steer = "on"`):
 when a trip persists (above), the router spawns a steer review instead of the
 escalation, with the trip and the last 12 calls (tool, target, result; no file
 contents), one at a time, and sends its summary and findings to the main
-session as a steer message (`task-router/steer`); without the spawn API, with
-the steer budget spent or when the review fails, the escalation goes into the
-result as before. In local mode without the spawn API the router warns once at
+session as a steer message (`task-router/steer`); without the spawn API or with
+the steer budget spent the escalation goes into the result as before, and when
+the review fails the escalation is sent as that steer message instead. In local mode without the spawn API the router warns once at
 `session_start`: "task-router: local mode needs actor-subagents with
 spawnPolicyApi ≥ 2; merges are refused and plans are unavailable". Logs: one
 `review` outcome line per attempt (`taskId` the review id, `role`, `member`,
@@ -598,7 +604,7 @@ points into `src`.
 | `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's two `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
 | `retry` | the patched pi-retry's vitest suite (300 tests) on the shared npm lock, and the greps that pin the free-cap patch and the inline print/json route |
 | `typecheck-retry` | `tsc --strict` over `retry.ts` and `src/`; the tests stay out (one upstream test and the free-cap patch's own test do not type-check; vitest runs them) |
-| `task-router` | the router's own tests (`node --test`, 621), run when it builds; includes the redesign's golden grid against its frozen oracle, under the today fixture and under the defaults (the oracle with the default deltas) |
+| `task-router` | the router's own tests (`node --test`, 631), run when it builds; includes the redesign's golden grid against its frozen oracle, under the today fixture and under the defaults (the oracle with the default deltas) |
 | `typecheck-task-router` | `tsc --strict` over `index.ts`, `core/` and `test/` |
 | `iface-subagents-task-router`, `iface-experiments-task-router` | the router's copies of `__subagentsApi_v1` and `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`) are satisfied by the providers' types |
 | `iface-policy-task-router` | the router's copy of the spawn policy's result (`PolicyResult` in `core/api.ts`: tool guard, `childTools`, `cwd`) is satisfied by the actor's type |
