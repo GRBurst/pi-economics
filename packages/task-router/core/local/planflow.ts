@@ -22,7 +22,7 @@ import { canonical, parsePlan, type PlanFs, type PlanRecord, renderPlan, type Sk
   validateSkeleton } from "./plan.ts";
 import { approve, findingLine, type Finding } from "./verdict.ts";
 import { mergedUnits, type PlanStore } from "./plans.ts";
-import { refreshFacts, unitFacts } from "./worktree.ts";
+import { branchName, refreshFacts, unitFacts, vetCheck, worktreeDir } from "./worktree.ts";
 
 export type PlanPorts = {
   git: Git; run: Runner; overseer: OverseerPort; branches: BranchStore; plans: PlanStore; settings: RouterSettings;
@@ -104,7 +104,7 @@ async function request(p: PlanPorts, input: PlanInput, cwd: string): Promise<Pla
   if (main.checkout && (await git.dirty(main.checkout))) return done("refused", "main-dirty", reasonText("main-dirty", { checkout: main.checkout }));
   // ── 2–3 author, red runs ──
   const out = await p.overseer.run({ role: "plan-author", input: authorInput(s, input, files, await git.lsFiles(checkout, REPO_MAP)), cwd: checkout,
-    submit: planSubmit(p, { repo, checkout, tip: main.sha }), signal: p.signal });
+    submit: planSubmit(p, { repo, slug: input.slug, checkout, tip: main.sha }), signal: p.signal });
   if (!out.ok) {
     return out.outcome === "aborted" ? done("error", "aborted", "aborted") : done("error", "author-unavailable", `the plan author is unavailable (${out.outcome})`);
   }
@@ -164,20 +164,31 @@ export function authorInput(s: RouterSettings, i: PlanInput, files: readonly str
 
 /** What `submit_plan` records: an accepted skeleton, or why the plan fails once `plans.rounds` are spent. */
 export type Authored = { ok: true; sk: Skeleton } | { ok: false; reason: "invalid" | "broken-check"; reasons: string[] };
-type RedExit = { task: Task; exit: number };
-/** Exit 0: vacuous; 126/127: broken (design §3.5.2 step 3). */
-const failsRed = (exit: number): boolean => exit === 0 || exit === 126 || exit === 127;
+/** A red run's outcome: the check's exit, or `blocked`, the git guard's reason (review F7: the check was not run). */
+type RedExit = { task: Task; exit: number; blocked?: string };
+/** Exit 0: vacuous; 126/127 or blocked: broken (design §3.5.2 step 3). */
+const failsRed = (r: RedExit): boolean => r.blocked !== undefined || r.exit === 0 || r.exit === 126 || r.exit === 127;
+const brokenRed = (r: RedExit): boolean => failsRed(r) && (r.blocked !== undefined || r.exit !== 0);
+/** `M1.T1: \`cmd\` exit 127`, or `… was not run: <the guard's reason>`. */
+const redLine = (r: RedExit): string => `${r.task.id}: \`${r.task.check}\` ${r.blocked !== undefined ? `was not run: ${r.blocked}` : `exit ${r.exit}`}`;
 const redFinding = (r: RedExit, i: number, tip: string): Finding => ({
   id: `F${i + 1}`, category: "check", target: r.task.id, blocking: true,
-  defect: r.exit === 0 ? "the check passes on the main tip, before the task is done" : `the check cannot run (exit ${r.exit})`,
-  evidence: `\`${r.task.check}\` exit ${r.exit} on ${tip.slice(0, 7)}`,
-  fix: r.exit === 0 ? "the check fails on the main tip and passes once the task is done" : "the check command runs on the main tip and fails there",
+  defect: r.blocked !== undefined ? `the router's git guard blocks the check: ${r.blocked}`
+    : r.exit === 0 ? "the check passes on the main tip, before the task is done" : `the check cannot run (exit ${r.exit})`,
+  evidence: r.blocked !== undefined ? `\`${r.task.check}\` was not run` : `\`${r.task.check}\` exit ${r.exit} on ${tip.slice(0, 7)}`,
+  fix: r.blocked !== undefined ? "a check that writes no main branch"
+    : r.exit === 0 ? "the check fails on the main tip and passes once the task is done" : "the check command runs on the main tip and fails there",
 });
 
-/** Each task's check on `tip` in its own detached temporary worktree (removed afterwards); a worktree git cannot make skips it. */
-async function redRuns(p: PlanPorts, repo: string, tip: string, tasks: readonly Task[]): Promise<RedExit[]> {
-  const out: RedExit[] = [];
+/** Each task's check on `tip` in its own detached temporary worktree (removed afterwards); a worktree git cannot make skips it.
+ *  Review F7: the git classifier reads each check first, as in the worktree of the branch it will run on (`unit`: the task's
+ *  plan unit); a check it blocks is not run. */
+async function redRuns(p: PlanPorts, repo: string, tip: string, tasks: readonly Task[], slug: string, unit: (t: Task) => string): Promise<RedExit[]> {
+  const out: RedExit[] = [], w = p.settings.worktrees;
   for (const task of tasks) {
+    const branch = branchName(w.branchPrefix, { plan: slug, id: unit(task) });
+    const blocked = await vetCheck({ git: p.git, store: p.branches, settings: p.settings }, task.check, worktreeDir(w.root, repo, branch), branch);
+    if (blocked !== undefined) { out.push({ task, exit: -1, blocked }); continue; }
     const dir = p.tmp();
     if (!(await p.git.worktreeAddDetached(repo, dir, tip)).ok) continue;
     try { out.push({ task, exit: (await p.run(task.check, dir, p.settings.checkTimeoutSec * 1000)).exit }); }
@@ -190,7 +201,7 @@ async function redRuns(p: PlanPorts, repo: string, tip: string, tasks: readonly 
  *  a resubmit; afterwards the submission is final: still invalid or broken fails the plan (D52), still vacuous is accepted with
  *  `vacuousCheck` on those tasks (LD9). `rewrite` (design §3.5.4 step 5): the author rewrites one milestone of an approved plan;
  *  only the rewrite's own findings count, and only its new or changed tasks run red. */
-export function planSubmit(p: PlanPorts, x: { repo: string; checkout: string; tip: string; rewrite?: Rewrite }): SubmitSpec<Authored> {
+export function planSubmit(p: PlanPorts, x: { repo: string; slug: string; checkout: string; tip: string; rewrite?: Rewrite }): SubmitSpec<Authored> {
   const rounds = p.settings.plans.rounds;
   let round = 0;
   return {
@@ -202,12 +213,12 @@ export function planSubmit(p: PlanPorts, x: { repo: string; checkout: string; ti
       const v = x.rewrite ? validateRewrite(input, p.settings, checkoutFs(x.checkout), x.rewrite) : validateSkeleton(input, p.settings, checkoutFs(x.checkout));
       if (!v.ok) return last ? { ok: true, value: { ok: false, reason: "invalid", reasons: v.reasons } } : v;
       const tasks = x.rewrite ? changedTasks(x.rewrite.old, v.value) : v.value.milestones.flatMap((m) => m.tasks);
-      const bad = (await redRuns(p, x.repo, x.tip, tasks)).filter((r) => failsRed(r.exit));
+      const bad = (await redRuns(p, x.repo, x.tip, tasks, x.slug, unitOf(v.value))).filter(failsRed);
       if (!bad.length) return { ok: true, value: { ok: true, sk: x.rewrite ? marked(x.rewrite.old, v.value, new Set()) : v.value } };
       const lines = bad.map((r, i) => findingLine(redFinding(r, i, x.tip)));
       if (!last) return { ok: false, reasons: lines };
-      const broken = bad.filter((r) => r.exit !== 0);
-      if (broken.length) return { ok: true, value: { ok: false, reason: "broken-check", reasons: broken.map((r) => `${r.task.id}: \`${r.task.check}\` exit ${r.exit}`) } };
+      const broken = bad.filter(brokenRed);
+      if (broken.length) return { ok: true, value: { ok: false, reason: "broken-check", reasons: broken.map(redLine) } };
       return { ok: true, value: { ok: true, sk: marked(x.rewrite?.old, v.value, new Set(bad.map((r) => r.task.id))) } };
     },
   };
@@ -303,7 +314,10 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   if (t.id === "new") {
     const cmd = t.evidenceCommand;
     if (t.kind !== "interface-break" || typeof cmd !== "string" || !cmd.trim()) return refused("trigger", "a new trigger needs kind interface-break and an evidenceCommand");
-    const a = p.branches.active(), dir = a && a.repo === repo ? a.worktree : checkout;
+    const a = p.branches.active(), mine = a && a.repo === repo ? a : undefined, dir = mine ? mine.worktree : checkout;
+    // review F7: the git classifier reads the command first, in its directory (the main checkout's branch is a main branch)
+    const blocked = await vetCheck({ git, store: p.branches, settings: s }, cmd, dir, mine?.branch);
+    if (blocked !== undefined) return refused("evidence", `the evidence command \`${cmd}\` was not run: ${blocked}`);
     const r = await p.run(cmd, dir, s.checkTimeoutSec * 1000);
     if (r.exit === 0) return refused("evidence", `the evidence command \`${cmd}\` exits 0 in ${dir}; an interface-break needs a command that fails`);
     evidence = [`\`${cmd}\` exit ${r.exit} in ${dir}`, tailOf(r.output)].filter(Boolean).join("\n");
@@ -325,12 +339,10 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   if (own.length) return refused("invalid", `the amended plan is invalid: ${own.join("; ")}`, { trigger });
   // the new and changed tasks' checks on the main tip, as at plan time (§3.5.2 step 3): one that cannot run refuses, a vacuous
   // one is marked
-  const changed = changedTasks(old, amended), red = await redRuns(p, repo, main.sha, changed);
-  const broken = red.filter((r) => r.exit !== 0 && failsRed(r.exit));
-  if (broken.length) {
-    return refused("broken-check", `the amended checks cannot run: ${broken.map((r) => `${r.task.id}: \`${r.task.check}\` exit ${r.exit}`).join("; ")}`, { trigger });
-  }
-  const final = marked(old, amended, new Set(red.filter((r) => r.exit === 0).map((r) => r.task.id)));
+  const changed = changedTasks(old, amended), red = await redRuns(p, repo, main.sha, changed, slug, unitOf(amended));
+  const broken = red.filter(brokenRed);
+  if (broken.length) return refused("broken-check", `the amended checks cannot run: ${broken.map(redLine).join("; ")}`, { trigger });
+  const final = marked(old, amended, new Set(red.filter((r) => r.blocked === undefined && r.exit === 0).map((r) => r.task.id)));
   // ── 3 review: plan-review for an interface-break, an amended task in publicApiGlobs, a milestone added or removed; else delta ──
   const trig = p.plans.get(slug)!.triggers.find((x) => x.id === trigger)!;
   const removed = old.milestones.flatMap((m) => m.tasks).filter((x) => !taskOf(final, x.id));
@@ -365,7 +377,7 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
       `Proposed changes: ${JSON.stringify(input.changes)}`, "Findings of the last review:", ...findings.map((x) => `- ${x}`),
       `Keep the invariants, every other milestone and every checked task (${[...checked].join(", ") || "none"}) exactly as they are; submit the whole skeleton.`,
       limits(s), "Every new or changed task check must fail on the main tip and pass once the task is done.", "The plan:", text!].join("\n"),
-    submit: planSubmit(p, { repo, checkout, tip: main.sha, rewrite: { old, checked, milestone: mid } }) });
+    submit: planSubmit(p, { repo, slug, checkout, tip: main.sha, rewrite: { old, checked, milestone: mid } }) });
   if (!author.ok) {
     return author.outcome === "aborted" ? amendDone("error", "aborted", "aborted", no)
       : amendDone("error", "author-unavailable", `the plan author is unavailable (${author.outcome})`, no);
@@ -376,6 +388,8 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   return r.status === "approved" ? { ...r, detail: `the amendment was rejected ${n} times; the plan author rewrote ${mid}: ${r.detail}` } : r;
 }
 
+/** The plan unit each task of `sk` runs on (design §3.3.1): its milestone when that is one branch, else the task. */
+const unitOf = (sk: Skeleton) => (t: Task): string => sk.milestones.find((m) => m.tasks.some((x) => x.id === t.id) && m.branch === "milestone")?.id ?? t.id;
 const nTasks = (sk: Skeleton): number => sk.milestones.reduce((n, m) => n + m.tasks.length, 0);
 /** The `plan` line; best effort, it never fails a flow. */
 function logPlan(p: PlanPorts, i: PlanLogInput): void {

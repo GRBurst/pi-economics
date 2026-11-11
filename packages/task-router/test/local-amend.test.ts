@@ -215,3 +215,18 @@ test("an amended task whose check passes on the main tip is marked vacuous; one 
   const no = await refused(y, amend({ changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: "no-such-command-x" } }] }));
   assert.deepEqual([no.reason, no.detail], ["broken-check", "the amended checks cannot run: M1.T2: `no-such-command-x` exit 127"]);
 });
+
+test("review F7: an amended check or an evidence command the git guard blocks is never run", async () => {
+  const bad = "git push origin HEAD:main";
+  const x = approved();
+  x.plans.open("parser", "over-budget", "M1.T2");
+  const no = await refused(x, amend({ changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: bad } }] }));
+  assert.equal(no.reason, "broken-check");
+  assert.ok(no.detail.startsWith(`the amended checks cannot run: M1.T2: \`${bad}\` was not run: `), no.detail);
+  const y = approved();
+  await start(y, "M1.T1");
+  const ev = await refused(y, amend({ trigger: { id: "new", kind: "interface-break", evidenceCommand: bad } }));
+  assert.equal(ev.reason, "evidence");
+  assert.ok(ev.detail.startsWith(`the evidence command \`${bad}\` was not run: `), ev.detail);
+  assert.ok(![...x.checks, ...y.checks].some((c) => c.cmd === bad), "never run");
+});

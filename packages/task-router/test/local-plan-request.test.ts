@@ -194,3 +194,15 @@ test("LD10 a main checkout made dirty during authoring refuses the commit; nothi
   assert.equal(x.mainSha(), tip);
   assert.deepEqual(x.entries, []);
 });
+
+test("review F7: a task check the git guard blocks is never run; a check finding, and after plans.rounds plan_request fails", async () => {
+  const x = planRig();
+  const bad = "git push origin HEAD:main";
+  x.script.push([skeleton(bad), skeleton(bad), skeleton(bad)]);
+  const r = await planRequest(x.ports, INPUT, x.r.dir);
+  assert.ok(!x.checks.some((c) => c.cmd === bad), "never run");
+  assert.deepEqual(x.replies.map((y) => y.ok), [false, false, true]);
+  assert.ok(x.replies[0]!.reasons!.some((t) => t.includes("check M1.T1") && t.includes("request_merge")), String(x.replies[0]!.reasons));
+  assert.equal(r.reason, "broken-check");
+  assert.ok(r.detail.includes(`M1.T1: \`${bad}\` was not run: `), r.detail);
+});

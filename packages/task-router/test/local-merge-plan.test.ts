@@ -149,3 +149,18 @@ test("a milestone branch: all its tasks' files and checks, the milestone's goal"
   assert.deepEqual(x.runs.map((c) => c.cmd), ["test -f src/parse.ts && grep -q wire src/b.ts", "grep -q parse src/b.ts"]);
   assert.ok(String(x.reviews[0]!.input).startsWith("Goal: a parser\n"));
 });
+
+test("review F7: an earlier task's check the git guard blocks is never run; the merge is refused check", async () => {
+  const bad = "git push origin HEAD:main";
+  const sk: Skeleton = { ...SK, milestones: [{ ...SK.milestones[0]!, tasks: [{ ...SK.milestones[0]!.tasks[0]!, check: bad }, SK.milestones[0]!.tasks[1]!] }] };
+  const x = rig({}, sk);
+  x.store.put({ repo: x.r.dir, branch: "lm/parser/M1.T1", worktree: join(x.r.base, "gone"), base: x.mainSha(), plan: { slug: "parser", id: "M1.T1" },
+    state: "merged", rejections: 0, fixerRuns: 0 });
+  const wt = await x.start("M1.T2");
+  x.work(wt, { "src/b.ts": "export const parse = 2;\n" });
+  const r = await x.merge();
+  assert.equal(r.reason, "check");
+  assert.ok(r.detail.startsWith(`the check \`${bad}\` was not run: `), r.detail);
+  assert.ok(!x.runs.some((c) => c.cmd === bad), "never run");
+  assert.equal(x.reviews.length, 0);
+});

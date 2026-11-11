@@ -665,8 +665,8 @@ cwd (`packages/task-router/core/local/planflow.ts`):
    that exist, `create` paths that do not but whose directory does, at most
    `splitFiles` (3) paths per task, a non-empty check) and runs each task's
    check at the main tip in a detached temporary worktree: a check that
-   cannot run (exit 126 or 127) or passes there (vacuous) goes back as a
-   `check` finding. Rejections count against `plans.rounds` (2); after them a
+   cannot run (exit 126 or 127), that the git guard (above) blocks (it is not
+   run), or that passes there (vacuous) goes back as a `check` finding. Rejections count against `plans.rounds` (2); after them a
    skeleton that is still invalid is `refused` `invalid`, a check that still
    cannot run `broken-check`, and a vacuous one is accepted with
    `vacuousCheck: true` (the merge reviewer is told);
@@ -712,14 +712,16 @@ Plan-bound branches have guards and their own merge rules:
   approved skeleton (`plan-changed`); the size leaves out tick-only plan
   lines and is bounded by `splitLines` (100) and `splitFiles` (3) for a task
   branch, `milestoneLines` (250) for a milestone branch, never above the
-  gate's own limits (`size`, opens `over-budget`); a changed file outside the whitelist, or a plan change that
-  is not a tick of the branch's own tasks, is `scope` (opens
-  `non-whitelisted`); then the unit's checks, `extraChecks` and, with
-  `regression` `milestone` (the default) or `plan`, the checks of the merged
-  tasks of the milestone or the plan (a failure there is `check` and opens
-  `regression`; `off` runs none); there is no red run (the reviewer reads `passed` for a
-  check the author left vacuous, else `failed`), and the reviewer gets the unit's goal and
-  the invariants plus the tasks' `forbidden`. A fixer round rejected again
+  gate's own limits (`size`, opens `over-budget`); a changed file outside
+  the whitelist, or a plan change that is not a tick of the branch's own
+  tasks, is `scope` (opens `non-whitelisted`); then the unit's checks,
+  `extraChecks` and, with `regression` `milestone` (the default) or `plan`,
+  the checks of the merged tasks of the milestone or the plan (a failure
+  there is `check` and opens `regression`; `off` runs none). Every check
+  from the plan passes the git guard first, as the branch check does. There
+  is no red run (the reviewer reads `passed` for a check the author left
+  vacuous, else `failed`), and the reviewer gets the unit's goal and the
+  invariants plus the tasks' `forbidden`. A fixer round rejected again
   blocks the branch, opens `remediation-failed` and says "restructure the
   task with amend_plan".
 
@@ -732,11 +734,11 @@ same open trigger for the same task is not opened twice. `amend_plan` takes
 milestone) and `reason`. It refuses: no plan record (`no-plan`), a plan file
 on the main tip that does not hold the approved skeleton (`plan-changed`), no
 open trigger ("no replan trigger is open; finish the task as planned") or an
-unknown one (`trigger`), a new trigger whose evidence command exits 0 in the
-active worktree or else the main checkout (`evidence`; one that fails opens the `interface-break`
+unknown one (`trigger`), a new trigger whose evidence command the git guard blocks or that exits 0
+in the active worktree or else the main checkout (`evidence`; one that fails opens the `interface-break`
 trigger), a change to a checked task (ticked on main or merged: `checked`),
 an amended skeleton that is invalid (`invalid`) and amended checks that
-cannot run (`broken-check`). Then a review: the whole plan (`plan-review`) for
+cannot run or that the git guard blocks (`broken-check`). Then a review: the whole plan (`plan-review`) for
 an `interface-break`, a changed task with a path in `publicApiGlobs` (`[]`),
 or a milestone added or removed; else the `delta` review (the trigger and its
 evidence, the old and the proposed tasks, the dependants). Approved: the plan

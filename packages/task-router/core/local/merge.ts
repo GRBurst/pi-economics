@@ -359,12 +359,14 @@ async function pipeline(p: MergePorts, input: Input, cwd: string, seen: Seen): P
   // ── 5 checks: the branch check (a plan unit's from the plan), then mergeGate.extraChecks, then the merged tasks' checks per
   //    plans.regression, in the worktree; the first failure refuses ──
   const checks: CheckRun[] = [];
-  if (rec?.check) { // review F7: the branch check is the model's text; the git classifier reads it before the router runs it
-    const why = await vetCheck({ git, store: p.branches, settings: s }, rec.check, wt.dir, branch);
-    if (why !== undefined) return done("refused", "check", `the check \`${rec.check}\` was not run: ${why}`, commit);
-  }
   const own = bound ? bound.tasks.map((x) => x.check) : rec?.check ? [rec.check] : [];
   const earlier = bound && s.plans.regression !== "off" ? regressionTasks(s, bound, p.branches.all()) : [];
+  // review F7: the branch check (a plan unit's checks and its regression checks too) is the model's text; the git classifier
+  // reads each before the router runs any
+  for (const cmd of [...own, ...earlier.map((x) => x.check)]) {
+    const why = await vetCheck({ git, store: p.branches, settings: s }, cmd, wt.dir, branch);
+    if (why !== undefined) return done("refused", "check", `the check \`${cmd}\` was not run: ${why}`, commit);
+  }
   const runs = [...own.map((cmd) => ({ cmd })), ...g.extraChecks.map((cmd) => ({ cmd })), ...earlier.map((x) => ({ cmd: x.check, of: x.id }))];
   for (const c of runs) {
     if (p.signal?.aborted) return aborted(commit); // review F11: Esc stops the checks, not only the review
