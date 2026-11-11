@@ -18,7 +18,7 @@ Requirements).
 | `analysisSkill` | an agent skill that runs `pi-analyse` and proposes decisions from the logs |
 | `cacheLifecycle` | elides stale tool results and thinking after the prompt cache expired; cache warming |
 | `experiments` | one fractional-factorial arm per main session, recorded for the reports |
-| `taskRouter` | routes subagent spawns by task card to the cheapest capable member (local, free-cloud, Haiku, Sonnet, …) |
+| `taskRouter` | routes subagent spawns by task card to the cheapest capable member (local, free-cloud, Haiku, Sonnet, …); `/force` fixes the model; local mode, for a main session on a local model: hints, an Opus overseer, worktree branches, a merge gate and plans |
 | `infiniteContext` | pi-infinite-context with two patches: absolute fold-reminder thresholds, a cost-aware fold hint |
 | `retry` | pi-retry with a patch for OpenRouter's daily free-tier cap |
 | `bench` | `pi-bench` and `bench-report`: arms, blind judges, bootstrap reports |
@@ -101,7 +101,7 @@ it misses the API and switches off only what needs it.
 
 | Package | Used by | Without it |
 |---|---|---|
-| pi-actor-subagents | required by `task-router`; used by `cache-lifecycle`, `experiments` | the router is off (no `task_verdict`, no task cards, no nudge; its effort guard stays on); cache lifecycle does not keep sessions waiting on children warm; experiments children do not inherit an arm. Patched build via the pi-economics Nix modules; upstream support pending. |
+| pi-actor-subagents | required by `task-router`; used by `cache-lifecycle`, `experiments` | the router is off (no `task_verdict`, no task cards, no nudge; its effort guard stays on); cache lifecycle does not keep sessions waiting on children warm; experiments children do not inherit an arm. The router's local mode needs the actor's spawn API (the third patch): with an actor that lacks it, local mode warns once, refuses every merge and offers no plans. Patched build via the pi-economics Nix modules; upstream support pending. |
 | pi-infinite-context | optional | the upstream's fold reminders work as they are; the per-model reminder thresholds and the cost-aware fold hint come only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
 | pi-retry | optional | the meter's retry accounting works with the upstream (it reads its `pi-retry:*` events); the handling of OpenRouter's daily free cap (that 429 is not retried) comes only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
 

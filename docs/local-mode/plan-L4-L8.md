@@ -1125,7 +1125,7 @@ message). Open notes, for L6 or later:
 #### L8.T3 Design wording fixes `[x] done`
 - **Files**: `docs/local-mode/design.md` (P13 X1, X3, X10 and X15, X20, X22–X26, X29: wording only; AC-M1 scope; §3.0.2 branch entry fields; §3.4.1 `details`). **Check**: `chk leak boundary`.
 
-#### L8.T4 README `[ ] todo`
+#### L8.T4 README `[x] done`
 - **Files**: `README.md` ("Without Nix" prerequisites row: local mode needs the spawn-api patch; component table). **Check**: `chk module-eval` (`readme-package` case), `chk leak boundary`.
 
 #### L8.T5 Final sweep and manual runbook `[ ] todo`
