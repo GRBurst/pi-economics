@@ -18,8 +18,8 @@ import { globMatch } from "../glob.ts";
 import { advanceMain, type OverseerPort, reasonText, tailOf } from "./merge.ts";
 import { type SubmitSpec, verdictSubmit } from "./overseer.ts";
 import { check as schemaCheck } from "./schema.ts";
-import { canonical, parsePlan, type PlanFs, type PlanRecord, renderPlan, type Skeleton, SKELETON_SCHEMA, skeletonHash, type Task, type Trigger,
-  validateSkeleton } from "./plan.ts";
+import { canonical, parsePlan, planBudget, type PlanFs, type PlanRecord, renderPlan, type Skeleton, SKELETON_SCHEMA, skeletonHash, type Task,
+  type Trigger, validateSkeleton } from "./plan.ts";
 import { approve, findingLine, type Finding } from "./verdict.ts";
 import { mergedUnits, type PlanStore } from "./plans.ts";
 import { branchName, refreshFacts, unitFacts, vetCheck, worktreeDir } from "./worktree.ts";
@@ -151,9 +151,13 @@ const AUTHOR_FAILED: Record<"invalid" | "broken-check", string> = {
   invalid: "the plan author's skeleton is still invalid after plans.rounds",
   "broken-check": "task checks still cannot run after plans.rounds",
 };
-const limits = ({ plans: l }: RouterSettings): string =>
-  `Limits: a task changes at most ${l.taskFiles} files and about ${l.taskLines} lines; its files and create name at most ${l.splitFiles} paths; `
-  + `a milestone has at most ${l.milestoneTasks} tasks and about ${l.milestoneLines} lines. Paths are relative to the repository root.`;
+/** Review L7 F4: the budgets the merge enforces (`planBudget`), so the author plans what can merge. */
+const limits = (s: RouterSettings): string => {
+  const l = s.plans, task = planBudget(s, "task"), whole = planBudget(s, "milestone");
+  return `Limits: a task changes at most ${l.taskFiles} files and about ${l.taskLines} lines; its files and create name at most ${task.files} paths, `
+    + `and its branch merges at most ${task.lines} lines. A milestone has at most ${l.milestoneTasks} tasks; one with branch "milestone" is one branch: `
+    + `its tasks' files and create name at most ${whole.files} paths together, and it merges at most ${whole.lines} lines. Paths are relative to the repository root.`;
+};
 /** The author's input (design §3.2.1): the request digest, the acceptance, the grounding, the limits, the repository map. */
 export function authorInput(s: RouterSettings, i: PlanInput, files: readonly string[], map: readonly string[]): string {
   return [`Request: ${i.request}`, "Acceptance:", ...i.acceptance.map((a) => `- ${a}`),

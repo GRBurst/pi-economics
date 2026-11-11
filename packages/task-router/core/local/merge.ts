@@ -17,7 +17,7 @@ import { globMatch } from "../glob.ts";
 import { check } from "./schema.ts";
 import type { Schema } from "./schema.ts";
 import { errorReply } from "./branchtool.ts";
-import { type Milestone, parsePlan, type PlanRecord, type Skeleton, skeletonHash, type Task, tickOnly } from "./plan.ts";
+import { type Milestone, parsePlan, planBudget, type PlanRecord, type Skeleton, skeletonHash, type Task, tickOnly } from "./plan.ts";
 import { mergedUnits, type PlanStore } from "./plans.ts";
 import type { RouterTool } from "./branchtool.ts";
 
@@ -272,14 +272,9 @@ async function boundOf(p: MergePorts, plans: PlanStore, repo: string, unit: { sl
   return { rec, sk: parsed.sk, id: unit.id, milestone, tasks: task ? [task] : milestone.tasks, file: rec.file, changed: before !== after,
     ...(tick?.ok && { tick: tick.flipped }) };
 }
-/** A plan-bound branch's size budget (§3.5.5 `over-budget`): a task branch `splitLines`/`splitFiles`, a milestone branch
- *  `milestoneLines`; never above the merge gate's own limits. */
-const budgetOf = (s: RouterSettings, b: Bound | undefined): { lines: number; files: number } => {
-  const g = s.mergeGate;
-  if (!b) return { lines: g.maxDiffLines, files: g.maxDiffFiles };
-  return b.milestone.branch === "milestone" ? { lines: Math.min(g.maxDiffLines, s.plans.milestoneLines), files: g.maxDiffFiles }
-    : { lines: Math.min(g.maxDiffLines, s.plans.splitLines), files: Math.min(g.maxDiffFiles, s.plans.splitFiles) };
-};
+/** A plan-bound branch's size budget (§3.5.5 `over-budget`; `planBudget`, which the author and the validation read too). */
+const budgetOf = (s: RouterSettings, b: Bound | undefined): { lines: number; files: number } =>
+  b ? planBudget(s, b.milestone.branch) : { lines: s.mergeGate.maxDiffLines, files: s.mergeGate.maxDiffFiles };
 /** The merged tasks whose checks guard against a regression (`plans.regression`): of the unit's milestone or of the whole plan,
  *  without the unit's own tasks, in plan order. */
 function regressionTasks(s: RouterSettings, b: Bound, branches: readonly BranchRecord[]): Task[] {

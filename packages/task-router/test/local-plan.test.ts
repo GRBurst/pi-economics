@@ -33,16 +33,17 @@ const names = (x: unknown, word: string) =>
 function generate(rnd: Rnd): Skeleton {
   const earlierTasks: string[] = [], earlierMs: string[] = [];
   const milestones = Array.from({ length: 1 + rnd(4) }, (_, m) => {
-    const id = `M${m + 1}`;
-    const tasks = Array.from({ length: 1 + rnd(S.plans.milestoneTasks) }, (_, t) => {
+    const id = `M${m + 1}`, branch = pick(rnd, ["milestone", "task"] as const);
+    // a milestone branch's tasks name at most maxDiffFiles paths together (review L7 F4): at most 2 tasks of 2 files, no create
+    const tasks = Array.from({ length: 1 + rnd(branch === "milestone" ? 2 : S.plans.milestoneTasks) }, (_, t) => {
       const tid = `${id}.T${t + 1}`;
       const files = [...new Set(Array.from({ length: 1 + rnd(2) }, () => pick(rnd, FILES)))];
-      const create = rnd(2) === 0 ? [`${pick(rnd, DIRS)}/new${m}${t}.ts`.replace(/^\.\//, "")] : undefined;
+      const create = branch === "task" && rnd(2) === 0 ? [`${pick(rnd, DIRS)}/new${m}${t}.ts`.replace(/^\.\//, "")] : undefined;
       const dependsOn = earlierTasks.filter(() => rnd(3) === 0);
       earlierTasks.push(tid);
       return task(tid, { files, ...(create && { create }), dependsOn, ...(rnd(2) === 0 && { checkCounterexample: "a stub passes" }) });
     });
-    const out = milestone(id, tasks, { branch: pick(rnd, ["milestone", "task"] as const), dependsOn: earlierMs.filter(() => rnd(2) === 0) });
+    const out = milestone(id, tasks, { branch, dependsOn: earlierMs.filter(() => rnd(2) === 0) });
     earlierMs.push(id);
     return out;
   });
@@ -120,6 +121,19 @@ test("AC-P2 files ∪ create above splitFiles", () => {
   const files = ["src/a.ts", "src/b.ts", "src/c.ts"];
   names(sk(milestone("M1", [task("M1.T1", { files, create: ["src/d.ts"] })])), "splitFiles");
   assert.equal(validateSkeleton(sk(milestone("M1", [task("M1.T1", { files, create: [] })])), S, fs).ok, true);
+});
+
+test("review L7 F4: a task's files ∪ create above mergeGate.maxDiffFiles (when it is below splitFiles)", () => {
+  const s = { ...S, mergeGate: { ...S.mergeGate, maxDiffFiles: 2 } };
+  const r = validateSkeleton(sk(milestone("M1", [task("M1.T1", { files: ["src/a.ts", "src/b.ts", "src/c.ts"] })])), s, fs);
+  assert.deepEqual(r.ok ? [] : r.reasons, ["M1.T1: files and create name 3 paths; at most 2 (mergeGate.maxDiffFiles)"]);
+});
+
+test("review L7 F4: a milestone branch whose tasks name more paths together than mergeGate.maxDiffFiles", () => {
+  const tasks = [task("M1.T1", { files: ["src/a.ts", "src/b.ts", "src/c.ts"] }), task("M1.T2", { files: ["test/a.test.ts", "test/b.test.ts", "README.md"] }),
+    task("M1.T3", { files: ["src/a.ts"], create: ["src/new.ts"] })];
+  assert.deepEqual(reasons(sk(milestone("M1", tasks, { branch: "milestone" }))), ["M1: a milestone branch names 7 paths; at most 6 (mergeGate.maxDiffFiles)"]);
+  assert.equal(validateSkeleton(sk(milestone("M1", tasks)), S, fs).ok, true, "a branch per task");
 });
 
 test("AC-P2 a missing file", () => {

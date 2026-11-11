@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkBypass, MAIN_REF_TYPE } from "../core/local/merge.ts";
 import { renderPlan, type Skeleton, skeletonHash } from "../core/local/plan.ts";
-import { planRequest } from "../core/local/planflow.ts";
+import { authorInput, planRequest } from "../core/local/planflow.ts";
 import { PLAN_TYPE } from "../core/local/plans.ts";
 import { rig } from "./overseer-rig.ts";
 import { planRig } from "./plan-rig.ts";
@@ -78,6 +78,14 @@ test("AC-P3 the plan author runs in the main checkout with the request, the grou
   assert.equal(a.submit.resubmits, x.settings.plans.rounds);
   for (const part of ["add a parser", "the parser test passes", "src/a.ts", "parse", "test/a.test.ts", "README",
     `${x.settings.plans.splitFiles}`, `${x.settings.plans.milestoneTasks}`]) assert.ok(a.input.includes(part), part);
+});
+
+test("review L7 F4: the author's limits are the merge's budgets (a milestone branch: min(milestoneLines, maxDiffLines), maxDiffFiles)", () => {
+  const x = planRig();
+  const lim = authorInput(x.settings, INPUT, ["src/a.ts"], []).split("\n").filter((l) => l.startsWith("Limits: "));
+  assert.deepEqual(lim, ["Limits: a task changes at most 2 files and about 60 lines; its files and create name at most 3 paths, and its branch "
+    + "merges at most 100 lines. A milestone has at most 5 tasks; one with branch \"milestone\" is one branch: its tasks' files and create "
+    + "name at most 6 paths together, and it merges at most 150 lines. Paths are relative to the repository root."]);
 });
 
 test("AC-P3 a vacuous task check: the author's execute gets isError with a check finding targeting the task id", async () => {

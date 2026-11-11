@@ -63,7 +63,19 @@ function cyclic(us: Unit[]): Set<string> {
   return out;
 }
 
-/** design §3.2.4: the schema, then ids, dependencies, file facts, task counts and checks. Every rule names itself. */
+/** What a plan-bound branch may merge (design §3.5.5 `over-budget`; review L7 F4: the author's limits, the validation and the
+ *  merge's size step read these): a task branch `splitLines`/`splitFiles`, a milestone branch (`branch: "milestone"`)
+ *  `milestoneLines` and the gate's files; never above the merge gate's `maxDiffLines`/`maxDiffFiles`. `files`/`filesBy`: the
+ *  setting that binds (a validation reason names it). */
+export function planBudget(s: RouterSettings, branch: Milestone["branch"]): { lines: number; files: number; filesBy: string } {
+  const g = s.mergeGate, p = s.plans;
+  if (branch === "milestone") return { lines: Math.min(g.maxDiffLines, p.milestoneLines), files: g.maxDiffFiles, filesBy: "mergeGate.maxDiffFiles" };
+  return { lines: Math.min(g.maxDiffLines, p.splitLines), files: Math.min(g.maxDiffFiles, p.splitFiles),
+    filesBy: p.splitFiles <= g.maxDiffFiles ? "plans.splitFiles" : "mergeGate.maxDiffFiles" };
+}
+
+/** design §3.2.4: the schema, then ids, dependencies, file facts, task counts and checks. Every rule names itself. A task names at
+ *  most its branch budget's paths, a milestone branch's tasks together too (review L7 F4). */
 export function validateSkeleton(x: unknown, s: RouterSettings, fs: PlanFs): { ok: true; value: Skeleton } | { ok: false; reasons: string[] } {
   const schema = check(SKELETON_SCHEMA, x);
   if (schema.length) return { ok: false, reasons: schema };
@@ -83,12 +95,14 @@ export function validateSkeleton(x: unknown, s: RouterSettings, fs: PlanFs): { o
     }
     if (loop.has(u.id)) out.push(`${u.id}: dependsOn forms a cycle`);
   });
-  const { splitFiles, milestoneTasks } = s.plans;
+  const { milestoneTasks } = s.plans, task = planBudget(s, "task"), whole = planBudget(s, "milestone");
   for (const m of sk.milestones) {
     if (m.tasks.length > milestoneTasks) out.push(`${m.id}: ${m.tasks.length} tasks; at most ${milestoneTasks} (plans.milestoneTasks)`);
+    const paths = new Set(m.tasks.flatMap((t) => [...t.files, ...(t.create ?? [])]));
+    if (m.branch === "milestone" && paths.size > whole.files) out.push(`${m.id}: a milestone branch names ${paths.size} paths; at most ${whole.files} (${whole.filesBy})`);
     for (const t of m.tasks) {
       const all = new Set([...t.files, ...(t.create ?? [])]);
-      if (all.size > splitFiles) out.push(`${t.id}: files and create name ${all.size} paths; at most ${splitFiles} (plans.splitFiles)`);
+      if (all.size > task.files) out.push(`${t.id}: files and create name ${all.size} paths; at most ${task.files} (${task.filesBy})`);
       for (const f of t.files) if (!fs.exists(f)) out.push(`${t.id}: file ${f} does not exist`);
       for (const f of t.create ?? []) {
         if (fs.exists(f)) out.push(`${t.id}: create ${f} exists`);

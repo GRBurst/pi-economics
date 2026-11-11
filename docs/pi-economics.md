@@ -682,7 +682,10 @@ cwd (`packages/task-router/core/local/planflow.ts`):
    `create`, `forbidden`, `check` and `dependsOn`. The router validates it
    (JSON schema, unique ids, dependencies on earlier ids and no cycle, files
    that exist, `create` paths that do not but whose directory does, at most
-   `splitFiles` (3) paths per task, a non-empty check) and runs each task's
+   `splitFiles` (3) paths per task and `maxDiffFiles` (6) per milestone
+   branch, never above the merge gate's files, a non-empty check; the author
+   is told these and the lines a branch merges, the same budgets the merge
+   enforces) and runs each task's
    check at the main tip in a detached temporary worktree: a check that
    cannot run (exit 126 or 127), that the git guard (above) blocks (it is not
    run), or that passes there (vacuous) goes back as a `check` finding. Rejections count against `plans.rounds` (2), per overseer
