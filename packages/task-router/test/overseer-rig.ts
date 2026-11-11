@@ -18,9 +18,11 @@ export function rig(o: { overseer?: Partial<OverseerSettings>; budget?: Partial<
   /** `each`: the child's action on a poll with no scripted step. */
   const on: { each?: Step } = {};
   const entries: Array<{ type: string; data: any }> = [];
+  const warnings: string[] = [];
   let k = 0, polls = 0;
   const d: OverseerDeps = {
     api: () => h.a.api, settings: h.router.settings, tickets: h.router.tickets, log: h.router.log,
+    policyOn: () => h.a.hasPolicy(), warn: (m) => void warnings.push(m),
     hex: (n) => (++k).toString(16).padStart(2 * n, "0"),
     now: () => h.clock.t,
     sleep: async (ms) => {
@@ -39,5 +41,5 @@ export function rig(o: { overseer?: Partial<OverseerSettings>; budget?: Partial<
     ov.run({ role: "merge", input: "review this", cwd: "/wt", submit: verdictSubmit(), ...x });
   /** The i-th spawn's (last by default) name, model and effort as the policy answered. */
   const spawned = (i = -1) => { const s = h.a.apiSpawns.at(i)!; const p = s.policy as Ok; return [s.args.name, p.model, p.thinkingLevel]; };
-  return { h, d, ov, script, on, entries, tool, spawned, run };
+  return { h, d, ov, script, on, entries, warnings, tool, spawned, run };
 }

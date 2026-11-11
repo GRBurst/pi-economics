@@ -1,10 +1,9 @@
 // Steer overseer (design §3.1.2, §3.2; plan D31, D32): a persistent trip in the main session runs an overseer of role
 // `steer` while its budget has room. Its input is the trip and the last call records (no bodies); its findings reach the
 // main session as a steer message. Advisory: one at a time, and a failure sends the fixed escalation instead (D31).
-import type { SubagentsApiV1 } from "../api.ts";
 import type { RouterSettings } from "../types.ts";
 import { ESCALATION, block } from "./hints.ts";
-import { hasSpawnApi, pickMember, verdictSubmit } from "./overseer.ts";
+import { pickMember, verdictSubmit } from "./overseer.ts";
 import type { Budget, createOverseer } from "./overseer.ts";
 import type { CallRecord, Trip } from "./tripwires.ts";
 import { findingLine } from "./verdict.ts";
@@ -32,17 +31,17 @@ export function steerInput(trip: Trip, n: number, records: readonly CallRecord[]
 }
 
 export type SteerDeps = {
-  settings: RouterSettings; budget: Budget; api(): SubagentsApiV1 | undefined; overseer: ReturnType<typeof createOverseer>;
+  settings: RouterSettings; budget: Budget; overseer: ReturnType<typeof createOverseer>;
   /** The steer message to the main session (`pi.sendMessage`, deliverAs "steer"). */
   send(content: string): void;
 };
 export function createSteer(d: SteerDeps) {
   let running = false;
   return {
-    /** `hints.steer` on, the spawn API there, the steer budget with room, and no steer running. */
+    /** `hints.steer` on, the overseer ready (the spawn API and the router's policy, review F1), the steer budget with room, and
+     *  no steer running. */
     available(): boolean {
-      const a = d.api();
-      return d.settings.hints.steer === "on" && !running && !!a && hasSpawnApi(a) && pickMember(d.settings, "steer", d.budget) !== "skip";
+      return d.settings.hints.steer === "on" && !running && d.overseer.ready() && pickMember(d.settings, "steer", d.budget) !== "skip";
     },
     /** Runs in the background; the escalation stands in for a failed run (D31). */
     start(trip: Trip, n: number, records: readonly CallRecord[], cwd: string, rel: (abs: string) => string): void {

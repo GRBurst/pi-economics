@@ -7,6 +7,9 @@ import { ESCALATION, block } from "../core/local/hints.ts";
 import { STEER_TYPE, steerInput } from "../core/local/steer.ts";
 import type { CallRecord } from "../core/local/tripwires.ts";
 import type { Verdict } from "../core/local/verdict.ts";
+import { verdictSubmit } from "../core/local/overseer.ts";
+import type { Deps } from "../core/shell.ts";
+import { fakeApi } from "./fake-api.ts";
 import { harness } from "./harness.ts";
 import { finding, type Ok } from "./overseer-rig.ts";
 
@@ -17,8 +20,8 @@ const STUCK: Verdict = { verdict: "REVISE", summary: "The file is read again and
   { ...finding("F2"), category: "correctness", fix: "the check passes." },
 ] };
 
-function rig(settings: Record<string, unknown> = { mode: "local" }, entries: Array<{ type: string; data: unknown }> = []) {
-  const h = harness({ settings: settings as never, apiExt: true });
+function rig(settings: Record<string, unknown> = { mode: "local" }, entries: Array<{ type: string; data: unknown }> = [], extra?: Partial<Deps>) {
+  const h = harness({ settings: settings as never, apiExt: true, extra });
   h.f.entries.push(...entries);
   const ctx = {
     sessionManager: { getSessionId: () => "s-main", getBranch: () => h.f.entries.map((e) => ({ type: "custom", customType: e.type, data: e.data })) },
@@ -86,6 +89,18 @@ test("failure (D31): a steer whose spawn fails sends the escalation as the steer
   await settle();
   assert.deepEqual(h.f.sent.map((s) => [s.msg.customType, s.msg.content, s.opts?.deliverAs]),
     [[STEER_TYPE, block("identical-call", 3, ESCALATION), "steer"]]);
+});
+
+test("review F1: another extension's spawn policy holds the API (the router's did not register) → the escalation block, nothing spawned", async () => {
+  const foreign = fakeApi({ ext: true });
+  foreign.api.registerSpawnPolicy(() => ({ model: "x/any", thinkingLevel: "low" }));
+  const { h, pair, settle } = rig({ mode: "local" }, [], { api: () => foreign.api });
+  for (let i = 0; i < 4; i++) pair(...READ_A);
+  assert.deepEqual(pair(...READ_A)!.content[1], { type: "text", text: block("identical-call", 3, ESCALATION) });
+  await settle();
+  assert.deepEqual([foreign.apiSpawns.length, h.f.sent.length], [0, 0]);
+  assert.deepEqual(await h.router.overseer.run({ role: "merge", input: "x", cwd: "/wt", submit: verdictSubmit() }), { ok: false, outcome: "error" });
+  assert.equal(foreign.apiSpawns.length, 0);
 });
 
 test("hints.steer off: the L3 escalation block, nothing spawned or sent", async () => {

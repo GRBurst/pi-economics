@@ -69,6 +69,10 @@ export type RunResult<T> = { ok: true; value: T; reviewId: string; member: strin
 export type RunArgs<T> = { role: Role; input: string; cwd: string; submit: SubmitSpec<T>; commit?: string; branch?: string; signal?: AbortSignal };
 export type OverseerDeps = {
   api(): SubagentsApiV1 | undefined; settings: RouterSettings; tickets: Tickets;
+  /** The router's own spawn policy is registered (review F1): without it a ticket reaches no one, so nothing is spawned. */
+  policyOn(): boolean;
+  /** A one-line warning (a child the router's policy did not route). */
+  warn(text: string): void;
   /** Random hex of 2·bytes characters (review ids, D34). */
   hex(bytes: number): string;
   now(): number; sleep(ms: number): Promise<void>;
@@ -121,7 +125,8 @@ export function budgetOf(branch: readonly unknown[]): Budget {
     .at(-1) as { data: Budget } | undefined;
   return last ? { opusUsed: last.data.opusUsed, steerUsed: last.data.steerUsed } : { opusUsed: 0, steerUsed: 0 };
 }
-type Settled<T> = { kind: "ok"; value: T } | { kind: "timeout" | "error" | "invalid" | "aborted" };
+/** `unrouted` (review F1): the spawn succeeded, but not through the router's policy; logged as an `error`, never retried. */
+type Settled<T> = { kind: "ok"; value: T } | { kind: "timeout" | "error" | "invalid" | "aborted" | "unrouted" };
 type SpawnApi = SubagentsApiV1 & Required<Pick<SubagentsApiV1, "spawn" | "kill">>;
 
 export function createOverseer(d: OverseerDeps) {
@@ -163,6 +168,13 @@ export function createOverseer(d: OverseerDeps) {
       const sp = await a.spawn({ name, systemPrompt: PROMPT[r.role], message: r.input, task: { ticket } }, { by: "main", quiet: true })
         .catch((err: Error) => ({ ok: false as const, reason: err.message }));
       if (!sp.ok) { d.tickets.forget(name); return settled?.kind === "aborted" ? settled : { kind: "error" }; }
+      // Review F1: only the router's policy takes a ticket. A child it did not route (a foreign policy, none) may run with
+      // every default tool and no guard, so it is killed before its first turn can act (fail closed), and nothing is charged.
+      if (d.tickets.owner(name) === undefined) {
+        await a.kill([name]).catch(() => []);
+        d.warn(`task-router: ${name} was not spawned through the task-router policy; killed, the review fails`);
+        return { kind: "unrouted" };
+      }
       charge();
       const t0 = d.now();
       while (!settled) {
@@ -186,13 +198,16 @@ export function createOverseer(d: OverseerDeps) {
       r.signal?.removeEventListener("abort", abort);
     }
   }
+  /** The spawn API is there and the router's policy is registered (review F1). */
+  const ready = (): boolean => { const a = d.api(); return !!a && hasSpawnApi(a) && d.policyOn(); };
   return {
+    ready,
     /** Design §3.2.2: two attempts (`steer` one), the second on the fallback member (D28); `invalid` is a failed attempt. */
     async run<T>(r: RunArgs<T>): Promise<RunResult<T>> {
       const a = d.api();
-      if (!a || !hasSpawnApi(a)) return { ok: false, outcome: "error" };
+      if (!a || !hasSpawnApi(a) || !ready()) return { ok: false, outcome: "error" };
       const s = d.settings.overseer;
-      let last: Exclude<Settled<T>["kind"], "ok"> = "error";
+      let last: "timeout" | "error" | "invalid" = "error";
       for (const no of r.role === "steer" ? [1] : [1, 2]) {
         if (r.signal?.aborted) return { ok: false, outcome: "aborted" };
         const p = no === 1 ? pickMember(d.settings, r.role, d.budget) : { member: s.fallbackMember, effort: s.fallbackEffort, fallback: "error" as const };
@@ -210,10 +225,11 @@ export function createOverseer(d: OverseerDeps) {
         // The line's outcome: a verdict's approval (V2), else how the attempt ended; an aborted attempt is an `error`.
         const v = o.kind === "ok" && r.submit.name === "submit_verdict" ? o.value as Verdict : undefined;
         d.log.review({ reviewId, role: r.role, member: p.member, model, attempt: no, durationMs: d.now() - t0, fallback: p.fallback,
-          outcome: o.kind === "ok" ? (v && !approve(v.findings) ? "revise" : "approve") : o.kind === "aborted" ? "error" : o.kind,
+          outcome: o.kind === "ok" ? (v && !approve(v.findings) ? "revise" : "approve") : o.kind === "aborted" || o.kind === "unrouted" ? "error" : o.kind,
           ...(v && { findings: v.findings.length, blocking: v.findings.filter((f) => f.blocking).length, ...(inconsistent(v) && { inconsistent: true }) }),
           commit: r.commit, branch: r.branch });
         if (o.kind === "aborted") return { ok: false, outcome: "aborted" };
+        if (o.kind === "unrouted") return { ok: false, outcome: "error" }; // a second attempt would meet the same policy
         if (o.kind !== "ok") { last = o.kind; continue; }
         d.append(REVIEW_TYPE, { reviewId, role: r.role, member: p.member, ...(r.commit && { commit: r.commit }), verdict: o.value,
           ...(r.submit.name === "submit_verdict" && { approved: approve((o.value as Verdict).findings) }), ts: d.now() });

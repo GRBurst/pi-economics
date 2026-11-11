@@ -26,6 +26,8 @@ export type LocalDeps = {
   settings: RouterSettings; log: Pick<ReturnType<typeof createOutcomeLog>, "hint" | "review">; isChild(ctx: any): boolean; sessionId(): string | undefined;
   /** The overseer's ports (plan S20): the actor API, the shell's tickets, random hex, the clock and its poll sleep. */
   api(): SubagentsApiV1 | undefined; tickets: Tickets; hex(bytes: number): string; now(): number; sleep(ms: number): Promise<void>;
+  /** The router's spawn policy is registered (review F1). */
+  policyOn(): boolean;
   /** After every budget change and rebuild (the status line, design §2.5). */
   onBudget?(): void;
   /** A file's hash; undefined when it cannot be read (§3.1.4). Default: sha256 of its bytes. */
@@ -52,6 +54,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   const budget: Budget = { opusUsed: 0, steerUsed: 0 };
   const overseer = createOverseer({
     api: d.api, settings: d.settings, tickets: d.tickets, hex: d.hex, now: d.now, sleep: d.sleep, budget, log: d.log,
+    policyOn: d.policyOn, warn: (text) => console.warn(text),
     append: (type, data) => { pi.appendEntry?.(type, data); if (type === BUDGET_TYPE) d.onBudget?.(); },
   });
   const handle = {
@@ -65,7 +68,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   const s = d.settings, h = s.hints;
   if (!componentOn(s, "hints")) return handle;
   // A persistent trip runs a steer overseer instead of the escalation block while one can run (design §3.1.2, AC-H4).
-  const steer = createSteer({ settings: s, budget, api: d.api, overseer,
+  const steer = createSteer({ settings: s, budget, overseer,
     send: (content) => pi.sendMessage?.({ customType: STEER_TYPE, content, display: true }, { deliverAs: "steer" }) });
   const hash = d.hash ?? fileHash, detect = d.detect ?? callTrips;
   const engine = createHintEngine(h, s.plans);

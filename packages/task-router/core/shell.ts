@@ -247,7 +247,7 @@ export function install(pi: PiLike, deps: Deps) {
   // Hints (design §3.1, plan S12): in local mode, or anywhere with hints "on"; the status line names the last hint (plan Q5).
   // The overseer (design §3.2) lives here too: its spawn line comes from `onEvent` (D26), its events from its own subscription.
   const lm = installLocal(pi, { settings, log, isChild, sessionId: () => sessionId, hash: deps.hash, detect: deps.detect, onTrip: (t) => { hint = t; render(); },
-    api, tickets, hex, now: nowMs, sleep: pd.sleep, onBudget: render });
+    api, tickets, hex, now: nowMs, sleep: pd.sleep, onBudget: render, policyOn: () => off.length > 0 });
   pi.on("before_agent_start", (e, ctx) => {
     track(ctx);
     skills = e.systemPromptOptions?.skills ?? skills;

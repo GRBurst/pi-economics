@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PROMPT } from "../core/local/overseer.ts";
+import { fakeApi } from "./fake-api.ts";
 import { finding, OPUS, rig, VALID, type Ok } from "./overseer-rig.ts";
 
 test("happy: one quiet spawn by main with a 32-hex ticket; a valid submit is recorded, the child killed, one review entry", async () => {
@@ -154,6 +155,29 @@ test("review F4: a spawn that fails before the policy took its ticket (a duplica
   assert.deepEqual(await t.run(), { ok: false, outcome: "error" });
   assert.equal(tickets.length, 2);
   for (const [i, id] of tickets.entries()) assert.ok("reject" in await t.h.a.spawn({ name: `probe-${i}`, task: { ticket: id } }), `ticket ${i}`);
+});
+
+test("review F1: a child the router's policy did not take the ticket for (a foreign policy, none) is killed at once: error, no charge, no attempt 2", async () => {
+  const foreign = fakeApi({ ext: true });
+  foreign.api.registerSpawnPolicy(() => ({ model: "x/any", thinkingLevel: "low" }));
+  for (const other of [foreign, fakeApi({ ext: true })]) {
+    const r = rig();
+    r.d.api = () => other.api;
+    assert.deepEqual(await r.run(), { ok: false, outcome: "error" });
+    assert.deepEqual(other.apiSpawns.map((s) => s.args.name), ["ovs-merge-1"]);
+    assert.deepEqual(other.killed, ["ovs-merge-1"]);
+    assert.deepEqual(r.d.budget, { opusUsed: 0, steerUsed: 0 });
+    assert.deepEqual(r.entries, []);
+    assert.deepEqual(r.warnings, ["task-router: ovs-merge-1 was not spawned through the task-router policy; killed, the review fails"]);
+    assert.deepEqual(r.h.lines().filter((l) => l.event === "review").map((l) => [l.outcome, l.attempt]), [["error", 1]]);
+  }
+});
+
+test("review F1: without the router's policy registered nothing is spawned", async () => {
+  const r = rig();
+  r.d.policyOn = () => false;
+  assert.deepEqual(await r.run(), { ok: false, outcome: "error" });
+  assert.equal(r.h.a.apiSpawns.length, 0);
 });
 
 test("both attempts invalid → {ok: false, outcome: 'invalid'}; an invalid attempt 1 is retried (D28)", async () => {
