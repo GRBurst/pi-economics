@@ -293,6 +293,17 @@ The human's commands (`user`) and panel input still reach it. The flag is set at
 while the child's session is created. Rejected: a `tool_call` guard in task-router that blocks these tools for
 ticket children (it covers only the main session, and only while the router is loaded).
 
+**A quiet agent has no agent preamble (review F3).** The actor appends its agent preamble to every child's
+system prompt: the tools for reaching other agents, "end your turn with send_message", and a handshake ("your
+FIRST turn must send_message to your spawner … then END YOUR TURN and wait for a go-ahead"). A quiet child
+can use none of it (its guard blocks the agent tools, LD13 keeps agents away), and no go-ahead comes: it would
+end its first turn idle, take the reminder, and end the next one idle too, which fails the attempt. In the
+patch a quiet child's prompt is pi's own plus the caller's `systemPrompt`, without the preamble. The overseer's
+prompt also says it ("No one answers you and no go-ahead comes: start at once, and end by calling <tool>.").
+Rejected: only that sentence in the overseer's prompt against the preamble (two contradicting instructions,
+and the preamble's "CRITICAL" outranks a one-liner); a policy flag to drop the preamble (every API caller that
+spawns quietly needs it dropped, so the flag would only be one more thing to forget).
+
 The router detects the extension with `typeof api.spawn === "function" && typeof api.kill === "function"`
 (`core/local/overseer.ts`). If it is missing in local mode, the router warns once ("task-router: local mode needs
 actor-subagents with spawnPolicyApi ≥ 2; merges are refused and plans are unavailable"). The merge gate then
@@ -383,7 +394,8 @@ Computing a file hash that fails (missing file, unreadable) records `undefined` 
 Every role uses read-only tools (`overseer.tools`, with no bash: `bash` can write). The cwd is the worktree or
 repository under review. The system prompt says: auditor, not author; derive the invariants from the goal
 before reading the diff or plan; report only through the submit tool; findings name a target and a verifiable
-fix criterion; no code, no replacement plan.
+fix criterion; no code, no replacement plan; no one answers and no go-ahead comes, so start at once and end
+with the submit tool (§3.0.4, review F3).
 
 #### 3.2.2 Invocation
 

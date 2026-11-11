@@ -14,7 +14,8 @@
 # - spawn-api (spawnPolicyApi 2, local mode): optional `api.spawn` and
 #   `api.kill` for the router's own agents (quiet: no notices to the parent,
 #   no roster entry, and only the API and the user act on the agent: no
-#   agent, its spawner included, messages or controls it), per-child tools
+#   agent, its spawner included, messages or controls it; no agent preamble
+#   in its system prompt), per-child tools
 #   (`childTools`) and cwd from the policy,
 #   and tool guards that may answer with a Promise. `version` stays 1.
 #

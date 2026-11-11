@@ -272,3 +272,10 @@ test("abort: an aborted signal ends the run as aborted, kills the child, no atte
   assert.deepEqual(await early.run({ signal: AbortSignal.abort() }), { ok: false, outcome: "aborted" });
   assert.equal(early.h.a.apiSpawns.length, 0);
 });
+
+test("review F3: every role's prompt says no go-ahead comes and that the run ends with its submit tool", () => {
+  for (const [role, text] of Object.entries(PROMPT)) {
+    const tool = role === "plan-author" ? "submit_plan" : "submit_verdict";
+    assert.ok(text.split("\n").includes(`No one answers you and no go-ahead comes: start at once, and end by calling ${tool}.`), role);
+  }
+});

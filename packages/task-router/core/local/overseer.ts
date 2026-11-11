@@ -87,13 +87,16 @@ export type OverseerDeps = {
 export const AUDITOR = `You are an auditor, not an author. Before reading the diff or plan, derive the invariants the goal implies; then check the work against them.
 Report only through the submit tool. Every finding names a target (path[:line] or a plan task id) and a fix criterion: a checkable condition, not code.
 Write no code and no replacement plan. You cannot edit files or run commands.`;
+/** Review F3: the actor gives a quiet child no agent preamble (no handshake); the prompt still says so, so a model that expects
+ *  one starts anyway, and that the run ends with the submit tool (else the reminder, then an error). */
+const start = (tool: string): string => `No one answers you and no go-ahead comes: start at once, and end by calling ${tool}.`;
 export const PROMPT: Record<Role, string> = {
-  merge: `${AUDITOR}\nReview the branch below for merging into the main branch. A finding is blocking when the branch must not merge without its fix.`,
-  delta: `${AUDITOR}\nReview the plan amendment below against its trigger and evidence. A finding is blocking when the amendment must not be applied as proposed.`,
-  "plan-review": `${AUDITOR}\nReview the whole plan below with the amendment applied. A finding is blocking when work must not continue on this plan.`,
-  steer: `${AUDITOR}\nA local model is stuck; the call records below show how. Name the cause and what to do next. Mark a finding blocking only when the current approach cannot work.`,
+  merge: `${AUDITOR}\nReview the branch below for merging into the main branch. A finding is blocking when the branch must not merge without its fix.\n${start("submit_verdict")}`,
+  delta: `${AUDITOR}\nReview the plan amendment below against its trigger and evidence. A finding is blocking when the amendment must not be applied as proposed.\n${start("submit_verdict")}`,
+  "plan-review": `${AUDITOR}\nReview the whole plan below with the amendment applied. A finding is blocking when work must not continue on this plan.\n${start("submit_verdict")}`,
+  steer: `${AUDITOR}\nA local model is stuck; the call records below show how. Name the cause and what to do next. Mark a finding blocking only when the current approach cannot work.\n${start("submit_verdict")}`,
   "plan-author": `You are the planner. Write the plan skeleton for the request below and submit it with submit_plan.
-Each task is small: few files, and one check command that fails before the task and passes after it. Write no code.`,
+Each task is small: few files, and one check command that fails before the task and passes after it. Write no code.\n${start("submit_plan")}`,
 };
 
 /** `submit_verdict` (design §3.2.3): the schema and the V1 rules; `targets` per role (D33). */

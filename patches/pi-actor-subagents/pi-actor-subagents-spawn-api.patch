@@ -167,6 +167,47 @@ index 30d0281..61f98f7 100644
  	if (self && name === by) return { ok: true };
  	if (isStrictDescendant(agents, name, authorityOf(by))) return { ok: true };
  	return { ok: false, reason: `'${name}' is not in your subtree` };
+diff --git a/extensions/actor-subagents/child-prompt.test.ts b/extensions/actor-subagents/child-prompt.test.ts
+index dee050e..759a77d 100644
+--- a/extensions/actor-subagents/child-prompt.test.ts
++++ b/extensions/actor-subagents/child-prompt.test.ts
+@@ -20,3 +20,10 @@ test("childPromptOptions keeps discovered append prompts and adds the agent prea
+ 		agentSystemPrompt("worker", "Be brief.", "lead"),
+ 	]);
+ });
++
++test("review F3: a quiet child (api.spawn with quiet) gets the caller's prompt without the agent preamble", () => {
++	// The preamble's handshake waits for a go-ahead and ends turns with send_message; a quiet child is driven by the API alone
++	// (no agent may message it, LD13), so no go-ahead would ever come.
++	const { appendSystemPromptOverride } = childPromptOptions("ovs", "Audit.", "main", true);
++	assert.deepEqual(appendSystemPromptOverride(["FROM APPEND_SYSTEM.md"]), ["FROM APPEND_SYSTEM.md", "Audit."]);
++});
+diff --git a/extensions/actor-subagents/child-prompt.ts b/extensions/actor-subagents/child-prompt.ts
+index ab1f1f9..89e157f 100644
+--- a/extensions/actor-subagents/child-prompt.ts
++++ b/extensions/actor-subagents/child-prompt.ts
+@@ -5,6 +5,10 @@
+  * systemPromptOverride makes pi drop its default preamble together with the tools and rules
+  * sections, and the rules section is where extensions' promptGuidelines land: a child would get
+  * a policy-granted extension's tools without the guidance on when to use them.
++ *
++ * Local patch (spawn-api, review F3): a quiet child (api.spawn with quiet) gets the caller's prompt
++ * alone. The preamble's handshake waits for a go-ahead and ends every turn with send_message; the
++ * API drives a quiet child and no agent may message it, so that go-ahead would never come.
+  */
+ import { agentSystemPrompt } from "./agent-system-prompt.ts";
+ 
+@@ -12,8 +16,9 @@ export function childPromptOptions(
+ 	name: string,
+ 	systemPrompt: string,
+ 	spawnedBy: string,
++	quiet = false,
+ ): { appendSystemPromptOverride: (base: string[]) => string[] } {
+ 	return {
+-		appendSystemPromptOverride: (base) => [...base, agentSystemPrompt(name, systemPrompt, spawnedBy)],
++		appendSystemPromptOverride: (base) => [...base, quiet ? systemPrompt : agentSystemPrompt(name, systemPrompt, spawnedBy)],
+ 	};
+ }
 diff --git a/extensions/actor-subagents/child-tools.test.ts b/extensions/actor-subagents/child-tools.test.ts
 new file mode 100644
 index 0000000..b28eb34
@@ -444,7 +485,7 @@ index 68cb056..344fb65 100644
  
  	/** Tell the parents what a lifecycle change did to their children (lifecycle-notice.ts decides). */
 diff --git a/extensions/actor-subagents/index.ts b/extensions/actor-subagents/index.ts
-index 69fbfaa..e796b74 100644
+index 69fbfaa..18afd89 100644
 --- a/extensions/actor-subagents/index.ts
 +++ b/extensions/actor-subagents/index.ts
 @@ -27,7 +27,7 @@ import { renderAgentMessage } from "./agent-message-renderer.ts";
@@ -474,12 +515,13 @@ index 69fbfaa..e796b74 100644
    let foregroundModel: ModelLike | undefined; // current foreground model (for inheritance to agents)
    let foregroundThinkingLevel: ThinkingLevel | undefined;
    // "provider/id" of the models this session is scoped to (empty = no scoping configured).
-@@ -535,8 +539,12 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -535,8 +539,13 @@ export default function subagents(pi: ExtensionAPI) {
        thinkingLevel?: ThinkingLevel;
        tools?: string[];
        toolGuard?: ToolGuard;
 +      childTools?: ChildTool[];
 +      cwd?: string;
++      quiet?: true;
      },
      existingFile?: string,
 +    // Local patch (spawn-api): shadows the host's cwd for everything below.
@@ -487,7 +529,16 @@ index 69fbfaa..e796b74 100644
    ): Promise<{ session: SessionLike; sessionFile?: string; sessionId?: string }> => {
      // Children get the human's settings as VALUES, through a manager whose writes go nowhere.
      // pi's session.setModel()/setThinkingLevel() persist the new default into settings.json, so
-@@ -601,7 +609,7 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -568,7 +577,7 @@ export default function subagents(pi: ExtensionAPI) {
+         { name: "subagent-retry-signals", factory: forwardRetrySignals(spec.name) },
+         ...toolGuardExtensions(spec.toolGuard),
+       ],
+-      ...childPromptOptions(spec.name, spec.systemPrompt, spec.spawnedBy),
++      ...childPromptOptions(spec.name, spec.systemPrompt, spec.spawnedBy, spec.quiet === true),
+     });
+     await loader.reload();
+     // Project settings ride along as overrides (the in-memory manager only seeds the global
+@@ -601,7 +610,7 @@ export default function subagents(pi: ExtensionAPI) {
      // foreground toolset, plus the custom agent tools via customTools -- unless the spawn
      // policy restricted it (the orchestration tools always stay; see childToolAllowlist).
      const modelRuntime = await modelRuntimeReady;
@@ -496,7 +547,7 @@ index 69fbfaa..e796b74 100644
      const tools = childToolAllowlist(spec.tools, customTools);
      const { session } = await createAgentSession({
        ...(tools ? { tools } : {}),
-@@ -722,6 +730,8 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -722,6 +731,8 @@ export default function subagents(pi: ExtensionAPI) {
        const result = await setAgentModel("main", { name, ...t });
        if (!result.ok) throw new Error(result.msg);
      },
@@ -505,7 +556,7 @@ index 69fbfaa..e796b74 100644
    });
  
    // Overwrite roster.json with current background membership (called after spawn/kill).
-@@ -729,7 +739,7 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -729,7 +740,7 @@ export default function subagents(pi: ExtensionAPI) {
    const persistRoster = (): void => {
      if (!subDir) return;
      try {
@@ -516,10 +567,10 @@ index 69fbfaa..e796b74 100644
      }
 diff --git a/extensions/actor-subagents/quiet-control.test.ts b/extensions/actor-subagents/quiet-control.test.ts
 new file mode 100644
-index 0000000..04b57ff
+index 0000000..b5bb034
 --- /dev/null
 +++ b/extensions/actor-subagents/quiet-control.test.ts
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,141 @@
 +// Local patch (spawn-api, review F2): a quiet agent (api.spawn with quiet, a router's overseer) answers only to the API and
 +// the human. No agent, its spawner 'main' included, may message, retune, pause, resume or kill it; reading stays open.
 +import { test } from "node:test";
@@ -641,6 +692,25 @@ index 0000000..04b57ff
 +	e.subscribe((ev) => void events.push(ev));
 +	assert.deepEqual(await api.kill!(["ovs"]), ["ovs"]);
 +	assert.deepEqual(events.filter((ev) => ev.type === "kill").map((ev) => ev.by), ["api"]);
++});
++
++test("review F3: a quiet spawn hands quiet to createSession (the preamble is left out); a loud one does not", async () => {
++	const e = new Engine({ maxAgents: 8, maxSpawnDepth: 3 });
++	e.addAgent(record("main"));
++	const specs: { name: string; quiet?: boolean }[] = [];
++	const spawner = createSpawner({
++		engine: e,
++		resolveModel: (ref) => (ref ? { provider: "a", id: "b", model: { ref } } : undefined),
++		createSession: async (spec) => {
++			specs.push({ name: spec.name, ...(spec.quiet !== undefined && { quiet: spec.quiet }) });
++			return { session: fakeSession(), sessionId: `sess-${spec.name}` };
++		},
++		cwd: () => "/repo",
++	});
++	const api = installApi({ engine: e, retune: async () => {}, ...spawnApiDeps({ engine: e, spawnAgent: spawner.spawnAgent, persist: () => {} }) }, {});
++	assert.equal((await api.spawn!({ name: "ovs", systemPrompt: "s", message: "m", model: "a/b" }, { quiet: true })).ok, true);
++	assert.equal((await api.spawn!({ name: "w", systemPrompt: "s", message: "m", model: "a/b" })).ok, true);
++	assert.deepEqual(specs, [{ name: "ovs", quiet: true }, { name: "w" }]);
 +});
 diff --git a/extensions/actor-subagents/spawn-api.test.ts b/extensions/actor-subagents/spawn-api.test.ts
 new file mode 100644
@@ -799,7 +869,7 @@ index 0000000..21e161b
 +	assert.equal("kill" in api, false);
 +});
 diff --git a/extensions/actor-subagents/spawner.ts b/extensions/actor-subagents/spawner.ts
-index b0ab9ce..3382e1a 100644
+index b0ab9ce..3867a90 100644
 --- a/extensions/actor-subagents/spawner.ts
 +++ b/extensions/actor-subagents/spawner.ts
 @@ -5,7 +5,7 @@
@@ -811,17 +881,19 @@ index b0ab9ce..3382e1a 100644
  import { formatStatusDetail, type StopReason } from "./agent-status.ts";
  import type { AgentHandle, AgentRecord, AgentView } from "./agent-record.ts";
  import type { Engine } from "./engine.ts";
-@@ -116,6 +116,9 @@ export interface SpawnerDeps {
+@@ -116,6 +116,11 @@ export interface SpawnerDeps {
  		/** Tool allowlist set by the spawn policy; undefined keeps the full default toolset. */
  		tools?: string[];
  		toolGuard?: ToolGuard;
 +		/** Local patch (spawn-api): the policy's child tools and the child session's cwd. */
 +		childTools?: ChildTool[];
 +		cwd?: string;
++		/** Local patch (spawn-api, review F3): an api.spawn with quiet; the child runs without the agent preamble. */
++		quiet?: true;
  	}) => Promise<{ session: SessionLike; sessionFile?: string; sessionId?: string }>;
  	/** Called after every relevant activity (e.g. refresh the status footer). */
  	onActivity?: () => void;
-@@ -142,8 +145,15 @@ export interface RestoreSpec {
+@@ -142,8 +147,15 @@ export interface RestoreSpec {
  }
  
  export interface Spawner {
@@ -839,7 +911,7 @@ index b0ab9ce..3382e1a 100644
  	/** Re-register an agent from a restored session (used by restart resume). */
  	restoreAgent: (spec: RestoreSpec) => void;
  }
-@@ -373,14 +383,14 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+@@ -373,14 +385,14 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  		});
  	};
  
@@ -856,7 +928,7 @@ index b0ab9ce..3382e1a 100644
  		if (!reserved.ok) return { ok: false, msg: `error: ${reserved.reason}` };
  		// Identity, not just the name, distinguishes this reservation from a later re-spawn.
  		const reservation = engine.get(spec.name);
-@@ -390,6 +400,8 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+@@ -390,6 +402,8 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  		let message = spec.message;
  		let tools: string[] | undefined;
  		let toolGuard: ToolGuard | undefined;
@@ -865,7 +937,7 @@ index b0ab9ce..3382e1a 100644
  		let policyMeta: unknown;
  		const policy = deps.spawnPolicy?.();
  		if (policy) {
-@@ -418,6 +430,8 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+@@ -418,6 +432,8 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  			if (decision.briefAppend) message = message ? `${message}\n\n${decision.briefAppend}` : decision.briefAppend;
  			tools = decision.tools;
  			toolGuard = decision.toolGuard;
@@ -874,16 +946,17 @@ index b0ab9ce..3382e1a 100644
  			policyMeta = decision.meta;
  		}
  
-@@ -441,6 +455,8 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+@@ -441,6 +457,9 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  				thinkingLevel,
  				...(tools ? { tools } : {}),
  				...(toolGuard ? { toolGuard } : {}),
 +				...(childTools ? { childTools } : {}),
 +				...(childCwd ? { cwd: childCwd } : {}),
++				...(opts.quiet === true ? { quiet: true as const } : {}),
  			}));
  		} catch (e) {
  			if (engine.get(spec.name) === reservation) engine.release(spec.name);
-@@ -473,6 +489,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+@@ -473,6 +492,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  			sessionFile,
  			sessionId,
  			policyMeta,
@@ -891,7 +964,7 @@ index b0ab9ce..3382e1a 100644
  		});
  
  		// 4) Deliver the optional first message atomically (no race; the agent is registered).
-@@ -490,7 +507,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+@@ -490,7 +510,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  			else sent = ` (initial message NOT delivered: ${outcome.reason})`;
  		}
  		const model = formatModelThinking(`${resolved.provider}/${resolved.id}`, session.thinkingLevel);

@@ -65,6 +65,8 @@ pkgs.runCommand "pi-actor-subagents-tests" {nativeBuildInputs = [pkgs.nodejs];} 
   # LD13 (review F2): a quiet agent answers only to the API and the user; send_message asks the engine first.
   grep -qF 'engine.quietRefusal(selfName, t)' agent-tools.ts
   grep -qF 'd.engine.kill(API_ACTOR, names)' api.ts
+  # Review F3: a quiet child runs without the agent preamble (its handshake waits for a go-ahead no one sends).
+  grep -qF 'childPromptOptions(spec.name, spec.systemPrompt, spec.spawnedBy, spec.quiet === true)' index.ts
   grep -q 'spawnApiDeps({ engine, spawnAgent' index.ts
   grep -q 'cwd = cwdOf(spec)' index.ts
   grep -qF '.map(piTool)' index.ts
