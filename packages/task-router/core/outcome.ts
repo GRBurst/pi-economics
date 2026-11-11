@@ -1,6 +1,7 @@
 // Outcome log events (spec §5.2.7, R2): allowlisted keys, bounded strings, no card or prompt text.
 import { createHash } from "node:crypto";
 import { isAbsolute, join } from "node:path";
+import type { Trip } from "./local/tripwires.ts";
 import type { Card, LoggedPlan, Start, ThinkingLevel } from "./types.ts";
 
 export type OutcomeEvent = Record<string, string | number | boolean | string[]>;
@@ -19,6 +20,8 @@ const KEYS = [
   "fromModel", "toModel", "fromLevel", "toLevel",
   // local mode L2 (design §3.0.3): the force line; a forced spawn's source and what routing would have chosen
   "action", "source", "model", "effort", "forced", "forceSource", "routedModel", "routedEffort",
+  // local mode L3 (design §3.0.3): the hint line
+  "trip", "stage", "count",
 ];
 const MAX_STR = 256;
 const MAX_ITEMS = 20;
@@ -77,6 +80,11 @@ export type Forced = { source: ForceSource; routedModel: string; routedEffort: T
 /** A session-level line (design §3.0.3): `taskId: ""`; `model` is a model reference, never the command's text. */
 export const forceEvent = (i: { now: Date; action: ForceAction; source: ForceSource; model?: string; effort?: string; reason?: "unknown-model" | "usage" }) =>
   finish({ ...base("force", i.now, ""), action: i.action, source: i.source, model: i.model, effort: i.effort, reason: i.reason });
+
+export type HintStage = "hint" | "steer" | "parent";
+/** A hint (design §3.1.2, §3.0.3): `taskId` is "main" or the child's name; the trip and stage, never the hint's text. */
+export const hintEvent = (i: { now: Date; taskId: string; trip: Trip; stage: HintStage; count?: number; sessionId?: string }) =>
+  finish({ ...base("hint", i.now, i.taskId), trip: i.trip, stage: i.stage, count: i.count, sessionId: i.sessionId });
 
 export const serializeEvent = (e: OutcomeEvent): string => `${JSON.stringify(e)}\n`;
 

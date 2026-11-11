@@ -815,7 +815,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   Σ over progress-free runs of ⌊detections / (1 + persistTrips)⌋, and no two hints of one trip are ≤ `cooldownCalls` calls apart.
 - **GREEN**: S11. **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R. **ACs**: AC-H2 (pure), AC-H4 (L3).
 
-#### L3.T4 Hint log line (router side) (AC-L2) `[ ] todo`
+#### L3.T4 Hint log line (router side) (AC-L2) `[x] done`
 - **Files**: `core/outcome.ts` (`trip`, `stage`, `count` in KEYS; `hintEvent`), `core/log.ts` (`hint`), `test/hint-log.test.ts` (new).
 - **Depends**: L2.T2 (same files). **Parallel**: with L3.T1–T3, L3.T5, L3.T6.
 - **RED**: `hintEvent` shape; "AC-L2": every string value ∈ `TRIPS ∪ {hint, steer, parent} ∪ {"main"} ∪ ids` and no hint text
