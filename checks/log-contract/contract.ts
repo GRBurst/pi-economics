@@ -17,6 +17,7 @@ import { ROLES } from "../../packages/task-router/core/local/overseer.ts";
 import { TRIPS } from "../../packages/task-router/core/local/tripwires.ts";
 import { fakeCtx as meterCtx, fakePi as meterPi } from "../../packages/token-meter/test/fake-pi.ts";
 import { harness, card } from "../../packages/task-router/test/harness.ts";
+import { fakeGit } from "../../packages/task-router/test/fake-git.ts";
 import { install as installCache } from "../../packages/cache-lifecycle/core/shell.ts";
 import { defaults as cacheDefaults } from "../../packages/cache-lifecycle/core/settings.ts";
 import { fakeCtx as cacheCtx, fakePi as cachePi } from "../../packages/cache-lifecycle/test/fake-pi.ts";
@@ -136,6 +137,38 @@ async function mainSession(sid: string, child: string, usd: number): Promise<voi
 await mainSession("contract-main-1", "contract-child-1", 0.4);
 await mainSession("contract-main-2", "contract-child-2", 0.25);
 
+// --- task-router's merge gate (design §3.4, plan D57: this check has no git, so the fake one): a first `bash` result records
+// main, one merged and one refused request_merge (merge lines), main moved by hand, then a `bash` result (a gatebypass line).
+{
+  const fg = fakeGit({ repos: [{ root: "/r" }] });
+  const gate = harness({ agentDir, settings: { mode: "local" }, apiExt: true,
+    extra: { git: fg.git, run: async () => ({ exit: 0, output: "ok\n", timedOut: false }) } as never });
+  gate.clock.t = clock.t;
+  gate.hooks.onSleep = () => {
+    const p = gate.a.apiSpawns.at(-1)?.policy as { childTools?: { execute(x: unknown): Promise<unknown> }[] } | undefined;
+    void p?.childTools?.[0]?.execute({ verdict: "APPROVE", summary: "s", findings: [] });
+  };
+  const gctx = { sessionManager: { getSessionId: () => "contract-gate", getBranch: () => [] }, cwd: "/r", hasUI: true,
+    ui: { notify: () => {}, setStatus: () => {} } };
+  gate.f.fire("session_start", {}, gctx);
+  const bash = async (id: string): Promise<void> => {
+    gate.f.fire("tool_call", { toolName: "bash", toolCallId: id, input: { command: "true" } }, gctx);
+    gate.f.fire("tool_result", { toolName: "bash", toolCallId: id, input: { command: "true" }, content: [], isError: false }, gctx);
+    await gate.router.settled();
+  };
+  await bash("g1");
+  const started = await gate.f.callTool("start_branch", { slug: "contract", goal: "g", check: "true" }, gctx);
+  assert.ok(!started.isError, `start_branch: ${JSON.stringify(started.details)}`);
+  fg.commit(started.details.worktree);
+  const merged = await gate.f.callTool("request_merge", { summary: "s" }, gctx);
+  assert.equal(merged.details.status, "merged", JSON.stringify(merged.details));
+  const refused = await gate.f.callTool("request_merge", { branch: "main" }, gctx);
+  assert.equal(refused.details.status, "refused", JSON.stringify(refused.details));
+  fg.repos.get("/r")!.refs.set("main", "b".repeat(40));
+  await bash("g2");
+  clock.t = Math.max(clock.t, gate.clock.t);
+}
+
 // --- every log exists, every line carries the current schema version
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 const dirLines = (dir: string): any[] => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".jsonl")).flatMap((f) => jsonl(join(dir, f))) : []);
@@ -151,7 +184,7 @@ for (const [name, lines] of Object.entries(logs)) {
   const old = lines.filter((l) => l.v !== 1);
   if (old.length) failures.push(`${name}: ${old.length} line(s) without schema version v=1, e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
 }
-for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force", "hint", "review"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
+for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force", "hint", "review", "merge", "gatebypass"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
 if (!logs.outcomes.some((l) => l.event === "spawn" && l.ticket === "steer")) failures.push("outcomes: no ticket spawn line");
 // The contract keeps literal copies of the router's enums (token-meter imports nothing of the router): the overseer roles, the trips
 // and the merge reasons.
