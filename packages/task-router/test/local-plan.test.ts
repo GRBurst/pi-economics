@@ -1,9 +1,10 @@
 // Local mode L7.T1–T3 (design §3.2.4, §3.5.3, §3.5.6; plan S29): the plan core. Pure; the file facts come through an
 // `fs` port. T1: the skeleton schema and its validation, one counterexample per rule ("AC-P2 <rule>"); generated valid
-// skeletons pass. T2: canonical JSON, hash, render and parse ("AC-P4").
+// skeletons pass. T2: canonical JSON, hash, render and parse ("AC-P4"). T3: the tick-only diff ("AC-P5").
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canonical, type Milestone, parsePlan, renderPlan, type Skeleton, SKELETON_SCHEMA, skeletonHash, type Task, validateSkeleton } from "../core/local/plan.ts";
+import { canonical, type Milestone, parsePlan, renderPlan, type Skeleton, SKELETON_SCHEMA, skeletonHash, type Task, tickOnly,
+  validateSkeleton } from "../core/local/plan.ts";
 import { defaults } from "../core/settings.ts";
 import { seeded } from "./rand.ts";
 
@@ -216,4 +217,51 @@ ${canonical(x)}
 </details>
 `);
   assert.ok(canonical(x).startsWith('{\n  "invariants": [\n    "no new dependency"\n  ],\n  "milestones": [\n    {\n      "acceptance": ['));
+});
+
+/** A rendered plan, its lines, and the indexes of its unticked and ticked task lines. */
+const rendered = (rnd: Rnd) => {
+  const x = generate(rnd), ticks = new Set(taskIds(x).filter(() => rnd(2) === 0));
+  const lines = renderPlan(META, x, ticks).split("\n");
+  const at = (box: string) => lines.flatMap((l, i) => (l.startsWith(`- [${box}] M`) ? [i] : []));
+  return { lines, open: at(" "), done: at("x") };
+};
+const idOf = (l: string) => l.slice(6, l.indexOf(":"));
+
+test("AC-P5 flipping any subset of open task lines is tick-only, with exactly those ids", () => {
+  for (let seed = 1; seed <= 200; seed++) {
+    const rnd = seeded(seed), { lines, open } = rendered(rnd);
+    const flip = open.filter(() => rnd(2) === 0), after = [...lines];
+    for (const i of flip) after[i] = after[i]!.replace("- [ ] ", "- [x] ");
+    assert.deepEqual(tickOnly(lines.join("\n"), after.join("\n")), { ok: true, flipped: flip.map((i) => idOf(lines[i]!)) }, `seed ${seed}`);
+  }
+});
+
+test("AC-P5 untick blocked", () => {
+  for (let seed = 1; seed <= 100; seed++) {
+    const rnd = seeded(seed), { lines, done } = rendered(rnd);
+    if (!done.length) continue;
+    const after = [...lines], i = pick(rnd, done);
+    after[i] = after[i]!.replace("- [x] ", "- [ ] ");
+    assert.deepEqual(tickOnly(lines.join("\n"), after.join("\n")), { ok: false }, `seed ${seed}`);
+  }
+});
+
+test("AC-P5 any other line change or an added line is not tick-only", () => {
+  for (let seed = 1; seed <= 100; seed++) {
+    const rnd = seeded(seed), { lines, open } = rendered(rnd), before = lines.join("\n");
+    const changed = [...lines], i = rnd(lines.length);
+    changed[i] = `${changed[i]}!`;
+    assert.deepEqual(tickOnly(before, changed.join("\n")), { ok: false }, `seed ${seed} change`);
+    const added = [...lines];
+    added.splice(rnd(lines.length + 1), 0, pick(rnd, ["", "- [x] M9.T9: new", "text"]));
+    assert.deepEqual(tickOnly(before, added.join("\n")), { ok: false }, `seed ${seed} add`);
+    if (open.length) {
+      const both = [...lines], j = pick(rnd, open);
+      both[j] = `${both[j]!.replace("- [ ] ", "- [x] ")} too`;
+      assert.deepEqual(tickOnly(before, both.join("\n")), { ok: false }, `seed ${seed} tick and edit`);
+    }
+  }
+  assert.deepEqual(tickOnly("a\n- [ ] M1.T1: x", "a\n- [x] M1.T1: x\n"), { ok: false });
+  assert.deepEqual(tickOnly("a\n", "a\n"), { ok: true, flipped: [] });
 });

@@ -1,6 +1,6 @@
 // Local mode L7 (design §3.2.4, §3.5.3; plan S29): the plan core. Pure; file facts come through an `fs` port.
 // L7.T1: `submit_plan`'s skeleton schema and the deterministic validation the router adds to it. L7.T2: canonical
-// JSON, the skeleton hash, and the plan file's render and parse.
+// JSON, the skeleton hash, and the plan file's render and parse. L7.T3: the tick-only diff the plan guard allows.
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import type { RouterSettings } from "../types.ts";
@@ -146,3 +146,16 @@ export function parsePlan(text: string): { sk: Skeleton; ticks: Set<string> } | 
 }
 
 export const TICK = /^- \[( |x)\] (M\d+\.T\d+):/;
+
+/** L7.T3 (design §3.5.6): `after` differs from `before` only in `[ ]`→`[x]` on task lines; `flipped` in file order. */
+export function tickOnly(before: string, after: string): { ok: true; flipped: string[] } | { ok: false } {
+  const b = before.split("\n"), a = after.split("\n"), flipped: string[] = [];
+  if (a.length !== b.length) return { ok: false };
+  for (let i = 0; i < b.length; i++) {
+    if (a[i] === b[i]) continue;
+    const m = TICK.exec(b[i]!);
+    if (m?.[1] !== " " || a[i] !== `- [x]${b[i]!.slice(5)}`) return { ok: false };
+    flipped.push(m[2]!);
+  }
+  return { ok: true, flipped };
+}
