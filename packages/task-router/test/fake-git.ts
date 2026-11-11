@@ -67,8 +67,8 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
       r.worktrees.splice(i, 1);
       return { ok: true, out: "" };
     },
-    async branchDelete(repo, branch) {
-      calls.push(`branchDelete ${repo} ${branch}`);
+    async branchDelete(repo, branch, force = false) {
+      calls.push(`branchDelete ${repo} ${branch}${force ? " force" : ""}`);
       const bad = scripted("branchDelete");
       if (bad) return bad;
       const r = repoOf(repo);

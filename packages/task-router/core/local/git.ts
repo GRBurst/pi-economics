@@ -37,7 +37,8 @@ export type Git = {
   sha(repo: string, ref: string): Promise<string | undefined>;
   worktreeAdd(repo: string, dir: string, branch: string, base: string): Promise<Res>;
   worktreeRemove(repo: string, dir: string): Promise<Res>;
-  branchDelete(repo: string, branch: string): Promise<Res>;
+  /** `git branch -d` (refuses a branch with unmerged commits); `force`: `-D`. */
+  branchDelete(repo: string, branch: string, force?: boolean): Promise<Res>;
   dirty(dir: string): Promise<boolean>;
 };
 /** A command that either gave its stdout or failed with the tail of its stderr (2048 characters). */
@@ -76,7 +77,7 @@ export function createGit(run: GitRun): Git {
     sha: (repo, ref) => line(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], repo),
     async worktreeAdd(repo, dir, branch, base) { return res(await run(["worktree", "add", "-q", "-b", branch, dir, base], repo, ADD_MS)); },
     async worktreeRemove(repo, dir) { return res(await run(["worktree", "remove", dir], repo, ADD_MS)); },
-    async branchDelete(repo, branch) { return res(await run(["branch", "-d", branch], repo, SHORT_MS)); },
+    async branchDelete(repo, branch, force = false) { return res(await run(["branch", force ? "-D" : "-d", branch], repo, SHORT_MS)); },
     async dirty(dir) {
       const r = await run(["status", "--porcelain"], dir, ADD_MS);
       return r.exit !== 0 || r.out.trim() !== ""; // a status that fails counts as dirty: nothing is removed or merged on it

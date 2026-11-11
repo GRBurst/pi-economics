@@ -1,6 +1,9 @@
-// Worktrees and branches (design §3.3; plan S22, S23): names, directories and containment (pure); `startBranch` and the write
-// guard follow in later tasks.
+// Worktrees and branches (design §3.3; plan S22, S23): names, directories and containment (pure), and `startBranch`; the write
+// guard and the cleanup follow in later tasks.
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import type { Result, RouterSettings } from "../types.ts";
+import type { BranchRecord, BranchStore } from "./branches.ts";
+import type { Git } from "./git.ts";
 
 export const SLUG = /^[a-z0-9-]{1,40}$/;
 /** `<prefix><slug>`, or `<prefix><plan>/<id>` for a unit of a plan (design §3.3.1). */
@@ -16,3 +19,73 @@ export const inside = (p: string, dir: string): boolean => {
   const r = relative(dir, p);
   return r === "" || (!r.startsWith("..") && !isAbsolute(r));
 };
+
+// ── start_branch (design §3.3.2) ──
+export type StartDeps = { git: Git; store: BranchStore; settings: RouterSettings };
+/** What `start_branch` returns: `base` is the main tip the branch was made at (a commit). */
+export type Started = { branch: string; worktree: string; base: string; check: string };
+const MAX_TEXT = 300;
+const fail = (e: string): Result<never> => ({ ok: false, errors: [e] });
+
+/** The first main branch that exists in `repo` and its tip. */
+async function mainTip(d: StartDeps, repo: string): Promise<{ name: string; sha: string } | undefined> {
+  for (const name of d.settings.mergeGate.mainBranches) {
+    const sha = await d.git.sha(repo, name);
+    if (sha !== undefined) return { name, sha };
+  }
+  return undefined;
+}
+/** Refreshes the facts the synchronous guards read (plan D39): the repository's main checkout and registered worktrees. */
+export async function refreshFacts(d: StartDeps, repo: string): Promise<void> {
+  const wts = await d.git.worktrees(repo);
+  d.store.facts.worktrees.set(repo, wts.map((w) => w.dir));
+  const main = wts.find((w) => w.branch !== undefined && d.settings.mergeGate.mainBranches.includes(w.branch));
+  if (main) d.store.facts.mainCheckout.set(repo, main.dir);
+  else d.store.facts.mainCheckout.delete(repo);
+}
+
+/** `start_branch` for a slug (design §3.3.2): validates everything first, so a failure changes nothing; an existing branch in a
+ *  worktree is re-activated (idempotent; one in the state merged, fixer or blocked is refused); else `git worktree add -b`. A
+ *  plan unit is L7's: until then `plan` is refused. */
+export async function startBranch(d: StartDeps, input: unknown, cwd: string): Promise<Result<Started>> {
+  const i = (typeof input === "object" && input !== null ? input : {}) as Record<string, unknown>;
+  if (i.slug !== undefined && i.plan !== undefined) return fail("give either a slug or a plan, not both");
+  if (i.slug === undefined && i.plan === undefined) return fail("a slug or a plan is required");
+  if (i.plan !== undefined) return fail("plans are not active");
+  if (typeof i.slug !== "string" || !SLUG.test(i.slug)) return fail("slug must match ^[a-z0-9-]{1,40}$");
+  for (const k of ["goal", "check"] as const) {
+    if (typeof i[k] !== "string" || i[k] === "") return fail(`${k} is required`);
+    if ((i[k] as string).length > MAX_TEXT) return fail(`${k} is longer than ${MAX_TEXT} characters`);
+  }
+  const goal = i.goal as string, check = i.check as string;
+  if (i.repo !== undefined && !(typeof i.repo === "string" && isAbsolute(i.repo))) return fail("repo must be an absolute path");
+  const from = (i.repo as string | undefined) ?? cwd;
+  const repo = await d.git.root(from);
+  if (repo === undefined) return fail(`${from} is not in a git repository`);
+  const main = await mainTip(d, repo);
+  if (main === undefined) return fail(`none of the main branches (${d.settings.mergeGate.mainBranches.join(", ")}) exists in ${repo}`);
+  const branch = branchName(d.settings.worktrees.branchPrefix, { slug: i.slug });
+  const known = d.store.get(repo, branch);
+  const there = (await d.git.worktrees(repo)).find((w) => w.branch === branch);
+  const existed = (await d.git.sha(repo, branch)) !== undefined;
+  let rec: BranchRecord;
+  if (there) {
+    if (known && known.state !== "active" && known.state !== "abandoned") return fail(`branch ${branch} is ${known.state}; start another`);
+    rec = { ...(known ?? { repo, branch, base: main.sha, rejections: 0, fixerRuns: 0 }), worktree: there.dir, state: "active", goal, check };
+    const current = d.store.active();
+    const same = known !== undefined && current?.repo === repo && current.branch === branch && current.goal === goal && current.check === check;
+    if (!same) d.store.put(rec);
+  } else {
+    const dir = worktreeDir(d.settings.worktrees.root, repo, branch);
+    const added = await d.git.worktreeAdd(repo, dir, branch, main.sha);
+    if (!added.ok) {
+      // `git worktree add -b` creates the branch before it finds the directory in the way: take back what it made.
+      if (!existed) await d.git.branchDelete(repo, branch, true);
+      return fail(added.err);
+    }
+    rec = { repo, branch, worktree: dir, base: main.sha, state: "active", rejections: 0, fixerRuns: 0, goal, check };
+    d.store.put(rec);
+  }
+  await refreshFacts(d, repo);
+  return { ok: true, value: { branch, worktree: rec.worktree, base: rec.base, check } };
+}

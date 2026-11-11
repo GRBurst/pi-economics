@@ -157,3 +157,15 @@ test("a failing call is {ok: false, err} with err the stderr tail, at most 2048 
   const mute = createGit(async () => ({ exit: 3, out: "", err: "", timedOut: false }));
   assert.deepEqual(await mute.worktreeRemove(r.dir, "d"), { ok: false, err: "git exited 3" });
 });
+
+test("branchDelete without force refuses a branch with unmerged commits; with force it deletes it", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  r.git(["checkout", "-q", "-b", "side"]);
+  r.commit("s.ts", "s\n");
+  r.git(["checkout", "-q", "main"]);
+  const refused = await git.branchDelete(r.dir, "side");
+  assert.ok(!refused.ok && /not fully merged/.test(refused.err), JSON.stringify(refused));
+  assert.ok((await git.branchDelete(r.dir, "side", true)).ok);
+  assert.equal(await git.sha(r.dir, "side"), undefined);
+});

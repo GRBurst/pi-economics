@@ -819,7 +819,7 @@ message). Open notes, for L6 or later:
 - **RED**: `put` appends one `task-router/branch` entry per change; `rebuild` from entries reproduces `all()` (property over random put sequences: last record per `(repo, branch)` wins); `active()` = D38.
 - **GREEN**: S22. **Check**: fast runner; `chk task-router typecheck-task-router`.
 
-#### L5.T5 `startBranch` (AC-W1) `[ ] todo`
+#### L5.T5 `startBranch` (AC-W1) `[x] done`
 - **Files**: `core/local/worktree.ts` (`startBranch(deps, input, cwd)`), `test/local-start-branch.test.ts`. **Depends**: L5.T3, L5.T4.
 - **RED** (temp repo): "AC-W1": `{slug: "x", goal: "g", check: "true"}` → branch `lm/x` at the main tip, worktree `<parent>/repo.worktrees/lm--x` (realpath), result `{branch, worktree, base, check}`; again → same result, worktree and branch lists unchanged. Failure table, each leaving worktrees, branches and entries unchanged: slug and plan; neither; slug `X_y`; no goal; no check; cwd outside a repo; no main branch; `plan` (`plans are not active`, until L7); target dir exists as a file → `isError` with git's stderr tail.
 - **GREEN**: §3.3.2. **Check**: fast runner; `chk task-router`. **ACs**: AC-W1.
