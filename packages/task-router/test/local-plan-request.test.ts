@@ -93,6 +93,21 @@ test("AC-P3 a vacuous task check: the author's execute gets isError with a check
   assert.ok(!out[0]!.text.includes("M1.T2"), "M1.T2's check fails on the main tip");
 });
 
+test("review L7 F3: the fallback attempt gets its own plans.rounds: its first vacuous submission is a resubmit, not final", async () => {
+  const x = planRig(), o = rig({ overseer: { resubmits: 0 } });
+  x.ports.overseer = o.ov;
+  const out: Array<{ text: string; isError?: boolean; terminate?: boolean }> = [];
+  for (let i = 0; i < 2; i++) o.script.push(async () => out.push(await o.tool().execute(skeleton("true"))));
+  o.script.push(() => o.h.a.emit({ type: "kill", name: "ovs-plan-author-1", ts: 0 })); // attempt 1 dies after its rounds
+  o.script.push(async () => out.push(await o.tool().execute(skeleton("true"))));
+  o.script.push(async () => out.push(await o.tool().execute(skeleton())));
+  const r = await planRequest(x.ports, INPUT, x.r.dir);
+  assert.equal(o.h.a.apiSpawns.length, 2);
+  assert.deepEqual(out.map((y) => [y.isError, y.terminate]), [[true, undefined], [true, undefined], [true, undefined], [undefined, true]]);
+  assert.ok(out[2]!.text.startsWith("invalid: F1 [blocking] check M1.T1: "), out[2]!.text);
+  assert.equal(r.status, "approved", r.detail);
+});
+
 test("AC-P3 after plans.rounds vacuous rounds the skeleton is accepted, vacuousCheck recorded on that task", async () => {
   const x = planRig();
   x.script.push([skeleton("true"), skeleton("true"), skeleton("true")]);

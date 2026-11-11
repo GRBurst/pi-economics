@@ -202,16 +202,18 @@ async function redRuns(p: PlanPorts, repo: string, tip: string, tasks: readonly 
 /** `submit_plan` (design §3.5.2 steps 2–3): validation, then the red runs. Within `plans.rounds` a failure goes back to the author as
  *  a resubmit; afterwards the submission is final: still invalid or broken fails the plan (D52), still vacuous is accepted with
  *  `vacuousCheck` on those tasks (LD9). `rewrite` (design §3.5.4 step 5): the author rewrites one milestone of an approved plan;
- *  only the rewrite's own findings count, and only its new or changed tasks run red. */
+ *  only the rewrite's own findings count, and only its new or changed tasks run red. Each overseer attempt has its own rounds
+ *  (review L7 F3: the fallback author starts afresh). */
 export function planSubmit(p: PlanPorts, x: { repo: string; slug: string; checkout: string; tip: string; rewrite?: Rewrite }): SubmitSpec<Authored> {
-  const rounds = p.settings.plans.rounds;
-  let round = 0;
+  const rounds = p.settings.plans.rounds, used = new Map<number, number>();
   return {
     name: "submit_plan", parameters: SKELETON_SCHEMA, resubmits: rounds,
     description: "Submit the plan skeleton: milestones of small tasks, each with its files and one check command that fails before the task "
       + "and passes after it. The router validates it and runs every check on the main tip; a finding comes back as a resubmit.",
-    async check(input) {
-      const last = ++round > rounds;
+    async check(input, attempt = 1) {
+      const round = (used.get(attempt) ?? 0) + 1;
+      used.set(attempt, round);
+      const last = round > rounds;
       const v = x.rewrite ? validateRewrite(input, p.settings, checkoutFs(x.checkout), x.rewrite) : validateSkeleton(input, p.settings, checkoutFs(x.checkout));
       if (!v.ok) return last ? { ok: true, value: { ok: false, reason: "invalid", reasons: v.reasons } } : v;
       const tasks = x.rewrite ? changedTasks(x.rewrite.old, v.value) : v.value.milestones.flatMap((m) => m.tasks);

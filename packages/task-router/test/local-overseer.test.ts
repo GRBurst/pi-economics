@@ -325,6 +325,22 @@ test("L7.T7: a submit spec's own resubmits (plan_request: plans.rounds) stand fo
   assert.deepEqual(res, { ok: false, outcome: "invalid" });
 });
 
+test("review L7 F3: a check still running when its attempt dies settles before the fallback starts; each attempt's check gets its number", async () => {
+  const r = rig();
+  const v = verdictSubmit(), seen: Array<[number | undefined, number]> = [];
+  const slow = { ...v, check: async (x: unknown, attempt?: number) => {
+    await new Promise((res) => setTimeout(res, 30));
+    seen.push([attempt, r.h.a.apiSpawns.length]);
+    return v.check(x);
+  } };
+  r.script.push(() => void r.tool().execute(VALID));
+  r.script.push(() => r.h.a.emit({ type: "kill", name: "ovs-merge-1", ts: 0 }));
+  r.script.push(async () => r.tool().execute(VALID));
+  const res = await r.run({ submit: slow });
+  assert.equal(res.ok, true, JSON.stringify(res));
+  assert.deepEqual(seen, [[1, 1], [2, 2]], "attempt 1's check ended before attempt 2 spawned");
+});
+
 // L7.T17: plan_request's submit check runs the red runs (real processes); a submission arriving before the deadline is judged,
 // however long its check takes, and the poll waits for that check instead of the clock.
 test("a submission whose check is still running holds the deadline: its result counts", async () => {

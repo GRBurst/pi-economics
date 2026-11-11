@@ -685,7 +685,8 @@ cwd (`packages/task-router/core/local/planflow.ts`):
    `splitFiles` (3) paths per task, a non-empty check) and runs each task's
    check at the main tip in a detached temporary worktree: a check that
    cannot run (exit 126 or 127), that the git guard (above) blocks (it is not
-   run), or that passes there (vacuous) goes back as a `check` finding. Rejections count against `plans.rounds` (2); after them a
+   run), or that passes there (vacuous) goes back as a `check` finding. Rejections count against `plans.rounds` (2), per overseer
+   attempt (the fallback author starts afresh); after them a
    skeleton that is still invalid is `refused` `invalid`, a check that still
    cannot run `broken-check`, and a vacuous one is accepted with
    `vacuousCheck: true` (the merge reviewer is told);

@@ -66,9 +66,10 @@ export const ticketPolicy = (t: Ticket): PolicyResult => ({
 });
 
 // ── Running an overseer (plan S20, design §3.2.2) ──
-/** `resubmits`: the attempt's resubmits for invalid input, if not `overseer.resubmits` (`submit_plan`: `plans.rounds`, L7). */
+/** `resubmits`: the attempt's resubmits for invalid input, if not `overseer.resubmits` (`submit_plan`: `plans.rounds`, L7).
+ *  `check` gets the attempt's number (1, the fallback 2): a spec that counts submissions counts them per attempt (review L7 F3). */
 export type SubmitSpec<T> = { name: "submit_verdict" | "submit_plan"; description: string; parameters: Schema; resubmits?: number;
-  check(input: unknown): Promise<{ ok: true; value: T } | { ok: false; reasons: string[] }> };
+  check(input: unknown, attempt?: number): Promise<{ ok: true; value: T } | { ok: false; reasons: string[] }> };
 export type Budget = { opusUsed: number; steerUsed: number };
 /** `why`: the spawn refusals of the attempts that did not start (a member at its dailyCap or without a free slot). */
 export type RunResult<T> = { ok: true; value: T; reviewId: string; member: string; model: string }
@@ -161,7 +162,7 @@ export function createOverseer(d: OverseerDeps) {
   let n = 0;
   /** One overseer child: spawn with a ticket, await its submit tool (reminder, timeout, events, abort), kill it. `charge`
    *  runs once the spawn succeeded (D30: an attempt that later times out still cost). */
-  async function attempt<T>(a: SpawnApi, r: RunArgs<T> & { cwd: string }, member: string, model: string, effort: ThinkingLevel, reviewId: string,
+  async function attempt<T>(a: SpawnApi, r: RunArgs<T> & { cwd: string }, no: number, member: string, model: string, effort: ThinkingLevel, reviewId: string,
     charge: () => void): Promise<Settled<T>> {
     const s = d.settings.overseer, name = `ovs-${r.role}-${++n}`;
     let settled: Settled<T> | undefined, wake!: () => void;
@@ -174,7 +175,7 @@ export function createOverseer(d: OverseerDeps) {
       name: r.submit.name, description: r.submit.description, parameters: r.submit.parameters,
       async execute(x) {
         if (settled) return { text: "review closed", isError: true, terminate: true };
-        const pending = (checking = r.submit.check(x));
+        const pending = (checking = r.submit.check(x, no));
         let c: Awaited<typeof pending>;
         try { c = await pending; } finally { if (checking === pending) checking = undefined; }
         if (c.ok) { finish({ kind: "ok", value: c.value }); return { text: "recorded", terminate: true }; }
@@ -226,6 +227,9 @@ export function createOverseer(d: OverseerDeps) {
       }
       await a.kill([name]).catch(() => []);
       d.tickets.forget(name);
+      // review L7 F3: a check still running (a kill or error event ended the attempt) settles first, so the fallback's checks
+      // never run beside it
+      while (checking) await checking.catch(() => undefined);
       return settled;
     } finally {
       if (ticket !== undefined) d.tickets.revoke(ticket); // review F4: never left open
@@ -301,7 +305,7 @@ export function createOverseer(d: OverseerDeps) {
           d.append(BUDGET_TYPE, { opusUsed: d.budget.opusUsed, steerUsed: d.budget.steerUsed });
         };
         const reviewId = `rv-${d.hex(4)}`, t0 = d.now();
-        const o = await attempt(a, r, p.member, model, p.effort, reviewId, charge).finally(unhold);
+        const o = await attempt(a, r, no, p.member, model, p.effort, reviewId, charge).finally(unhold);
         // The line's outcome: a verdict's approval (V2), else how the attempt ended; an aborted attempt is an `error`.
         const v = o.kind === "ok" && r.submit.name === "submit_verdict" ? o.value as Verdict : undefined;
         d.log.review({ reviewId, role: r.role, member: p.member, model, attempt: no, durationMs: d.now() - t0, fallback: p.fallback,
