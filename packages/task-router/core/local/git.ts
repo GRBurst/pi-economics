@@ -46,8 +46,7 @@ export function createGit(run: GitRun): Git {
     async root(dir) {
       const c = await line(["rev-parse", "--git-common-dir"], dir);
       if (c === undefined) return undefined;
-      const common = real(resolve(dir, c)); // D35: the directory that holds the git directory, else (bare) the common directory
-      return common.endsWith("/.git") ? dirname(common) : common;
+      return repoRootOf(real(resolve(dir, c)));
     },
     async top(dir) {
       const t = await line(["rev-parse", "--show-toplevel"], dir);
@@ -55,3 +54,48 @@ export function createGit(run: GitRun): Git {
     },
   };
 }
+
+export type Wt = { dir: string; branch?: string; head: string; bare?: true; locked?: true; prunable?: true };
+export type Stat = { path: string; added: number; deleted: number }[];
+/** The repository key (plan D35): the directory that holds the git directory, else (a bare repository) the common directory. */
+export const repoRootOf = (commonDir: string): string => (commonDir.endsWith("/.git") ? dirname(commonDir) : commonDir);
+/** `git worktree list --porcelain`: blocks separated by a blank line; a bare repository has no HEAD (`head: ""`), a detached
+ *  one no branch; `locked` and `prunable` carry an optional reason that is dropped. Paths with a newline are not supported. */
+export function parseWorktrees(porcelain: string): Wt[] {
+  const out: Wt[] = [];
+  for (const block of porcelain.split("\n\n")) {
+    const lines = block.split("\n").filter((l) => l !== "");
+    const first = lines[0];
+    if (first === undefined || !first.startsWith("worktree ")) continue;
+    const wt: Wt = { dir: first.slice("worktree ".length), head: "" };
+    for (const l of lines.slice(1)) {
+      if (l.startsWith("HEAD ")) wt.head = l.slice(5);
+      else if (l.startsWith("branch ")) wt.branch = l.slice(7).replace(/^refs\/heads\//, "");
+      else if (l === "bare") wt.bare = true;
+      else if (l === "locked" || l.startsWith("locked ")) wt.locked = true;
+      else if (l === "prunable" || l.startsWith("prunable ")) wt.prunable = true;
+    }
+    out.push(wt);
+  }
+  return out;
+}
+/** `git diff --numstat` lines (`<added>\t<deleted>\t<path>`); a binary file (`-\t-`) counts as a file with 0/0; a rename
+ *  (`a => b`, `dir/{a => b}/f`) names the new path. Lines of another shape are dropped. */
+export function parseNumstat(text: string): Stat {
+  const out: Stat = [];
+  for (const l of text.split("\n")) {
+    const m = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(l);
+    if (!m) continue;
+    out.push({ path: renamedTo(m[3]!), added: m[1] === "-" ? 0 : Number(m[1]), deleted: m[2] === "-" ? 0 : Number(m[2]) });
+  }
+  return out;
+}
+const renamedTo = (p: string): string => {
+  const b = /^(.*)\{(.*) => (.*)\}(.*)$/.exec(p);
+  if (b) {
+    const joined = `${b[1]}${b[3]}${b[4]}`.replace(/\/{2,}/g, "/");
+    return b[1] === "" && b[3] === "" ? joined.replace(/^\//, "") : joined;
+  }
+  const i = p.indexOf(" => ");
+  return i < 0 ? p : p.slice(i + 4);
+};

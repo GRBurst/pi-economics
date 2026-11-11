@@ -804,7 +804,7 @@ message). Open notes, for L6 or later:
 - **RED**: "root": `tempRepo()` → `root(dir) === realpath(dir)`; "timeout": `git hash-object --stdin` with no stdin end and 100 ms → `{timedOut: true, exit: 124}`; "missing binary": `gitRunner("git-nosuch")` → exit 127. `chk task-router` FAILS (exit 127) until `nativeCheckInputs` (plant §11).
 - **GREEN**: S21 runner. **Check**: fast runner; `chk task-router typecheck-task-router leak`.
 
-#### L5.T2 Names and parsers (pure) `[ ] todo`
+#### L5.T2 Names and parsers (pure) `[x] done`
 - **Files**: `core/local/worktree.ts` (`SLUG`, `branchName`, `worktreeDir`, `inside`), `core/local/git.ts` (`parseWorktrees`, `parseNumstat`, `repoRootOf`), `test/local-worktree-names.test.ts`. **Parallel**: with L5.T1.
 - **RED**: ∀ slug ∈ SLUG: `worktreeDir("../{repo}.worktrees", "/r/p/x", branchName("lm/", {slug}))` = `/r/p/x.worktrees/lm--<slug>` (D36); never inside `/r/p/x`; injective over valid slugs and plan units; porcelain fixtures (detached, bare, locked, prunable); numstat with binary (`-\t-\t`) and renames.
 - **GREEN**: S21/S22 pure parts. **Check**: fast runner; `chk task-router typecheck-task-router`.
