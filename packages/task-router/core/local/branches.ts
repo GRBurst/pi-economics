@@ -20,6 +20,9 @@ export type BranchStore = {
   put(r: BranchRecord): void;
   /** D38: the newest-put record whose state is `active`. */
   active(): BranchRecord | undefined;
+  /** The newest-put record whose state is one of `states` (request_merge without a branch: the active one, else one a fixer owns
+   *  or one that is blocked, so its answer names the state). */
+  latest(states: readonly BranchState[]): BranchRecord | undefined;
   /** Replaces everything with what the session entries (in order) say; entries that are not well-formed are ignored. */
   rebuild(entries: readonly unknown[]): void;
   facts: BranchFacts;
@@ -42,16 +45,18 @@ const keyOf = (repo: string, branch: string): string => `${repo}\0${branch}`;
 export function createBranchStore(append: (customType: string, data: unknown) => void): BranchStore {
   const records = new Map<string, { r: BranchRecord; seq: number }>();
   let seq = 0;
+  const latest = (states: readonly BranchState[]): BranchRecord | undefined => {
+    let best: { r: BranchRecord; seq: number } | undefined;
+    for (const x of records.values()) if (states.includes(x.r.state) && (!best || x.seq > best.seq)) best = x;
+    return best && structuredClone(best.r);
+  };
   const set = (r: BranchRecord): void => { records.set(keyOf(r.repo, r.branch), { r: structuredClone(r), seq: ++seq }); };
   return {
     all: () => [...records.values()].map((x) => structuredClone(x.r)),
     get: (repo, branch) => { const x = records.get(keyOf(repo, branch)); return x && structuredClone(x.r); },
     put(r) { set(r); append(BRANCH_TYPE, structuredClone(r)); },
-    active() {
-      let best: { r: BranchRecord; seq: number } | undefined;
-      for (const x of records.values()) if (x.r.state === "active" && (!best || x.seq > best.seq)) best = x;
-      return best && structuredClone(best.r);
-    },
+    active: () => latest(["active"]),
+    latest,
     rebuild(entries) {
       records.clear();
       seq = 0;
