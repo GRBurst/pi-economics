@@ -443,7 +443,9 @@ when its spawn fails. A submitted verdict is kept as a session entry
 (15), a steer review also against `steerBudget` (3); with the budget spent a
 review runs on the fallback member and a steer review is skipped. A pick of
 `overseer.member` holds its unit from the pick on, so reviews running at the
-same time cannot overrun the budget. The status
+same time cannot overrun the budget. These three counts (`budget`, `steerBudget`,
+`resubmits`) may be 0 (Opus never used, no steering, no resubmits); every other
+count is positive. The status
 line adds `opus <n> left` once three or fewer are left. Steer (`hints.steer = "on"`):
 when a trip persists (above), the router spawns a steer review instead of the
 escalation, with the trip and the last 12 calls (tool, target, result; no file

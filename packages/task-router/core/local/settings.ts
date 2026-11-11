@@ -30,6 +30,8 @@ const ENUMS: [string, readonly string[], string?][] = [
 
 /** Number leaves of the local sections that are ranges, not counts: path, upper bound (the lower bound 0 is exclusive). */
 const RANGES: [string, number][] = [["hints.errorSimilarity", 1], ["hints.contextPercent", 100]];
+/** Counts that may be 0: Opus never used, no steering, no resubmits. */
+const ZERO_OK = ["overseer.budget", "overseer.steerBudget", "overseer.resubmits"];
 const SECTIONS = ["hints", "overseer", "mergeGate", "plans"] as const;
 const isStr = (x: unknown): x is string => typeof x === "string";
 /** path, the list rule, its reason. */
@@ -58,7 +60,8 @@ export function validateLocal(s: RouterSettings, base: RouterSettings, problems:
   for (const sec of SECTIONS) for (const [k, d] of Object.entries(base[sec])) {
     const path = `${sec}.${k}`, v = get(s, path) as number, top = ranges.get(path);
     if (typeof d !== "number") continue;
-    if (top === undefined && !(Number.isInteger(v) && v > 0)) reset(path, "must be a positive integer");
+    const floor = ZERO_OK.includes(path) ? 0 : 1;
+    if (top === undefined && !(Number.isInteger(v) && v >= floor)) reset(path, floor === 0 ? "must be a non-negative integer" : "must be a positive integer");
     if (top !== undefined && !(v > 0 && v <= top)) reset(path, `must be a number in (0, ${top}]`);
   }
   for (const [path, ok, why] of LISTS) if (!ok(get(s, path) as unknown[])) reset(path, why);

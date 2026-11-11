@@ -57,8 +57,7 @@ test("AC-O3: a fenced summary or a duplicate id is rejected for resubmission; th
 
 test("AC-O3 property: with resubmits r ∈ 0…3, submissions 1…r get '; resubmit', the (r+1)-th terminates the attempt as invalid", async () => {
   for (const resubmits of [0, 1, 2, 3]) {
-    const r = rig();
-    r.h.router.settings.overseer.resubmits = resubmits; // the settings rule admits positive counts only; the run takes 0 too
+    const r = rig({ overseer: { resubmits } });
     const out: Array<{ text: string; isError?: boolean; terminate?: boolean }> = [];
     for (let i = 0; i <= resubmits; i++) r.script.push(async () => out.push(await r.tool().execute({ verdict: "APPROVE" })));
     const res = await r.run({ role: "steer" }); // one attempt (D28), so the run's outcome is the attempt's
@@ -181,8 +180,7 @@ test("review F1: without the router's policy registered nothing is spawned", asy
 });
 
 test("both attempts invalid → {ok: false, outcome: 'invalid'}; an invalid attempt 1 is retried (D28)", async () => {
-  const r = rig();
-  r.h.router.settings.overseer.resubmits = 0;
+  const r = rig({ overseer: { resubmits: 0 } });
   r.on.each = async () => { await r.tool().execute({}); };
   assert.deepEqual(await r.run(), { ok: false, outcome: "invalid" });
   assert.deepEqual(r.h.a.apiSpawns.map((s) => s.args.name), ["ovs-merge-1", "ovs-merge-2"]);
@@ -238,6 +236,18 @@ test("an Opus attempt that times out still counts (D30); attempt 2 on the fallba
   r.on.each = async () => { if (r.h.a.apiSpawns.length === 2) await r.tool().execute(VALID); };
   assert.ok((await r.run()).ok);
   assert.deepEqual(r.d.budget, { opusUsed: 1, steerUsed: 0 });
+});
+
+test("budget 0: Opus is never used (the first attempt is on the fallback, opusUsed stays 0); steerBudget 0: no steer", async () => {
+  const r = rig({ overseer: { budget: 0 } });
+  r.script.push(async () => r.tool().execute(VALID));
+  const res = await r.run();
+  assert.deepEqual(r.spawned(), ["ovs-merge-1", SONNET, "xhigh"]);
+  assert.ok(res.ok && res.member === "sonnet");
+  assert.deepEqual(r.d.budget, { opusUsed: 0, steerUsed: 0 });
+  const none = rig({ overseer: { steerBudget: 0 } });
+  assert.deepEqual(await none.run({ role: "steer" }), { ok: false, outcome: "skipped" });
+  assert.equal(none.h.a.apiSpawns.length, 0);
 });
 
 test("steer: steerUsed = steerBudget → skipped, no spawn; a steer spawn counts both; a failing steer gets no attempt 2", async () => {

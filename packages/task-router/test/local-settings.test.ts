@@ -107,13 +107,22 @@ const COUNTS = (["hints", "overseer", "mergeGate", "plans"] as const).flatMap((s
   Object.entries(defaults()[sec]).filter(([, v]) => typeof v === "number").map(([k]) => `${sec}.${k}`)).filter((p) => !RANGES.includes(p));
 const one = (path: string, v: unknown): Record<string, unknown> => { const [top, key] = path.split("."); return { [top]: { [key]: v } }; };
 
-test("COUNT: every count must be a positive integer", () => {
+/** The counts whose 0 means "none": Opus never used, no steering, no resubmits (they are non-negative; the others positive). */
+const ZERO = ["overseer.budget", "overseer.steerBudget", "overseer.resubmits"];
+
+test("COUNT: every count must be a positive integer, except the overseer's three that may be 0", () => {
   assert.ok(COUNTS.length >= 20, `${COUNTS.length} counts`);
+  for (const p of ZERO) assert.ok(COUNTS.includes(p), p);
   for (const p of COUNTS) {
-    for (const v of [0, -1, 1.5]) {
+    const why = ZERO.includes(p) ? "must be a non-negative integer" : "must be a positive integer";
+    for (const v of ZERO.includes(p) ? [-1, 1.5] : [0, -1, 1.5]) {
       const r = parseSettings(one(p, v));
-      assert.deepEqual(r.problems, [kept(p, "must be a positive integer")], `${p} = ${v}`);
+      assert.deepEqual(r.problems, [kept(p, why)], `${p} = ${v}`);
       assert.equal(at(r.settings, p), at(defaults(), p));
+    }
+    if (ZERO.includes(p)) {
+      const z = parseSettings(one(p, 0));
+      assert.deepEqual([z.problems, at(z.settings, p)], [[], 0], `${p} = 0`);
     }
     const s = parseSettings(one(p, "7")); // merge() drops a value of the wrong type: no problem
     assert.deepEqual([s.problems, at(s.settings, p)], [[], at(defaults(), p)], `${p} = "7"`);
