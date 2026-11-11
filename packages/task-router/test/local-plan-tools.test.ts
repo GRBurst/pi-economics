@@ -123,3 +123,21 @@ test("plan_request: invalid input is refused before anything runs (isError)", as
   const a = await m.call("amend_plan", { slug: "parser", trigger: {}, changes: [], reason: "r" });
   assert.equal(a.isError, true);
 });
+
+test("AC-M6 (review F3): a child turn while plan_request moves main writes no gatebypass line", async () => {
+  const m = rig();
+  await m.h.router.settled();
+  const orig = m.git.ffMerge.bind(m.git);
+  (m.git as any).ffMerge = async (...a: Parameters<typeof orig>) => {
+    const r = await orig(...a); // main has moved; its record comes after
+    m.h.a.emit({ type: "turn", name: "w1", ts: 0 });
+    await new Promise((res) => setTimeout(res, 300));
+    return r;
+  };
+  m.verdicts.push(SK as never);
+  const p = await m.call("plan_request", { slug: "parser", request: "add a parser", acceptance: ["the parser exists"], files: ["src/a.ts"], symbols: ["parse"] });
+  assert.equal((p.details as { status: string }).status, "approved", JSON.stringify(p.details));
+  m.h.a.emit({ type: "turn", name: "w1", ts: 0 });
+  await m.h.router.settled();
+  assert.deepEqual(m.h.lines().filter((l) => l.event === "gatebypass"), []);
+});

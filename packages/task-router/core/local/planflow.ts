@@ -33,6 +33,8 @@ export type PlanPorts = {
   signal?: AbortSignal;
   /** The `plan` lines (design §3.0.3); absent: none. */
   log?(i: PlanLogInput): void;
+  /** The plan commit's move of main, as the merge's step 9 (`MergePorts.exclusive`, review F3); absent: at once. */
+  exclusive?<T>(f: () => Promise<T>): Promise<T>;
 };
 export type PlanInput = { slug: string; request: string; acceptance: string[]; files: string[]; symbols?: string[] };
 export const PLAN_REASONS = ["grounding", "slug", "main-dirty", "invalid", "broken-check", "author-unavailable", "aborted", "git"] as const;

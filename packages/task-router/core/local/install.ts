@@ -237,7 +237,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   // plan_request and amend_plan (design §3.5.2, §3.5.4) while plans are active (D40); submit_plan is the plan author's child tool.
   if (activeSet(s).plans) {
     const planPorts = (signal: AbortSignal | undefined): PlanPorts => ({ git, run: d.run ?? runCheck, overseer, branches, plans, settings: s,
-      append: appendRef, tmp: redTmp, log: (i) => d.log.plan(i), ...(signal && { signal }) });
+      append: appendRef, tmp: redTmp, log: (i) => d.log.plan(i), exclusive, ...(signal && { signal }) });
     pi.registerTool?.(planRequestTool(planPorts, () => ready));
     pi.registerTool?.(amendPlanTool(planPorts, () => ready));
   }
