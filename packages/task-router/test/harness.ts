@@ -26,10 +26,10 @@ export const T0_ALL = { bounded: true, specified: true, verifiable: true, lowRis
 export const card = (o: Partial<Card> = {}): Card => ({ kind: "implement", files: ["src/a.ts"], check: "npm test", acceptance: ["tests pass"], t0: T0_ALL, t2: [], ...o });
 
 export type Health = { health: number; slots: number };
-export function harness(o: { settings?: Partial<RouterSettings>; base?: "defaults" | "today"; health?: Health; extra?: Partial<Deps>; agentDir?: string } = {}) {
+export function harness(o: { settings?: Partial<RouterSettings>; base?: "defaults" | "today"; health?: Health; extra?: Partial<Deps>; agentDir?: string; apiExt?: boolean } = {}) {
   const agentDir = o.agentDir ?? mkdtempSync(join(tmpdir(), "task-router-h-"));
   const f = fakePi();
-  const a = fakeApi();
+  const a = fakeApi({ ext: o.apiExt });
   const clock = { t: Date.UTC(2026, 9, 2, 12, 0, 0) };
   const health: Health = o.health ?? { health: 200, slots: 200 };
   const urls: string[] = [];

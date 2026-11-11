@@ -1,6 +1,7 @@
 // All extension logic, free of pi imports so it runs under node's test runner with test/fake-pi.ts.
 // Outcome log, `task_verdict`, the spawn policy and the guards that watch the swarm.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ApiEvent, SubagentsApiV1 } from "./api.ts";
@@ -24,6 +25,7 @@ import { cardSection, localSection } from "./prompt.ts";
 import { isLocal, statusText } from "./local/mode.ts";
 import { installLocal } from "./local/install.ts";
 import { createChildTrips } from "./local/childtrips.ts";
+import { createTickets } from "./local/overseer.ts";
 import type { LocalDeps } from "./local/install.ts";
 import type { Trip } from "./local/tripwires.ts";
 import { enabled } from "./members.ts";
@@ -96,6 +98,7 @@ export function install(pi: PiLike, deps: Deps) {
   // A routed child's tripwires (design §3.1.3): the policy composes their guard in local mode with hints on.
   const childTrips = createChildTrips({ settings, api, log });
   const children = new Map<string, Child>();
+  const tickets = createTickets((bytes) => randomBytes(bytes).toString("hex"));
   let skills: Array<{ name: string; filePath: string; baseDir: string }> = [];
   const skillPort: SkillPort = { find: (n) => skills.find((x) => x.name === n), read: (path) => readFileSync(path, "utf8") };
   const counter = createMemberCounter(join(deps.agentDir, "task-router", "member-count.json"), now);
@@ -107,7 +110,7 @@ export function install(pi: PiLike, deps: Deps) {
     fs: deps.fs ?? { exists: existsSync, size: (p) => statSync(p).size, isDir: (p) => existsSync(p) && statSync(p).isDirectory() },
     sleep: deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))),
     probe: createProbes({ fetch: deps.fetch ?? (globalThis.fetch as unknown as FetchLike), now: nowMs }), counter, blocks: new Map(),
-    force: force.port, childGuard: (child, parent) => childTrips.guard(child, parent),
+    force: force.port, childGuard: (child, parent) => childTrips.guard(child, parent), tickets,
   };
   const policy = createPolicy(pd);
   const failover = createFailover({ ...pd, log });
@@ -241,5 +244,5 @@ export function install(pi: PiLike, deps: Deps) {
     else delete sections.task_cards;
   });
 
-  return { log, settings };
+  return { log, settings, tickets };
 }

@@ -10,6 +10,8 @@ import type { MemberCounter } from "./counter.ts";
 import type { Health } from "./health.ts";
 import { importanceOf } from "./importance.ts";
 import { componentOn, isLocal } from "./local/mode.ts";
+import { ticketPolicy } from "./local/overseer.ts";
+import type { Tickets } from "./local/overseer.ts";
 import { planSpawn } from "./pipeline.ts";
 import { profileFor, skillBlocks, skillNames } from "./profile.ts";
 import { pickMember } from "./select.ts";
@@ -52,6 +54,8 @@ export type PolicyDeps = {
   force?: ForcePort;
   /** A routed child's tripwire guard (design §3.1.3, plan S13): local mode with hints on; absent = none. */
   childGuard?: (child: string, parent: string) => SyncGuard;
+  /** The router's own spawns (design §3.2.2, plan S19): a known ticket in `task.ticket` is answered first. */
+  tickets?: Tickets;
 };
 
 const POLL_MS = 2000;
@@ -107,6 +111,9 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
   const s = d.settings;
   const reject = (errors: string[]) => ({ reject: errors.join("; ") });
   return async (args, caller: Caller) => {
+    // D25 (design §3.2.2 step 3): the router's own spawn first, whatever routing and a force say; an unknown ticket is no card field.
+    const t = d.tickets?.take((args.task as { ticket?: unknown } | undefined)?.ticket, args.name);
+    if (t) return ticketPolicy(t);
     if (!s.routing) return { model: args.model ?? caller.model, thinkingLevel: args.thinkingLevel ?? caller.thinkingLevel ?? "medium" };
     if (args.task === undefined) return { reject: cardRejection(s, "spawn_subagent needs a task card.") };
     const parsed = parseCard(args.task);
