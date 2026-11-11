@@ -206,3 +206,16 @@ test("review F7: a task check the git guard blocks is never run; a check finding
   assert.equal(r.reason, "broken-check");
   assert.ok(r.detail.includes(`M1.T1: \`${bad}\` was not run: `), r.detail);
 });
+
+test("review F11: an abort during a red run ends plan_request aborted; the red run gets the signal; main is unchanged", async () => {
+  const x = planRig();
+  const before = x.mainSha(), ctl = new AbortController(), run = x.ports.run, got: Array<AbortSignal | undefined> = [];
+  x.ports.signal = ctl.signal;
+  x.ports.run = (cmd, cwd, ms, signal) => { got.push(signal); ctl.abort(); return run(cmd, cwd, ms, signal); };
+  x.script.push([skeleton()]);
+  const r = await planRequest(x.ports, INPUT, x.r.dir);
+  assert.deepEqual([r.status, r.reason], ["error", "aborted"], r.detail);
+  assert.deepEqual(got, [ctl.signal], "one red run, with the signal; none after the abort");
+  assert.equal(x.mainSha(), before);
+  assert.equal(x.plans.get("parser"), undefined);
+});

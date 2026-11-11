@@ -107,9 +107,8 @@ async function request(p: PlanPorts, input: PlanInput, cwd: string): Promise<Pla
   // ── 2–3 author, red runs ──
   const out = await p.overseer.run({ role: "plan-author", input: authorInput(s, input, files, await git.lsFiles(checkout, REPO_MAP)), cwd: checkout,
     submit: planSubmit(p, { repo, slug: input.slug, checkout, tip: main.sha }), signal: p.signal });
-  if (!out.ok) {
-    return out.outcome === "aborted" ? done("error", "aborted", "aborted") : done("error", "author-unavailable", `the plan author is unavailable (${out.outcome})`);
-  }
+  if (p.signal?.aborted || (!out.ok && out.outcome === "aborted")) return done("error", "aborted", "aborted");
+  if (!out.ok) return done("error", "author-unavailable", `the plan author is unavailable (${out.outcome})`);
   if (!out.value.ok) return done("error", out.value.reason, `${AUTHOR_FAILED[out.value.reason]}: ${out.value.reasons.join("; ")}`);
   // ── 4 render, commit on main (D50: plumbing, then the merge's fast-forward path), record ──
   const sk = out.value.sk, reviewId = out.reviewId;
@@ -188,12 +187,13 @@ const redFinding = (r: RedExit, i: number, tip: string): Finding => ({
 async function redRuns(p: PlanPorts, repo: string, tip: string, tasks: readonly Task[], slug: string, unit: (t: Task) => string): Promise<RedExit[]> {
   const out: RedExit[] = [], w = p.settings.worktrees;
   for (const task of tasks) {
+    if (p.signal?.aborted) break; // review F11: Esc stops the red runs
     const branch = branchName(w.branchPrefix, { plan: slug, id: unit(task) });
     const blocked = await vetCheck({ git: p.git, store: p.branches, settings: p.settings }, task.check, worktreeDir(w.root, repo, branch), branch);
     if (blocked !== undefined) { out.push({ task, exit: -1, blocked }); continue; }
     const dir = p.tmp();
     if (!(await p.git.worktreeAddDetached(repo, dir, tip)).ok) continue;
-    try { out.push({ task, exit: (await p.run(task.check, dir, p.settings.checkTimeoutSec * 1000)).exit }); }
+    try { out.push({ task, exit: (await p.run(task.check, dir, p.settings.checkTimeoutSec * 1000, p.signal)).exit }); }
     finally { await p.git.worktreeRemove(repo, dir, true); }
   }
   return out;
@@ -215,7 +215,9 @@ export function planSubmit(p: PlanPorts, x: { repo: string; slug: string; checko
       const v = x.rewrite ? validateRewrite(input, p.settings, checkoutFs(x.checkout), x.rewrite) : validateSkeleton(input, p.settings, checkoutFs(x.checkout));
       if (!v.ok) return last ? { ok: true, value: { ok: false, reason: "invalid", reasons: v.reasons } } : v;
       const tasks = x.rewrite ? changedTasks(x.rewrite.old, v.value) : v.value.milestones.flatMap((m) => m.tasks);
-      const bad = (await redRuns(p, x.repo, x.tip, tasks, x.slug, unitOf(v.value))).filter(failsRed);
+      const red = await redRuns(p, x.repo, x.tip, tasks, x.slug, unitOf(v.value));
+      if (p.signal?.aborted) return { ok: false, reasons: ["aborted"] }; // the run ends aborted (review F11)
+      const bad = red.filter(failsRed);
       if (!bad.length) return { ok: true, value: { ok: true, sk: x.rewrite ? marked(x.rewrite.old, v.value, new Set()) : v.value } };
       const lines = bad.map((r, i) => findingLine(redFinding(r, i, x.tip)));
       if (!last) return { ok: false, reasons: lines };
@@ -320,7 +322,8 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
     // review F7: the git classifier reads the command first, in its directory (the main checkout's branch is a main branch)
     const blocked = await vetCheck({ git, store: p.branches, settings: s }, cmd, dir, mine?.branch);
     if (blocked !== undefined) return refused("evidence", `the evidence command \`${cmd}\` was not run: ${blocked}`);
-    const r = await p.run(cmd, dir, s.checkTimeoutSec * 1000);
+    const r = await p.run(cmd, dir, s.checkTimeoutSec * 1000, p.signal);
+    if (p.signal?.aborted) return amendDone("error", "aborted", "aborted"); // review F11: before the trigger opens
     if (r.exit === 0) return refused("evidence", `the evidence command \`${cmd}\` exits 0 in ${dir}; an interface-break needs a command that fails`);
     evidence = [`\`${cmd}\` exit ${r.exit} in ${dir}`, tailOf(r.output)].filter(Boolean).join("\n");
     trigger = p.plans.open(slug, "interface-break", a?.plan?.slug === slug ? a.plan.id : undefined)!;
@@ -342,6 +345,7 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   // the new and changed tasks' checks on the main tip, as at plan time (§3.5.2 step 3): one that cannot run refuses, a vacuous
   // one is marked
   const changed = changedTasks(old, amended), red = await redRuns(p, repo, main.sha, changed, slug, unitOf(amended));
+  if (p.signal?.aborted) return amendDone("error", "aborted", "aborted", { trigger });
   const broken = red.filter(brokenRed);
   if (broken.length) return refused("broken-check", `the amended checks cannot run: ${broken.map(redLine).join("; ")}`, { trigger });
   const final = marked(old, amended, new Set(red.filter((r) => r.blocked === undefined && r.exit === 0).map((r) => r.task.id)));
@@ -380,10 +384,8 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
       `Keep the invariants, every other milestone and every checked task (${[...checked].join(", ") || "none"}) exactly as they are; submit the whole skeleton.`,
       limits(s), "Every new or changed task check must fail on the main tip and pass once the task is done.", "The plan:", text!].join("\n"),
     submit: planSubmit(p, { repo, slug, checkout, tip: main.sha, rewrite: { old, checked, milestone: mid } }) });
-  if (!author.ok) {
-    return author.outcome === "aborted" ? amendDone("error", "aborted", "aborted", no)
-      : amendDone("error", "author-unavailable", `the plan author is unavailable (${author.outcome})`, no);
-  }
+  if (p.signal?.aborted || (!author.ok && author.outcome === "aborted")) return amendDone("error", "aborted", "aborted", no);
+  if (!author.ok) return amendDone("error", "author-unavailable", `the plan author is unavailable (${author.outcome})`, no);
   if (!author.value.ok) return amendDone("error", author.value.reason, `${AUTHOR_FAILED[author.value.reason]}: ${author.value.reasons.join("; ")}`, no);
   logPlan(p, { slug, action: "skeleton", trigger: trig.kind, nTasks: nTasks(author.value.sk), reviewId: author.reviewId });
   const r = await commitAmended(p, c, author.value.sk, author.reviewId, { trigger, full, findings });

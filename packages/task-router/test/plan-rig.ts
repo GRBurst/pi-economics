@@ -51,7 +51,7 @@ export function planRig(o: { settings?: Record<string, unknown> } = {}) {
   };
   let tmps = 0;
   const checks: Array<{ cmd: string; cwd: string }> = [];
-  const run: Runner = (cmd, cwd, ms) => { checks.push({ cmd, cwd }); return runCheck(cmd, cwd, ms); };
+  const run: Runner = (cmd, cwd, ms, signal) => { checks.push({ cmd, cwd }); return runCheck(cmd, cwd, ms, signal); };
   const ports: PlanPorts = { git, run, overseer, branches, plans, settings, append, tmp: () => join(r.base, `red-${++tmps}`), log };
   const mainSha = (): string => r.git(["rev-parse", "main"]);
   return { r, git, entries, logs, refs, branches, plans, settings, script, runs, replies, overseer, checks, ports, mainSha };

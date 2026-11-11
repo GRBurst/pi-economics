@@ -230,3 +230,23 @@ test("review F7: an amended check or an evidence command the git guard blocks is
   assert.ok(ev.detail.startsWith(`the evidence command \`${bad}\` was not run: `), ev.detail);
   assert.ok(![...x.checks, ...y.checks].some((c) => c.cmd === bad), "never run");
 });
+
+test("review F11: an abort during the evidence command or a red run ends amend_plan aborted; no trigger opens, nothing runs after", async () => {
+  for (const at of ["evidence", "red"] as const) {
+    const x = approved();
+    await start(x, "M1.T1");
+    const ctl = new AbortController(), run = x.ports.run;
+    x.ports.signal = ctl.signal;
+    const target = at === "evidence" ? "false" : "grep -q parse src/b.ts && true";
+    x.ports.run = (cmd, cwd, ms, signal) => { if (cmd === target) ctl.abort(); return run(cmd, cwd, ms, signal); };
+    const input = at === "evidence"
+      ? amend({ trigger: { id: "new", kind: "interface-break", evidenceCommand: "false" } })
+      : amend({ trigger: { id: x.plans.open("parser", "over-budget", "M1.T2")! }, changes: [{ op: "replace", id: "M1.T2", task: { ...T2, check: target } }] });
+    const before = state(x), opened = x.plans.get("parser")!.triggers.length;
+    const r = await amendPlan(x.ports, input, x.r.dir);
+    assert.deepEqual([r.status, r.reason], ["error", "aborted"], `${at}: ${r.detail}`);
+    assert.equal(x.plans.get("parser")!.triggers.length, opened, `${at}: no trigger opens`);
+    assert.equal(state(x), before, at);
+    assert.equal(x.runs.length, 0, `${at}: no review`);
+  }
+});
