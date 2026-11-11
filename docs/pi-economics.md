@@ -689,7 +689,8 @@ cwd (`packages/task-router/core/local/planflow.ts`):
    `milestoneTasks` (5) tasks), each task (`M<n>.T<m>`) with goal, `files`,
    `create`, `forbidden`, `check` and `dependsOn`. The router validates it
    (JSON schema, unique ids, dependencies on earlier ids and no cycle, files
-   that exist, `create` paths that do not but whose directory does, at most
+   that exist, `create` paths that do not but whose directory does, none of
+   them under `plans.dir` (a plan file changes only through `amend_plan`), at most
    `splitFiles` (3) paths per task and `maxDiffFiles` (6) per milestone
    branch, never above the merge gate's files, a non-empty check; the author
    is told these and the lines a branch merges, the same budgets the merge

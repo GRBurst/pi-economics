@@ -136,6 +136,19 @@ test("review L7 F4: a milestone branch whose tasks name more paths together than
   assert.equal(validateSkeleton(sk(milestone("M1", tasks)), S, fs).ok, true, "a branch per task");
 });
 
+test("review spot-check F7: a task's files and create never name a file under plans.dir (a plan changes only through amend_plan)", () => {
+  const all = { exists: (p: string) => !p.endsWith("new.md"), isDir: () => true }; // the plan files exist, the file to create does not
+  const why = (p: string) => `M1.T1: ${p} is under plans.dir (docs/plans); a plan file changes only through amend_plan`;
+  for (const [files, create] of [[["docs/plans/b.md"], []], [["src/a.ts"], ["docs/plans/new.md"]], [["docs/plans"], []], [["docs/./plans/../plans/b.md"], []]] as const) {
+    const r = validateSkeleton(sk(milestone("M1", [task("M1.T1", { files: [...files], create: [...create] })])), S, all);
+    const p = [...files, ...create].find((f) => f.includes("plans"))!;
+    assert.deepEqual(r.ok ? [] : r.reasons, [why(p)], p);
+  }
+  assert.equal(validateSkeleton(sk(milestone("M1", [task("M1.T1", { files: ["docs/planning.md", "docs/plans-old/a.md"] })])), S, all).ok, true, "a sibling that shares the prefix");
+  const other = { ...S, plans: { ...S.plans, dir: "plans" } };
+  assert.equal(validateSkeleton(sk(milestone("M1", [task("M1.T1", { files: ["docs/plans/b.md"] })])), other, all).ok, true, "plans.dir is the setting");
+});
+
 test("AC-P2 a missing file", () => {
   names(sk(milestone("M1", [task("M1.T1", { files: ["src/gone.ts"] })])), "does not exist");
 });

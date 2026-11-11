@@ -74,6 +74,8 @@ export function planBudget(s: RouterSettings, branch: Milestone["branch"]): { li
     filesBy: p.splitFiles <= g.maxDiffFiles ? "plans.splitFiles" : "mergeGate.maxDiffFiles" };
 }
 
+/** `p` is `dir` or a path inside it (both repository-relative, `/`-separated). */
+const under = (p: string, dir: string): boolean => { const d = posix.normalize(dir).replace(/\/$/, ""); return p === d || p.startsWith(`${d}/`); };
 /** design §3.2.4: the schema, then ids, dependencies, file facts, task counts and checks. Every rule names itself. A task names at
  *  most its branch budget's paths, a milestone branch's tasks together too (review L7 F4). */
 export function validateSkeleton(x: unknown, s: RouterSettings, fs: PlanFs): { ok: true; value: Skeleton } | { ok: false; reasons: string[] } {
@@ -103,6 +105,8 @@ export function validateSkeleton(x: unknown, s: RouterSettings, fs: PlanFs): { o
     for (const t of m.tasks) {
       const all = new Set([...t.files, ...(t.create ?? [])]);
       if (all.size > task.files) out.push(`${t.id}: files and create name ${all.size} paths; at most ${task.files} (${task.filesBy})`);
+      // spot-check F7: a plan file changes only through amend_plan, so no task whitelists one (the merge would leave that plan plan-changed)
+      for (const f of all) if (under(posix.normalize(f), s.plans.dir)) out.push(`${t.id}: ${f} is under plans.dir (${s.plans.dir}); a plan file changes only through amend_plan`);
       for (const f of t.files) if (!fs.exists(f)) out.push(`${t.id}: file ${f} does not exist`);
       for (const f of t.create ?? []) {
         if (fs.exists(f)) out.push(`${t.id}: create ${f} exists`);
