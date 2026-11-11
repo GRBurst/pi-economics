@@ -806,7 +806,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   exactly `stallTurns` turns ≥ `contextPercent` without progress and resets on progress.
 - **GREEN**: S10 rest. **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R. **ACs**: AC-H1 (5 more trips).
 
-#### L3.T3 Hint texts, cooldown, persistence (AC-H2 pure, AC-H4 L3 part) `[ ] todo`
+#### L3.T3 Hint texts, cooldown, persistence (AC-H2 pure, AC-H4 L3 part) `[x] done`
 - **Files**: `core/local/hints.ts` (new, S11), `test/local-hints-engine.test.ts` (new).
 - **Depends**: L3.T1 (`Trip`). **Parallel**: with L3.T2.
 - **RED**: `HINT_TEXT` under defaults pinned for all 10 trips (S11 literals); `block` format; engine: first detection →
