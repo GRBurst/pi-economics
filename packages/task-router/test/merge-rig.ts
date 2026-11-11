@@ -78,14 +78,15 @@ export type MergeRig = ReturnType<typeof mergeRig>;
 export function reviewRig(o: { settings?: Record<string, unknown>; repo?: TempRepo; entries?: Array<{ type: string; data: unknown }>;
   /** More of the session's ctx (a model registry for a settings force). */ ctx?: Record<string, unknown>;
   /** false: the actor without the spawn API (design §3.0.4). */ apiExt?: boolean;
-  /** Agents the actor lists before session_start (restored from its roster). */ agents?: AgentInfo[] } = {}) {
+  /** Agents the actor lists before session_start (restored from its roster). */ agents?: AgentInfo[];
+  /** The session_start event (its `reason`). */ event?: Record<string, unknown> } = {}) {
   const r = o.repo ?? tempRepo();
   const git = createGit(gitRunner("git", r.env));
   const h = harness({ settings: { mode: "local", ...o.settings } as never, apiExt: o.apiExt ?? true, extra: { git } });
   h.f.entries.push(...(o.entries ?? []));
   h.a.agents.push(...(o.agents ?? []));
   const ctx = { ...o.ctx, cwd: r.dir, sessionManager: { getSessionId: () => "s-main", getBranch: () => h.f.entries.map((e) => ({ type: "custom", customType: e.type, data: e.data })) } };
-  h.f.fire("session_start", {}, ctx);
+  h.f.fire("session_start", o.event ?? {}, ctx);
   const verdicts: Verdict[] = [];
   let answered = 0;
   h.hooks.onSleep = () => {

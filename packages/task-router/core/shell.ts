@@ -4,7 +4,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "n
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { ApiEvent, SubagentsApiV1 } from "./api.ts";
+import type { ApiEvent, SpawnPolicy, SubagentsApiV1 } from "./api.ts";
 import { createProbes } from "./health.ts";
 import type { FetchLike } from "./health.ts";
 import { createMemberCounter } from "./counter.ts";
@@ -116,7 +116,13 @@ export function install(pi: PiLike, deps: Deps) {
     force: force.port, childGuard: (child, parent) => childTrips.guard(child, parent), tickets,
     local: { activeWorktree: () => (componentOn(settings, "worktrees") ? lm.branches.active()?.worktree : undefined), guard: (cwd) => lm.childGuard(cwd) },
   };
-  const policy = createPolicy(pd);
+  // L8: the names this process's policy accepted; a listed agent outside them was restored by the actor (installLocal, `placed`).
+  const placed = new Set<string>(), routed = createPolicy(pd);
+  const policy: SpawnPolicy = async (args, caller) => {
+    const r = await routed(args, caller);
+    if (!("reject" in r)) placed.add(args.name);
+    return r;
+  };
   const failover = createFailover({ ...pd, log });
   const guards = createGuards(pd);
   const gate = createGate({ ...pd, log, run: deps.run ?? runCheck });
@@ -219,7 +225,7 @@ export function install(pi: PiLike, deps: Deps) {
     render();
   };
   let spawnWarned = false;
-  pi.on("session_start", (_e, ctx) => {
+  pi.on("session_start", (e, ctx) => {
     track(ctx);
     force.start(ctx, problems); // plan D8: its problem joins the one notification below
     lm.start(ctx); // the Opus budget (D30) before the status line shows it
@@ -228,6 +234,7 @@ export function install(pi: PiLike, deps: Deps) {
     active = hasSubagentsApiV1(a);
     if (active) { connect(); registerVerdict(); }
     else warnOnce(ctx, "actor:task-router", actorMissing("task-router", "task-router routing is off (no task_verdict, no task_cards, no nudge); the effort guard and fresh-on-cold stay on"));
+    lm.restored(e?.reason); // L8: after the policy's registration
     if (connectError !== undefined) warnOnce(ctx, "spawn-policy:task-router", `task-router: no spawn policy: ${connectError}`);
     // Design §3.0.4: without the spawn API the overseer cannot run; the merge gate fails closed (L6).
     if (isLocal(settings) && !spawnWarned && !(active && hasSpawnApi(a!))) {
@@ -254,7 +261,8 @@ export function install(pi: PiLike, deps: Deps) {
   // Hints (design §3.1, plan S12): in local mode, or anywhere with hints "on"; the status line names the last hint (plan Q5).
   // The overseer (design §3.2) lives here too: its spawn line comes from `onEvent` (D26), its events from its own subscription.
   const lm = installLocal(pi, { settings, log, isChild, sessionId: () => sessionId, hash: deps.hash, detect: deps.detect, git: deps.git, onTrip: (t) => { hint = t; render(); },
-    api, tickets, hex, now: nowMs, sleep: pd.sleep, onBudget: render, force: force.port, run: deps.run, policyOn: () => off.length > 0 });
+    api, tickets, hex, now: nowMs, sleep: pd.sleep, onBudget: render, force: force.port, run: deps.run, policyOn: () => off.length > 0,
+    placed: (n) => placed.has(n) });
   pi.on("before_agent_start", (e, ctx) => {
     track(ctx);
     skills = e.systemPromptOptions?.skills ?? skills;

@@ -18,7 +18,7 @@ import { createGit, gitRunner } from "./git.ts";
 import type { Git } from "./git.ts";
 import { block, createHintEngine } from "./hints.ts";
 import type { Delivery } from "./hints.ts";
-import { activeSet, componentOn } from "./mode.ts";
+import { activeSet, componentOn, isLocal } from "./mode.ts";
 import { gitGuard } from "./childguards.ts";
 import { composeGuards, type Guard, type SyncGuard } from "../toolguard.ts";
 import { createPlanStore } from "./plans.ts";
@@ -49,6 +49,8 @@ export type LocalDeps = {
   api(): SubagentsApiV1 | undefined; tickets: Tickets; hex(bytes: number): string; now(): number; sleep(ms: number): Promise<void>;
   /** The router's spawn policy is registered (review F1). */
   policyOn(): boolean;
+  /** This process's spawn policy accepted a spawn of `name` (a routed or forced child, a ticket); absent: none is restored (L8). */
+  placed?(name: string): boolean;
   /** The force override: the fixer runs under it (D47). */
   force?: ForcePort;
   /** The merge checks' runner (default: runCheck); a test seam. */
@@ -136,6 +138,17 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     void d.api()?.kill?.(xs).catch(() => []);
     warn(`task-router: killed the restored fixer ${xs.join(", ")}: a restored agent runs without the router's git guard`);
   };
+  /** L8 (open from the L6 fixes): the actor restores a persisted routed child without the policy's tool guard and cwd. In local
+   *  mode, with routing and this process's policy on, an agent the policy did not place is killed with a warning: listed at session
+   *  start (not at a reload, whose live children kept their guards) or announced by its spawn event (the actor restores after this
+   *  session_start). Never in a child session that loads the router; a restored fixer is F4's (`stale`). Branches and worktrees stay. */
+  const reaping = (): boolean => isLocal(d.settings) && d.settings.routing && d.placed !== undefined && d.policyOn() && !d.isChild(mainCtx);
+  const killRestored = (names: readonly string[]): void => {
+    const xs = names.filter((n) => n !== "main" && !d.placed?.(n) && !stale.has(n));
+    if (!xs.length) return;
+    void d.api()?.kill?.(xs).catch(() => []);
+    warn(restoredText(xs));
+  };
   /** A branch whose fixer this process did not spawn, or whose fixer is gone, is active again (review F5). */
   const fixerGone = (name: string | undefined): boolean => name === undefined || !ours(name) || ended.has(name) || !listed(name);
   const handle = {
@@ -175,6 +188,11 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       // session's first bash call is a bypass.
       if (activeSet(d.settings).mergeGate) void checkRefs();
     },
+    /** After `start` and the policy's registration (the shell's session_start): the routed children the actor restored before
+     *  this session_start are killed (L8, `killRestored`); `reason`: the event's, nothing at a reload. Total. */
+    restored(reason: unknown): void {
+      try { if (reason !== "reload" && reaping()) killRestored((d.api()?.list() ?? []).map((a) => a.name)); } catch { /* best effort */ }
+    },
     /** Resolves when the work `start` began has finished (a test seam, and what `start_branch` awaits). */
     ready: (): Promise<void> => ready,
     /** Resolves when no diff read is running or waiting (a test seam). */
@@ -188,6 +206,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       try {
         if (e.type === "pause" || e.type === "resume") killStale(e.names);
         if (e.type === "spawn" || e.type === "turn") killStale([e.name]);
+        if (e.type === "spawn" && reaping()) killRestored([e.name]);
         if (e.type === "turn" && activeSet(d.settings).mergeGate) { void checkRefs(); return; }
         const name = e.type === "route" ? (e.to === "main" ? e.from : undefined) : e.type === "kill" || e.type === "error" ? e.name : undefined;
         if (name === undefined) return;
@@ -428,3 +447,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   });
   return handle;
 }
+
+/** The warning when the router kills restored routed children (L8). */
+export const restoredText = (names: readonly string[]): string =>
+  `task-router: killed the restored subagent${names.length === 1 ? "" : "s"} ${names.join(", ")}: the actor restores a routed child without the router's tool guard and cwd; branches and worktrees stay`;
