@@ -420,20 +420,36 @@ async function commitAmended(p: PlanPorts, c: AmendCtx, final: Skeleton, by: str
     return adv.reason === "main-dirty" ? amendDone("refused", "main-dirty", reasonText("main-dirty", { checkout: adv.checkout }), { ...more, reviewId: by })
       : amendDone("error", "git", `git failed: ${adv.err}`, { ...more, reviewId: by });
   }
-  const rec = p.plans.get(c.slug)!, kind = rec.triggers.find((t) => t.id === c.trigger)?.kind;
+  const rec = p.plans.get(c.slug)!, answered = rec.triggers.find((t) => t.id === c.trigger), kind = answered?.kind;
   p.plans.put({ ...rec, skeletonHash: skeletonHash(final), approvedBy: by });
   p.plans.close(c.slug, c.trigger);
   logPlan(p, { slug: c.slug, action: "amend", ...(kind && { trigger: kind }), nTasks: nTasks(final), reviewId: by, ...(more.full !== undefined && { full: more.full }) });
+  const notes: string[] = [];
   for (const b of p.branches.all()) {
     if (b.plan?.slug !== c.slug || !["active", "fixer", "blocked"].includes(b.state)) continue;
-    const u = unitFacts(final, b.plan.id);
-    if (u && canonical({ goal: b.goal, check: b.check, files: b.files }) !== canonical(u)) p.branches.update({ ...b, ...u }); // not made active (review F8)
+    const id = b.plan.id, u = unitFacts(final, id);
+    // review L7 F2: a blocked branch whose unit the amendment removed is abandoned; one whose unit it changed, or whose
+    // remediation-failed trigger it answers, starts over (counts at 0), so start_branch resumes it (its name follows from the id)
+    if (b.state === "blocked" && !u) {
+      p.branches.update({ ...b, state: "abandoned" });
+      notes.push(`${b.branch} is abandoned: the plan has no ${id} now`);
+    } else if (b.state === "blocked" && (unitChanged(cur.sk, final, id) || (kind === "remediation-failed" && answered?.task === id))) {
+      const { fixer: _none, ...rest } = b;
+      p.branches.update({ ...rest, ...u, state: "active", rejections: 0, fixerRuns: 0 }); // not made active (review F8)
+      notes.push(`${b.branch} is unblocked (its counts reset): resume it with start_branch {"plan": {"slug": "${c.slug}", "id": "${id}"}}`);
+    } else if (u && canonical({ goal: b.goal, check: b.check, files: b.files }) !== canonical(u)) p.branches.update({ ...b, ...u }); // not made active (review F8)
   }
-  return amendDone("approved", undefined, `plan amended: ${file} at ${made.out.slice(0, 7)}${adv.push}; trigger ${c.trigger} is closed`,
+  return amendDone("approved", undefined, [`plan amended: ${file} at ${made.out.slice(0, 7)}${adv.push}; trigger ${c.trigger} is closed`, ...notes].join("; "),
     { ...more, reviewId: by, commit: made.out });
 }
 
 const same = (a: Task | undefined, b: Task | undefined): boolean => !!a && !!b && canonical(bareTask(a)) === canonical(bareTask(b));
+/** The tasks of the unit `id` (a task, or a milestone's tasks) differ between `old` and `sk` (vacuous marks aside). */
+const unitChanged = (old: Skeleton, sk: Skeleton, id: string): boolean => canonical(unitTasks(old, id)) !== canonical(unitTasks(sk, id));
+const unitTasks = (sk: Skeleton, id: string): Task[] => {
+  const m = sk.milestones.find((x) => x.id === id || x.tasks.some((t) => t.id === id));
+  return (!m ? [] : m.id === id ? m.tasks : m.tasks.filter((t) => t.id === id)).map(bareTask);
+};
 /** The tasks of `sk` that are new or differ from `old` (vacuous marks aside). */
 const changedTasks = (old: Skeleton, sk: Skeleton): Task[] => sk.milestones.flatMap((m) => m.tasks).filter((t) => !same(taskOf(old, t.id), t));
 /** The ticks of `cur` whose task `sk` keeps as it is. */

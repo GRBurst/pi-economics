@@ -10,8 +10,9 @@ import { join } from "node:path";
 import { createPlanStore } from "../core/local/plans.ts";
 import { renderPlan, type Skeleton, skeletonHash } from "../core/local/plan.ts";
 import { reasonText } from "../core/local/merge.ts";
+import { type AmendChange, amendPlan, type PlanPorts } from "../core/local/planflow.ts";
 import { startBranch } from "../core/local/worktree.ts";
-import { mergeRig } from "./merge-rig.ts";
+import { mergeRig, REVISE } from "./merge-rig.ts";
 
 const SK: Skeleton = {
   invariants: ["parse stays pure"],
@@ -124,6 +125,57 @@ test("AC-M2 size over splitLines is refused and opens over-budget", async () => 
   assert.equal(r.detail, `${reasonText("size", { lines: "3", files: "1", maxLines: "2", maxFiles: "3" })} (trigger t1 is open)`);
   assert.deepEqual(x.triggers(), [{ id: "t1", kind: "over-budget", task: "M1.T1", open: true }]);
   assert.equal(x.reviews.length, 0);
+});
+
+// ── review L7 F2: a blocked plan-bound branch and the amendment that answers its remediation-failed trigger ──
+/** M1.T1 started, worked on, and blocked by the fixer's last rejection (remediation-failed t1 open); the plan ports. */
+async function blockedUnit() {
+  const x = rig();
+  const wt = await x.start("M1.T1");
+  x.work(wt, { "src/parse.ts": "export {};\n" });
+  x.store.update({ ...x.store.get(x.r.dir, "lm/parser/M1.T1")!, fixerRuns: 1, rejections: 2 }); // a fixer round ran
+  x.verdicts.push(REVISE);
+  assert.equal((await x.merge()).reason, "blocked");
+  const ports: PlanPorts = { git: x.git, run: x.ports.run, overseer: x.overseer, branches: x.store, plans: x.plans, settings: x.settings,
+    append: x.ports.append, tmp: x.ports.tmp };
+  const amend = (changes: AmendChange[]) => amendPlan(ports, { slug: "parser", trigger: { id: "t1" }, changes, reason: "restructure" }, x.r.dir);
+  return { x, wt, amend };
+}
+const T1 = SK.milestones[0]!.tasks[0]!, T2 = SK.milestones[0]!.tasks[1]!;
+
+test("review L7 F2: start_branch of a blocked plan-bound branch names amend_plan and the open trigger", async () => {
+  const { x } = await blockedUnit();
+  const r = await startBranch({ git: x.git, store: x.store, settings: x.settings, plans: x.plans }, { plan: { slug: "parser", id: "M1.T1" } }, x.r.dir);
+  assert.deepEqual(r, { ok: false, errors: ["lm/parser/M1.T1 is blocked: the fixer's changes were rejected again; restructure the task with amend_plan (trigger t1 is open)"] });
+});
+
+test("review L7 F2: blocked → amend_plan replaces the task → start_branch resumes the branch with its counts reset → merged", async () => {
+  const { x, wt, amend } = await blockedUnit();
+  const a = await amend([{ op: "replace", id: "M1.T1", task: { ...T1, check: "test -f src/parse.ts" } }]);
+  assert.equal(a.status, "approved", a.detail);
+  assert.ok(a.detail.endsWith('; lm/parser/M1.T1 is unblocked (its counts reset): resume it with start_branch {"plan": {"slug": "parser", "id": "M1.T1"}}'), a.detail);
+  const s = await startBranch({ git: x.git, store: x.store, settings: x.settings, plans: x.plans }, { plan: { slug: "parser", id: "M1.T1" } }, x.r.dir);
+  assert.ok(s.ok, JSON.stringify(s));
+  const rec = x.store.get(x.r.dir, "lm/parser/M1.T1")!;
+  assert.deepEqual([rec.state, rec.rejections, rec.fixerRuns, rec.check, rec.worktree], ["active", 0, 0, "test -f src/parse.ts", wt]);
+  const behind = await x.merge();
+  assert.equal(behind.reason, "behind", "the amendment moved main: the refusal says to rebase");
+  x.r.git(["rebase", "-q", "main"], wt);
+  const m = await x.merge();
+  assert.equal(m.status, "merged", m.detail);
+});
+
+test("review L7 F2: an amendment that removes a blocked branch's task abandons the branch; one that answers its trigger unblocks it", async () => {
+  const gone = await blockedUnit();
+  const a = await gone.amend([{ op: "remove", id: "M1.T1" }, { op: "replace", id: "M1.T2", task: { ...T2, dependsOn: [] } }]);
+  assert.equal(a.status, "approved", a.detail);
+  assert.ok(a.detail.endsWith("; lm/parser/M1.T1 is abandoned: the plan has no M1.T1 now"), a.detail);
+  assert.equal(gone.x.store.get(gone.x.r.dir, "lm/parser/M1.T1")!.state, "abandoned");
+  const kept = await blockedUnit();
+  const b = await kept.amend([{ op: "replace", id: "M1.T2", task: { ...T2, goal: "wire the parser in" } }]);
+  assert.equal(b.status, "approved", b.detail);
+  const rec = kept.x.store.get(kept.x.r.dir, "lm/parser/M1.T1")!;
+  assert.deepEqual([rec.state, rec.rejections, rec.fixerRuns], ["active", 0, 0], "the remediation-failed trigger is answered");
 });
 
 /** M1.T1 merged (its record), then M1.T2 breaks M1.T1's check. */

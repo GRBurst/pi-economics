@@ -137,6 +137,10 @@ export async function startBranch(d: StartDeps, input: unknown, cwd: string): Pr
   if (why !== undefined) return fail(`check: ${why}`);
   let rec: BranchRecord;
   if (there) {
+    if (known?.state === "blocked" && known.plan && d.plans) { // review L7 F2: the remedy, not another branch of the same name
+      const t = d.plans.openTriggers(known.plan.slug).find((x) => x.kind === "remediation-failed" && x.task === known.plan!.id);
+      return fail(`${branch} is blocked: the fixer's changes were rejected again; restructure the task with amend_plan${t ? ` (trigger ${t.id} is open)` : ""}`);
+    }
     if (known && known.state !== "active" && known.state !== "abandoned") return fail(`branch ${branch} is ${known.state}; start another`);
     // review F8: a hand-made record is adopted (the router's from now on)
     const { handmade: _adopted, ...prior } = known ?? { repo, branch, base: main.sha, rejections: 0, fixerRuns: 0 };
