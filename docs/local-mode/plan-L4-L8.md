@@ -845,7 +845,7 @@ message). Open notes, for L6 or later:
 - **RED**: local + active `/wt`: card without `cwd` → `cwd: "/wt"`, a `read-only+files` child with `files: ["src/a.ts"]` may `read {path: "src/a.ts"}` and is blocked on a foreign path; `card.cwd: "/other"` → `/other`; no active worktree → no `cwd` key; default mode → result keys ⊆ today's for every card of `test/policy.test.ts`'s fixtures (plant §11).
 - **GREEN**: as above. **Check**: fast runner; `chk task-router typecheck-task-router router-golden`. **ACs**: §2.2 item 2.
 
-#### L5.T10 Cleanup and abandoned branches (§3.3.4) `[ ] todo`
+#### L5.T10 Cleanup and abandoned branches (§3.3.4) `[x] done`
 - **Files**: `core/local/worktree.ts` (`cleanupBranch`, `refreshAbandoned`), `core/local/install.ts` (`session_start`, before `start_branch`), `test/local-cleanup.test.ts`. **Depends**: L5.T5.
 - **RED** (temp repo): `cleanupBranch` removes dir and branch; a dirty worktree → returns `cleanup failed: <tail>`, throws nothing, merge state untouched; the worktree dir deleted → `refreshAbandoned` sets `abandoned` + entry; `start_branch` of the same slug afterwards → `isError` (branch exists).
 - **GREEN**: §3.3.4. **Check**: fast runner; `chk task-router`.

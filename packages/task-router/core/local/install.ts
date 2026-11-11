@@ -17,7 +17,7 @@ import type { Git } from "./git.ts";
 import { block, createHintEngine } from "./hints.ts";
 import type { Delivery } from "./hints.ts";
 import { componentOn } from "./mode.ts";
-import { refreshFacts, writeGuard } from "./worktree.ts";
+import { refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
 import type { Budget, Tickets } from "./overseer.ts";
@@ -71,6 +71,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   });
   const git = d.git ?? createGit(gitRunner());
   const branches = createBranchStore((type, data) => pi.appendEntry?.(type, data));
+  let ready: Promise<void> = Promise.resolve();
   const handle = {
     overseer, budget, branches,
     start(ctx: any): void {
@@ -80,12 +81,19 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       const entries = Array.isArray(branch) ? branch : [];
       Object.assign(budget, budgetOf(entries));
       branches.rebuild(entries);
-      // The guards read cached facts (plan D39): refresh them for every repository the session knows, off the event.
-      for (const repo of new Set(branches.all().map((r) => r.repo))) void refreshFacts({ git, store: branches, settings: d.settings }, repo).catch(() => undefined);
+      // Off the event: branches whose worktree disappeared are abandoned (§3.3.4), then the guards' cached facts are refreshed for
+      // every repository the session knows (plan D39). `start_branch` waits for it.
+      const deps = { git, store: branches, settings: d.settings };
+      ready = (async () => {
+        await refreshAbandoned(deps);
+        for (const repo of new Set(branches.all().map((r) => r.repo))) await refreshFacts(deps, repo);
+      })().catch(() => undefined);
     },
+    /** Resolves when the work `start` began has finished (a test seam, and what `start_branch` awaits). */
+    ready: (): Promise<void> => ready,
   };
   const s = d.settings, h = s.hints;
-  if (componentOn(s, "worktrees")) pi.registerTool?.(startBranchTool({ git, store: branches, settings: s }));
+  if (componentOn(s, "worktrees")) pi.registerTool?.(startBranchTool({ git, store: branches, settings: s }, () => ready));
   // The main-checkout write guard (design §3.3.3). It blocks on purpose, so it is total itself: pi treats a throwing handler as a
   // block. Registered after the hint recorder's `tool_call` handler, so that call is recorded first.
   const guardWrites = (): void => {

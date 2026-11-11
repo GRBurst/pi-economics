@@ -1,5 +1,6 @@
 // Worktrees and branches (design §3.3; plan S22, S23): names, directories and containment (pure), and `startBranch`; the write
 // guard and the cleanup follow in later tasks.
+import { realpathSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { Result, RouterSettings } from "../types.ts";
 import type { BranchRecord, BranchStore } from "./branches.ts";
@@ -66,7 +67,7 @@ export async function startBranch(d: StartDeps, input: unknown, cwd: string): Pr
   if (main === undefined) return fail(`none of the main branches (${d.settings.mergeGate.mainBranches.join(", ")}) exists in ${repo}`);
   const branch = branchName(d.settings.worktrees.branchPrefix, { slug: i.slug });
   const known = d.store.get(repo, branch);
-  const there = (await d.git.worktrees(repo)).find((w) => w.branch === branch);
+  const there = (await d.git.worktrees(repo)).find((w) => w.branch === branch && !w.prunable); // a prunable one has lost its directory
   const existed = (await d.git.sha(repo, branch)) !== undefined;
   let rec: BranchRecord;
   if (there) {
@@ -102,4 +103,38 @@ export function writeGuard(x: { tool: string; input: unknown; cwd: string; activ
   const p = resolve(x.cwd, raw);
   if (!inside(p, x.mainCheckout) || x.worktrees.some((w) => w !== x.mainCheckout && inside(p, w))) return undefined;
   return `write in the worktree ${x.active.worktree}; use absolute paths under it`;
+}
+
+// ── cleanup and abandoned branches (design §3.3.4) ──
+/** After a merge (the caller checks `removeAfterMerge`): `git worktree remove`, then `git branch -d`. A failure is a hint, never
+ *  an exception, and changes no record: the merge stands. undefined = both gone. */
+export async function cleanupBranch(d: StartDeps, rec: BranchRecord): Promise<string | undefined> {
+  try {
+    const removed = await d.git.worktreeRemove(rec.repo, rec.worktree);
+    if (!removed.ok) return `cleanup failed: ${removed.err}`;
+    const deleted = await d.git.branchDelete(rec.repo, rec.branch);
+    await refreshFacts(d, rec.repo);
+    return deleted.ok ? undefined : `cleanup failed: ${deleted.err}`;
+  } catch (err) {
+    return `cleanup failed: ${(err as Error).message}`;
+  }
+}
+
+/** The states a branch can be abandoned from; `merged` and `abandoned` are final. */
+const LIVE: readonly string[] = ["active", "fixer", "blocked"];
+const real = (p: string): string => { try { return realpathSync(p); } catch { return p; } };
+/** Marks a branch `abandoned` (one entry) when its worktree is no longer a worktree of the repository: unregistered, or git lists
+ *  it as prunable (the directory is gone). A repository whose list is empty is skipped: git failed, and the main checkout is
+ *  always listed. Abandoning a branch is plain git on a non-main ref, which the guard allows. */
+export async function refreshAbandoned(d: StartDeps): Promise<void> {
+  const repos = new Set(d.store.all().filter((r) => LIVE.includes(r.state)).map((r) => r.repo));
+  for (const repo of repos) {
+    const wts = await d.git.worktrees(repo);
+    if (wts.length === 0) continue;
+    for (const r of d.store.all()) {
+      if (r.repo !== repo || !LIVE.includes(r.state)) continue;
+      const w = wts.find((x) => x.dir === r.worktree || real(x.dir) === real(r.worktree));
+      if (!w || w.prunable) d.store.put({ ...r, state: "abandoned" });
+    }
+  }
 }

@@ -25,7 +25,7 @@ export const START_BRANCH_SCHEMA = {
 /** The error shape of D48: the reason as text, `{status: "error", reason}` as details, `isError`. */
 export const errorReply = (reason: string): ToolReply => ({ content: [{ type: "text", text: reason }], details: { status: "error", reason }, isError: true });
 
-export function startBranchTool(d: { git: Git; store: BranchStore; settings: RouterSettings }): RouterTool {
+export function startBranchTool(d: { git: Git; store: BranchStore; settings: RouterSettings }, ready: () => Promise<void> = async () => undefined): RouterTool {
   return {
     name: "start_branch",
     label: "Start branch",
@@ -33,6 +33,7 @@ export function startBranchTool(d: { git: Git; store: BranchStore; settings: Rou
       + "it becomes the active worktree. Give a slug, a goal and the check command that proves the change. The same slug again re-activates the branch.",
     parameters: START_BRANCH_SCHEMA,
     async execute(_id, params, _signal, _update, ctx) {
+      await ready(); // the session_start work (abandoned branches, facts) comes first
       const res = await startBranch(d, params, typeof ctx?.cwd === "string" ? ctx.cwd : process.cwd());
       if (!res.ok) return errorReply(res.errors.join("; "));
       return { content: [{ type: "text", text: JSON.stringify(res.value) }], details: res.value };
