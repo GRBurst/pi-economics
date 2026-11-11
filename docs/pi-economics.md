@@ -763,8 +763,9 @@ milestone) and `reason`. It refuses: no plan record (`no-plan`), a plan file
 on the main tip that does not hold the approved skeleton (`plan-changed`), a
 dirty main checkout (`main-dirty`, before any check or review runs), no
 open trigger ("no replan trigger is open; finish the task as planned") or an
-unknown one (`trigger`), a new trigger whose evidence command the git guard blocks or that exits 0
-in the active worktree or else the main checkout (`evidence`; one that fails opens the `interface-break`
+unknown one (`trigger`), a new trigger whose evidence command the git guard blocks, that exits 0,
+cannot run (126, 127) or times out
+in the active worktree or else the main checkout (`evidence`; one that fails otherwise opens the `interface-break`
 trigger), a change to a checked task (ticked on main or merged: `checked`),
 an amended skeleton that is invalid (`invalid`) and amended checks that
 cannot run or that the git guard blocks (`broken-check`). Then a review: the whole plan (`plan-review`) for

@@ -357,6 +357,9 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
     const r = await p.run(cmd, dir, s.checkTimeoutSec * 1000, p.signal);
     if (p.signal?.aborted) return amendDone("error", "aborted", "aborted"); // review F11: before the trigger opens
     if (r.exit === 0) return refused("evidence", `the evidence command \`${cmd}\` exits 0 in ${dir}; an interface-break needs a command that fails`);
+    // review L7 F10: a command that cannot run or does not finish shows no break (as a red run's 126/127)
+    const why = r.timedOut ? `timed out in ${dir} (checkTimeoutSec ${s.checkTimeoutSec} s)` : r.exit === 126 || r.exit === 127 ? `cannot run in ${dir} (exit ${r.exit})` : undefined;
+    if (why) return refused("evidence", `the evidence command \`${cmd}\` ${why}; an interface-break needs a command that runs and fails`);
     evidence = [`\`${cmd}\` exit ${r.exit} in ${dir}`, tailOf(r.output)].filter(Boolean).join("\n");
     trigger = p.plans.open(slug, "interface-break", a?.plan?.slug === slug ? a.plan.id : undefined)!;
   } else {

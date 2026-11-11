@@ -73,6 +73,19 @@ test("AC-P6 evidence: a new interface-break is accepted iff its evidence command
   assert.deepEqual(x.checks.filter((c) => c.cmd === "false"), [{ cmd: "false", cwd: wt }]);
 });
 
+test("review L7 F10: an evidence command that cannot run (126/127) or times out opens no trigger", async () => {
+  const x = approved();
+  const wt = await start(x, "M1.T1");
+  const no = await refused(x, amend({ trigger: { id: "new", kind: "interface-break", evidenceCommand: "no-such-command-x" } }));
+  assert.deepEqual([no.reason, no.detail], ["evidence",
+    `the evidence command \`no-such-command-x\` cannot run in ${wt} (exit 127); an interface-break needs a command that runs and fails`]);
+  assert.equal((await refused(x, amend({ trigger: { id: "new", kind: "interface-break", evidenceCommand: "printf x > /dev/null; exit 126" } }))).reason, "evidence");
+  x.ports.run = async () => ({ exit: 124, output: "", timedOut: true });
+  const slow = await refused(x, amend({ trigger: { id: "new", kind: "interface-break", evidenceCommand: "sleep 999" } }));
+  assert.equal(slow.detail, `the evidence command \`sleep 999\` timed out in ${wt} (checkTimeoutSec ${x.settings.checkTimeoutSec} s); an interface-break needs a command that runs and fails`);
+  assert.deepEqual(x.plans.get("parser")!.triggers, []);
+});
+
 test("AC-P6 validation: the amended skeleton's own errors refuse it; unknown ids and changes without a task too", async () => {
   const x = approved();
   x.plans.open("parser", "over-budget", "M1.T2");
