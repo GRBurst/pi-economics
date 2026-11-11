@@ -814,7 +814,7 @@ message). Open notes, for L6 or later:
 - **RED** (temp repo): `worktreeAdd` → `worktrees()` lists dir+branch; `sha`, `branchOf` (branch, detached → undefined), `dirty`, `worktreeRemove`, `branchDelete`; a failing call → `{ok: false, err}` with `err.length ≤ 2048`.
 - **GREEN**: S21. **Check**: fast runner; `chk task-router`.
 
-#### L5.T4 Branch store and `fake-git` `[ ] todo`
+#### L5.T4 Branch store and `fake-git` `[x] done`
 - **Files**: `core/local/branches.ts` (S22 store), `test/fake-git.ts` (typed `Git`, scripted refs/worktrees/stats), `test/local-branch-store.test.ts`. **Depends**: L5.T2.
 - **RED**: `put` appends one `task-router/branch` entry per change; `rebuild` from entries reproduces `all()` (property over random put sequences: last record per `(repo, branch)` wins); `active()` = D38.
 - **GREEN**: S22. **Check**: fast runner; `chk task-router typecheck-task-router`.
