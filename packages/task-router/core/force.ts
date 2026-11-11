@@ -68,3 +68,9 @@ export function consume(cmd: ForceEntry | undefined): { next: ForceEntry | undef
 
 export const describeForce = (f: ActiveForce): string =>
   `force ${f.model}${f.thinkingLevel ? ` ${f.thinkingLevel}` : ""}${f.remaining !== undefined ? ` (${f.remaining} left)` : ""}`;
+
+/** A forced spawn its member cannot take (`cause`: "down", "no free slot after N s"), with how to end the force (L8: the explicit
+ *  model's "leave `model` unset" does not apply). `/force off` does not end a settings force: the router falls back to it. */
+export const forceRejection = (f: ActiveForce, cause: string): string => f.source === "command"
+  ? `force ${f.model} (/force): ${cause}; \`/force off\` clears it`
+  : `force ${f.model} (settings \`force.model\`): ${cause}; an empty \`force.model\` in the task-router settings clears it, \`/force <model>\` overrides it for this session`;

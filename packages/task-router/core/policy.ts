@@ -2,6 +2,7 @@
 import type { Caller, SpawnPolicy, SubagentsApiV1 } from "./api.ts";
 import type { AttemptState, Escalation } from "./attempts.ts";
 import { briefAppend } from "./brief.ts";
+import { forceRejection } from "./force.ts";
 import { parseCard } from "./card.ts";
 import type { ForcePort } from "./forceinstall.ts";
 import { byModel, effortAt, lvl, named, sameLadder } from "./members.ts";
@@ -105,6 +106,8 @@ function ticketRoom(d: PolicyDeps, member: string, name: string): string | undef
 export type Selected = { member: Named; effort: ThinkingLevel; waitMs: number; why: string };
 export async function resolveLeg(d: PolicyDeps, x: {
   name: string; cands: Named[]; planned: Named; step: number; effort?: ThinkingLevel; pinned: boolean; failover: string[]; entry: ChildBase;
+  /** A pinned start's rejection from its cause ("down", "no free slot after N s"); default: the explicit model's. */
+  explain?: (cause: string) => string;
 }): Promise<Result<Selected>> {
   const t0 = d.now(), deadline = t0 + d.settings.queueMaxSec * 1000;
   for (;;) {
@@ -125,9 +128,11 @@ export async function resolveLeg(d: PolicyDeps, x: {
       const why = `selection: ${m.name}${waitMs ? ` after ${Math.round(waitMs / 1000)} s` : ""}${m.name !== x.planned.name ? ` (planned ${x.planned.name})` : ""}`;
       return { ok: true, value: { member: m, effort, waitMs, why } };
     }
-    if ("none" in p) return { ok: false, errors: [x.pinned
-      ? `explicit model ${x.cands[0].model}: ${p.none === "no member up" ? "down" : `no free slot after ${d.settings.queueMaxSec} s`}; leave \`model\` unset to let the router choose`
-      : `no member for this leg: ${p.none}`] };
+    if ("none" in p) {
+      const cause = p.none === "no member up" ? "down" : `no free slot after ${d.settings.queueMaxSec} s`;
+      return { ok: false, errors: [!x.pinned ? `no member for this leg: ${p.none}`
+        : x.explain ? x.explain(cause) : `explicit model ${x.cands[0].model}: ${cause}; leave \`model\` unset to let the router choose`] };
+    }
     await d.sleep(POLL_MS);
   }
 }
@@ -198,8 +203,9 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
       const member = byModel(s.models, f.model);
       plan.reasons.push(`force: ${f.model} ${effort} (${f.source})`);
       if (member) {
-        const to = await resolveLeg(d, { name: args.name, cands: [member], planned: member, step: plan.worker.step, effort, pinned: true, failover: [], entry: { ...entry, forced } });
-        if (!to.ok) return reject(to.errors.map((e) => `force ${f.model}: ${e}`));
+        const to = await resolveLeg(d, { name: args.name, cands: [member], planned: member, step: plan.worker.step, effort, pinned: true, failover: [],
+          entry: { ...entry, forced }, explain: (cause) => forceRejection(f, cause) });
+        if (!to.ok) return reject(to.errors);
         plan.reasons.push(to.value.why);
       } else {
         const now = d.now();

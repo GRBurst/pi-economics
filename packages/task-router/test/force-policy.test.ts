@@ -125,9 +125,24 @@ test("a forced member with no free slot is rejected, and the force is not used",
   await force("qwen-local next");
   h.a.agents.push({ name: "c1", parent: "main", sessionId: "s-c1", model: QWEN, thinkingLevel: "xhigh", state: "running" });
   const r = await h.a.spawn({ name: "c2", task: card() });
-  assert.ok("reject" in r && r.reject.startsWith(`force ${QWEN}: `), JSON.stringify(r));
+  assert.ok("reject" in r && r.reject.startsWith(`force ${QWEN} (/force): `), JSON.stringify(r));
   assert.equal(h.f.entries.length, before + 1); // only the set: no countdown
   assert.deepEqual(forceLines(h).slice(-1), [["set", "command"]]);
+});
+
+// L8 (the L2 wart): a rejected forced spawn names its force and how to end it; "leave `model` unset" would not help.
+test("a rejected forced spawn names the force (/force or the settings) and how to clear it", async () => {
+  const full = async (s: Partial<RouterSettings>, set?: string) => {
+    const { h, force } = setup({ queueMaxSec: 0, ...s });
+    await spawn(h, "c1"); // on qwen-local, routed or forced: its only slot
+    h.a.agents.push({ name: "c1", parent: "main", sessionId: "s-c1", model: QWEN, thinkingLevel: "xhigh", state: "running" });
+    if (set) await force(set);
+    const r = await h.a.spawn({ name: "c2", task: card() });
+    return "reject" in r ? r.reject : JSON.stringify(r);
+  };
+  assert.equal(await full({}, "qwen-local"), `force ${QWEN} (/force): no free slot after 0 s; \`/force off\` clears it`);
+  assert.equal(await full({ force: { model: "qwen-local", thinkingLevel: "" } }),
+    `force ${QWEN} (settings \`force.model\`): no free slot after 0 s; an empty \`force.model\` in the task-router settings clears it, \`/force <model>\` overrides it for this session`);
 });
 
 test("routing off (plan D12): the force is not applied", async () => {
