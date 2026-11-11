@@ -141,7 +141,9 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   /** L8 (open from the L6 fixes): the actor restores a persisted routed child without the policy's tool guard and cwd. In local
    *  mode, with routing and this process's policy on, an agent the policy did not place is killed with a warning: listed at session
    *  start (not at a reload, whose live children kept their guards) or announced by its spawn event (the actor restores after this
-   *  session_start). Never in a child session that loads the router; a restored fixer is F4's (`stale`). Branches and worktrees stay. */
+   *  session_start). Never in a child session that loads the router: its copy cannot register a policy while main's is (the actor takes
+   *  one), so `policyOn()` is false there; `isChild` is the second guard and holds only once the child is listed (spot-check F4). A
+   *  restored fixer is review F4's (`stale`). Branches and worktrees stay. */
   const reaping = (): boolean => isLocal(d.settings) && d.settings.routing && d.placed !== undefined && d.policyOn() && !d.isChild(mainCtx);
   const killRestored = (names: readonly string[]): void => {
     const xs = names.filter((n) => n !== "main" && !d.placed?.(n) && !stale.has(n));

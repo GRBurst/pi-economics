@@ -75,6 +75,21 @@ test("default mode, local mode with routing off, and a child session that loads 
   };
   assert.deepEqual(await run({}), []);
   assert.deepEqual(await run({ mode: "local", routing: false }), []);
-  assert.deepEqual(await run({ mode: "local" }, "s-w1"), []);
+  assert.deepEqual(await run({ mode: "local" }, "s-w1"), []); // isChild only: the child is listed first here (spot-check F4 below: the real order)
   assert.deepEqual(await run({ mode: "local" }), ["w1", "w2"]); // the contrast
+});
+
+// ── spot-check F4: the guard against a child session's copy of the router ──
+test("spot-check F4: a child session's copy kills nothing: the actor takes one policy, so it cannot register while main's is, and its own record is not listed yet", async () => {
+  const local = { mode: "local" as const };
+  const start = (h: ReturnType<typeof harness>, sessionId: string) => h.f.fire("session_start", {}, { sessionManager: { getSessionId: () => sessionId, getBranch: () => [] } });
+  const main = harness({ settings: local, apiExt: true });
+  start(main, "s-main"); // main's policy is registered
+  main.a.agents.push(agent("w2")); // a child main placed, as the child's copy sees it
+  // the child's session exists before its own record is listed (the actor creates the session, then lists the agent)
+  const child = harness({ settings: local, apiExt: true, extra: { api: () => main.a.api } });
+  start(child, "s-w1");
+  main.a.emit(spawned("w1")); // the actor's announcement, which the child's copy hears too
+  await settle();
+  assert.deepEqual(main.a.killed, []);
 });
