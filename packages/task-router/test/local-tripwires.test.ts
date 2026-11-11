@@ -357,3 +357,32 @@ test("check-failing: pinned sequences; no check, a different command, and a chec
   assert.deepEqual(run(aged).filter((t) => t === "check-failing"), [], "the first failure left the ring: one failure in the window");
 });
 const edit0 = () => write("e", "h0", "h0");
+
+// --- L5.T12: over-size (design §3.1.1, plan D13) ----------------------------------------------------------------------
+
+import { overSize } from "../core/local/tripwires.ts";
+
+test("AC-H1 over-size: fires iff changed lines > splitLines or files > splitFiles, and not one line or file earlier", () => {
+  const P = defaults().plans;
+  const lim = { splitLines: P.splitLines, splitFiles: P.splitFiles };
+  const files = (n: number, per: number) => Array.from({ length: n }, (_, i) => ({ path: `f${i}`, added: per, deleted: 0 }));
+  assert.equal(overSize([], lim), false);
+  assert.equal(overSize(files(1, P.splitLines), lim), false, "exactly splitLines");
+  assert.equal(overSize(files(1, P.splitLines + 1), lim), true, "one line more");
+  assert.equal(overSize([{ path: "a", added: 60, deleted: 41 }], lim), true, "added + deleted count: 101");
+  assert.equal(overSize([{ path: "a", added: 60, deleted: 40 }], lim), false, "100");
+  assert.equal(overSize(files(P.splitFiles, 0), lim), false, "exactly splitFiles files, binary or empty included");
+  assert.equal(overSize(files(P.splitFiles + 1, 0), lim), true, "one file more");
+  const rnd = seeded(12);
+  let over = 0, under = 0;
+  for (let i = 0; i < 400; i++) {
+    const p = { splitLines: 1 + rnd(40), splitFiles: 1 + rnd(5) };
+    const stat = Array.from({ length: rnd(8) }, (_, k) => ({ path: `p${k}`, added: rnd(20), deleted: rnd(20) }));
+    let lines = 0;
+    for (const s of stat) lines += s.added + s.deleted;
+    const expected = lines > p.splitLines || stat.length > p.splitFiles;
+    assert.equal(overSize(stat, p), expected, JSON.stringify([p, stat]));
+    if (expected) over++; else under++;
+  }
+  assert.ok(over > 50 && under > 50, `${over}/${under}`);
+});

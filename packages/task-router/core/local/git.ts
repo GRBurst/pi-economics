@@ -1,8 +1,8 @@
 // Git for local mode (design §3.3; plan S21): an argv runner and the port the worktree, merge and plan code talk to. Every
 // method is total: a failing command is a value (`undefined`, `false`, `{ok: false}`), never an exception.
 import { spawn } from "node:child_process";
-import { realpathSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 export type GitOut = { exit: number; out: string; err: string; timedOut: boolean };
 export type GitRun = (args: string[], cwd: string, timeoutMs: number, opts?: { stdin?: string; env?: Record<string, string> }) => Promise<GitOut>;
@@ -40,11 +40,28 @@ export type Git = {
   /** `git branch -d` (refuses a branch with unmerged commits); `force`: `-D`. */
   branchDelete(repo: string, branch: string, force?: boolean): Promise<Res>;
   dirty(dir: string): Promise<boolean>;
+  /** The changes of the worktree `dir` against `base`: staged, unstaged and committed ones (`git diff --numstat base`) plus the
+   *  untracked files, whose lines are counted through the file system (D42). Failing or timing out (5 s) gives []. */
+  diffStat(dir: string, base: string): Promise<Stat>;
 };
 /** A command that either gave its stdout or failed with the tail of its stderr (2048 characters). */
 export type Res = { ok: true; out: string } | { ok: false; err: string };
 
-const SHORT_MS = 5000, BRANCH_MS = 2000, ADD_MS = 60_000, ERR_TAIL = 2048;
+const SHORT_MS = 5000, BRANCH_MS = 2000, ADD_MS = 60_000, ERR_TAIL = 2048, STAT_MS = 5000;
+/** The lines of an untracked file (D42): 0 for a binary file (a NUL byte), one that is no regular file (a symlink) or one over
+ *  4 MB; a last line without a newline counts. It still counts as a file. */
+const MAX_UNTRACKED = 4 * 1024 * 1024;
+function untrackedLines(file: string): number {
+  try {
+    const st = lstatSync(file);
+    if (!st.isFile() || st.size > MAX_UNTRACKED) return 0;
+    const b = readFileSync(file);
+    if (b.includes(0)) return 0;
+    let n = 0;
+    for (const c of b) if (c === 10) n++;
+    return b.length > 0 && b[b.length - 1] !== 10 ? n + 1 : n;
+  } catch { return 0; }
+}
 /** stdout on exit 0, else the tail of stderr (a timeout and a silent failure get a sentence). */
 const res = (r: GitOut): Res =>
   r.exit === 0 ? { ok: true, out: r.out.trim() } : { ok: false, err: r.timedOut ? "git timed out" : r.err.trim().slice(-ERR_TAIL) || `git exited ${r.exit}` };
@@ -78,6 +95,14 @@ export function createGit(run: GitRun): Git {
     async worktreeAdd(repo, dir, branch, base) { return res(await run(["worktree", "add", "-q", "-b", branch, dir, base], repo, ADD_MS)); },
     async worktreeRemove(repo, dir) { return res(await run(["worktree", "remove", dir], repo, ADD_MS)); },
     async branchDelete(repo, branch, force = false) { return res(await run(["branch", force ? "-D" : "-d", branch], repo, SHORT_MS)); },
+    async diffStat(dir, base) {
+      try {
+        const diff = await run(["-c", "core.quotepath=off", "diff", "--numstat", "--no-renames", base, "--"], dir, STAT_MS);
+        const others = await run(["ls-files", "--others", "--exclude-standard", "-z"], dir, STAT_MS);
+        if (diff.exit !== 0 || others.exit !== 0) return [];
+        return [...parseNumstat(diff.out), ...others.out.split("\0").filter((p) => p !== "").map((p) => ({ path: p, added: untrackedLines(join(dir, p)), deleted: 0 }))];
+      } catch { return []; }
+    },
     async dirty(dir) {
       const r = await run(["status", "--porcelain"], dir, ADD_MS);
       return r.exit !== 0 || r.out.trim() !== ""; // a status that fails counts as dirty: nothing is removed or merged on it

@@ -17,11 +17,11 @@ import type { Git } from "./git.ts";
 import { block, createHintEngine } from "./hints.ts";
 import type { Delivery } from "./hints.ts";
 import { componentOn } from "./mode.ts";
-import { refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
+import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
 import type { Budget, Tickets } from "./overseer.ts";
-import { callKey, callTrips, changed, checkPassed, contextSoft, contextStall, errSig, normOf, push, riskGlobsOf } from "./tripwires.ts";
+import { callKey, callTrips, changed, checkPassed, contextSoft, contextStall, errSig, normOf, overSize, push, riskGlobsOf } from "./tripwires.ts";
 import type { CallRecord, Trip } from "./tripwires.ts";
 
 type Pi = {
@@ -71,7 +71,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   });
   const git = d.git ?? createGit(gitRunner());
   const branches = createBranchStore((type, data) => pi.appendEntry?.(type, data));
-  let ready: Promise<void> = Promise.resolve();
+  let ready: Promise<void> = Promise.resolve(), sizing: Promise<void> | undefined;
   const handle = {
     overseer, budget, branches,
     start(ctx: any): void {
@@ -91,6 +91,8 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     },
     /** Resolves when the work `start` began has finished (a test seam, and what `start_branch` awaits). */
     ready: (): Promise<void> => ready,
+    /** Resolves when no diff read is running or waiting (a test seam). */
+    settled: async (): Promise<void> => { while (sizing) await sizing; await ready; },
   };
   const s = d.settings, h = s.hints;
   if (componentOn(s, "worktrees")) pi.registerTool?.(startBranchTool({ git, store: branches, settings: s }, () => ready));
@@ -132,6 +134,21 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       return undefined;
     }
   };
+  /** over-size (§3.1.1): the diff is a git process, so it is read off the event, one at a time (a write that comes meanwhile
+   *  makes one more read), and its trip waits for the next result like a turn-end trip (plan D17). A timeout or a failure
+   *  gives an empty diff: no trip (§3.1.4). */
+  let again = false;
+  const checkSize = (): void => {
+    if (sizing) { again = true; return; }
+    sizing = (async () => {
+      do {
+        again = false;
+        const a = branches.active();
+        if (!a) return;
+        if (overSize(await git.diffStat(a.worktree, a.base), s.plans)) queue.push(...engine.detected(["over-size"], call));
+      } while (again);
+    })().catch(() => undefined).finally(() => { sizing = undefined; });
+  };
   const soft = (ctx: any): Trip[] => {
     const r = contextSoft(armed, ctx?.getContextUsage?.()?.tokens, h);
     armed = r.armed;
@@ -160,6 +177,8 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       const r: CallRecord = { ...rec, turn, isError, errSig: isError ? errSig(textOf(e.content)) : undefined,
         hashAfter: rec.path === undefined ? undefined : hash(rec.path) };
       ring = push(ring, r, h);
+      const active = branches.active();
+      if (r.isWrite && !isError && r.path !== undefined && active && inside(r.path, active.worktree)) checkSize();
       const checks = activeChecks();
       if (changed(r) || checkPassed(r, checks)) { // progress (plan D15; a passing check, D41): the persistence counts, the stall and the status suffix reset
         engine.progress();

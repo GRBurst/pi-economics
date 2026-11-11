@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { globMatch } from "../glob.ts";
 import type { HintSettings, RouterSettings } from "../types.ts";
+import type { Stat } from "./git.ts";
 
 export const TRIPS = ["identical-call", "no-change-writes", "alternation", "repeated-error", "churn", "check-failing",
   "over-size", "risky-path", "context-soft", "context-stall", "outside-worktree"] as const;
@@ -164,3 +165,9 @@ const checkFailing = (r: CallRecord[], h: HintSettings, checks: readonly string[
   }
   return n >= h.checkFailures;
 };
+
+// ── over-size (design §3.1.1, plan D13, D42) ──
+/** After a write: the worktree's diff against its base holds more than `splitLines` changed lines (added + deleted) or more
+ *  than `splitFiles` files (a binary or empty file counts as a file). The caller reads the diff (it needs git); this is the rule. */
+export const overSize = (stat: Stat, p: Pick<RouterSettings["plans"], "splitLines" | "splitFiles">): boolean =>
+  stat.length > p.splitFiles || stat.reduce((n, s) => n + s.added + s.deleted, 0) > p.splitLines;

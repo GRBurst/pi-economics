@@ -855,7 +855,7 @@ message). Open notes, for L6 or later:
 - **RED**: property over random bash sequences (the check with whitespace variants, other commands, pass/fail) vs a reference counter: fires exactly at the `checkFailures`-th consecutive failing check run (D41); a pass resets; P13 S11 text delivered.
 - **GREEN**: D41. **Check**: fast runner; `chk task-router`. **ACs**: AC-H1 (check-failing).
 
-#### L5.T12 `over-size` (AC-H1) `[ ] todo`
+#### L5.T12 `over-size` (AC-H1) `[x] done`
 - **Files**: `core/local/tripwires.ts` (pure `overSize(stat, s)`), `core/local/git.ts` (`diffStat` + untracked, D42), `core/local/install.ts` (after a write in the active worktree; 5 s timeout → skip), `test/local-tripwires.test.ts`, `test/local-git.test.ts`. **Depends**: L5.T11.
 - **RED**: property: fires iff lines > `splitLines` ∨ files > `splitFiles`, not one line earlier; temp repo: an untracked 101-line file trips; a timed-out `diffStat` → no trip, no throw.
 - **Check**: fast runner; `chk task-router`. **ACs**: AC-H1 (over-size).

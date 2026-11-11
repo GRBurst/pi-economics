@@ -169,3 +169,45 @@ test("branchDelete without force refuses a branch with unmerged commits; with fo
   assert.ok((await git.branchDelete(r.dir, "side", true)).ok);
   assert.equal(await git.sha(r.dir, "side"), undefined);
 });
+
+// --- L5.T12: diffStat (plan D42) ----------------------------------------------------------------------------------------
+
+test("diffStat: committed, staged, unstaged and untracked changes against base; binary and empty files count as files", async () => {
+  const r = tempRepo();
+  const git = createGit(gitRunner("git", r.env));
+  r.commit("keep.ts", "1\n2\n3\n4\n5\n", "keep");
+  r.commit("gone.ts", "x\ny\n", "gone");
+  const base = r.git(["rev-parse", "HEAD"]);
+  const wt = join(r.base, "wt");
+  await git.worktreeAdd(r.dir, wt, "lm/x", base);
+  assert.deepEqual(await git.diffStat(wt, base), [], "nothing yet");
+  r.commit("c.ts", "a\nb\nc\n", "committed", wt); // committed: 3 added
+  writeFileSync(join(wt, "keep.ts"), "1\n2\nTHREE\n4\n5\n6\n"); // unstaged: 2 added, 1 deleted
+  writeFileSync(join(wt, "s.ts"), "s1\ns2\n");
+  r.git(["add", "s.ts"], wt); // staged: 2 added
+  rmSync(join(wt, "gone.ts")); // deleted: 2 deleted
+  writeFileSync(join(wt, "u.ts"), Array.from({ length: 101 }, (_, i) => `l${i}`).join("\n") + "\n"); // untracked: 101
+  writeFileSync(join(wt, "no-newline.txt"), "a\nb"); // untracked, last line without a newline: 2
+  writeFileSync(join(wt, "empty.txt"), ""); // untracked, empty: 0
+  writeFileSync(join(wt, "bin.dat"), Buffer.from([0, 1, 2, 0, 255])); // untracked, binary: 0
+  mkdirSync(join(wt, "dir", "deep"), { recursive: true });
+  writeFileSync(join(wt, "dir", "deep", "n.txt"), "n\n"); // untracked in a new directory: 1
+  writeFileSync(join(wt, "with space.txt"), "w\n"); // 1
+  writeFileSync(join(wt, ".gitignore"), "ignored.log\n"); // untracked: 1
+  writeFileSync(join(wt, "ignored.log"), "i\n".repeat(50)); // ignored: not counted
+  const stat = await git.diffStat(wt, base);
+  const by = Object.fromEntries(stat.map((s) => [s.path, [s.added, s.deleted]]));
+  assert.deepEqual(by, {
+    "c.ts": [3, 0], "keep.ts": [2, 1], "s.ts": [2, 0], "gone.ts": [0, 2], "u.ts": [101, 0], "no-newline.txt": [2, 0], "empty.txt": [0, 0],
+    "bin.dat": [0, 0], "dir/deep/n.txt": [1, 0], "with space.txt": [1, 0], ".gitignore": [1, 0],
+  });
+  assert.equal(stat.length, 11);
+});
+
+test("diffStat: a failing or timed-out git, a directory that is no repository → [] and no exception", async () => {
+  const r = tempRepo();
+  assert.deepEqual(await createGit(async () => ({ exit: 124, out: "", err: "", timedOut: true })).diffStat(r.dir, "main"), []);
+  assert.deepEqual(await createGit(async () => { throw new Error("boom"); }).diffStat(r.dir, "main"), []);
+  assert.deepEqual(await createGit(gitRunner("git", r.env)).diffStat(join(r.base, "missing"), "main"), []);
+  assert.deepEqual(await createGit(gitRunner("git", r.env)).diffStat(r.dir, "nosuchbase"), []);
+});

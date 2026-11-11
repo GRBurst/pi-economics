@@ -1,7 +1,7 @@
 // An in-memory `Git` (core/local/git.ts) for the logic tests (plan D56): scripted repositories, refs, worktrees and dirty
 // directories; every call is recorded. Typed `Git`, so a port method without a fake fails the type check. The tests that are
 // about git's behaviour run real git (test/git-repo.ts); test/local-fake-git.test.ts keeps the two in step.
-import type { Git, Res, Wt } from "../core/local/git.ts";
+import type { Git, Res, Stat, Wt } from "../core/local/git.ts";
 import { inside } from "../core/local/worktree.ts";
 
 export type FakeRepo = {
@@ -19,6 +19,8 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
   /** Directories that exist without being a worktree (a file or a directory in the way): `worktreeAdd` onto one fails. */
   const existing = new Set<string>();
   const dirty = new Set<string>();
+  /** worktree → what `diffStat` answers (an Error is thrown, as a misbehaving port might). */
+  const stats = new Map<string, Stat | Error>();
   /** method → the error its next calls fail with (`{ok: false, err}`); `undefined` entries are ignored. */
   const fail = new Map<string, string>();
   const addRepo = (root: string, main = "main", sha = "a".repeat(40)): FakeRepo => {
@@ -78,7 +80,13 @@ export function fakeGit(o: { repos?: { root: string; main?: string; sha?: string
       return { ok: true, out: `Deleted branch ${branch}.` };
     },
     async dirty(dir) { return dirty.has(dir); },
+    async diffStat(dir, base) {
+      calls.push(`diffStat ${dir} ${base}`);
+      const s = stats.get(dir);
+      if (s instanceof Error) throw s;
+      return s ?? [];
+    },
   };
-  return { git, repos, addRepo, calls, existing, dirty, fail };
+  return { git, repos, addRepo, calls, existing, dirty, fail, stats };
 }
 export type FakeGit = ReturnType<typeof fakeGit>;

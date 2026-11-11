@@ -265,5 +265,5 @@ export function install(pi: PiLike, deps: Deps) {
     else delete sections.task_cards;
   });
 
-  return { log, settings, tickets, overseer: lm.overseer, budget: lm.budget, branches: lm.branches, ready: lm.ready };
+  return { log, settings, tickets, overseer: lm.overseer, budget: lm.budget, branches: lm.branches, ready: lm.ready, settled: lm.settled };
 }
