@@ -2,7 +2,7 @@
 // owns their rules. An invalid value gets its default back, reported as "<path>: <why>; default kept".
 import { EFFORTS } from "../members.ts";
 import type { RouterSettings, ThinkingLevel } from "../types.ts";
-import { LOCAL_COMPONENTS, isLocal } from "./mode.ts";
+import { LOCAL_COMPONENTS, componentOn, isLocal } from "./mode.ts";
 
 type Obj = Record<string, unknown>;
 const get = (o: unknown, path: string): unknown => path.split(".").reduce<unknown>((x, k) => (x as Obj | undefined)?.[k], o);
@@ -68,6 +68,11 @@ export function validateLocal(s: RouterSettings, base: RouterSettings, problems:
   // An overseer audits and must not write (design §3.2, P13 Q11): its tools are read-only.
   const writer = s.overseer.tools.find((t) => WRITERS.includes(t));
   if (writer !== undefined) reset("overseer.tools", `${writer} can write`);
+  // Plan D40: plans switched on need worktrees and mergeGate active; else they are switched off (auto is silently inactive).
+  if (s.plans.enabled === "on" && !(componentOn(s, "worktrees") && componentOn(s, "mergeGate"))) {
+    s.plans.enabled = "off";
+    problems.push("plans: needs worktrees and mergeGate; off");
+  }
   // Plan D2: member references only matter when a component that uses them can run; in default mode with every component
   // "auto" a blank Opus or Sonnet must not add a problem (G6, AC-N2).
   if (!isLocal(s) && !LOCAL_COMPONENTS.some((c) => s[c].enabled === "on")) return;

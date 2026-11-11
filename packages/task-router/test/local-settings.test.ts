@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defaults, parseSettings } from "../core/settings.ts";
-import { LOCAL_COMPONENTS, componentOn } from "../core/local/mode.ts";
+import { LOCAL_COMPONENTS, activeSet, componentOn } from "../core/local/mode.ts";
 
 /** Design §3.0.1's JSON, verbatim (`plans.regression` = "milestone"; plan Q12 adds "off" as a third value). */
 const DESIGN = JSON.parse(`{
@@ -65,10 +65,26 @@ test("AC-R1: an unknown toggle is reported and the default kept", () => {
 
 test("every component toggle: auto/on/off parse; componentOn = on, or auto in local mode", () => {
   for (const c of LOCAL_COMPONENTS) for (const v of ["auto", "on", "off"]) for (const mode of ["default", "local"]) {
+    if (c === "plans" && v === "on" && mode === "default") continue; // D40: without worktrees and mergeGate, below
     const r = parseSettings({ mode, [c]: { enabled: v } });
     assert.deepEqual(r.problems, [], `${c} ${v} ${mode}`);
     assert.equal(componentOn(r.settings, c), v === "on" || (v === "auto" && mode === "local"), `${c} ${v} ${mode}`);
   }
+});
+
+test("D40: plans switched on without worktrees and mergeGate active is a problem and switched off; auto is silently inactive", () => {
+  const PROBLEM = "plans: needs worktrees and mergeGate; off";
+  for (const o of [{ plans: { enabled: "on" } }, { mode: "local", plans: { enabled: "on" }, mergeGate: { enabled: "off" } },
+    { mode: "local", plans: { enabled: "on" }, worktrees: { enabled: "off" } }, { plans: { enabled: "on" }, worktrees: { enabled: "on" } }]) {
+    const r = parseSettings(o);
+    assert.deepEqual(r.problems, [PROBLEM], JSON.stringify(o));
+    assert.equal(r.settings.plans.enabled, "off");
+    assert.equal(activeSet(r.settings).plans, false);
+  }
+  const on = parseSettings({ plans: { enabled: "on" }, worktrees: { enabled: "on" }, mergeGate: { enabled: "on" } });
+  assert.deepEqual([on.problems, activeSet(on.settings).plans], [[], true]);
+  const auto = parseSettings({ mode: "local", mergeGate: { enabled: "off" } });
+  assert.deepEqual([auto.problems, auto.settings.plans.enabled, activeSet(auto.settings).plans], [[], "auto", false]);
 });
 
 test("the other enums: an invalid value is reported at its path and the default kept", () => {

@@ -23,6 +23,8 @@ import { gitGuard } from "./childguards.ts";
 import { composeGuards, type Guard, type SyncGuard } from "../toolguard.ts";
 import { createPlanStore } from "./plans.ts";
 import { planGuard, touches, whitelistGuard } from "./planguard.ts";
+import type { PlanPorts } from "./planflow.ts";
+import { amendPlanTool, planRequestTool } from "./plantools.ts";
 import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
 import { bypassHint, bypassText, checkBypass, createApprovals, createMainRefs, requestMergeTool } from "./merge.ts";
@@ -217,16 +219,27 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     childGuard: (cwd: string): Guard | undefined => composeGuards(handle.gitGuard(cwd), handle.planGuard(cwd), handle.whitelistGuard(cwd)),
   };
   const s = d.settings, h = s.hints;
+  // The plan store goes to start_branch and request_merge only while plans are active (design §3.3.2, §3.4.2).
+  const planned = activeSet(s).plans ? { plans } : {};
   // Review F2: a repository start_branch registers gets its baseline before the tool returns.
   if (componentOn(s, "worktrees")) {
-    pi.registerTool?.(startBranchTool({ git, store: branches, settings: s }, () => ready,
+    pi.registerTool?.(startBranchTool({ git, store: branches, settings: s, ...planned }, () => ready,
       activeSet(s).mergeGate ? () => checkRefs() : undefined));
   }
+  const appendRef = (type: string, data: unknown): void => { pi.appendEntry?.(type, data); refs.observe(type, data); };
+  const redTmp = (): string => join(tmpdir(), `task-router-red-${d.hex(6)}`);
   // request_merge (design §3.4.1) while the merge gate is active; one set of ports per call, with its AbortSignal (D49).
   if (activeSet(s).mergeGate) {
     pi.registerTool?.(requestMergeTool((signal) => ({ git, run: d.run ?? runCheck, overseer, branches, approvals, settings: s,
-      append: (type, data) => { pi.appendEntry?.(type, data); refs.observe(type, data); }, tmp: () => join(tmpdir(), `task-router-red-${d.hex(6)}`), fixer: handle.fixer, log: (i) => d.log.merge(i),
+      append: appendRef, tmp: redTmp, fixer: handle.fixer, log: (i) => d.log.merge(i), ...planned,
       exclusive, fixerGone, ...(signal && { signal }) }), () => ready));
+  }
+  // plan_request and amend_plan (design §3.5.2, §3.5.4) while plans are active (D40); submit_plan is the plan author's child tool.
+  if (activeSet(s).plans) {
+    const planPorts = (signal: AbortSignal | undefined): PlanPorts => ({ git, run: d.run ?? runCheck, overseer, branches, plans, settings: s,
+      append: appendRef, tmp: redTmp, log: (i) => d.log.plan(i), ...(signal && { signal }) });
+    pi.registerTool?.(planRequestTool(planPorts, () => ready));
+    pi.registerTool?.(amendPlanTool(planPorts, () => ready));
   }
   // The main-checkout write guard (design §3.3.3). It blocks on purpose, so it is total itself: pi treats a throwing handler as a
   // block. Registered after the hint recorder's `tool_call` handler, so that call is recorded first.

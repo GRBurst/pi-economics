@@ -77,6 +77,17 @@ test("AC-R3 worktrees+mergeGate: the full branch line (design §2.3)", () => {
   assert.ok(!text.includes(BRANCH_ONLY + "\n"));
 });
 
+// L7.T17 (plan S25, Q17): the plans line after the branch line.
+const PLANS = `A request that needs more than one branch starts with plan_request. Follow the plan file, tick only your
+task's checkbox, and change the plan only with amend_plan.`;
+
+test("AC-R3 all: worktrees, mergeGate and plans active → the full branch line, then the plans line (design §2.3)", () => {
+  const text = fire(harness({ settings: { mode: "local" } as never }));
+  assert.equal(text, WITH(cardSchema(defaults()), `${BRANCH_FULL}\n${PLANS}`));
+  assert.equal(text, localSection(parseSettings({ mode: "local" }).settings, { worktrees: true, mergeGate: true, plans: true }));
+  assert.ok(!fire(harness({ settings: { mode: "local", plans: { enabled: "off" } } as never })).includes("plan_request"));
+});
+
 test("AC-R3 mergeGate only: the gate line", () => {
   const text = fire(harness({ settings: { mode: "local", worktrees: { enabled: "off" } } as never }));
   assert.equal(text, WITH(cardSchema(defaults()), GATE_ONLY));

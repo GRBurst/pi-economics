@@ -1,9 +1,6 @@
 // The `start_branch` tool (design §3.3.2; plan D48): the main session's way to a worktree. The logic is `startBranch`; this is
 // the tool's shape: the schema, and the result as text plus `details`.
-import type { RouterSettings } from "../types.ts";
-import type { BranchStore } from "./branches.ts";
-import type { Git } from "./git.ts";
-import { startBranch } from "./worktree.ts";
+import { startBranch, type StartDeps } from "./worktree.ts";
 
 export type ToolReply = { content: { type: "text"; text: string }[]; details: unknown; isError?: boolean };
 export type RouterTool = {
@@ -26,8 +23,7 @@ export const START_BRANCH_SCHEMA = {
 export const errorReply = (reason: string): ToolReply => ({ content: [{ type: "text", text: reason }], details: { status: "error", reason }, isError: true });
 
 /** `after`: awaited after a branch started, before the result (the merge gate's baseline of the repository's main tip). */
-export function startBranchTool(d: { git: Git; store: BranchStore; settings: RouterSettings }, ready: () => Promise<void> = async () => undefined,
-  after?: () => Promise<void>): RouterTool {
+export function startBranchTool(d: StartDeps, ready: () => Promise<void> = async () => undefined, after?: () => Promise<void>): RouterTool {
   return {
     name: "start_branch",
     label: "Start branch",
