@@ -64,8 +64,10 @@ their own `!` commands. The router never blocks those commands (`user_bash` is n
 - There is no auto-detection: a session whose main model is not Qwen still runs in local mode when `mode` is
   `"local"`. The status line shows it (§2.5).
 - Each local-mode component has its own toggle, `enabled: "auto" | "on" | "off"` (default `"auto"`):
-  `hints`, `overseer` (implied by the components that need it), `worktrees`, `mergeGate`, `plans`. `"auto"`
-  means on in local mode and off in default mode. `"on"` turns a component on in default mode later (§7 OQ11).
+  `hints`, `worktrees`, `mergeGate`, `plans`. The `overseer` has no toggle: it serves the components that need
+  it. `"auto"` means on in local mode and off in default mode. `"on"` turns a component on in default mode
+  later (§7 OQ11). `mergeGate` does not need `worktrees`; `plans` is active only while both are (the *active
+  set*, `activeSet` in `core/local/mode.ts`; `plans: "on"` without both is a reported problem and off).
   `force` (§3.6) works in both modes.
 
 New HM assertions (each has a negative case in `checks/module-eval/cases/task-router.nix`):
@@ -91,9 +93,9 @@ level-0 `write`/`read` member at cost 0, so cheapest-fit sends level-0 work to Q
    leg. The card's `importance`, the parent's importance and `pathRules` still count. (LD1)
 2. **Default child cwd.** While a worktree is active (§3.3), a card without `cwd` gets the active worktree.
    The Actor API extension (§3.0.4) also lets the policy start the child session in that directory. (LD2)
-3. **Composed tool guard for every routed child.** The git guard (§3.4.5), the plan guard (§3.5.6) and the
-   call tripwires (§3.1.3) are composed with the existing `read-only+files` guard (`composeGuards`,
-   `core/toolguard.ts`).
+3. **Composed tool guard for every routed child.** The call tripwires (§3.1.3), the git guard (§3.4.5), the
+   plan guard (§3.5.6) and the whitelist guard are composed in front of the existing `read-only+files` guard
+   by `composeGuards`, which local mode adds to `core/toolguard.ts`: the first guard that blocks decides.
 4. **Delegation nudge off, orchestrator rule off.** Both were designed for a strong main model that should
    delegate. Local mode replaces them with hints (§3.1). This holds even when an experiments arm sets
    `delegationRule`. (LD3)
@@ -110,8 +112,9 @@ measure it with the meter.)
 ### 2.3 The prompt section for a Qwen main
 
 In local mode, `before_agent_start` sets `sections.task_cards` to `localSection(settings)`
-(`core/prompt.ts`) instead of `cardSection`. Children still get no section, and rejections still embed
-`cardSchema`. The section is short: it keeps rules, field names and one example, and drops the strategy
+(`core/prompt.ts`) instead of `cardSection`. Children never load the router (`forChildren = false`); a child
+session that did would get `cardSection(settings, false)` as today, never the local section. Rejections still
+embed `cardSchema`. The section is short: it keeps rules, field names and one example, and drops the strategy
 prose. Its exact text is part of the acceptance criteria (AC-R3); it is cache-stable (no per-turn values):
 
 ```
@@ -132,8 +135,11 @@ Task card (spawn_subagent `task`; do not set model or thinkingLevel):
  "t0":{"bounded":true,"specified":true,"verifiable":true,"lowRisk":true,"small":true,"linear":true},"t2":[]}
 ```
 
-The lines about branches and plans appear only when `worktrees`/`mergeGate` and `plans` are active
-(`localSection` takes the active set).
+The branch lines follow the active set (`localSection` takes it): with `worktrees` and `mergeGate` the two
+lines above; with `worktrees` only "Code changes happen on branches: start_branch, then edit and commit in its
+worktree (absolute paths)."; with `mergeGate` only "Merge into a main branch only with request_merge. You cannot
+merge, push or commit to a main branch; the router blocks it."; with neither, none. The two plan lines appear
+only while `plans` is active.
 
 ### 2.4 Hints instead of the nudge
 
@@ -215,10 +221,10 @@ Session state lives in memory. Every change is persisted with `pi.appendEntry(cu
 | customType | data |
 |---|---|
 | `task-router/force` | `{ model, thinkingLevel?, scope: "session" \| "next", remaining?, source: "command" }` or `{ cleared: true }` |
-| `task-router/branch` | `{ repo, branch, worktree, base, plan?: {slug, id}, state: "active" \| "merged" \| "abandoned" \| "fixer", rejections }` |
-| `task-router/review` | `{ reviewId, role, member, commit?, verdict (full JSON), approved, ts }` |
+| `task-router/branch` | `{ repo, branch, worktree, base, plan?: {slug, id}, state: "active" \| "merged" \| "abandoned" \| "fixer" \| "blocked", rejections, fixerRuns, fixer?, goal?, check?, handmade?, files? }`; `goal`/`check` are the merge review's goal and the branch check, `fixerRuns`/`fixer` the fixer rounds spent and the running fixer, `handmade` a branch the router did not make (its counts only), `files` a plan unit's whitelist; an update in place adds `keep: true` |
+| `task-router/review` | `{ reviewId, role, member, commit?, verdict (full JSON), approved?, ts }`; `approved` for a verdict, not for a plan skeleton |
 | `task-router/approval` | `{ repo, branch, commit, tree, reviewId }` |
-| `task-router/plan` | `{ slug, file, skeletonHash, approvedBy, triggers: [...] }` |
+| `task-router/plan` | `{ slug, repo, file, skeletonHash, approvedBy, triggers: [{ id, kind, task?, open, rejected? }] }` |
 | `task-router/budget` | `{ opusUsed, steerUsed }` |
 | `task-router/main-ref` | `{ repo, branch, sha }` (last known main sha, §3.4.6) |
 
@@ -227,22 +233,27 @@ Session state lives in memory. Every change is persisted with `pi.appendEntry(cu
 The log stays text-free (`core/outcome.ts`: no card text, no prompt text, no finding text). New events and keys
 are added to `KEYS`, and the log contract is updated with them: `packages/token-meter/core/contract.ts` (the
 `event` enum and the per-event rules) and `packages/token-meter/LOGS.md`. The `log-contract` check runs every
-writer through `pi-analyse --check`. Session-level events use `taskId: ""`.
+writer through `pi-analyse --check`. Session-level events use `taskId: ""`. `pi-analyse`
+(`packages/token-meter/core/analyse.ts`) counts only the task events (`reroute`, `check`, `corrective`,
+`escalate`, `verdict`, `spotcheck`) as "task events without a spawn", so `force` and `hint` lines are no
+data-quality defect.
 
 | event | required | optional |
 |---|---|---|
 | `hint` | `taskId` (`"main"` or the child name), `trip`, `stage` (`"hint"`\|`"steer"`\|`"parent"`) | `count`, `sessionId` |
 | `review` | `taskId` (reviewId), `role` (`merge`\|`plan-author`\|`plan-review`\|`delta`\|`steer`), `member`, `model`, `outcome` (`approve`\|`revise`\|`invalid`\|`timeout`\|`error`) | `blocking`, `findings` (counts), `fallback` (`"budget"`\|`"error"`), `inconsistent` (bool), `attempt`, `durationMs`, `commit`, `branch` |
-| `merge` | `taskId` (branch), `outcome` (`merged`\|`refused`\|`revise`\|`fixer`\|`failed`) | `reason` (a fixed code, §3.4.3), `commit`, `nLines`, `nFiles`, `reviewId`, `pushed` |
+| `merge` | `taskId` (branch), `outcome` (`merged`\|`refused`\|`revise`\|`fixer`\|`failed`) | `reason` (a fixed code, §3.4.2), `commit`, `nLines`, `nFiles`, `reviewId`, `pushed` |
 | `plan` | `taskId` (plan slug), `action` (`skeleton`\|`approve`\|`trigger`\|`amend`\|`reject`) | `trigger` (code), `nTasks`, `reviewId`, `full` (bool) |
 | `force` | `taskId: ""`, `action` (`set`\|`clear`\|`used`\|`expired`\|`rejected`), `source` (`command`\|`settings`) | `model`, `effort`, `reason` |
-| `gatebypass` | `taskId` (branch), `from`, `to` (shas) | `repo` |
+| `gatebypass` | `taskId` (the main branch), `from`, `to` (shas) | `repo` (the repository's directory name, never a path) |
 
 `spawn` gets these optional keys:
 
 - `forced: true`, `forceSource`, and `routedModel`/`routedEffort` (what routing would have chosen), when a force
   is active.
-- `ticket: "<role>"` for router-internal spawns.
+- `ticket: "<role>"` for router-internal spawns. Their line is written by the router's own `ticketSpawn`, not by
+  card routing: `kind: "overseer"` (the fixer: `"implement"`), the member's `workerTier`, `workerEffort`,
+  `workerMember` and `workerModel`, no `cardHash`, and no verdict slot (a kill logs no `unjudged`).
 
 #### 3.0.4 Actor API extension (spawnPolicyApi 2)
 
@@ -267,7 +278,7 @@ export type ChildTool = {
 };
 export type PolicyResult =
   | { model: string; thinkingLevel: ThinkingLevel; briefAppend?: string; tools?: string[]; meta?: unknown;
-      toolGuard?: ToolGuard;
+      toolGuard?: ToolGuard;      // NEW: may answer with a Promise, which the guard extension awaits
       childTools?: ChildTool[];   // NEW: appended to the child's customTools and to its allowlist
       cwd?: string }              // NEW: the child session's cwd (absolute); default: today's
   | { reject: string };
@@ -539,7 +550,8 @@ Errors return to the author as a resubmit, counted toward `plans.rounds`.
 
 - Branch `<branchPrefix><plan-slug>/<id>` for plan work, else `<branchPrefix><slug>` (slug: `[a-z0-9-]{1,40}`).
 - Worktree directory: `worktrees.root`, with `{repo}` replaced by the repository's directory name and relative
-  roots resolved against the repository root's parent. Inside it, the branch name with `/` replaced by `--`.
+  roots resolved against the repository root (so `../{repo}.worktrees` is a sibling of the repository).
+  Inside it, the branch name with `/` replaced by `--`.
   The default `../{repo}.worktrees` keeps worktrees outside the repository, so no `.gitignore` change is needed.
 - Base: the current tip of the first existing branch in `mainBranches`.
 - The *main checkout* is the worktree that has the main branch checked out (`git worktree list --porcelain`).
@@ -568,7 +580,7 @@ Behaviour:
 - If the branch already exists in a worktree, re-activate it (idempotent). Otherwise run
   `git worktree add -b <branch> <dir> <base>`.
 - Make it the *active worktree*, append `task-router/branch`, and return
-  `{branch, worktree, base, check, files?}`.
+  `{branch, worktree, base, check, files?}` as text and as the result's `details`.
 
 Failure: a git error returns `isError` with git's stderr tail (2 kB), and the state is unchanged.
 
@@ -597,11 +609,12 @@ non-main ref, which the guard allows. The router marks a branch `abandoned` when
   } }
 ```
 
-Result (as text plus `structuredContent`):
+Result (as text in `content`, and as the object in the result's `details`; `isError` only for `status: "error"`
+and invalid input):
 
 ```
-{ status: "merged" | "refused" | "revise" | "fixer" | "error", reason: <code>, detail: string,
-  commit, reviewId?, findings?: string[], pushed?: boolean }
+{ status: "merged" | "refused" | "revise" | "fixer" | "error", reason?: <code>, detail: string,
+  commit?, reviewId?, findings?: string[], pushed?: boolean }
 ```
 
 #### 3.4.2 Pipeline (cheap and deterministic first; Opus last)
@@ -702,7 +715,9 @@ Nothing waits for a human.
 Wiring:
 
 - **Main session:** `pi.on("tool_call")` for `bash` and `powershell` (same input shape).
-- **Children:** the composed `toolGuard`.
+- **Children:** the composed `toolGuard` (§2.2 item 3). A guard may answer with a Promise, which the actor's
+  guard extension awaits (the spawn-api patch), so `branchOf` runs as a process without blocking any session;
+  `composeGuards` keeps a chain of synchronous guards synchronous.
 
 `branchOf` runs `git -C <dir> symbolic-ref --short -q HEAD` with a 2 s timeout. A timeout counts as an unknown
 directory.
@@ -923,7 +938,7 @@ and iface checks. (LD12)
 | worktrees | `core/local/worktree.ts` | — |
 | plans | `core/local/plan.ts` (schema, validation, render/parse, tick-only diff, triggers), `core/local/planflow.ts` | — |
 | wiring | `core/local/install.ts` `installLocal(pi, deps)`, called from `install()` in `core/shell.ts` at `session_start` inside the guarded body | registers tools and hooks only when a component is active |
-| outcome keys and events | `core/outcome.ts` `KEYS`, `core/log.ts`; `packages/token-meter/core/contract.ts`, `packages/token-meter/LOGS.md` | log contract |
+| outcome keys and events | `core/outcome.ts` `KEYS`, `core/log.ts`; `packages/token-meter/core/contract.ts`, `packages/token-meter/core/analyse.ts` (task events only), `packages/token-meter/LOGS.md` | log contract |
 | API types | `core/api.ts` (router's copy) | the iface check compares it with the provider |
 | Actor patch | `patches/pi-actor-subagents/pi-actor-subagents-spawn-api.patch`; `packages/actor-subagents/package.nix` (patch list, `spawnPolicyApi = 2`) | §3.0.4 |
 | HM | `modules/task-router.nix` (`localMode.enable`, three assertions); `checks/module-eval/cases/task-router.nix` (negative cases); `checks/module-eval/cases/actor-subagents.nix` (`spawnPolicyApi` 1 → 2) | — |
@@ -991,7 +1006,7 @@ port, a temporary git repository where noted). The HM criteria are module-eval c
 
 - AC-O1. `request_merge` on a valid branch calls `api.spawn` once, with `task.ticket`. The policy, given that
   ticket, returns `tools === overseer.tools`, one `childTools` entry named `submit_verdict`, `cwd` = the
-  worktree, and a `toolGuard` that blocks `bash`, `edit` and `send_message`.
+  ticket's (the main checkout, LD14), and a `toolGuard` that blocks `bash`, `edit` and `send_message`.
 - AC-O2. `verdict.approve(findings)` is true iff no finding is blocking, for every generated verdict (property
   test). A `REVISE` with only non-blocking findings is approved and logged `inconsistent: true`.
 - AC-O3. A submission containing ```` ``` ```` or a duplicate id returns `isError` and does not resolve the
@@ -1018,7 +1033,8 @@ port, a temporary git repository where noted). The HM criteria are module-eval c
 
 - AC-M1. `gitcmd.classify` blocks every command in a fixed corpus of main-branch writes (≥ 40 forms: each
   subcommand × direct, `-C`, `cd &&`, `bash -c`, `$(…)`). It allows every command in a corpus of non-main and
-  read-only forms (≥ 40). Every block reason names `request_merge`.
+  read-only forms (≥ 40). The corpus uses literal directories only, and every block reason for it names
+  `request_merge`; the unknown-directory and fail-closed reasons (§3.4.5) name their own remedy instead.
 - AC-M2. Each refusal code in §3.4.2 steps 2–5 is produced by a minimal setup, makes no `api.spawn` call, and
   leaves the main ref unchanged.
 - AC-M3. An approved review merges with fast-forward: the main tip equals the reviewed commit. A `merge` line
@@ -1083,8 +1099,8 @@ Each milestone leaves default mode unchanged (AC-N1–N4 run in every milestone)
 4. **L4. Actor spawn API and overseer.** The patch, `spawnPolicyApi = 2`, the API types and iface,
    `overseer.ts`, `verdict.ts`, budget and fallback, the `steer` role wired into L3's persistence, the third HM
    assertion. *Ships:* Opus steering of persistent loops.
-5. **L5. Worktrees.** `start_branch` (non-plan), worktree writes guard, cleanup. *Ships:* a branch workflow,
-   with merging still manual.
+5. **L5. Worktrees.** `start_branch` (non-plan), worktree writes guard, the default child cwd (§2.2 item 2),
+   cleanup. *Ships:* a branch workflow, with merging still manual.
 6. **L6. Merge gate.** The git classifier and guard (main and children), `request_merge` steps 1–3 and 5–10
    for non-plan branches, the red run, approval binding, the fixer, bypass detection, logs. *Ships:* the
    binding merge gate.
