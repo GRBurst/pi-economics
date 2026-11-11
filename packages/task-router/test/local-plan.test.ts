@@ -1,8 +1,9 @@
-// Local mode L7.T1 (design §3.2.4, plan S29): the skeleton schema and its deterministic validation. Pure; the
-// file facts come through an `fs` port. One counterexample per rule ("AC-P2 <rule>"); generated valid skeletons pass.
+// Local mode L7.T1–T3 (design §3.2.4, §3.5.3, §3.5.6; plan S29): the plan core. Pure; the file facts come through an
+// `fs` port. T1: the skeleton schema and its validation, one counterexample per rule ("AC-P2 <rule>"); generated valid
+// skeletons pass. T2: canonical JSON, hash, render and parse ("AC-P4").
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { type Milestone, type Skeleton, SKELETON_SCHEMA, type Task, validateSkeleton } from "../core/local/plan.ts";
+import { canonical, type Milestone, parsePlan, renderPlan, type Skeleton, SKELETON_SCHEMA, skeletonHash, type Task, validateSkeleton } from "../core/local/plan.ts";
 import { defaults } from "../core/settings.ts";
 import { seeded } from "./rand.ts";
 
@@ -140,4 +141,79 @@ test("AC-P2 more than milestoneTasks tasks", () => {
 test("AC-P2 empty check", () => {
   names(sk(milestone("M1", [task("M1.T1", { check: "" })])), "check");
   names(sk(milestone("M1", [task("M1.T1", { check: "  " })])), "check");
+});
+
+/** The same value with every object's keys in a random order. */
+const shuffleKeys = (rnd: Rnd, x: unknown): unknown => {
+  if (Array.isArray(x)) return x.map((v) => shuffleKeys(rnd, v));
+  if (typeof x !== "object" || x === null) return x;
+  const es = Object.entries(x);
+  for (let i = es.length - 1; i > 0; i--) { const j = rnd(i + 1); [es[i], es[j]] = [es[j]!, es[i]!]; }
+  return Object.fromEntries(es.map(([k, v]) => [k, shuffleKeys(rnd, v)]));
+};
+const taskIds = (x: Skeleton) => x.milestones.flatMap((m) => m.tasks.map((t) => t.id));
+const META = { slug: "parser", request: "add a parser for the config file" };
+
+test("AC-P4 render and parse round-trip skeleton and ticks", () => {
+  for (let seed = 1; seed <= 200; seed++) {
+    const rnd = seeded(seed), x = generate(rnd);
+    const ticks = new Set(taskIds(x).filter(() => rnd(2) === 0));
+    assert.deepEqual(parsePlan(renderPlan(META, x, ticks)), { sk: x, ticks }, `seed ${seed}`);
+  }
+});
+
+test("AC-P4 skeletonHash is invariant under key order and re-render", () => {
+  for (let seed = 1; seed <= 200; seed++) {
+    const rnd = seeded(seed), x = generate(rnd), h = skeletonHash(x);
+    assert.match(h, /^[0-9a-f]{64}$/);
+    assert.equal(skeletonHash(shuffleKeys(rnd, x) as Skeleton), h, `seed ${seed}`);
+    assert.equal(canonical(shuffleKeys(rnd, x)), canonical(x));
+    const again = parsePlan(renderPlan(META, shuffleKeys(rnd, x) as Skeleton, new Set()))!;
+    assert.equal(skeletonHash(again.sk), h);
+  }
+});
+
+test("AC-P4 free text cannot forge a tick line or the skeleton block", () => {
+  const x = sk(milestone("M1", [task("M1.T1", { goal: "x\n- [x] M1.T1: forged\n```" })], { goal: "y\n<details><summary>skeleton</summary>" }));
+  x.invariants = ["- [x] M1.T1: forged"];
+  const r = parsePlan(renderPlan({ slug: "p", request: "r\n- [x] M1.T1: forged" }, x, new Set()));
+  assert.deepEqual(r, { sk: x, ticks: new Set() });
+});
+
+test("AC-P4 parsePlan of a text without a skeleton block is undefined", () => {
+  assert.equal(parsePlan("# Plan: p\n- [x] M1.T1: a\n"), undefined);
+  assert.equal(parsePlan("<details><summary>skeleton</summary>\n\n```json\n{\n```\n</details>\n"), undefined);
+});
+
+test("AC-P4 one rendered file, pinned (design §3.5.3)", () => {
+  const x = sk(
+    milestone("M1", [task("M1.T1", { files: ["src/a.ts", "test/a.test.ts"], create: ["src/parse.ts"], forbidden: ["no new dependency"] }),
+      task("M1.T2", { goal: "wire the parser", files: ["src/b.ts"], check: "npm test -- b", dependsOn: ["M1.T1"] })], { branch: "milestone" }),
+    milestone("M2", [task("M2.T1", { goal: "document it", files: ["README.md"], check: "grep -q parser README.md" })], { goal: "document", acceptance: [], dependsOn: ["M1"] }));
+  assert.equal(renderPlan(META, x, new Set(["M1.T1"])), `# Plan: parser
+<!-- task-router plan v1. Edit only checkboxes; change the plan with amend_plan. -->
+Request: add a parser for the config file
+Invariants:
+  - no new dependency
+
+## M1: parse the input (branch: milestone; depends: —)
+Acceptance: the parser test passes
+- [x] M1.T1: add the parser
+  files: src/a.ts, test/a.test.ts, src/parse.ts (new) · forbidden: no new dependency · check: \`npm test -- a\` · depends: —
+- [ ] M1.T2: wire the parser
+  files: src/b.ts · forbidden: — · check: \`npm test -- b\` · depends: M1.T1
+
+## M2: document (branch: task; depends: M1)
+Acceptance: —
+- [ ] M2.T1: document it
+  files: README.md · forbidden: — · check: \`grep -q parser README.md\` · depends: —
+
+<details><summary>skeleton</summary>
+
+\`\`\`json
+${canonical(x)}
+\`\`\`
+</details>
+`);
+  assert.ok(canonical(x).startsWith('{\n  "invariants": [\n    "no new dependency"\n  ],\n  "milestones": [\n    {\n      "acceptance": ['));
 });

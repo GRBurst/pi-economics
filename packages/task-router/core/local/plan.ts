@@ -1,5 +1,7 @@
 // Local mode L7 (design §3.2.4, §3.5.3; plan S29): the plan core. Pure; file facts come through an `fs` port.
-// L7.T1: `submit_plan`'s skeleton schema and the deterministic validation the router adds to it.
+// L7.T1: `submit_plan`'s skeleton schema and the deterministic validation the router adds to it. L7.T2: canonical
+// JSON, the skeleton hash, and the plan file's render and parse.
+import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import type { RouterSettings } from "../types.ts";
 import { check, type Schema } from "./schema.ts";
@@ -97,3 +99,50 @@ export function validateSkeleton(x: unknown, s: RouterSettings, fs: PlanFs): { o
   }
   return out.length ? { ok: false, reasons: out } : { ok: true, value: sk };
 }
+
+// L7.T2 (design §3.5.3): the plan file. The JSON block is the source of truth; the text above it is for reading.
+const sortKeys = (x: unknown): unknown =>
+  Array.isArray(x) ? x.map(sortKeys)
+  : typeof x === "object" && x !== null ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, sortKeys((x as Record<string, unknown>)[k])]))
+  : x;
+export const canonical = (x: unknown): string => JSON.stringify(sortKeys(x), null, 2);
+export const skeletonHash = (sk: Skeleton): string => createHash("sha256").update(canonical(sk)).digest("hex");
+
+const SUMMARY = "<details><summary>skeleton</summary>";
+/** Free text on one line: no line of the body but the router's own starts with a tick or the skeleton marker. */
+const flat = (t: string) => t.replace(/\s+/g, " ").trim();
+const list = (xs: readonly string[], sep = ", ") => (xs.length ? xs.map(flat).join(sep) : "—");
+
+export function renderPlan(meta: { slug: string; request: string }, sk: Skeleton, ticks: ReadonlySet<string>): string {
+  const out = [`# Plan: ${meta.slug}`, "<!-- task-router plan v1. Edit only checkboxes; change the plan with amend_plan. -->",
+    `Request: ${flat(meta.request)}`, sk.invariants.length ? "Invariants:" : "Invariants: —", ...sk.invariants.map((i) => `  - ${flat(i)}`)];
+  for (const m of sk.milestones) {
+    out.push("", `## ${m.id}: ${flat(m.goal)} (branch: ${m.branch}; depends: ${list(m.dependsOn)})`, `Acceptance: ${list(m.acceptance, "; ")}`);
+    for (const t of m.tasks) {
+      const files = [...t.files, ...(t.create ?? []).map((f) => `${f} (new)`)];
+      out.push(`- [${ticks.has(t.id) ? "x" : " "}] ${t.id}: ${flat(t.goal)}`,
+        `  files: ${list(files)} · forbidden: ${list(t.forbidden, "; ")} · check: \`${flat(t.check)}\` · depends: ${list(t.dependsOn)}`);
+    }
+  }
+  out.push("", SUMMARY, "", "```json", canonical(sk), "```", "</details>", "");
+  return out.join("\n");
+}
+
+/** The skeleton from the last JSON block and the ticked task ids above it; undefined without a readable block. */
+export function parsePlan(text: string): { sk: Skeleton; ticks: Set<string> } | undefined {
+  const lines = text.split("\n"), at = lines.lastIndexOf(SUMMARY);
+  if (at < 0) return undefined;
+  const open = lines.indexOf("```json", at), close = open < 0 ? -1 : lines.indexOf("```", open + 1);
+  if (close < 0) return undefined;
+  let sk: unknown;
+  try { sk = JSON.parse(lines.slice(open + 1, close).join("\n")); } catch { return undefined; }
+  if (typeof sk !== "object" || sk === null || !Array.isArray((sk as Skeleton).milestones)) return undefined;
+  const ticks = new Set<string>();
+  for (const l of lines.slice(0, at)) {
+    const m = TICK.exec(l);
+    if (m?.[1] === "x") ticks.add(m[2]!);
+  }
+  return { sk: sk as Skeleton, ticks };
+}
+
+export const TICK = /^- \[( |x)\] (M\d+\.T\d+):/;
