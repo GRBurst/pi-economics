@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { check, REASONS, renderProblems } from "../core/contract.ts";
+import { check, REASONS, renderProblems, TRIGGERS } from "../core/contract.ts";
 import { iso, MIN, T0, turn, world } from "./world.ts";
 
 const fields = (ps: ReturnType<typeof check>) => ps.map((p) => `${p.log}.${p.field}`);
@@ -253,4 +253,28 @@ test("gatebypass lines: from and to are shas, repo optional; without to one prob
 
 test("REASONS: the contract's merge codes are the literal list above", () => {
   assert.deepEqual(REASONS, MERGE_REASONS);
+});
+
+// Local mode L7.T16 (design §3.0.3, AC-L1): the plan's line (taskId = the plan's slug).
+const PLAN = { v: 1, ts: iso(T0 + 66 * MIN), event: "plan", taskId: "parser", action: "skeleton" };
+const PLAN_TRIGGERS = ["non-whitelisted", "interface-break", "regression", "over-budget", "remediation-failed"];
+
+test("plan lines: every action and trigger passes; the optional keys typed; trigger: \"x\" fails", () => {
+  const w = world();
+  for (const action of ["skeleton", "approve", "trigger", "amend", "reject"]) w.outcomes.push({ ...PLAN, action });
+  for (const trigger of PLAN_TRIGGERS) w.outcomes.push({ ...PLAN, action: "trigger", trigger });
+  w.outcomes.push({ ...PLAN, action: "amend", trigger: "over-budget", nTasks: 3, reviewId: "rv-2", full: false });
+  assert.deepEqual(check(JSON.parse(JSON.stringify(w))), []);
+  for (const [bad, field] of [
+    [{ action: undefined }, "action"], [{ action: "set" }, "action"], [{ trigger: "x" }, "trigger"], [{ nTasks: 0 }, "nTasks"],
+    [{ reviewId: "" }, "reviewId"], [{ full: "yes" }, "full"], [{ taskId: "" }, "taskId"],
+  ] as const) {
+    const x = world();
+    x.outcomes.push(JSON.parse(JSON.stringify({ ...PLAN, ...bad })));
+    assert.deepEqual(fields(check(x)), [`outcomes.${field}`], JSON.stringify(bad));
+  }
+});
+
+test("TRIGGERS: the contract's plan trigger codes are the literal list above", () => {
+  assert.deepEqual(TRIGGERS, PLAN_TRIGGERS);
 });

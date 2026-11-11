@@ -160,6 +160,15 @@ test("AC-P7 the main session: blocked outside, the trigger opened once and named
   assert.deepEqual(await x.call("write", { path: join(x.wt, "src/a.ts"), content: "x" }), []);
 });
 
+test("AC-L2 plan: the trigger the guard opens is one plan line in the outcome log", async () => {
+  const x = bound();
+  await x.h.router.settled();
+  await x.call("write", { path: join(x.wt, "src/c.ts"), content: "x" });
+  await x.call("write", { path: join(x.wt, "src/d.ts"), content: "x" });
+  assert.deepEqual(x.h.lines().filter((l) => l.event === "plan").map(({ v, ts, ...rest }) => rest),
+    [{ event: "plan", taskId: "p", action: "trigger", trigger: "non-whitelisted" }]);
+});
+
 test("AC-P7 a child of that branch: the same guard in its toolGuard (its cwd is the worktree)", async () => {
   const x = bound();
   await x.h.router.settled();

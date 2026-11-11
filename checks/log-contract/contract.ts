@@ -11,8 +11,11 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { install as installMeter } from "../../packages/token-meter/core/shell.ts";
-import { REASONS as CONTRACT_REASONS, ROLES as CONTRACT_ROLES, TRIPS as CONTRACT_TRIPS } from "../../packages/token-meter/core/contract.ts";
+import { REASONS as CONTRACT_REASONS, ROLES as CONTRACT_ROLES, TRIGGERS as CONTRACT_TRIGGERS, TRIPS as CONTRACT_TRIPS } from "../../packages/token-meter/core/contract.ts";
+import { BRANCH_TYPE } from "../../packages/task-router/core/local/branches.ts";
 import { REASONS } from "../../packages/task-router/core/local/merge.ts";
+import { TRIGGERS } from "../../packages/task-router/core/local/plan.ts";
+import { PLAN_TYPE } from "../../packages/task-router/core/local/plans.ts";
 import { ROLES } from "../../packages/task-router/core/local/overseer.ts";
 import { TRIPS } from "../../packages/task-router/core/local/tripwires.ts";
 import { fakeCtx as meterCtx, fakePi as meterPi } from "../../packages/token-meter/test/fake-pi.ts";
@@ -170,6 +173,25 @@ await mainSession("contract-main-2", "contract-child-2", 0.25);
   clock.t = Math.max(clock.t, gate.clock.t);
 }
 
+// --- task-router's plans (design §3.5.5): a session holding an approved plan and its task's branch; a write outside the task's
+// files is blocked and opens a non-whitelisted trigger (a plan line).
+{
+  const fg = fakeGit({ repos: [{ root: "/q" }] });
+  const wt = "/q.worktrees/lm--p--M1.T1";
+  await fg.git.worktreeAdd("/q", wt, "lm/p/M1.T1", "main");
+  const plan = { slug: "p", repo: "/q", file: "docs/plans/p.md", skeletonHash: "a".repeat(64), approvedBy: "rv-1", triggers: [] };
+  const branch = { repo: "/q", branch: "lm/p/M1.T1", worktree: wt, base: "b".repeat(40), plan: { slug: "p", id: "M1.T1" }, state: "active",
+    rejections: 0, fixerRuns: 0, goal: "g", check: "true", files: ["src/a.ts"] };
+  const planned = harness({ agentDir, settings: { mode: "local" }, extra: { git: fg.git } as never });
+  planned.clock.t = clock.t;
+  const pctx = { sessionManager: { getSessionId: () => "contract-plan", getBranch: () => [
+    { type: "custom", customType: PLAN_TYPE, data: plan }, { type: "custom", customType: BRANCH_TYPE, data: branch }] }, cwd: "/q" };
+  planned.f.fire("session_start", {}, pctx);
+  await planned.router.settled();
+  const blocked = await Promise.all(planned.f.fire("tool_call", { toolName: "write", toolCallId: "w1", input: { path: `${wt}/src/c.ts`, content: "x" } }, pctx));
+  assert.ok(blocked.some((b) => (b as { block?: boolean } | undefined)?.block), "the whitelist guard blocks");
+}
+
 // --- every log exists, every line carries the current schema version
 const jsonl = (file: string): any[] => readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 const dirLines = (dir: string): any[] => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".jsonl")).flatMap((f) => jsonl(join(dir, f))) : []);
@@ -185,7 +207,7 @@ for (const [name, lines] of Object.entries(logs)) {
   const old = lines.filter((l) => l.v !== 1);
   if (old.length) failures.push(`${name}: ${old.length} line(s) without schema version v=1, e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
 }
-for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force", "hint", "review", "merge", "gatebypass"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
+for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force", "hint", "review", "merge", "gatebypass", "plan"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
 if (!logs.outcomes.some((l) => l.event === "spawn" && l.ticket === "steer")) failures.push("outcomes: no ticket spawn line");
 // The contract keeps literal copies of the router's enums (token-meter imports nothing of the router): the overseer roles, the trips
 // and the merge reasons.
@@ -193,6 +215,7 @@ const same = (a: readonly string[], b: readonly string[]) => JSON.stringify([...
 if (!same(CONTRACT_ROLES, ROLES)) failures.push(`contract ROLES ${JSON.stringify(CONTRACT_ROLES)} differ from the router's ${JSON.stringify(ROLES)}`);
 if (!same(CONTRACT_TRIPS, TRIPS)) failures.push(`contract TRIPS ${JSON.stringify(CONTRACT_TRIPS)} differ from the router's ${JSON.stringify(TRIPS)}`);
 if (!same(CONTRACT_REASONS, REASONS)) failures.push(`contract REASONS ${JSON.stringify(CONTRACT_REASONS)} differ from the router's ${JSON.stringify(REASONS)}`);
+if (!same(CONTRACT_TRIGGERS, TRIGGERS)) failures.push(`contract TRIGGERS ${JSON.stringify(CONTRACT_TRIGGERS)} differ from the router's ${JSON.stringify(TRIGGERS)}`);
 for (const e of ["correction", "rating", "peek-after-mask"]) if (!logs.guards.some((l) => l.event === e)) failures.push(`guards: no ${e} event`);
 
 // --- pi-analyse --check over the produced lines, then the full analysis

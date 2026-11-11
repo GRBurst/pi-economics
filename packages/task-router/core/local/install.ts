@@ -42,7 +42,7 @@ type Pi = {
   registerTool?(tool: RouterTool): void;
 };
 export type LocalDeps = {
-  settings: RouterSettings; log: Pick<ReturnType<typeof createOutcomeLog>, "hint" | "review" | "merge" | "gatebypass">; isChild(ctx: any): boolean; sessionId(): string | undefined;
+  settings: RouterSettings; log: Pick<ReturnType<typeof createOutcomeLog>, "hint" | "review" | "merge" | "gatebypass" | "plan">; isChild(ctx: any): boolean; sessionId(): string | undefined;
   /** The overseer's ports (plan S20): the actor API, the shell's tickets, random hex, the clock and its poll sleep. */
   api(): SubagentsApiV1 | undefined; tickets: Tickets; hex(bytes: number): string; now(): number; sleep(ms: number): Promise<void>;
   /** The router's spawn policy is registered (review F1). */
@@ -92,7 +92,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   /** The last known main tips (design §3.4.6), rebuilt at `start`; a merge's record reaches them through the merge's append. */
   const refs = createMainRefs((type, data) => pi.appendEntry?.(type, data));
   /** The approved plans (design §3.5), rebuilt at `start`. */
-  const plans = createPlanStore((type, data) => pi.appendEntry?.(type, data));
+  const plans = createPlanStore((type, data) => pi.appendEntry?.(type, data), (i) => d.log.plan(i));
   /** Every plan file in every checkout of its repository (the main checkout and the worktrees git lists, plan D39). */
   const planFiles = (): string[] => plans.all().flatMap((r) =>
     [...new Set([r.repo, ...(branches.facts.worktrees.get(r.repo) ?? [])])].map((dir) => join(dir, r.file)));

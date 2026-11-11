@@ -8,6 +8,7 @@ import { createMainRefs } from "../core/local/merge.ts";
 import type { RunArgs, RunResult } from "../core/local/overseer.ts";
 import { createPlanStore } from "../core/local/plans.ts";
 import { type PlanPorts } from "../core/local/planflow.ts";
+import type { PlanLogInput } from "../core/outcome.ts";
 import { runCheck, type Runner } from "../core/gate.ts";
 import { parseSettings } from "../core/settings.ts";
 import { tempRepo } from "./git-repo.ts";
@@ -22,7 +23,10 @@ export function planRig(o: { settings?: Record<string, unknown> } = {}) {
   const entries: Array<{ type: string; data: any }> = [];
   const refs = createMainRefs(() => undefined);
   const append = (type: string, data: unknown): void => { entries.push({ type, data: structuredClone(data) }); refs.observe(type, data); };
-  const branches = createBranchStore(append), plans = createPlanStore(append);
+  /** The `plan` lines (design §3.0.3) the flows and the store logged, in order. */
+  const logs: PlanLogInput[] = [];
+  const log = (i: PlanLogInput): void => void logs.push(i);
+  const branches = createBranchStore(append), plans = createPlanStore(append, log);
   const settings = parseSettings({ mode: "local", ...o.settings }).settings;
   /** Per overseer run: the submissions its child makes, in order (a run without any ends `invalid`; "fail": it cannot run). */
   const script: Array<unknown[] | "fail"> = [];
@@ -48,8 +52,8 @@ export function planRig(o: { settings?: Record<string, unknown> } = {}) {
   let tmps = 0;
   const checks: Array<{ cmd: string; cwd: string }> = [];
   const run: Runner = (cmd, cwd, ms) => { checks.push({ cmd, cwd }); return runCheck(cmd, cwd, ms); };
-  const ports: PlanPorts = { git, run, overseer, branches, plans, settings, append, tmp: () => join(r.base, `red-${++tmps}`) };
+  const ports: PlanPorts = { git, run, overseer, branches, plans, settings, append, tmp: () => join(r.base, `red-${++tmps}`), log };
   const mainSha = (): string => r.git(["rev-parse", "main"]);
-  return { r, git, entries, refs, branches, plans, settings, script, runs, replies, overseer, checks, ports, mainSha };
+  return { r, git, entries, logs, refs, branches, plans, settings, script, runs, replies, overseer, checks, ports, mainSha };
 }
 export type PlanRig = ReturnType<typeof planRig>;

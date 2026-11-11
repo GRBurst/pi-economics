@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { basename, isAbsolute, join } from "node:path";
 import type { MergeReason } from "./local/merge.ts";
 import type { Role, TicketRole } from "./local/overseer.ts";
+import type { TriggerKind } from "./local/plan.ts";
 import type { Trip } from "./local/tripwires.ts";
 import type { Card, LoggedPlan, Start, ThinkingLevel } from "./types.ts";
 
@@ -28,6 +29,8 @@ const KEYS = [
   "role", "member", "outcome", "blocking", "findings", "fallback", "inconsistent", "attempt", "commit", "branch", "ticket",
   // local mode L6 (design §3.0.3): the merge and gatebypass lines
   "nLines", "nFiles", "reviewId", "pushed", "repo",
+  // local mode L7 (design §3.0.3): the plan line
+  "trigger", "nTasks", "full",
 ];
 const MAX_STR = 256;
 const MAX_ITEMS = 20;
@@ -120,6 +123,12 @@ export const mergeEvent = (i: MergeInput & { now: Date }) =>
  *  basename, never a path (D35). */
 export const gatebypassEvent = (i: { now: Date; branch: string; from: string; to: string; repo?: string }) =>
   finish({ ...base("gatebypass", i.now, i.branch), from: i.from, to: i.to, repo: i.repo === undefined ? undefined : basename(i.repo) });
+export type PlanAction = "skeleton" | "approve" | "trigger" | "amend" | "reject";
+export type PlanLogInput = { slug: string; action: PlanAction; trigger?: TriggerKind; nTasks?: number; reviewId?: string; full?: boolean };
+/** A plan event (design §3.0.3): `taskId` is the plan's slug; the plan author's skeleton accepted, the plan committed, a replan
+ *  trigger opened (its code), an amendment applied or rejected (`full`: by a plan-review); never the plan's text. */
+export const planEvent = (i: PlanLogInput & { now: Date }) =>
+  finish({ ...base("plan", i.now, i.slug), action: i.action, trigger: i.trigger, nTasks: i.nTasks, reviewId: i.reviewId, full: i.full });
 
 export const serializeEvent = (e: OutcomeEvent): string => `${JSON.stringify(e)}\n`;
 

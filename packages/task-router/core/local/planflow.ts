@@ -10,6 +10,7 @@
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, join, normalize, posix, relative } from "node:path";
 import type { Runner } from "../gate.ts";
+import type { PlanLogInput } from "../outcome.ts";
 import type { RouterSettings } from "../types.ts";
 import type { BranchStore } from "./branches.ts";
 import type { Git } from "./git.ts";
@@ -30,6 +31,8 @@ export type PlanPorts = {
   /** A fresh path for a red run's temporary worktree (it must not exist). */
   tmp(): string;
   signal?: AbortSignal;
+  /** The `plan` lines (design §3.0.3); absent: none. */
+  log?(i: PlanLogInput): void;
 };
 export type PlanInput = { slug: string; request: string; acceptance: string[]; files: string[]; symbols?: string[] };
 export const PLAN_REASONS = ["grounding", "slug", "main-dirty", "invalid", "broken-check", "author-unavailable", "aborted", "git"] as const;
@@ -108,6 +111,7 @@ async function request(p: PlanPorts, input: PlanInput, cwd: string): Promise<Pla
   if (!out.value.ok) return done("error", out.value.reason, `${AUTHOR_FAILED[out.value.reason]}: ${out.value.reasons.join("; ")}`);
   // ── 4 render, commit on main (D50: plumbing, then the merge's fast-forward path), record ──
   const sk = out.value.sk, reviewId = out.reviewId;
+  logPlan(p, { slug: input.slug, action: "skeleton", nTasks: nTasks(sk), reviewId });
   const now = await mainOf(git, s, repo);
   if (!now) return done("error", "git", `git failed: the main branch of ${repo} is gone`);
   const c = await git.commitFile(repo, now.sha, file, renderPlan({ slug: input.slug, request: input.request }, sk, new Set()),
@@ -119,6 +123,7 @@ async function request(p: PlanPorts, input: PlanInput, cwd: string): Promise<Pla
       : done("error", "git", `git failed: ${adv.err}`)), reviewId };
   }
   p.plans.put({ slug: input.slug, repo, file, skeletonHash: skeletonHash(sk), approvedBy: reviewId, triggers: [] });
+  logPlan(p, { slug: input.slug, action: "approve", nTasks: nTasks(sk), reviewId });
   // ── 5 return: the path and the first startable unit ──
   const next = startable(sk, mergedUnits(sk, input.slug, p.branches.all()))[0];
   const start = next ? `; start with start_branch {"plan": {"slug": "${input.slug}", "id": "${next}"}}` : "";
@@ -350,6 +355,7 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
   if (approve(out.value.findings)) return commitAmended(p, c, final, out.reviewId, { trigger, full });
   // ── 5 rejected: the findings; after plans.rounds rejections for this trigger the plan author rewrites the milestone ──
   const findings = out.value.findings.map(findingLine), n = p.plans.reject(slug, trigger), rounds = s.plans.rounds;
+  logPlan(p, { slug, action: "reject", trigger: trig.kind, reviewId: out.reviewId, full });
   const no = { trigger, full, reviewId: out.reviewId, findings };
   if (n < rounds) return amendDone("rejected", undefined, `the plan amendment was rejected (${n} of plans.rounds ${rounds}); answer the findings with a new amend_plan`, no);
   const at = trig.task ?? input.changes.map((x) => x.id ?? x.task?.id).find((x): x is string => typeof x === "string");
@@ -365,8 +371,15 @@ async function amendment(p: PlanPorts, input: AmendInput, _cwd: string): Promise
       : amendDone("error", "author-unavailable", `the plan author is unavailable (${author.outcome})`, no);
   }
   if (!author.value.ok) return amendDone("error", author.value.reason, `${AUTHOR_FAILED[author.value.reason]}: ${author.value.reasons.join("; ")}`, no);
+  logPlan(p, { slug, action: "skeleton", trigger: trig.kind, nTasks: nTasks(author.value.sk), reviewId: author.reviewId });
   const r = await commitAmended(p, c, author.value.sk, author.reviewId, { trigger, full, findings });
   return r.status === "approved" ? { ...r, detail: `the amendment was rejected ${n} times; the plan author rewrote ${mid}: ${r.detail}` } : r;
+}
+
+const nTasks = (sk: Skeleton): number => sk.milestones.reduce((n, m) => n + m.tasks.length, 0);
+/** The `plan` line; best effort, it never fails a flow. */
+function logPlan(p: PlanPorts, i: PlanLogInput): void {
+  try { p.log?.(i); } catch { /* the line is best effort */ }
 }
 
 type AmendCtx = { rec: PlanRecord; slug: string; request: string; trigger: string };
@@ -387,8 +400,10 @@ async function commitAmended(p: PlanPorts, c: AmendCtx, final: Skeleton, by: str
     return adv.reason === "main-dirty" ? amendDone("refused", "main-dirty", reasonText("main-dirty", { checkout: adv.checkout }), { ...more, reviewId: by })
       : amendDone("error", "git", `git failed: ${adv.err}`, { ...more, reviewId: by });
   }
-  p.plans.put({ ...p.plans.get(c.slug)!, skeletonHash: skeletonHash(final), approvedBy: by });
+  const rec = p.plans.get(c.slug)!, kind = rec.triggers.find((t) => t.id === c.trigger)?.kind;
+  p.plans.put({ ...rec, skeletonHash: skeletonHash(final), approvedBy: by });
   p.plans.close(c.slug, c.trigger);
+  logPlan(p, { slug: c.slug, action: "amend", ...(kind && { trigger: kind }), nTasks: nTasks(final), reviewId: by, ...(more.full !== undefined && { full: more.full }) });
   for (const b of p.branches.all()) {
     if (b.plan?.slug !== c.slug || !["active", "fixer", "blocked"].includes(b.state)) continue;
     const u = unitFacts(final, b.plan.id);

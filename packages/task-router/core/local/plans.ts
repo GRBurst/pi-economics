@@ -1,6 +1,7 @@
 // Local mode L7.T4 (design §3.0.2, §3.5.5; plan S29, D53): the router's plans, one record per slug, kept in memory and
 // appended to the session as `task-router/plan` entries at every change (the triggers included), rebuilt at
 // `session_start`; and the units of a plan its branches have merged.
+import type { PlanLogInput } from "../outcome.ts";
 import type { BranchRecord } from "./branches.ts";
 import { type PlanRecord, type Skeleton, type Trigger, type TriggerKind, TRIGGERS } from "./plan.ts";
 
@@ -34,7 +35,8 @@ export function readPlan(x: unknown): PlanRecord | undefined {
   return structuredClone(r) as PlanRecord;
 }
 
-export function createPlanStore(append: (customType: string, data: unknown) => void): PlanStore {
+/** `log`: the `plan` line of a trigger it opens (design §3.0.3). */
+export function createPlanStore(append: (customType: string, data: unknown) => void, log?: (i: PlanLogInput) => void): PlanStore {
   const plans = new Map<string, PlanRecord>();
   const put = (r: PlanRecord): void => { plans.set(r.slug, structuredClone(r)); append(PLAN_TYPE, structuredClone(r)); };
   return {
@@ -48,6 +50,7 @@ export function createPlanStore(append: (customType: string, data: unknown) => v
       if (same) return same.id;
       const id = `t${r.triggers.length + 1}`;
       put({ ...r, triggers: [...r.triggers, { id, kind, ...(task !== undefined && { task }), open: true }] });
+      try { log?.({ slug, action: "trigger", trigger: kind }); } catch { /* the line is best effort */ }
       return id;
     },
     close(slug, id) {

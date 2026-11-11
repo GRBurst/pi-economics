@@ -25,6 +25,8 @@ export const ROLES = ["merge", "plan-author", "delta", "plan-review", "steer"];
 /** task-router's merge refusal and error codes (its core/local/merge.ts `REASONS`; the log-contract check compares the two). */
 export const REASONS = ["main-branch", "dirty", "behind", "fixer-running", "abandoned", "blocked", "size", "scope", "check", "main-dirty",
   "plan-changed", "no-worktree", "review-unavailable", "aborted", "git"];
+/** task-router's replan trigger codes (its core/local/plan.ts `TRIGGERS`; the log-contract check compares the two). */
+export const TRIGGERS = ["non-whitelisted", "interface-break", "regression", "over-budget", "remediation-failed"];
 
 type Rule = { field: string; why: string; when?: (l: any) => boolean; ok: (v: any, l: any) => boolean };
 const every = (fields: Record<string, (v: any) => boolean>, why: string, when?: (l: any) => boolean): Rule[] =>
@@ -41,7 +43,7 @@ const METER: Rule[] = [
 ];
 const OUTCOMES: Rule[] = [
   versioned,
-  ...every({ ts: time, event: oneOf("spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck", "force", "hint", "review", "merge", "gatebypass") }, "every outcome event"),
+  ...every({ ts: time, event: oneOf("spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck", "force", "hint", "review", "merge", "gatebypass", "plan") }, "every outcome event"),
   // A session-level line (task-router local mode, design §3.0.3) has `taskId: ""`: `force`, and a `merge` refused before a
   // branch was known (no branch given, none active).
   { field: "taskId", why: "every outcome event (force, merge: a string, may be empty)", ok: (v, l) => (l?.event === "force" || l?.event === "merge" ? typeof v === "string" : str(v)) },
@@ -75,6 +77,9 @@ const OUTCOMES: Rule[] = [
   ...optional({ reason: oneOf(...REASONS), commit: sha, nLines: int0, nFiles: int0, reviewId: str, pushed: bool }, "merge", (l) => l.event === "merge"),
   ...every({ from: sha, to: sha }, "gatebypass (taskId = the main branch)", (l) => l.event === "gatebypass"),
   ...optional({ repo: str }, "gatebypass: the repository's directory name", (l) => l.event === "gatebypass"),
+  // task-router local mode L7 (design §3.0.3): a plan's skeleton, approval, replan trigger, amendment or rejection (taskId = the slug)
+  ...every({ action: oneOf("skeleton", "approve", "trigger", "amend", "reject") }, "plan", (l) => l.event === "plan"),
+  ...optional({ trigger: oneOf(...TRIGGERS), nTasks: int1, reviewId: str, full: bool }, "plan", (l) => l.event === "plan"),
 ];
 const ASSIGNMENTS: Rule[] = [
   versioned,
