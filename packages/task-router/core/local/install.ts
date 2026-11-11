@@ -21,6 +21,7 @@ import { gitGuard } from "./childguards.ts";
 import type { Guard } from "../toolguard.ts";
 import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
+import { createApprovals } from "./merge.ts";
 import { STEER_RECORDS, STEER_TYPE, cmdOf, createSteer } from "./steer.ts";
 import type { Budget, Tickets } from "./overseer.ts";
 import { callKey, callTrips, changed, checkPassed, contextSoft, contextStall, errSig, normOf, overSize, push, riskGlobsOf } from "./tripwires.ts";
@@ -73,9 +74,11 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   });
   const git = d.git ?? createGit(gitRunner());
   const branches = createBranchStore((type, data) => pi.appendEntry?.(type, data));
+  /** Merge approvals (design §3.4.3), rebuilt from the session at `start`. */
+  const approvals = createApprovals((type, data) => pi.appendEntry?.(type, data));
   let ready: Promise<void> = Promise.resolve(), sizing: Promise<void> | undefined;
   const handle = {
-    overseer, budget, branches,
+    overseer, budget, branches, approvals,
     start(ctx: any): void {
       if (typeof ctx?.cwd === "string") base = ctx.cwd;
       let branch: unknown;
@@ -83,6 +86,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       const entries = Array.isArray(branch) ? branch : [];
       Object.assign(budget, budgetOf(entries));
       branches.rebuild(entries);
+      approvals.rebuild(entries);
       // Off the event: branches whose worktree disappeared are abandoned (§3.3.4), then the guards' cached facts are refreshed for
       // every repository the session knows (plan D39). `start_branch` waits for it.
       const deps = { git, store: branches, settings: d.settings };

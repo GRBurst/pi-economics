@@ -7,6 +7,10 @@ import type { BranchRecord, BranchStore } from "./branches.ts";
 import type { Git, Stat } from "./git.ts";
 import type { createOverseer } from "./overseer.ts";
 import { refreshFacts } from "./worktree.ts";
+import { verdictSubmit } from "./overseer.ts";
+import { approve, findingLine } from "./verdict.ts";
+import { riskGlobsOf } from "./tripwires.ts";
+import { globMatch } from "../glob.ts";
 
 export const REASONS = ["main-branch", "dirty", "behind", "fixer-running", "abandoned", "blocked", "size", "scope",
   "check", "main-dirty", "plan-changed", "no-worktree", "review-unavailable", "aborted", "git"] as const;
@@ -53,9 +57,56 @@ export function reasonText(r: MergeReason, x: Record<string, string>): string {
   }
 }
 
+// ── step 7: approvals (design §3.4.3) ──
+export const APPROVAL_TYPE = "task-router/approval";
+export type ApprovalKey = { repo: string; branch: string; commit: string; tree: string };
+export type Approvals = { find(k: ApprovalKey): string | undefined; add(k: ApprovalKey, reviewId: string): void; rebuild(entries: readonly unknown[]): void };
+const keyOf = (k: ApprovalKey): string => JSON.stringify([k.repo, k.branch, k.commit, k.tree]);
+/** The approvals of this session: memory, one `task-router/approval` entry per approval; `rebuild` reads them back (a restart). */
+export function createApprovals(append: (customType: string, data: unknown) => void): Approvals {
+  const ids = new Map<string, string>();
+  return {
+    find: (k) => ids.get(keyOf(k)),
+    add(k, reviewId) {
+      ids.set(keyOf(k), reviewId);
+      append(APPROVAL_TYPE, { repo: k.repo, branch: k.branch, commit: k.commit, tree: k.tree, reviewId });
+    },
+    rebuild(entries) {
+      ids.clear();
+      for (const e of entries) {
+        const x = e as { customType?: unknown; data?: Record<string, unknown> } | null;
+        if (x?.customType !== APPROVAL_TYPE || typeof x.data !== "object" || x.data === null) continue;
+        const d = x.data;
+        if ([d.repo, d.branch, d.commit, d.tree, d.reviewId].every((v) => typeof v === "string" && v !== ""))
+          ids.set(keyOf(d as ApprovalKey), d.reviewId as string);
+      }
+    },
+  };
+}
+
+// ── step 8: the review input (S27) ──
+export type ReviewFacts = { goal?: string; summary?: string; checks: CheckRun[]; red: Red; risky: string[]; invariants?: string;
+  stat: Stat; base: string; commit: string; diff: string; maxLines: number };
+const none = (x: string | undefined): string => (x === undefined || x.trim() === "" ? "none" : x);
+/** What the merge overseer reads (S27): the router renders it; no file bodies beyond the diff. */
+export const reviewInput = (x: ReviewFacts): string => [
+  `Goal: ${none(x.goal)}`,
+  `Summary from the author: ${none(x.summary)}`,
+  ...(x.checks.length ? x.checks.flatMap((c) => [`Check: \`${c.cmd}\` exit ${c.exit}`, ...(c.output ? [c.output] : [])]) : ["Check: none"]),
+  `Red run at base: ${RED_TEXT[x.red]}`,
+  `Risky paths: ${x.risky.length ? x.risky.join(", ") : "none"}`,
+  `Invariants: ${none(x.invariants)}`,
+  "Numstat:",
+  ...x.stat.map((f) => `${f.added}\t${f.deleted}\t${f.path}`),
+  `Diff ${x.base}..${x.commit} (≤ ${x.maxLines} lines):`,
+  ...(x.diff ? [x.diff] : []),
+].join("\n");
+/** What `revise` tells the author (Q18). */
+export const REVISE_TEXT = "the review asks for changes: fix the blocking findings, commit, then call request_merge again";
+
 export type OverseerPort = Pick<ReturnType<typeof createOverseer>, "run" | "ready">;
 export type MergePorts = {
-  git: Git; run: Runner; overseer: OverseerPort; branches: BranchStore; settings: RouterSettings;
+  git: Git; run: Runner; overseer: OverseerPort; branches: BranchStore; approvals: Approvals; settings: RouterSettings;
   /** `pi.appendEntry` (design §3.0.2). */
   append(customType: string, data: unknown): void;
   /** A fresh path for the red run's temporary worktree (it must not exist). */
@@ -64,7 +115,7 @@ export type MergePorts = {
 };
 type Input = { branch?: string; summary?: string };
 /** A check the pipeline ran (step 5), for the review input (S27). */
-type CheckRun = { cmd: string; exit: number; output: string };
+export type CheckRun = { cmd: string; exit: number; output: string };
 /** The tail of a check's output: the last 40 lines, at most 4 kB (design §3.2.1). */
 const TAIL_LINES = 40, TAIL_BYTES = 4096;
 export const tailOf = (out: string): string => out.trimEnd().split("\n").slice(-TAIL_LINES).join("\n").slice(-TAIL_BYTES);
@@ -138,7 +189,31 @@ async function pipeline(p: MergePorts, input: Input, cwd: string): Promise<Merge
   }
   // ── 6 red run (a branch without a plan; its own check only) ──
   const red: Red = g.redRun && rec?.check ? await redRun(p, repo, main.sha, rec.check) : "skipped";
-  // Steps 7–9 follow (L6.T9–T10); until then nothing merges.
-  void checks; void red;
+  // ── 7 approval reuse: (repo, branch, commit, tree) ──
+  const tree = await git.tree(repo, commit);
+  if (tree === undefined) return gitError(`cannot read the tree of ${commit}`, commit);
+  const key: ApprovalKey = { repo, branch, commit, tree };
+  let reviewId = p.approvals.find(key);
+  if (reviewId === undefined) {
+    // ── 8 review: the merge overseer in the main checkout, the worktree by its absolute path (LD14) ──
+    const globs = riskGlobsOf(s), paths = st.map((f) => f.path);
+    const text = reviewInput({ goal: rec?.goal, summary: input.summary, checks, red, risky: paths.filter((f) => globs.some((x) => globMatch(x, f))),
+      stat: st, base: main.sha, commit, diff: await git.diff(repo, main.sha, commit, g.maxDiffLines), maxLines: g.maxDiffLines });
+    const out = await p.overseer.run({ role: "merge", input: text, cwd: p.branches.facts.mainCheckout.get(repo) ?? repo, worktree: wt.dir,
+      submit: verdictSubmit(new Set(paths)), commit, branch, signal: p.signal });
+    if (!out.ok) {
+      const r: MergeReason = out.outcome === "aborted" ? "aborted" : "review-unavailable";
+      return done("error", r, reasonText(r, {}), commit);
+    }
+    if (!approve(out.value.findings)) {
+      const now = p.branches.get(repo, branch) ?? { repo, branch, worktree: wt.dir, base: main.sha, state: "active" as const, rejections: 0, fixerRuns: 0 };
+      p.branches.put({ ...now, rejections: now.rejections + 1 });
+      return { status: "revise", detail: REVISE_TEXT, commit, reviewId: out.reviewId, findings: out.value.findings.map(findingLine) };
+    }
+    reviewId = out.reviewId;
+    p.approvals.add(key, reviewId);
+  }
+  // Step 9 follows (L6.T10); until then nothing merges.
+  return { ...gitError("merging follows in L6.T10", commit), reviewId };
   return done("error", "review-unavailable", reasonText("review-unavailable", {}), commit);
 }
