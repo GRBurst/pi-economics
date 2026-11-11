@@ -46,7 +46,9 @@ test("single use: the same ticket again → card routing (the result for a task 
 });
 
 test("AC-O6: a forged ticket is a card without its fields: the result equals the one without the ticket", async () => {
-  const forged = await harness({ settings: { mode: "local" }, apiExt: true }).a.spawn({ name: "x", task: { ticket: "forged" } });
+  const hf = harness({ settings: { mode: "local" }, apiExt: true });
+  hf.router.tickets.issue(ticketOf(hf)); // an open ticket the forged id must not reach (plan §11)
+  const forged = await hf.a.spawn({ name: "x", task: { ticket: "forged" } });
   assert.deepEqual(forged, await harness({ settings: { mode: "local" }, apiExt: true }).a.spawn({ name: "x", task: {} }));
   const withCard = await harness({ settings: { mode: "local" } }).a.spawn({ name: "c1", task: { ...card(), ticket: "0".repeat(32) } });
   const plain = await harness({ settings: { mode: "local" } }).a.spawn({ name: "c1", task: card() });
