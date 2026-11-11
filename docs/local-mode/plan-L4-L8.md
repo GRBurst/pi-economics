@@ -1,6 +1,6 @@
 # Local mode L4–L8: test-driven implementation plan
 
-Status: plan, not implemented. Scope: milestones **L4** (Actor spawn API and overseer), **L5** (worktrees), **L6**
+Status: plan, implemented. Scope: milestones **L4** (Actor spawn API and overseer), **L5** (worktrees), **L6**
 (merge gate), **L7** (plans) and **L8** (close-out) of `docs/local-mode/design.md` (the spec; §7 resolutions: every
 recommendation accepted, OQ18 a new patch file, OQ7 `quiet`). It builds on `docs/local-mode/plan-L1-L3.md`
 (called *P13* below): its decisions D1–D21, disagreements X1–X14, keep-green sets, commands, snippets S1–S14 and §18
@@ -1183,8 +1183,10 @@ message). Open notes, for L6 or later:
   the plans, then `#### Scout gate, dependencies and checks`. T3 also fixes AC-O1's overseer cwd (LD14) and §2.1's
   overseer "toggle". T4 pins the README's local-mode sentence in `readme-package` (seen red).
 
-#### L8.T5 Final sweep and manual runbook `[ ] todo`
-- Every check (AGENTS.md loop); §12 runbook steps 1–4; record results in the task's status line. Optional (OQ17): `pi-analyse` sections for hints, reviews, merges — a separate plan (Q20).
+#### L8.T5 Final sweep and manual runbook `[x] done` (sweep) · runbook open
+- Every check (AGENTS.md loop); §12 runbook steps 1–4; record results in the task's status line.
+- Result (main 1dfafb6): all 51 flake checks green; task-router 1055 node tests, token-meter 209. The §12 runbook
+  steps 1–4 are not run: they need a local Qwen server and Opus credentials outside the build sandbox. Optional (OQ17): `pi-analyse` sections for hints, reviews, merges — a separate plan (Q20).
 
 ## 15. Order and parallelism
 

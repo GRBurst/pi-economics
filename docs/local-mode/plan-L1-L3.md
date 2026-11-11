@@ -1,6 +1,6 @@
 # Local mode L1–L3: test-driven implementation plan
 
-Status: plan, not implemented. Scope: milestones **L1** (switch and local routing), **L2** (force override) and
+Status: plan, implemented. Scope: milestones **L1** (switch and local routing), **L2** (force override) and
 **L3** (hints and tripwires) of `docs/local-mode/design.md` (the spec, b4b6a79; §7 resolutions accepted).
 Task ids `L<m>.T<n>`; every task starts at status `[ ] todo` (states: `todo`, `red seen`, `green`, `done`).
 One task = one scenario = one commit (`git -c commit.gpgsign=false commit`).
