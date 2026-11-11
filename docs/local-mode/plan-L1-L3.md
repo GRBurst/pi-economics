@@ -822,7 +822,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   reaches the line (`HINT_TEXT` outputs are not substrings of the serialized line).
 - **GREEN**: S8 (L3 part). **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R, L1.T1 keys test. **ACs**: AC-L2 (hint).
 
-#### L3.T5 Contract and LOGS.md for `hint` (AC-L1) `[ ] todo`
+#### L3.T5 Contract and LOGS.md for `hint` (AC-L1) `[x] done`
 - **Files**: `packages/token-meter/core/contract.ts`, `packages/token-meter/test/contract.test.ts`, `packages/token-meter/LOGS.md`.
 - **Depends**: L2.T3. **Parallel**: with L3.T1–T4, L3.T6.
 - **RED**: a hint line `{taskId: "main", trip: "identical-call", stage: "hint", count: 1}` passes; without `trip` →

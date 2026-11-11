@@ -144,3 +144,21 @@ test("force lines: a forced spawn's fields pass when valid and are never require
     assert.deepEqual(fields(check(x)), [`outcomes.${field}`], JSON.stringify(bad));
   }
 });
+
+// Local mode L3.T5 (design §3.0.3, AC-L1): the `hint` line — taskId "main" or a child, trip and stage required enums.
+const HINT = { v: 1, ts: iso(T0 + 61 * MIN), event: "hint", taskId: "main", trip: "identical-call", stage: "hint", count: 1 };
+
+test("hint lines: a valid line passes; trip and stage are required enums; count and sessionId typed", () => {
+  const w = world();
+  w.outcomes.push(HINT, { ...HINT, taskId: "c1", trip: "context-stall", stage: "parent", count: 3, sessionId: "m1" });
+  w.outcomes.push({ v: 1, ts: iso(T0 + 61 * MIN), event: "hint", taskId: "main", trip: "risky-path", stage: "steer" });
+  assert.deepEqual(check(JSON.parse(JSON.stringify(w))), []);
+  for (const [bad, field] of [
+    [{ trip: undefined }, "trip"], [{ trip: "loop" }, "trip"], [{ stage: undefined }, "stage"], [{ stage: "x" }, "stage"],
+    [{ count: -1 }, "count"], [{ count: 1.5 }, "count"], [{ sessionId: "" }, "sessionId"], [{ taskId: "" }, "taskId"],
+  ] as const) {
+    const x = world();
+    x.outcomes.push(JSON.parse(JSON.stringify({ ...HINT, ...bad })));
+    assert.deepEqual(fields(check(x)), [`outcomes.${field}`], JSON.stringify(bad));
+  }
+});

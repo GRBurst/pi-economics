@@ -367,3 +367,15 @@ test("quality: session-level lines are no data-quality defect", () => {
   assert.deepEqual(item(w), item(base));
   assert.equal(item(base).n, 1);
 });
+
+// Local mode L3.T5 (plan D20): hint lines (taskId "main" or a child's name) are no task events either.
+test("quality: hint lines are no data-quality defect", () => {
+  const item = (w: Logs) => analyse(w).quality.unjoinable.find((x) => x.what === "task events without a spawn")!;
+  const base = world();
+  base.outcomes.push({ v: 1, ts: iso(T0), event: "verdict", taskId: "t9", verdict: "accepted" }); // one real defect
+  const w: Logs = JSON.parse(JSON.stringify(base));
+  for (const taskId of ["main", "c9"]) for (const stage of ["hint", "steer", "parent"])
+    w.outcomes.push({ v: 1, ts: iso(T0 + 61 * MIN), event: "hint", taskId, trip: "identical-call", stage, count: 1 });
+  assert.deepEqual(item(w), item(base));
+  assert.equal(item(base).n, 1);
+});

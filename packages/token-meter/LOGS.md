@@ -99,7 +99,7 @@ the warm gets its own line. A warm aborted before its headers gets no line.
 ## task-router/outcomes/YYYY-MM.jsonl
 
 Common: `v` (int), `ts` (ISO), `event`, `taskId` (subagent name; `""` on `force` lines, which belong to the session,
-not to a task) — all required.
+not to a task; `"main"` or the child's name on `hint` lines) — all required.
 
 | event | fields (required **bold**) | meaning |
 | --- | --- | --- |
@@ -111,6 +111,7 @@ not to a task) — all required.
 | `verdict` | **`verdict`** (`accepted` \| `partial` \| `rejected` \| `unjudged`), `note`, `reviewOf`† | the parent's judgement; `unjudged` when killed without one |
 | `spotcheck` | `requested` (`true`) | an accepted verdict was drawn for a spot-check review (`spotCheck.share`); the parent was told to spawn a `review` card with `reviewOf` |
 | `force` | **`action`** (`set` \| `clear` \| `used` \| `expired` \| `rejected`), **`source`** (`command` \| `settings`), `model`, `effort`, `reason` (`unknown-model` \| `usage`) | the force override (task-router local mode): `/force` set, cleared or rejected; a forced spawn used it; a `next:N` force ran out; `taskId` is `""` |
+| `hint` | **`trip`** (`identical-call` \| `no-change-writes` \| `alternation` \| `repeated-error` \| `churn` \| `check-failing` \| `over-size` \| `risky-path` \| `context-soft` \| `context-stall`), **`stage`** (`hint` \| `steer` \| `parent`), `count` (int ≥ 0), `sessionId` | a tripwire fired (task-router local mode): `hint` = a `<router-hint>` went into the tool result (main) or a message (child); `steer` = the main session got the escalation; `parent` = a stuck child's parent was told; `count` = the trip's detections since the last progress; `taskId` is `"main"` or the child's name; the hint's text is never logged |
 
 \* `arm` is required on a spawn whose parent session (or its root) has an assignment.
 
@@ -143,9 +144,9 @@ on `ability` (D7), so it exceeds the level of `from`/`fromModel` when the planne
 ‡ Optional, added with task-router's force override (local mode L2, no `v` bump); present only on a forced spawn.
 `forced` is `true`, `forceSource` says whether `/force` or the settings `force` applied, and `routedModel`/`routedEffort`
 are what routing would have chosen (the planned worker leg). `workerModel`/`startEffort` are the forced model and effort;
-a forced model outside the router's members has no `workerMember`. A `force` line has no task: `pi-analyse` counts
-only the task events (`reroute`, `check`, `corrective`, `escalate`, `verdict`, `spotcheck`) as "task events without a
-spawn".
+a forced model outside the router's members has no `workerMember`. A `force` line has no task, and a `hint` line's
+`taskId` may be `"main"`: `pi-analyse` counts only the task events (`reroute`, `check`, `corrective`, `escalate`,
+`verdict`, `spotcheck`) as "task events without a spawn".
 
 ### Older lines: the old → new mapping
 

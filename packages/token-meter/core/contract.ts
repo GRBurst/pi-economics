@@ -14,6 +14,10 @@ const oneOf = (...xs: unknown[]) => (v: unknown) => xs.includes(v);
 const obj = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v);
 const int0 = (v: unknown) => Number.isInteger(v) && (v as number) >= 0;
 
+/** task-router's tripwires (its core/local/tripwires.ts `TRIPS`; token-meter imports nothing of the router). */
+const TRIPS = ["identical-call", "no-change-writes", "alternation", "repeated-error", "churn", "check-failing",
+  "over-size", "risky-path", "context-soft", "context-stall"];
+
 type Rule = { field: string; why: string; when?: (l: any) => boolean; ok: (v: any, l: any) => boolean };
 const every = (fields: Record<string, (v: any) => boolean>, why: string, when?: (l: any) => boolean): Rule[] =>
   Object.entries(fields).map(([field, ok]) => ({ field, why, when, ok }));
@@ -29,7 +33,7 @@ const METER: Rule[] = [
 ];
 const OUTCOMES: Rule[] = [
   versioned,
-  ...every({ ts: time, event: oneOf("spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck", "force") }, "every outcome event"),
+  ...every({ ts: time, event: oneOf("spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck", "force", "hint") }, "every outcome event"),
   // A session-level line (task-router local mode, design §3.0.3) has `taskId: ""`; only `force` is one.
   { field: "taskId", why: "every outcome event (force: a string, may be empty)", ok: (v, l) => (l?.event === "force" ? typeof v === "string" : str(v)) },
   ...every({ kind: str, workerTier: str, workerEffort: str, sessionId: str, parentSessionId: str }, "spawn: tier mix, child-session join", (l) => l.event === "spawn"),
@@ -49,6 +53,9 @@ const OUTCOMES: Rule[] = [
   ...every({ action: oneOf("set", "clear", "used", "expired", "rejected"), source: oneOf("command", "settings") }, "force", (l) => l.event === "force"),
   ...optional({ model: str, effort: oneOf("off", "minimal", "low", "medium", "high", "xhigh", "max"), reason: oneOf("unknown-model", "usage") }, "force", (l) => l.event === "force"),
   ...optional({ forced: (v) => v === true, forceSource: oneOf("command", "settings"), routedModel: str, routedEffort: str }, "spawn: a forced spawn", (l) => l.event === "spawn"),
+  // task-router local mode L3 (design §3.1): a hint to the main session (taskId "main") or a child
+  ...every({ trip: oneOf(...TRIPS), stage: oneOf("hint", "steer", "parent") }, "hint", (l) => l.event === "hint"),
+  ...optional({ count: int0, sessionId: str }, "hint", (l) => l.event === "hint"),
 ];
 const ASSIGNMENTS: Rule[] = [
   versioned,
