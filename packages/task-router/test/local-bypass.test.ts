@@ -125,3 +125,27 @@ test("AC-M6: a repository with a registered worktree is known, besides the sessi
   assert.deepEqual(m.bypasses().map((l) => [l.repo, l.from, l.to]), [[basename(other.dir), from, to]]);
   assert.equal((await m.result("read")).length, 1);
 });
+
+// Review F2: the baseline is taken when the session starts (and when start_branch registers a repository), so a move in the
+// session's first bash call is a bypass, not a silent first sight.
+test("AC-M6 (review F2): the session's first bash call moves main → one gatebypass line and one warning", async () => {
+  const m = await rig();
+  await m.h.router.settled();
+  const from = m.mainSha();
+  const to = m.moveMain();
+  assert.deepEqual(await m.result(), []);
+  assert.deepEqual(m.bypasses().map((l) => [l.from, l.to]), [[from, to]]);
+  assert.equal(m.notes.length, 1);
+});
+
+test("AC-M6 (review F2): a repository start_branch registers is known from then on; its first move is a bypass", async () => {
+  const m = await rig();
+  const other = tempRepo();
+  const res = await m.h.f.tools.get("start_branch")!.execute("s1", { slug: "y", goal: "add y", check: "true", repo: other.dir }, undefined, undefined, m.ctx);
+  assert.equal((res as any).isError, undefined, JSON.stringify(res));
+  const from = other.git(["rev-parse", "main"]);
+  const to = other.git(["commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", "by hand"]);
+  other.git(["update-ref", "refs/heads/main", to]);
+  await m.result();
+  assert.deepEqual(m.bypasses().map((l) => [l.repo, l.from, l.to]), [[basename(other.dir), from, to]]);
+});

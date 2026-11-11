@@ -199,7 +199,8 @@ test("start_branch result (D48): the value as text and as details; no isError", 
   const res = await h.f.callTool("start_branch", X, ctx);
   const value = { branch: "lm/x", worktree: join(r.base, "repo.worktrees", "lm--x"), base: tip, check: "true" };
   assert.deepEqual(res, { content: [{ type: "text", text: JSON.stringify(value) }], details: value });
-  assert.deepEqual(h.f.entries.map((e) => e.type), ["task-router/branch"]);
+  // Besides the merge gate's main-ref baseline (review F2): one branch entry.
+  assert.deepEqual(h.f.entries.map((e) => e.type).filter((t) => t !== "task-router/main-ref"), ["task-router/branch"]);
 });
 
 test("start_branch error (D48): git's or the validator's message as text, details {status: error, reason}, isError", async () => {

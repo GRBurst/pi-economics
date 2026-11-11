@@ -25,7 +25,9 @@ export const START_BRANCH_SCHEMA = {
 /** The error shape of D48: the reason as text, `{status: "error", reason}` as details, `isError`. */
 export const errorReply = (reason: string): ToolReply => ({ content: [{ type: "text", text: reason }], details: { status: "error", reason }, isError: true });
 
-export function startBranchTool(d: { git: Git; store: BranchStore; settings: RouterSettings }, ready: () => Promise<void> = async () => undefined): RouterTool {
+/** `after`: awaited after a branch started, before the result (the merge gate's baseline of the repository's main tip). */
+export function startBranchTool(d: { git: Git; store: BranchStore; settings: RouterSettings }, ready: () => Promise<void> = async () => undefined,
+  after?: () => Promise<void>): RouterTool {
   return {
     name: "start_branch",
     label: "Start branch",
@@ -36,6 +38,7 @@ export function startBranchTool(d: { git: Git; store: BranchStore; settings: Rou
       await ready(); // the session_start work (abandoned branches, facts) comes first
       const res = await startBranch(d, params, typeof ctx?.cwd === "string" ? ctx.cwd : process.cwd());
       if (!res.ok) return errorReply(res.errors.join("; "));
+      await after?.();
       return { content: [{ type: "text", text: JSON.stringify(res.value) }], details: res.value };
     },
   };

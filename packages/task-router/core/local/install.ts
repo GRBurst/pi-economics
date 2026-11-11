@@ -122,6 +122,9 @@ export function installLocal(pi: Pi, d: LocalDeps) {
         await refreshAbandoned(deps);
         for (const repo of new Set(branches.all().map((r) => r.repo))) await refreshFacts(deps, repo);
       })().catch(() => undefined);
+      // Review F2: the main tips' baseline is read now (a repository without a record is recorded silently), so a move in the
+      // session's first bash call is a bypass.
+      if (activeSet(d.settings).mergeGate) void checkRefs();
     },
     /** Resolves when the work `start` began has finished (a test seam, and what `start_branch` awaits). */
     ready: (): Promise<void> => ready,
@@ -149,7 +152,11 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       activeSet(d.settings).mergeGate ? gitGuard(d.settings.mergeGate.mainBranches, (dir) => git.branchOf(dir), cwd) : undefined,
   };
   const s = d.settings, h = s.hints;
-  if (componentOn(s, "worktrees")) pi.registerTool?.(startBranchTool({ git, store: branches, settings: s }, () => ready));
+  // Review F2: a repository start_branch registers gets its baseline before the tool returns.
+  if (componentOn(s, "worktrees")) {
+    pi.registerTool?.(startBranchTool({ git, store: branches, settings: s }, () => ready,
+      activeSet(s).mergeGate ? () => checkRefs() : undefined));
+  }
   // request_merge (design §3.4.1) while the merge gate is active; one set of ports per call, with its AbortSignal (D49).
   if (activeSet(s).mergeGate) {
     pi.registerTool?.(requestMergeTool((signal) => ({ git, run: d.run ?? runCheck, overseer, branches, approvals, settings: s,

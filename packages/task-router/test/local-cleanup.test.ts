@@ -117,6 +117,7 @@ test("session_start marks an abandoned branch from the session's entries (before
   const res = await h.f.callTool("start_branch", { slug: "a", goal: "g", check: "true" }, ctx);
   assert.equal(res.isError, true);
   assert.deepEqual(h.router.branches.all().map((r) => [r.branch, r.state]), [["lm/a", "abandoned"]]);
-  assert.equal(h.f.entries.at(-1)!.type, BRANCH_TYPE);
+  // The merge gate's main-ref baseline (review F2) may land after it; the branch entry is the last of the others.
+  assert.equal(h.f.entries.filter((e) => e.type !== "task-router/main-ref").at(-1)!.type, BRANCH_TYPE);
   assert.equal(h.router.branches.active(), undefined);
 });
