@@ -12,7 +12,7 @@ index 45c3c53..d716cbc 100644
  	 * Phase of the running turn (reasoning vs answer text vs tool run); undefined means no
  	 * turn is running. Single field for "is it working" AND "at what": a separate streaming
 diff --git a/extensions/actor-subagents/api.ts b/extensions/actor-subagents/api.ts
-index 75460be..354eaf5 100644
+index 75460be..088f0cc 100644
 --- a/extensions/actor-subagents/api.ts
 +++ b/extensions/actor-subagents/api.ts
 @@ -11,6 +11,7 @@ import type { AgentEvent } from "./agent-event.ts";
@@ -23,7 +23,31 @@ index 75460be..354eaf5 100644
  import type { ThinkingLevel } from "./thinking-level.ts";
  import type { ToolGuard } from "./tool-guard.ts";
  
-@@ -50,6 +51,8 @@ export type PolicyResult =
+@@ -33,6 +34,16 @@ export type Caller = {
+ 	policyMeta?: unknown;
+ 	cwd: string;
+ };
++/**
++ * Local patch (spawn-api): a tool the policy gives one child (e.g. an overseer's submit tool). `parameters` is a JSON
++ * Schema object (TypeBox-compatible at run time); `execute` gets the validated input itself.
++ */
++export type ChildTool = {
++	name: string;
++	description: string;
++	parameters: Record<string, unknown>;
++	execute(input: unknown): Promise<{ text: string; isError?: boolean; terminate?: boolean }>;
++};
+ export type PolicyResult =
+ 	| {
+ 			model: string;
+@@ -47,9 +58,15 @@ export type PolicyResult =
+ 			meta?: unknown;
+ 			/** Checked on each of the child's tool calls; a returned reason blocks the call. */
+ 			toolGuard?: ToolGuard;
++			/** Local patch (spawn-api): appended to the child's custom tools and to its allowlist. */
++			childTools?: ChildTool[];
++			/** Local patch (spawn-api): the child session's cwd (absolute); default: the host's. */
++			cwd?: string;
  	  }
  	| { reject: string };
  export type SpawnPolicy = (a: SpawnArgs, c: Caller) => PolicyResult | Promise<PolicyResult>;
@@ -32,7 +56,7 @@ index 75460be..354eaf5 100644
  
  export type AgentInfo = {
  	name: string;
-@@ -84,6 +87,14 @@ export interface SubagentsApiV1 {
+@@ -84,6 +101,14 @@ export interface SubagentsApiV1 {
  	/** Deliver like send_message from `from` (default "router"); rejects when routing fails. */
  	send(to: string, text: string, from?: string): Promise<void>;
  	list(): AgentInfo[];
@@ -47,7 +71,7 @@ index 75460be..354eaf5 100644
  }
  
  /** What the shell binds on every load. */
-@@ -91,6 +102,29 @@ export interface ApiDeps {
+@@ -91,6 +116,29 @@ export interface ApiDeps {
  	engine: Engine;
  	retune: SubagentsApiV1["retune"];
  	now?: () => number;
@@ -77,7 +101,7 @@ index 75460be..354eaf5 100644
  }
  
  /** The installed object: the public API plus the hooks this extension itself reads. */
-@@ -146,6 +180,10 @@ function makeApi(initial: ApiDeps): InstalledApi {
+@@ -146,6 +194,10 @@ function makeApi(initial: ApiDeps): InstalledApi {
  			if (result.outcome === "failed") throw new Error(result.reason);
  		},
  		list: () => deps.engine.list().map((rec) => agentInfo(rec, deps.engine.status(rec), (deps.now ?? Date.now)())),
@@ -88,6 +112,161 @@ index 75460be..354eaf5 100644
  		spawnPolicy: () => policy,
  		rebind(next) {
  			deps = next;
+diff --git a/extensions/actor-subagents/child-tools.test.ts b/extensions/actor-subagents/child-tools.test.ts
+new file mode 100644
+index 0000000..b28eb34
+--- /dev/null
++++ b/extensions/actor-subagents/child-tools.test.ts
+@@ -0,0 +1,110 @@
++// Local patch (spawn-api): the policy's child tools and cwd, async tool guards, quiet agents off the roster.
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import type { ChildTool, PolicyResult } from "./api.ts";
++import { persisted, piTool, sessionCwd } from "./child-tools.ts";
++import { Engine } from "./engine.ts";
++import { createSpawner, type SessionLike } from "./spawner.ts";
++import { childToolAllowlist, toolGuardExtensions } from "./tool-guard.ts";
++
++const tool = (r: Awaited<ReturnType<ChildTool["execute"]>>, seen: unknown[] = []): ChildTool => ({
++	name: "submit_verdict",
++	description: "d",
++	parameters: { type: "object" },
++	execute: async (input) => {
++		seen.push(input);
++		return r;
++	},
++});
++
++test("piTool: execute receives the input object itself and maps every isError x terminate combination", async () => {
++	for (const isError of [undefined, false, true])
++		for (const terminate of [undefined, false, true]) {
++			const seen: unknown[] = [];
++			const t = piTool(tool({ text: "recorded", ...(isError !== undefined && { isError }), ...(terminate !== undefined && { terminate }) }, seen));
++			const input = { verdict: "APPROVE" };
++			const out = await t.execute("call-1", input);
++			assert.equal(seen[0], input);
++			assert.deepEqual(out, {
++				content: [{ type: "text", text: "recorded" }],
++				details: {},
++				isError: isError === true,
++				terminate: terminate === true,
++			});
++		}
++	const t = piTool(tool({ text: "x" }));
++	assert.deepEqual([t.name, t.label, t.description, t.parameters], ["submit_verdict", "submit_verdict", "d", { type: "object" }]);
++});
++
++test("allowlist: a child tool joins a policy allowlist like the orchestration tools", () => {
++	const orch = [{ name: "send_message" }];
++	assert.deepEqual(childToolAllowlist(["read"], [...orch, piTool(tool({ text: "x" }))]), ["read", "send_message", "submit_verdict"]);
++});
++
++test("sessionCwd: the policy's cwd, else the fallback", () => {
++	assert.equal(sessionCwd({ cwd: "/wt" }, "/repo"), "/wt");
++	assert.equal(sessionCwd({}, "/repo"), "/repo");
++});
++
++test("async guard: a guard returning a Promise blocks once it resolves; a sync guard stays sync", async () => {
++	const handlers: ((e: { toolName: string; input: unknown }) => unknown)[] = [];
++	const pi = { on: (_: string, h: (typeof handlers)[number]) => void handlers.push(h) };
++	for (const e of toolGuardExtensions(async (name) => (name === "bash" ? "no" : undefined))) e.factory(pi as never);
++	for (const e of toolGuardExtensions(() => "sync no")) e.factory(pi as never);
++	assert.deepEqual(await handlers[0]?.({ toolName: "bash", input: {} }), { block: true, reason: "no" });
++	assert.equal(await handlers[0]?.({ toolName: "read", input: {} }), undefined);
++	assert.deepEqual(handlers[1]?.({ toolName: "x", input: {} }), { block: true, reason: "sync no" });
++});
++
++test("roster: quiet agents are not persisted", () => {
++	const rs = [{ name: "a" }, { name: "q", quiet: true }, { name: "b", quiet: false }];
++	assert.deepEqual(persisted(rs).map((r) => r.name), ["a", "b"]);
++});
++
++type CreateSpec = Parameters<Parameters<typeof createSpawner>[0]["createSession"]>[0];
++function spawnWith(decision: PolicyResult) {
++	const engine = new Engine({ maxAgents: 8, maxSpawnDepth: 3 });
++	engine.addAgent({
++		name: "main",
++		model: "fg/main",
++		handle: { deliver: async () => {}, abort: async () => {} },
++		spawnedBy: "main",
++		depth: 0,
++		createdAt: 0,
++		turns: 0,
++		lastActivity: 0,
++	});
++	const specs: CreateSpec[] = [];
++	const session = {
++		sendAgentMessage: async () => {},
++		thinkingLevel: "high",
++		setThinkingLevel: () => {},
++		subscribe: () => () => {},
++		messages: [],
++	} as Partial<SessionLike> as SessionLike;
++	const spawner = createSpawner({
++		engine,
++		resolveModel: (ref) => (ref ? { provider: "a", id: "b", model: { ref } } : undefined),
++		createSession: async (spec) => {
++			specs.push(spec);
++			return { session, sessionId: "s" };
++		},
++		spawnPolicy: () => () => decision,
++	});
++	return { specs, run: () => spawner.spawnAgent({ name: "w", systemPrompt: "p" }, "main") };
++}
++
++test("spawner passes childTools and cwd exactly when the decision has them", async () => {
++	const base = { model: "a/b", thinkingLevel: "low" } as const;
++	const plain = spawnWith(base);
++	await plain.run();
++	const childTools = [tool({ text: "x" })];
++	const rich = spawnWith({ ...base, childTools, cwd: "/wt" });
++	await rich.run();
++	const { childTools: ct, cwd, ...rest } = rich.specs[0]!;
++	assert.equal(ct, childTools);
++	assert.equal(cwd, "/wt");
++	assert.deepEqual(rest, plain.specs[0]);
++	assert.equal("childTools" in plain.specs[0]!, false);
++	assert.equal("cwd" in plain.specs[0]!, false);
++});
+diff --git a/extensions/actor-subagents/child-tools.ts b/extensions/actor-subagents/child-tools.ts
+new file mode 100644
+index 0000000..f91475a
+--- /dev/null
++++ b/extensions/actor-subagents/child-tools.ts
+@@ -0,0 +1,33 @@
++/**
++ * Local patch (spawn-api, spawnPolicyApi 2): the pieces index.ts needs for the policy's per-child tools, its
++ * child cwd and quiet agents. SDK-free, so they stay headless-testable.
++ */
++import type { ChildTool } from "./api.ts";
++
++/** A policy's child tool as a pi custom tool: the model's input reaches `execute` unchanged. */
++export function piTool(t: ChildTool) {
++	return {
++		name: t.name,
++		label: t.name,
++		description: t.description,
++		parameters: t.parameters,
++		async execute(_id: string, params: unknown) {
++			const r = await t.execute(params);
++			return {
++				content: [{ type: "text" as const, text: r.text }],
++				details: {},
++				isError: r.isError === true,
++				terminate: r.terminate === true,
++			};
++		},
++	};
++}
++
++/** The child session's cwd: the policy's, else the host's. */
++export const sessionCwd = (spec: { cwd?: string }, fallback: string): string => spec.cwd ?? fallback;
++
++/**
++ * The agents roster.json keeps: a quiet agent (an overseer) is left out, since a restored one would have neither
++ * its child tools nor its ticket and could never report.
++ */
++export const persisted = <R extends { quiet?: boolean }>(rs: R[]): R[] => rs.filter((r) => r.quiet !== true);
 diff --git a/extensions/actor-subagents/engine.ts b/extensions/actor-subagents/engine.ts
 index 68cb056..51f8af8 100644
 --- a/extensions/actor-subagents/engine.ts
@@ -157,7 +336,7 @@ index 68cb056..51f8af8 100644
  
  	/** Tell the parents what a lifecycle change did to their children (lifecycle-notice.ts decides). */
 diff --git a/extensions/actor-subagents/index.ts b/extensions/actor-subagents/index.ts
-index 69fbfaa..5e272db 100644
+index 69fbfaa..e796b74 100644
 --- a/extensions/actor-subagents/index.ts
 +++ b/extensions/actor-subagents/index.ts
 @@ -27,7 +27,7 @@ import { renderAgentMessage } from "./agent-message-renderer.ts";
@@ -169,7 +348,47 @@ index 69fbfaa..5e272db 100644
  import type { AgentHandle } from "./agent-record.ts";
  import type { EngineResumeResult } from "./control-result.ts";
  import { authorityOf } from "./authorize.ts";
-@@ -722,6 +722,8 @@ export default function subagents(pi: ExtensionAPI) {
+@@ -55,6 +55,8 @@ import {
+   sessionSpecFromRoster,
+ } from "./persistence-logic.ts";
+ import { readRoster, subagentsDir, writeRoster } from "./persistence.ts";
++import { persisted, piTool, sessionCwd } from "./child-tools.ts";
++import type { ChildTool } from "./api.ts";
+ import {
+   resolveExplicitModelRef,
+   resolveModelRef,
+@@ -414,6 +416,8 @@ export default function subagents(pi: ExtensionAPI) {
+   };
+   type ModelLike = { provider: string; id: string };
+   let cwd = process.cwd();
++  // Local patch (spawn-api): a child session's cwd, the policy's or the host's (createSession's third parameter).
++  const cwdOf = (spec: { cwd?: string }) => sessionCwd(spec, cwd);
+   let foregroundModel: ModelLike | undefined; // current foreground model (for inheritance to agents)
+   let foregroundThinkingLevel: ThinkingLevel | undefined;
+   // "provider/id" of the models this session is scoped to (empty = no scoping configured).
+@@ -535,8 +539,12 @@ export default function subagents(pi: ExtensionAPI) {
+       thinkingLevel?: ThinkingLevel;
+       tools?: string[];
+       toolGuard?: ToolGuard;
++      childTools?: ChildTool[];
++      cwd?: string;
+     },
+     existingFile?: string,
++    // Local patch (spawn-api): shadows the host's cwd for everything below.
++    cwd = cwdOf(spec),
+   ): Promise<{ session: SessionLike; sessionFile?: string; sessionId?: string }> => {
+     // Children get the human's settings as VALUES, through a manager whose writes go nowhere.
+     // pi's session.setModel()/setThinkingLevel() persist the new default into settings.json, so
+@@ -601,7 +609,7 @@ export default function subagents(pi: ExtensionAPI) {
+     // foreground toolset, plus the custom agent tools via customTools -- unless the spawn
+     // policy restricted it (the orchestration tools always stay; see childToolAllowlist).
+     const modelRuntime = await modelRuntimeReady;
+-    const customTools = toolsFor(spec.name);
++    const customTools = [...toolsFor(spec.name), ...(spec.childTools ?? []).map(piTool)];
+     const tools = childToolAllowlist(spec.tools, customTools);
+     const { session } = await createAgentSession({
+       ...(tools ? { tools } : {}),
+@@ -722,6 +730,8 @@ export default function subagents(pi: ExtensionAPI) {
        const result = await setAgentModel("main", { name, ...t });
        if (!result.ok) throw new Error(result.msg);
      },
@@ -178,6 +397,15 @@ index 69fbfaa..5e272db 100644
    });
  
    // Overwrite roster.json with current background membership (called after spawn/kill).
+@@ -729,7 +739,7 @@ export default function subagents(pi: ExtensionAPI) {
+   const persistRoster = (): void => {
+     if (!subDir) return;
+     try {
+-      writeRoster(subDir, engine.list());
++      writeRoster(subDir, persisted(engine.list()));
+     } catch {
+       /* best-effort */
+     }
 diff --git a/extensions/actor-subagents/spawn-api.test.ts b/extensions/actor-subagents/spawn-api.test.ts
 new file mode 100644
 index 0000000..76ac9db
@@ -335,10 +563,29 @@ index 0000000..76ac9db
 +	assert.equal("kill" in api, false);
 +});
 diff --git a/extensions/actor-subagents/spawner.ts b/extensions/actor-subagents/spawner.ts
-index b0ab9ce..23a04f4 100644
+index b0ab9ce..8ce8d5a 100644
 --- a/extensions/actor-subagents/spawner.ts
 +++ b/extensions/actor-subagents/spawner.ts
-@@ -142,8 +142,15 @@ export interface RestoreSpec {
+@@ -5,7 +5,7 @@
+  */
+ import type { ExtensionStatuses } from "./extension-status.ts";
+ import type { RoutedAgentMessage } from "./agent-message.ts";
+-import type { Caller, SpawnPolicy } from "./api.ts";
++import type { Caller, ChildTool, SpawnPolicy } from "./api.ts";
+ import { formatStatusDetail, type StopReason } from "./agent-status.ts";
+ import type { AgentHandle, AgentRecord, AgentView } from "./agent-record.ts";
+ import type { Engine } from "./engine.ts";
+@@ -116,6 +116,9 @@ export interface SpawnerDeps {
+ 		/** Tool allowlist set by the spawn policy; undefined keeps the full default toolset. */
+ 		tools?: string[];
+ 		toolGuard?: ToolGuard;
++		/** Local patch (spawn-api): the policy's child tools and the child session's cwd. */
++		childTools?: ChildTool[];
++		cwd?: string;
+ 	}) => Promise<{ session: SessionLike; sessionFile?: string; sessionId?: string }>;
+ 	/** Called after every relevant activity (e.g. refresh the status footer). */
+ 	onActivity?: () => void;
+@@ -142,8 +145,15 @@ export interface RestoreSpec {
  }
  
  export interface Spawner {
@@ -356,7 +603,7 @@ index b0ab9ce..23a04f4 100644
  	/** Re-register an agent from a restored session (used by restart resume). */
  	restoreAgent: (spec: RestoreSpec) => void;
  }
-@@ -373,7 +380,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+@@ -373,7 +383,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  		});
  	};
  
@@ -365,7 +612,34 @@ index b0ab9ce..23a04f4 100644
  		const spawner = engine.get(spawnerName);
  		let inheritRef = spec.model ?? spawner?.model;
  		// The Map Is Not the Territory: inherit the observed effective level, not prior intent.
-@@ -473,6 +480,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+@@ -390,6 +400,8 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+ 		let message = spec.message;
+ 		let tools: string[] | undefined;
+ 		let toolGuard: ToolGuard | undefined;
++		let childTools: ChildTool[] | undefined;
++		let childCwd: string | undefined;
+ 		let policyMeta: unknown;
+ 		const policy = deps.spawnPolicy?.();
+ 		if (policy) {
+@@ -418,6 +430,8 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+ 			if (decision.briefAppend) message = message ? `${message}\n\n${decision.briefAppend}` : decision.briefAppend;
+ 			tools = decision.tools;
+ 			toolGuard = decision.toolGuard;
++			childTools = decision.childTools;
++			childCwd = decision.cwd;
+ 			policyMeta = decision.meta;
+ 		}
+ 
+@@ -441,6 +455,8 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+ 				thinkingLevel,
+ 				...(tools ? { tools } : {}),
+ 				...(toolGuard ? { toolGuard } : {}),
++				...(childTools ? { childTools } : {}),
++				...(childCwd ? { cwd: childCwd } : {}),
+ 			}));
+ 		} catch (e) {
+ 			if (engine.get(spec.name) === reservation) engine.release(spec.name);
+@@ -473,6 +489,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  			sessionFile,
  			sessionId,
  			policyMeta,
@@ -373,7 +647,7 @@ index b0ab9ce..23a04f4 100644
  		});
  
  		// 4) Deliver the optional first message atomically (no race; the agent is registered).
-@@ -490,7 +498,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
+@@ -490,7 +507,7 @@ export function createSpawner(deps: SpawnerDeps): Spawner {
  			else sent = ` (initial message NOT delivered: ${outcome.reason})`;
  		}
  		const model = formatModelThinking(`${resolved.provider}/${resolved.id}`, session.thinkingLevel);
@@ -382,3 +656,30 @@ index b0ab9ce..23a04f4 100644
  	};
  
  	return { spawnAgent, restoreAgent };
+diff --git a/extensions/actor-subagents/tool-guard.ts b/extensions/actor-subagents/tool-guard.ts
+index f9694e0..bfb7ac0 100644
+--- a/extensions/actor-subagents/tool-guard.ts
++++ b/extensions/actor-subagents/tool-guard.ts
+@@ -1,5 +1,10 @@
+-/** The spawn policy's per-child tool guard as an inline child extension (index.ts loads it). */
+-export type ToolGuard = (toolName: string, input: unknown) => string | undefined;
++/**
++ * The spawn policy's per-child tool guard as an inline child extension (index.ts loads it). Local patch
++ * (spawn-api): a guard may answer with a Promise (e.g. it asks git which branch a directory is on).
++ */
++export type ToolGuard = (toolName: string, input: unknown) => string | undefined | Promise<string | undefined>;
++
++const verdict = (reason: string | undefined) => (reason === undefined ? undefined : { block: true, reason });
+ 
+ type PiLike = { on(event: "tool_call", h: (e: { toolName: string; input: unknown }) => unknown): void };
+ 
+@@ -9,7 +14,8 @@ export function toolGuardExtensions(guard: ToolGuard | undefined): { name: strin
+ 	const factory = (pi: PiLike) =>
+ 		pi.on("tool_call", (e) => {
+ 			const reason = guard(e.toolName, e.input);
+-			return reason === undefined ? undefined : { block: true, reason };
++			// A sync guard keeps its sync answer; pi awaits a handler's Promise.
++			return reason instanceof Promise ? reason.then(verdict) : verdict(reason);
+ 		});
+ 	return [{ name: "subagent-tool-guard", factory }];
+ }

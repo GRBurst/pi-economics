@@ -57,9 +57,15 @@ pkgs.runCommand "pi-actor-subagents-tests" {nativeBuildInputs = [pkgs.nodejs];} 
   fi
 
   # The spawn-api patch's tests must be part of what ran, and index.ts must bind api.spawn/api.kill
-  # (spawnPolicyApi 2, local mode's overseers).
-  test -f spawn-api.test.ts
+  # (spawnPolicyApi 2, local mode's overseers), start a child in the policy's cwd with the policy's
+  # child tools, and keep quiet agents off the roster.
+  for t in spawn-api child-tools; do
+    test -f "$t.test.ts"
+  done
   grep -q 'spawnApiDeps({ engine, spawnAgent' index.ts
+  grep -q 'cwd = cwdOf(spec)' index.ts
+  grep -qF '.map(piTool)' index.ts
+  grep -qF 'persisted(engine.list())' index.ts
 
   touch $out
 ''
