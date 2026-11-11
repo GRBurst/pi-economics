@@ -32,12 +32,24 @@ export type Git = {
   root(dir: string): Promise<string | undefined>;
   /** The top directory of the checkout that holds `dir` (a worktree has its own); undefined outside one. */
   top(dir: string): Promise<string | undefined>;
+  branchOf(dir: string): Promise<string | undefined | "unknown">;
+  worktrees(repo: string): Promise<Wt[]>;
+  sha(repo: string, ref: string): Promise<string | undefined>;
+  worktreeAdd(repo: string, dir: string, branch: string, base: string): Promise<Res>;
+  worktreeRemove(repo: string, dir: string): Promise<Res>;
+  branchDelete(repo: string, branch: string): Promise<Res>;
+  dirty(dir: string): Promise<boolean>;
 };
+/** A command that either gave its stdout or failed with the tail of its stderr (2048 characters). */
+export type Res = { ok: true; out: string } | { ok: false; err: string };
 
-const SHORT_MS = 5000;
+const SHORT_MS = 5000, BRANCH_MS = 2000, ADD_MS = 60_000, ERR_TAIL = 2048;
+/** stdout on exit 0, else the tail of stderr (a timeout and a silent failure get a sentence). */
+const res = (r: GitOut): Res =>
+  r.exit === 0 ? { ok: true, out: r.out.trim() } : { ok: false, err: r.timedOut ? "git timed out" : r.err.trim().slice(-ERR_TAIL) || `git exited ${r.exit}` };
 export function createGit(run: GitRun): Git {
-  const line = async (args: string[], cwd: string): Promise<string | undefined> => {
-    const r = await run(args, cwd, SHORT_MS);
+  const line = async (args: string[], cwd: string, ms = SHORT_MS): Promise<string | undefined> => {
+    const r = await run(args, cwd, ms);
     const t = r.out.trim();
     return r.exit === 0 && t !== "" ? t : undefined;
   };
@@ -51,6 +63,23 @@ export function createGit(run: GitRun): Git {
     async top(dir) {
       const t = await line(["rev-parse", "--show-toplevel"], dir);
       return t === undefined ? undefined : real(t);
+    },
+    async branchOf(dir) {
+      const r = await run(["symbolic-ref", "--short", "-q", "HEAD"], dir, BRANCH_MS);
+      if (r.exit === 0 && r.out.trim() !== "") return r.out.trim();
+      return r.exit === 1 && !r.timedOut ? undefined : "unknown"; // exit 1: HEAD is detached; anything else: cannot tell
+    },
+    async worktrees(repo) {
+      const r = await run(["worktree", "list", "--porcelain"], repo, SHORT_MS);
+      return r.exit === 0 ? parseWorktrees(r.out) : [];
+    },
+    sha: (repo, ref) => line(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], repo),
+    async worktreeAdd(repo, dir, branch, base) { return res(await run(["worktree", "add", "-q", "-b", branch, dir, base], repo, ADD_MS)); },
+    async worktreeRemove(repo, dir) { return res(await run(["worktree", "remove", dir], repo, ADD_MS)); },
+    async branchDelete(repo, branch) { return res(await run(["branch", "-d", branch], repo, SHORT_MS)); },
+    async dirty(dir) {
+      const r = await run(["status", "--porcelain"], dir, ADD_MS);
+      return r.exit !== 0 || r.out.trim() !== ""; // a status that fails counts as dirty: nothing is removed or merged on it
     },
   };
 }

@@ -809,7 +809,7 @@ message). Open notes, for L6 or later:
 - **RED**: ∀ slug ∈ SLUG: `worktreeDir("../{repo}.worktrees", "/r/p/x", branchName("lm/", {slug}))` = `/r/p/x.worktrees/lm--<slug>` (D36); never inside `/r/p/x`; injective over valid slugs and plan units; porcelain fixtures (detached, bare, locked, prunable); numstat with binary (`-\t-\t`) and renames.
 - **GREEN**: S21/S22 pure parts. **Check**: fast runner; `chk task-router typecheck-task-router`.
 
-#### L5.T3 Git port for worktrees `[ ] todo`
+#### L5.T3 Git port for worktrees `[x] done`
 - **Files**: `core/local/git.ts` (L5 methods of S21), `test/local-git.test.ts`. **Depends**: L5.T1, L5.T2.
 - **RED** (temp repo): `worktreeAdd` → `worktrees()` lists dir+branch; `sha`, `branchOf` (branch, detached → undefined), `dirty`, `worktreeRemove`, `branchDelete`; a failing call → `{ok: false, err}` with `err.length ≤ 2048`.
 - **GREEN**: S21. **Check**: fast runner; `chk task-router`.
