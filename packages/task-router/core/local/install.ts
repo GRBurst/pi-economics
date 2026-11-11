@@ -296,10 +296,11 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   };
   // The main session's plan and whitelist guards (design §3.5.6, §3.5.5; AC-P5, AC-P7). Total, as the write guard. The same
   // handler marks a turn that worked in the active plan-bound worktree (D54); its turn_end counts it toward plans.taskTurns, and
-  // the count past it opens over-budget (§3.5.5). The counts live for the session.
+  // the count past it opens over-budget (§3.5.5). The counts live for the session. Review L7 F8: once the trigger a count opened
+  // is closed (an amendment answered it), that branch counts afresh.
   const guardPlans = (): void => {
     if (!activeSet(s).plans) return;
-    const turns = new Map<string, number>();
+    const turns = new Map<string, { n: number; trigger?: string }>();
     let touched: BranchRecord | undefined;
     pi.on("tool_call", (e, ctx) => {
       try {
@@ -316,9 +317,11 @@ export function installLocal(pi: Pi, d: LocalDeps) {
         const t = touched;
         touched = undefined;
         if (!t?.plan) return;
-        const key = `${t.repo}\0${t.branch}`, n = (turns.get(key) ?? 0) + 1;
-        turns.set(key, n);
-        if (n > s.plans.taskTurns) plans.open(t.plan.slug, "over-budget", t.plan.id);
+        const key = `${t.repo}\0${t.branch}`, was = turns.get(key);
+        const c: { n: number; trigger?: string } = was?.trigger !== undefined && !plans.openTriggers(t.plan.slug).some((x) => x.id === was.trigger) ? { n: 0 } : was ?? { n: 0 };
+        c.n += 1;
+        turns.set(key, c);
+        if (c.n > s.plans.taskTurns && c.trigger === undefined) c.trigger = plans.open(t.plan.slug, "over-budget", t.plan.id);
       } catch { /* a count is best effort */ }
     });
   };

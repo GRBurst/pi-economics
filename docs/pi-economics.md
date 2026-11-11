@@ -731,8 +731,8 @@ Plan-bound branches have guards and their own merge rules:
   <id> is open)" and opens a `non-whitelisted` trigger;
 - turns: a main-session turn with a call whose path is in the active
   plan-bound worktree (or a bash command that names it) counts; more than
-  `taskTurns` (12) open `over-budget` (counted per session, not kept across a
-  reload);
+  `taskTurns` (12) open `over-budget` once (counted per session, not kept
+  across a reload; once that trigger is closed the branch counts afresh);
 - `request_merge`: the plan file at the branch's commit must still hold the
   approved skeleton (`plan-changed`); the size leaves out tick-only plan
   lines and is bounded by `splitLines` (100) and `splitFiles` (3) for a task

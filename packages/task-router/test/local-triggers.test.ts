@@ -93,16 +93,19 @@ function session(settings: Record<string, unknown>) {
   void g.git.worktreeAdd("/r/x", WT, "lm/parser/M1.T1", "main");
   const h = harness({ settings: { mode: "local", ...settings } as never, extra: { git: g.git } as never });
   const bound: BranchRecord = { ...branch("parser", "M1.T1", "active"), worktree: WT, files: ["a"] };
+  let plan: PlanRecord = rec();
   const ctx = { cwd: "/r/x", sessionManager: { getSessionId: () => "s-main", getBranch: () => [
-    { type: "custom", customType: PLAN_TYPE, data: rec() }, { type: "custom", customType: BRANCH_TYPE, data: bound }] } };
+    { type: "custom", customType: PLAN_TYPE, data: plan }, { type: "custom", customType: BRANCH_TYPE, data: bound }] } };
   h.f.fire("session_start", {}, ctx);
+  /** The session starts again with the plan record `p` (the store rebuilds it; the process keeps its counts). */
+  const restart = (p: PlanRecord): void => { plan = p; h.f.fire("session_start", {}, ctx); };
   let n = 0;
   const turn = (...calls: Array<[string, unknown]>): void => {
     for (const [toolName, input] of calls) h.f.fire("tool_call", { toolName, toolCallId: `c${++n}`, input }, ctx);
     h.f.fire("turn_end", {}, ctx);
   };
   const triggers = () => h.f.entries.filter((e: { type: string }) => e.type === PLAN_TYPE).map((e) => (e.data as PlanRecord).triggers).at(-1) ?? [];
-  return { h, turn, triggers };
+  return { h, turn, triggers, restart };
 }
 
 for (const hints of ["on", "off"]) {
@@ -120,6 +123,21 @@ for (const hints of ["on", "off"]) {
     assert.equal(x.h.f.entries.filter((e: { type: string }) => e.type === PLAN_TYPE).length, 1, "opened once");
   });
 }
+
+test("review L7 F8: once the turns' over-budget trigger is closed, the count starts again; not a new trigger per turn", async () => {
+  const x = session({ plans: { taskTurns: 2 } });
+  await x.h.router.settled();
+  for (let i = 0; i < 3; i++) x.turn(["edit", { path: `${WT}/a`, edits: [] }]);
+  assert.deepEqual(x.triggers(), [{ id: "t1", kind: "over-budget", task: "M1.T1", open: true }]);
+  x.restart({ ...rec(), triggers: [{ id: "t1", kind: "over-budget", task: "M1.T1", open: false }] }); // an amendment closed it
+  await x.h.router.settled();
+  const n = () => x.h.f.entries.filter((e: { type: string }) => e.type === PLAN_TYPE).length, before = n();
+  x.turn(["edit", { path: `${WT}/a`, edits: [] }]);
+  x.turn(["edit", { path: `${WT}/a`, edits: [] }]);
+  assert.equal(n(), before, "taskTurns turns since the trigger closed open nothing");
+  x.turn(["edit", { path: `${WT}/a`, edits: [] }]);
+  assert.deepEqual(x.triggers(), [{ id: "t1", kind: "over-budget", task: "M1.T1", open: false }, { id: "t2", kind: "over-budget", task: "M1.T1", open: true }]);
+});
 
 test("over-budget by turns: a slug branch (no plan) and plans off count nothing", async () => {
   const x = session({ plans: { enabled: "off", taskTurns: 1 } });
