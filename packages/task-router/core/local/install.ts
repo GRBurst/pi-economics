@@ -29,6 +29,9 @@ const WRITERS = new Set(["edit", "write"]);
 export const fileHash = (abs: string): string | undefined => {
   try { return createHash("sha256").update(readFileSync(abs)).digest("hex"); } catch { return undefined; }
 };
+/** A call a tool made through `ctx.executeTool` (pi docs/extensions.md): its result reaches only the calling tool, so it is
+ *  neither recorded nor annotated, and it consumes nothing queued (L3 follow-up). */
+const nested = (e: any): boolean => typeof e?.parentToolCallId === "string";
 const textOf = (content: unknown): string =>
   Array.isArray(content) ? content.filter((c) => c?.type === "text" && typeof c.text === "string").map((c) => c.text).join("\n") : "";
 
@@ -55,7 +58,7 @@ export function installLocal(pi: Pi, d: LocalDeps): void {
   };
   pi.on("tool_call", (e, ctx) => {
     safe(() => {
-      if (d.isChild(ctx) || typeof e?.toolCallId !== "string") return;
+      if (d.isChild(ctx) || typeof e?.toolCallId !== "string" || nested(e)) return;
       const tool = String(e.toolName), isWrite = WRITERS.has(tool), p = e.input?.path;
       const path = isWrite && typeof p === "string" ? resolve(ctx?.cwd ?? process.cwd(), p) : undefined;
       pending.set(e.toolCallId, { tool, key: callKey(tool, e.input), isWrite, path, hashBefore: path === undefined ? undefined : hash(path) });
@@ -63,7 +66,7 @@ export function installLocal(pi: Pi, d: LocalDeps): void {
     return undefined;
   });
   pi.on("tool_result", (e, ctx) => safe(() => {
-    if (d.isChild(ctx)) return undefined;
+    if (d.isChild(ctx) || nested(e)) return undefined;
     const rec = pending.get(e?.toolCallId);
     pending.delete(e?.toolCallId);
     const out = queue;

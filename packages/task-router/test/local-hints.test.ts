@@ -149,6 +149,28 @@ test("child sessions: the main-session hooks ignore a child's calls", () => {
   assert.equal(pair(...READ_A).out, undefined); // the main's own count starts at one
 });
 
+test("nested calls (ctx.executeTool, parentToolCallId): not recorded, never annotated, the queue and context-soft wait for the main's own result", () => {
+  const { h, usage, ctx, pair, hints } = rig({ mode: "local", hints: { stallTurns: 1 } });
+  let k = 0;
+  const nested = (toolName: string, input: unknown) => {
+    const id = `tc0/${++k}`;
+    const calls = h.f.fire("tool_call", { toolName, toolCallId: id, parentToolCallId: "tc0", input }, ctx);
+    const rs = h.f.fire("tool_result", { toolName, toolCallId: id, parentToolCallId: "tc0", input, content: [{ type: "text", text: "x" }], isError: false }, ctx);
+    assert.ok([...calls, ...rs].every((r) => r === undefined));
+  };
+  for (let i = 0; i < 4; i++) nested(...READ_A);
+  pair(...READ_A);
+  pair(...READ_A); // two of the main's own: no trip yet
+  usage.percent = 90;
+  h.f.fire("turn_end", { message: { stopReason: "toolUse" }, toolResults: [] }, ctx); // queues context-stall
+  usage.tokens = 40_000; // crosses contextSoftTokens
+  nested("read", { path: "z.ts" });
+  assert.deepEqual(hints(), []);
+  const third = pair(...READ_A);
+  assert.deepEqual(third.out!.content.slice(1).map((c) => /^<router-hint trip="([a-z-]+)" n="1">/.exec(c.text)?.[1]),
+    ["context-stall", "identical-call", "context-soft"]);
+});
+
 test("status (Q5): a hint adds `hint <trip>` until the next progress", () => {
   assert.equal(statusText({ local: true, localModels: [], hint: "identical-call" }), "local · hint identical-call");
   assert.equal(statusText({ local: false, localModels: [], hint: "churn" }), "hint churn");
