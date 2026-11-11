@@ -249,17 +249,17 @@ inventory/keys tests; L6.T3 adds the default-mode `git push origin main` asserti
 
 | Check | Plant | Must FAIL | Seen |
 |---|---|---|---|
-| L4.T1 patch tests | patch holding only `spawn-api.test.ts` (natural red) | `actor-subagents` | [ ] |
-| L4.T2 roster filter | `persisted = (rs) => rs` | `child-tools.test.ts` › "roster" | [ ] |
-| L4.T4 `iface-policy-task-router` | router copy `cwd?: number` | `iface-policy-task-router` | [ ] |
-| L4.T4 `iface-subagents-task-router` (new members) | router copy `kill?(names: string[]): Promise<number[]>` | `iface-subagents-task-router` | [ ] |
-| L4.T7 AC-O6 forged ticket | `take` returns any ticket for any string | "AC-O6" | [ ] |
-| L4.T7 AC-F6 | apply the force branch before the ticket branch | "AC-F6" | [ ] |
-| L4.T10 no verdict slot | `ticketSpawn` calls `log.spawn` | "ticket spawn: no unjudged line" | [ ] |
-| L4.T11 contract `review` | `outcome` in `optional` | `test/contract.test.ts` › "review without outcome" | [ ] |
-| L4.T15 module-eval | (natural) assertion absent | `task-router-local-mode-needs-spawn-api` | [ ] |
-| L4.T16 log-contract `review` | drop `log.review` | `log-contract` "outcomes: no review event" | [ ] |
-| L4.T17 `pi-install-local` | build against the Actor without the spawn-api patch | `pi-install-local` (warning present) | [ ] |
+| L4.T1 patch tests | patch holding only `spawn-api.test.ts` (natural red) | `actor-subagents` | [x] |
+| L4.T2 roster filter | `persisted = (rs) => rs` | `child-tools.test.ts` › "roster" | [x] |
+| L4.T4 `iface-policy-task-router` | router copy `cwd?: number` | `iface-policy-task-router` | [x] |
+| L4.T4 `iface-subagents-task-router` (new members) | router copy `kill?(names: string[]): Promise<number[]>` | `iface-subagents-task-router` | [x] |
+| L4.T7 AC-O6 forged ticket | `take` returns any ticket for any string | "AC-O6" | [x] |
+| L4.T7 AC-F6 | apply the force branch before the ticket branch | "AC-F6" | [x] |
+| L4.T10 no verdict slot | `ticketSpawn` calls `log.spawn` | "ticket spawn: no unjudged line" | [x] |
+| L4.T11 contract `review` | `outcome` in `optional` | `test/contract.test.ts` › "review without outcome" | [x] |
+| L4.T15 module-eval | (natural) assertion absent | `task-router-local-mode-needs-spawn-api` | [x] |
+| L4.T16 log-contract `review` | drop `log.review` | `log-contract` "outcomes: no review event" | [x] |
+| L4.T17 `pi-install-local` | build against the Actor without the spawn-api patch | `pi-install-local` (warning present) | [x] |
 | L5.T1 git in sandbox | remove `git` from `nativeCheckInputs` | `task-router` (exit 127) | [ ] |
 | L5.T6 default inventory | register `start_branch` unconditionally | P13 "default mode: inventory" | [ ] |
 | L5.T7 write guard property | `inside()` by string prefix without a separator (`/r/x` vs `/r/xy`) | "write guard property" | [ ] |
@@ -677,99 +677,99 @@ generated inputs put spaces and fences into every free text, so no free text can
 
 ### L4 Actor spawn API and overseer
 
-#### L4.T1 Patch: `api.spawn`, `api.kill`, `quiet` (AC-O7 spawn/kill) `[ ] todo`
+#### L4.T1 Patch: `api.spawn`, `api.kill`, `quiet` (AC-O7 spawn/kill) `[x] done`
 - **Files**: `patches/pi-actor-subagents/pi-actor-subagents-spawn-api.patch` (new: `api.ts`, `spawner.ts`, `engine.ts`, `index.ts`, new `spawn-api.test.ts`), `packages/actor-subagents/package.nix` (third patch entry; passthru stays 1 until T3), `checks/actor-subagents/default.nix` (`test -f spawn-api.test.ts`; `grep -q` for `spawn: async` in `index.ts`).
 - **Depends**: P13 done. **Read first**: the spawn-policy patch's `api.ts`/`spawner.ts` hunks and its `api.test.ts`/`spawn-policy.test.ts` fakes; upstream `engine.ts` (`kill`, `announce`, terminal-error notices); `index.ts` around `installApi`/`persistRoster`.
 - **RED** (`$W`, §7; patch = test only): "spawn runs the policy": the policy records its args; `api.spawn({name: "ovs-merge-1", systemPrompt: "s", message: "m", task: {ticket: "t"}}, {by: "main", quiet: true})` → policy saw `task.ticket === "t"`, `caller.name === "main"`; result `{ok: true, name, sessionId}` with the created session's id. "reject": policy `{reject: "r"}` → `{ok: false, reason}` containing `r`; the name is free again. "kill": `api.kill(["ovs-merge-1"])` → `["ovs-merge-1"]`, absent from `list()`, kill event `by: "main"`. "quiet": a quiet child's terminal error routes no scheduler message to main; a non-quiet child's does. "v1 shape": `version === 1`; `makeApi` without `spawn`/`kill` deps has neither key. → `chk actor-subagents` FAILS.
 - **GREEN**: S15 (`api.ts`, `spawner.ts` `quiet`/`sessionId`, `engine.ts` quiet, `index.ts` `installApi`).
 - **Check**: `chk actor-subagents boundary leak`. **Keep green**: KG-A, KG-P (`pi-install-actor`). **ACs**: AC-O7 (spawn, kill).
 
-#### L4.T2 Patch: `childTools`, `cwd`, async guard, roster (AC-O7 tools/cwd) `[ ] todo`
+#### L4.T2 Patch: `childTools`, `cwd`, async guard, roster (AC-O7 tools/cwd) `[x] done`
 - **Files**: the patch (+ `child-tools.ts`, `child-tools.test.ts`; `tool-guard.ts`, `spawner.ts`, `index.ts`), `checks/actor-subagents/default.nix` (`test -f child-tools.test.ts`; `grep -q` for `cwd = cwdOf(spec)`, `.map(piTool)`, `persisted(engine.list())`).
 - **Depends**: L4.T1.
 - **RED**: "piTool": `execute` receives the input object itself (`===`); result mapping for every `isError`×`terminate` combination; "allowlist": `childToolAllowlist(["read"], [...orch, piTool(t)])` contains `t.name`; "spawner passes": a recording `createSession` gets `childTools`/`cwd` exactly when the decision has them (otherwise the spec deep-equals today's); "sessionCwd"; "async guard": `toolGuardExtensions(async () => "no")` handler resolves `{block: true, reason: "no"}`, the existing `tool-guard.test.ts` stays green; "roster": `persisted` drops quiet records (plant §11).
 - **GREEN**: S15 rest; D23 (keep every hunk ≥ 4 lines away from the display-name setter; `chk boundary` proves it).
 - **Check**: `chk actor-subagents boundary leak`. **Keep green**: KG-A, KG-P. **ACs**: AC-O7 (child tool callable with its input; cwd).
 
-#### L4.T3 `spawnPolicyApi = 2` (AC-O7 module-eval) `[ ] todo`
+#### L4.T3 `spawnPolicyApi = 2` (AC-O7 module-eval) `[x] done`
 - **Files**: `packages/actor-subagents/package.nix` (passthru 2; header "three local patches"), `checks/module-eval/cases/actor-subagents.nix` (l.99 `1` → `2`: an existing assertion changes because the build changes, design §4), `modules/actor-subagents.nix` (header; option text "(2: the spawn-api patch)"), `docs/pi-economics.md` (l.113).
 - **Depends**: L4.T2. **RED**: the case at 2 → `chk module-eval` FAILS. **GREEN**: passthru 2.
 - **Check**: `chk module-eval`. **Keep green**: KG-M (`task-router`'s `>= 1` assertion), KG-P. **ACs**: AC-O7 (module-eval).
 
-#### L4.T4 Router API copy and `iface-policy-task-router` `[ ] todo`
+#### L4.T4 Router API copy and `iface-policy-task-router` `[x] done`
 - **Files**: `packages/task-router/core/api.ts` (S16), `core/toolguard.ts` (`Guard`, `SyncGuard` types), `checks/default.nix` (new `iface-policy-task-router`: provider `{src = ../packages/task-router; file = "core/api.ts"; type = "PolicyResult";}`, consumer = `subagentsProvider // {type = "PolicyResult";}`).
 - **Depends**: L4.T2. **Parallel**: with L4.T3, L4.T5, L4.T6.
 - **RED/plant**: add the check with today's copy (passes: optional fields), plant `cwd?: number` → FAIL seen; plant `kill?(…): Promise<number[]>` in the `SubagentsApiV1` copy → `iface-subagents-task-router` FAILS; then S16.
 - **Check**: `chk iface-subagents-task-router iface-policy-task-router typecheck-task-router task-router`. **Keep green**: KG-A, KG-R.
 
-#### L4.T5 Schema subset (`core/local/schema.ts`) `[ ] todo`
+#### L4.T5 Schema subset (`core/local/schema.ts`) `[x] done`
 - **Files**: `core/local/schema.ts` (S17), `test/local-schema.test.ts`. **Depends**: — . **Parallel**: with L4.T1–T4.
 - **RED**: property: a generator of values valid for a random schema (from the S17 subset) → `check = []`; each single mutation (drop a required key, add a key under `additionalProperties: false`, wrong type, string over `maxLength`, enum miss, pattern miss, array over `maxItems`/under `minItems`) → exactly one reason, prefixed with the mutated path.
 - **GREEN**: S17. **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R.
 
-#### L4.T6 Verdict rules (AC-O2, AC-O3 pure) `[ ] todo`
+#### L4.T6 Verdict rules (AC-O2, AC-O3 pure) `[x] done`
 - **Files**: `core/local/verdict.ts` (S18), `test/local-verdict.test.ts`. **Depends**: L4.T5.
 - **RED**: `VERDICT_SCHEMA` deep-equals the design §3.2.3 JSON (literal in the test); "AC-O2" property over generated verdicts: `approve` ⇔ ∀ ¬blocking; `inconsistent` ⇔ (`APPROVE`) ≠ `approve`; V1: a fence in any string → `ok: false`; a repeated id → `duplicate id F<n>`; a target outside `targets` (after `targetPath`) and not a task id → reason; `targets` undefined/empty → no target reason; V3 pinned for one blocking and one non-blocking finding (trailing dots trimmed).
 - **GREEN**: S18. **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R. **ACs**: AC-O2, AC-O3 (pure).
 
-#### L4.T7 Fake API extension, tickets, ticket policy (AC-O1 policy, AC-O6, AC-F6) `[ ] todo`
+#### L4.T7 Fake API extension, tickets, ticket policy (AC-O1 policy, AC-O6, AC-F6) `[x] done`
 - **Files**: `test/fake-api.ts` (opt-in `fakeApi({ext: true})`: `api.spawn` runs the registered policy with caller `{name: opts.by ?? "main", cwd: "/work", …}`, records `apiSpawns: {args, opts, result}[]`, pushes an `AgentInfo` (status `idle`), emits `spawn` with `sessionId: "s-<name>"`; `api.kill` records `killed`, removes, emits `kill`; additive), `test/harness.ts` (`apiExt?: boolean`), `core/local/overseer.ts` (S19), `core/policy.ts` (first statement), `core/shell.ts` (`pd.tickets`), `test/local-ticket-policy.test.ts`.
 - **Depends**: L4.T4. **Read first**: `test/fake-api.ts`, `core/policy.ts`, P13 S7 (force branch).
 - **RED**: "AC-O1 policy": issue `{role: "merge", member: "opus", model, effort: "high", cwd: "/wt", tools: s.overseer.tools, childTools: [submit_verdict]}` → `a.spawn({name, task: {ticket}})` returns `tools` = `overseer.tools`, one `childTools` entry `submit_verdict`, `cwd: "/wt"`, `toolGuard` blocks `bash`, `edit`, `write`, `send_message`, `spawn_subagent` and allows `read`, `submit_verdict`; `meta = {taskId: reviewId, role: "merge"}`. "single use": same ticket again → card routing. "AC-O6": `{ticket: "forged"}` → result deep-equals the result for task `{}` (derived from the SUT). "AC-F6": settings force active → the ticket's model, no `forced`. "routing off" → ticket honoured. Default mode: P13 inventory test and `router-golden` green.
 - **GREEN**: S19. **Check**: fast runner; `chk task-router typecheck-task-router router-golden`. **Keep green**: KG-R; every existing `fake-api` user (opt-in). **ACs**: AC-O1 (policy), AC-O6, AC-F6.
 
-#### L4.T8 `runOverseer`: spawn, submit, resubmits, kill (AC-O3) `[ ] todo`
+#### L4.T8 `runOverseer`: spawn, submit, resubmits, kill (AC-O3) `[x] done`
 - **Files**: `core/local/overseer.ts` (`runOverseer`, one attempt), `test/local-overseer.test.ts`. **Depends**: L4.T6, L4.T7.
 - **RED** (ext fake API, manual clock/sleep): "happy": one `api.spawn`, `task.ticket` 32 hex, opts `{by: "main", quiet: true}`, name `ovs-merge-1`; `childTools[0].execute(valid)` → `{text: "recorded", terminate: true}`; result `{ok: true, value, reviewId: /^rv-[0-9a-f]{8}$/}`; `killed` = `[name]`; one `task-router/review` entry. "AC-O3": fenced summary or duplicate id → `isError`, text `^invalid: `, still unresolved; property over `resubmits ∈ {0, 1, 2, 3}`: submissions 1…r invalid → `…; resubmit`, the (r+1)-th → `terminate`, attempt outcome `invalid` (D29).
 - **GREEN**: S20 (single attempt). **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R. **ACs**: AC-O3.
 
-#### L4.T9 Idle, timeout, failure, fallback, budget (AC-O4, AC-O5 run part) `[ ] todo`
+#### L4.T9 Idle, timeout, failure, fallback, budget (AC-O4, AC-O5 run part) `[x] done`
 - **Files**: `core/local/overseer.ts`, `test/local-overseer.test.ts`. **Depends**: L4.T8.
 - **RED**: "reminder": `turn` event then status `idle` → one `api.send(name, "Submit with submit_verdict.", "router")`; a second busy→idle → attempt 2 on `fallbackMember`'s model. "timeout": no submit for `timeoutSec` → `killed`, outcome `timeout`, attempt 2. "kill/error event" → `error`. "spawn {ok: false}" → attempt 2. "both fail" → `{ok: false}`. "AC-O4": budget `{opusUsed: budget}` → the only spawn on `fallbackMember`/`fallbackEffort`, `fallback: "budget"`, `opusUsed` unchanged; property: k successful runs → `opusUsed = min(k, budget)`. "steer": `steerUsed = steerBudget` → `skipped`, no spawn; a failing steer → no attempt 2. "abort": aborted signal → `aborted`, no attempt 2.
 - **GREEN**: S20 complete (D27, D28, D30). **Check**: fast runner; `chk task-router typecheck-task-router`. **ACs**: AC-O4 (run), AC-O5 (run part).
 
-#### L4.T10 `review` and ticket `spawn` lines (AC-L2) `[ ] todo`
+#### L4.T10 `review` and ticket `spawn` lines (AC-L2) `[x] done`
 - **Files**: `core/outcome.ts` (S30 L4 part), `core/log.ts` (`review`, `ticketSpawn`), `core/shell.ts` (`onEvent`: `spawn` of `tickets.owner(name)` → `log.ticketSpawn`), `core/local/overseer.ts` (log calls), `test/review-log.test.ts`.
 - **Depends**: L4.T9. **Parallel**: with L4.T11.
 - **RED**: builder shapes; "AC-L2": `textFree` (S30) over review lines from generated verdicts; ticket spawn line `{kind: "overseer", ticket: "merge", workerTier, workerEffort, workerMember, workerModel, sessionId, parentSessionId}`; "ticket spawn: no unjudged line" after `kill` (plant §11), a card child still gets one.
 - **GREEN**: S30. **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R, P13 "default mode: outcome keys". **ACs**: AC-L2 (review).
 
-#### L4.T11 Contract: `review`, spawn `ticket` (AC-L1) `[ ] todo`
+#### L4.T11 Contract: `review`, spawn `ticket` (AC-L1) `[x] done`
 - **Files**: `packages/token-meter/core/contract.ts`, `test/contract.test.ts`, `LOGS.md` (rows). **Depends**: P13 L3.T5.
 - **RED**: a valid `review` passes; without `outcome` → `outcomes.outcome` problem (plant §11); `outcome: "x"` → problem; spawn `ticket: "merge"` passes, `"x"` fails; `analyse`: review lines raise no "task events without a spawn", overseer sessions are no "child sessions without a spawn event"; a router test asserts the contract's `ROLES` literal equals `Role`s.
 - **GREEN**: S30 contract part. **Check**: `chk token-meter typecheck-token-meter`. **Keep green**: KG-L. **ACs**: AC-L1 (review).
 
-#### L4.T12 Shell wiring: detection, budget entries, status (§3.0.4, §2.5) `[ ] todo`
+#### L4.T12 Shell wiring: detection, budget entries, status (§3.0.4, §2.5) `[x] done`
 - **Files**: `core/local/install.ts` (overseer instance; `task-router/budget` rebuild), `core/shell.ts` (warning; `onEvent` → `overseer.onEvent`), `core/local/mode.ts` (`statusText` + `opusLeft`), `test/local-overseer-shell.test.ts`.
 - **Depends**: L4.T10.
 - **RED**: "missing API extension": `{mode: "local"}` without ext → one `notify` with the §3.0.4 text, none on a second `session_start`, none in default mode. "budget persisted": two runs → entries `{opusUsed: 1, steerUsed: 0}`, `{opusUsed: 2, …}`; a harness rebuilt from them starts at 2. "status": `budget − opusUsed ≤ 3` → `local · opus 3 left` (Q19); otherwise P13's L1.T6 texts unchanged.
 - **GREEN**: wiring. **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R, P13 L1.T6.
 
-#### L4.T13 Steer overseer from persistence (AC-H4) `[ ] todo`
+#### L4.T13 Steer overseer from persistence (AC-H4) `[x] done`
 - **Files**: `core/local/steer.ts` (new: `steerInput`, `createSteer`), `core/local/install.ts` (stage `steer`: `steer.available()` → `start`, no `ESCALATION` block; else L3 behaviour), `core/local/tripwires.ts` (`CallRecord.cmd?`, first 200 chars of a bash command), `test/local-steer.test.ts`.
 - **Depends**: L4.T12.
 - **RED**: "AC-H4": `{mode: "local"}`, `apiExt`: five identical `read` pairs → exactly one `api.spawn` (`ovs-steer-1`, ticket), the fifth result has no `ESCALATION`; hint line `stage: "steer"`; the child submits → one `f.sent` `{customType: "task-router/steer", …}` with `opts.deliverAs === "steer"`, content = `[router] steer (<trip>): <summary>` + V3 lines. "budget exhausted" (entries `steerUsed = steerBudget`) → `ESCALATION` block, no spawn. "failure" → `ESCALATION` as a steer message (D31). "`hints.steer: off`" → L3 behaviour. "one at a time": while a steer runs, a further escalation gets `ESCALATION`. `steerInput` pinned for a fixed record list (≤ 12 lines, no bodies). P13 "AC-H4 (L3)" unmodified (X30).
 - **GREEN**: D31, D32. **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R, P13 L3 tests. **ACs**: AC-H4.
 
-#### L4.T14 `overseer.tools` must not write (P13 Q11) `[ ] todo`
+#### L4.T14 `overseer.tools` must not write (P13 Q11) `[x] done`
 - **Files**: `core/local/settings.ts`, `test/local-settings.test.ts`. **Depends**: — . **Parallel**: any L4 task.
 - **RED**: `tools` containing `bash`, `edit` or `write` → `overseer.tools: <t> can write; default kept`; `["read", "search-ext"]` accepted. **GREEN**: one rule. **Check**: fast runner; `chk task-router`.
 
-#### L4.T15 Third HM assertion (AC-R5) `[ ] todo`
+#### L4.T15 Third HM assertion (AC-R5) `[x] done`
 - **Files**: `modules/task-router.nix` (beside the second assertion), `checks/module-eval/cases/task-router.nix` (`task-router-local-mode-needs-spawn-api`: `actorSubagents.package = actor.overrideAttrs (o: {passthru = (o.passthru or {}) // {spawnPolicyApi = 1;};})`, `failed` with the §2.1 message prefix).
 - **Depends**: L4.T3. **RED**: the case first → FAILS. **GREEN**: `assertion = !cfg.localMode.enable || (actor.passthru.spawnPolicyApi or 0) >= 2`.
 - **Check**: `chk module-eval`; alejandra. **Keep green**: KG-M (P13 positive case). **ACs**: AC-R5 (third).
 
-#### L4.T16 log-contract over the review path `[ ] todo`
+#### L4.T16 log-contract over the review path `[x] done`
 - **Files**: `checks/log-contract/contract.ts`. **Depends**: L4.T11, L4.T13.
 - **RED/plant**: a local harness with `apiExt`, five identical pairs, the fake child submits → `review` and ticket `spawn` lines; `"review"` in the required events; plant (drop `log.review`) → red; remove. **Check**: `chk log-contract`. **Keep green**: KG-L.
 
-#### L4.T17 Real host `pi-install-local` `[ ] todo`
+#### L4.T17 Real host `pi-install-local` `[x] done`
 - **Files**: `checks/pi-package/local.nix` (new; `lib.nix` `installed` with `before` writing `$PI_CODING_AGENT_DIR/task-router/settings.json` = `{"mode":"local"}`, the patched Actor, `probe.ts`), `checks/default.nix`.
 - **Depends**: L4.T12. **RED/plant**: asserts `run.all` lacks `spawnPolicyApi ≥ 2` and `task_verdict` is in `tools`; plant (Actor without the new patch) → FAILS; restore.
 - **Check**: `chk pi-install-local`. **Keep green**: KG-P.
 
-#### L4.T18 Docs and milestone close `[ ] todo`
+#### L4.T18 Docs and milestone close `[x] done`
 - **Files**: `docs/pi-economics.md` (actorSubagents: three patches, `spawn`/`kill`/`childTools`/`cwd`/`quiet`; taskRouter: overseer settings, budget, steer, `review` event, the warning, third assertion; Patched upstreams; Checks: `iface-policy-task-router`, `pi-install-local`), `README.md` l.16.
 - **Depends**: L4.T1–T17. **Check**: `chk leak boundary`; sweep KG-R, KG-L, KG-M, KG-A, KG-P.
 

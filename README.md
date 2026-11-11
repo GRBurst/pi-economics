@@ -13,7 +13,7 @@ Requirements).
 
 | Option | What it does |
 |---|---|
-| `actorSubagents` | pi-actor-subagents with two patches (child prompt, spawn policy); the base for the router and the meter's child accounting |
+| `actorSubagents` | pi-actor-subagents with three patches (child prompt, spawn policy, spawn API); the base for the router and the meter's child accounting |
 | `tokenMeter` | one JSON line per provider request (tokens, cost, quota headers, retries; no prompt text); `meter-report` and `pi-analyse` |
 | `analysisSkill` | an agent skill that runs `pi-analyse` and proposes decisions from the logs |
 | `cacheLifecycle` | elides stale tool results and thinking after the prompt cache expired; cache warming |

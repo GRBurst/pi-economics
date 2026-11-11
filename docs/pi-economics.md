@@ -103,9 +103,14 @@ runs still report and judge, as long as `extensions` defines the name.
 
 ### `actorSubagents` (`modules/actor-subagents.nix`)
 
-pi-actor-subagents (upstream input `pi-actor-subagents`) with two patches
-from `patches/pi-actor-subagents`: child prompt and spawn policy (the
-`globalThis.__subagentsApi_v1` other extensions drive).
+pi-actor-subagents (upstream input `pi-actor-subagents`) with three patches
+from `patches/pi-actor-subagents`: child prompt, spawn policy (the
+`globalThis.__subagentsApi_v1` other extensions drive) and spawn API (local
+mode L4: the API's optional `spawn(args, {by, quiet})` and `kill(names)` for
+the router's own agents, where `quiet` sends no notice to the spawner and
+keeps the child out of the persisted roster; a spawn policy may give a child
+extra tools (`childTools`) and a working directory (`cwd`), and its tool
+guard may answer with a Promise; the API's `version` stays 1).
 
 | Option | Default | Effect |
 |---|---|---|
@@ -295,10 +300,10 @@ out) is read by the package's settings test and by the `module-eval` case
 (Qwen). The settings key `mode` is `"default"` (the default) or `"local"`;
 `localMode.enable` sets it. There is no auto-detection: a Claude main with
 `mode = "local"` runs in local mode too. The settings declare the local
-components `hints`, `overseer`, `worktrees`, `mergeGate` and `plans`, each with
+components `hints`, `worktrees`, `mergeGate` and `plans`, each with
 `enabled = "auto" | "on" | "off"` (default `"auto"`: on in local mode, off in
-default mode), and `force` (below); L1 validates them (a bad value is reported and its
-default kept); `hints` works since L3 (below), the others do nothing yet. The keys, their defaults and
+default mode), the `overseer` that serves them (no switch of its own), and `force` (below); L1 validates them (a bad value is reported and its
+default kept); `hints` works since L3 and the overseer since L4 (below), the others do nothing yet. The keys, their defaults and
 the messages are in `packages/task-router/core/settings.ts` and
 `packages/task-router/core/local/settings.ts`. In local mode:
 
@@ -387,8 +392,8 @@ call that tripped gets one more text block,
 at `turn_end` goes into the next result. The same trip then stays quiet for
 `cooldownCalls` (5) calls, but every detection counts: the `1 + persistTrips`-th
 (third) one without progress carries a fixed escalation instead ("Spawn a
-debug-design card for it; the router will route it to Sonnet or above."), and
-nothing is spawned (the steer overseer, `hints.steer`, arrives with L4).
+debug-design card for it; the router will route it to Sonnet or above."),
+unless the steer overseer (below) takes it.
 Children (local mode only): the router sees a routed child's calls, without
 results, through the spawn policy's `toolGuard`, composed in front of a
 profile's file guard, and checks `identical-call` and `alternation`. The child
@@ -401,7 +406,48 @@ name, `trip`, `stage` `hint`, `steer` or `parent`, optional `count` and
 `sessionId`; no text). The code: `packages/task-router/core/local/tripwires.ts`
 (detectors), `core/local/hints.ts` (texts, cooldown, persistence),
 `core/local/install.ts` (the main session), `core/local/childtrips.ts` and
-`composeGuards` in `core/toolguard.ts` (children).
+`composeGuards` in `core/toolguard.ts` (children). In the main session, calls
+that an extension makes from inside a tool (`ctx.executeTool`, events with `parentToolCallId`)
+are not the model's and are skipped.
+
+**Overseer (milestone L4).** The router spawns its own review agents through
+the actor's spawn API (`spawnPolicyApi` 2): quiet, spawned by `main`, named
+`ovs-<role>-<n>`, with a one-use ticket in the task card instead of a card.
+The spawn policy takes the ticket before anything else: the agent runs on
+`overseer.member` at `overseer.effort` (`opus`, `high`) with the read-only
+`overseer.tools` (`read`, `grep`, `find`, `ls`; `bash`, `edit` or `write` there is
+reported, `overseer.tools: <tool> can write; default kept`) plus one submit
+tool, and a guard refuses every other tool. Ticket spawns are not forced and
+not routed. The agent reports through the submit tool only: a verdict
+(`summary`, `verdict`, `findings` with id, category, target, criterion,
+blocking) checked against its JSON schema and the rules (no code fence, unique
+ids, every target in the diff or plan under review); an invalid one goes back with the
+reasons, at most `resubmits` (2) times. An agent that goes idle without
+submitting is reminded once, then the attempt fails; `timeoutSec` (900) bounds
+an attempt; a failed attempt (timeout, error, invalid) is retried once on
+`fallbackMember` at `fallbackEffort` (`sonnet`, `xhigh`), except a steer
+review. The agent is killed after each attempt; a submitted verdict is kept as a session entry
+(`task-router/review`). Budget (per session branch, session entries
+`task-router/budget`): each spawn on `overseer.member` counts against `budget`
+(15), a steer review also against `steerBudget` (3); with the budget spent a
+review runs on the fallback member and a steer review is skipped. The status
+line adds `opus <n> left` once three or fewer are left. Steer (`hints.steer = "on"`):
+when a trip persists (above), the router spawns a steer review instead of the
+escalation, with the trip and the last 12 calls (tool, target, result; no file
+contents), one at a time, and sends its summary and findings to the main
+session as a steer message (`task-router/steer`); without the spawn API, with
+the steer budget spent or when the review fails, the escalation goes into the
+result as before. In local mode without the spawn API the router warns once at
+`session_start`: "task-router: local mode needs actor-subagents with
+spawnPolicyApi ≥ 2; merges are refused and plans are unavailable". Logs: one
+`review` outcome line per attempt (`taskId` the review id, `role`, `member`,
+`model`, `outcome` `approve`, `revise`, `invalid`, `timeout` or `error`,
+`attempt`, `durationMs`, optional `fallback`, `findings`, `blocking`,
+`inconsistent`, `commit`, `branch`; no verdict text), and the agent's `spawn`
+line carries `ticket` and opens no verdict slot (`packages/token-meter/LOGS.md`).
+The code: `packages/task-router/core/local/overseer.ts` (tickets, the run,
+the prompts), `core/local/schema.ts`, `core/local/verdict.ts`,
+`core/local/steer.ts`.
 
 **Scout gate (Group 6, 2026-10-28).** Haiku at medium scored 0.646 against
 Sonnet high's 0.917 (threshold 0.825, H6.4; two runs per task and arm), so
@@ -418,6 +464,10 @@ Hard dependency: `taskRouter` needs `actorSubagents` with `passthru.spawnPolicyA
 (the router registers through `registerSpawnPolicy`, and its shell swallows the
 absence of the API, so without the patched build it would do nothing); an
 assertion says so (`pi-economics: taskRouter requires actorSubagents …`).
+Local mode needs `spawnPolicyApi >= 2` (the overseer spawns through the API's
+`spawn` and `childTools`): with `localMode.enable` a third assertion says so
+(`pi-economics: taskRouter.localMode requires actorSubagents with
+passthru.spawnPolicyApi >= 2 …`).
 
 With `bench.enable`, the bench's `router` base is defined while `taskRouter`
 is enabled, one `mkDefault` per leaf (a list is a leaf): the keys of
@@ -455,7 +505,8 @@ record. The redesign's Groups 3–7 are closed; Group 6 re-recorded nothing.
 requires `pi-analyse --check` to pass and every report section to have data.
 
 Checks: `task-router`, `typecheck-task-router`, `iface-subagents-task-router`,
-`iface-experiments-task-router`, `router-golden`, `log-contract`.
+`iface-experiments-task-router`, `iface-policy-task-router`, `router-golden`,
+`log-contract`, `pi-install-local`.
 
 ## The pi package
 
@@ -502,7 +553,7 @@ constant in `render/default.nix`; the tag is `v` + version. `render-package` als
   warnings as well; N3 the single-copy guard; N4 the settings file; N5 the sources of the four packages.
 
 Without the actor the package prints the warnings and keeps working; with the patched actor next to it none appears
-(`pi-install-actor`). The package checks load pi 1.4 offline (`pi -p`); they find the loaded extensions by pi's
+(`pi-install-actor`), in local mode too (`pi-install-local`). The package checks load pi 1.4 offline (`pi -p`); they find the loaded extensions by pi's
 `PI_TIMING=1` factory lines, an undocumented output pinned to the locked `pkgs.pi-coding-agent`: a pi that no longer
 prints the block fails them with one message ("pi printed no PI_TIMING block").
 
@@ -510,7 +561,8 @@ prints the block fails them with one message ("pi printed no PI_TIMING block").
 
 A component built from an upstream repository takes it as a `flake = false`
 input. Its patches live in `patches/<input>/` under the file names of the author's system configuration, so
-the derivation is that configuration's, bar two one-line differences (see "Resync"); `homeModules.default` hands the input to the
+the derivation is that configuration's, bar two one-line differences (see "Resync") and the actor's third
+patch (`pi-actor-subagents-spawn-api.patch`, local mode L4), which was written in this repository; `homeModules.default` hands the input to the
 component as its internal option `src`, and the registry entry's `checkPath`
 points into `src`.
 
@@ -539,9 +591,10 @@ points into `src`.
 | `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's two `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
 | `retry` | the patched pi-retry's vitest suite (300 tests) on the shared npm lock, and the greps that pin the free-cap patch and the inline print/json route |
 | `typecheck-retry` | `tsc --strict` over `retry.ts` and `src/`; the tests stay out (one upstream test and the free-cap patch's own test do not type-check; vitest runs them) |
-| `task-router` | the router's own tests (`node --test`, 442), run when it builds; includes the redesign's golden grid against its frozen oracle, under the today fixture and under the defaults (the oracle with the default deltas) |
+| `task-router` | the router's own tests (`node --test`, 621), run when it builds; includes the redesign's golden grid against its frozen oracle, under the today fixture and under the defaults (the oracle with the default deltas) |
 | `typecheck-task-router` | `tsc --strict` over `index.ts`, `core/` and `test/` |
 | `iface-subagents-task-router`, `iface-experiments-task-router` | the router's copies of `__subagentsApi_v1` and `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`) are satisfied by the providers' types |
+| `iface-policy-task-router` | the router's copy of the spawn policy's result (`PolicyResult` in `core/api.ts`: tool guard, `childTools`, `cwd`) is satisfied by the actor's type |
 | `router-golden` | every decision of the router on the golden grid and the selection, equal to the recorded ones; P2 (the invariance) over the empty-slot `select` lines |
 | `log-contract` | every log writer through `pi-analyse --check` and a full report |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths (`/home/<name>`), `git+ssh` URLs, private (RFC 1918) or Tailscale addresses, LAN host URLs (`http://<one-label host>`, not `localhost`) or names under `.local`, `.lan`, `.home.arpa`, `.ts.net` in tracked files (a worktree's `.git` file is skipped) |
@@ -552,6 +605,7 @@ points into `src`.
 | `pi-install-smoke` | `pi install ./pkg` offline: settings entry, `pi list`, every manifest extension loads, the router warns once, experiments stays inert (AC1) |
 | `pi-git-route` | the npm step of a git install (`--omit=dev --legacy-peer-deps`) is a no-op offline (AC10) |
 | `pi-install-actor` | the package next to the patched actor: no warning, `task_verdict` registered and active (AC5) |
+| `pi-install-local` | the same with the router's settings `{"mode": "local"}`: the router finds the spawn API (no warning), `task_verdict` registered; a control run without the actor prints the spawn-API warning (local mode L4) |
 | `pi-install-duplicate` | the package next to the Nix links: one `loaded twice` per component, exactly one bound copy (the actor warnings of task-router and cache-lifecycle appear once), no tool conflict, pi's skill loader reports the collision (AC7) |
 | `pi-install-scope-replaced`, `pi-install-scope-both` | the package in two scopes of a trusted project (user `pi install` plus `.pi/settings.json`): where the project entry replaces the user's package, no `loaded twice` and one bound copy; where a second copy joins it, one `loaded twice` per component and one bound copy (AC7, review M1) |
 | `pi-install-subset` | the README's filter loads only the listed extensions (AC4) |
