@@ -80,6 +80,11 @@ in {
           assertion = !cfg.localMode.enable || (cfg.settings.mode or "local") == "local";
           message = "pi-economics: taskRouter.localMode.enable needs taskRouter.settings.mode = \"local\" (found ${builtins.toJSON (cfg.settings.mode or null)})";
         }
+        # (local mode L4.T15, design §3.0.4) The overseer spawns through the spawn-api patch's api.spawn.
+        {
+          assertion = !cfg.localMode.enable || (pe.actorSubagents.package.passthru.spawnPolicyApi or 0) >= 2;
+          message = "pi-economics: taskRouter.localMode requires actorSubagents with passthru.spawnPolicyApi >= 2 (the overseer spawns review agents through the API's spawn and childTools)";
+        }
       ];
       # (local mode L1.T7, design §2.1) mkDefault: a user's settings.mode wins (and fails the assertion above); the file is
       # written even for settings = {}.

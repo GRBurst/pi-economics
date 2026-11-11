@@ -174,4 +174,15 @@ in {
       }
       withActor))
     [''pi-economics: taskRouter.localMode.enable needs taskRouter.settings.mode = "local" (found "default")''];
+  # (local mode L4.T15, design §3.0.4, AC-R5) The third assertion: the overseer
+  # needs the spawn-api patch (spawnPolicyApi 2); an Actor at 1 fails it.
+  task-router-local-mode-needs-spawn-api =
+    eq "assertions"
+    (failed "pi-economics: taskRouter.localMode" (eval ".pi/agent" {localMode.enable = true;} {
+      actorSubagents = {
+        enable = true;
+        package = self.packages.x86_64-linux.actor-subagents.overrideAttrs (o: {passthru = (o.passthru or {}) // {spawnPolicyApi = 1;};});
+      };
+    }))
+    ["pi-economics: taskRouter.localMode requires actorSubagents with passthru.spawnPolicyApi >= 2 (the overseer spawns review agents through the API's spawn and childTools)"];
 }
