@@ -1107,6 +1107,11 @@ message). Open notes, for L6 or later:
 - T17: the D40 problem is reported only for `plans.enabled = "on"`; `"auto"` without worktrees and mergeGate stays
   inactive silently (`activeSet`). The overseer's attempt waits at its deadline for a submit check that is still running
   (plan red runs take seconds), so a timeout no longer drops a submission under check (L4 code, one test).
+- Rebase onto the L6 review fixes (main ada8c31): `advanceMain` runs its ref move, push and record in `exclusive` (F3),
+  plan commits too (`PlanPorts.exclusive`); every command the router runs from a plan goes through the git classifier first
+  (F7: author and amendment red runs, as in the unit's future worktree, then `broken-check`; the evidence command,
+  `evidence`; the merge's plan and regression checks, `check`); Esc stops the plan red runs and the evidence command (F11);
+  an amendment's rebind uses `update` (F8: the active branch stays); a plan overseer that cannot start names why (caps).
 
 ### L8 Close-out
 
