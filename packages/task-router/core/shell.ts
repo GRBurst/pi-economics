@@ -23,6 +23,7 @@ import { createOutcomeLog } from "./log.ts";
 import { cardSection, localSection } from "./prompt.ts";
 import { isLocal, statusText } from "./local/mode.ts";
 import { installLocal } from "./local/install.ts";
+import { createChildTrips } from "./local/childtrips.ts";
 import type { LocalDeps } from "./local/install.ts";
 import type { Trip } from "./local/tripwires.ts";
 import { enabled } from "./members.ts";
@@ -92,6 +93,8 @@ export function install(pi: PiLike, deps: Deps) {
 
   const nowMs = () => now().getTime();
   const api = deps.api ?? (() => (globalThis as { __subagentsApi_v1?: SubagentsApiV1 }).__subagentsApi_v1);
+  // A routed child's tripwires (design §3.1.3): the policy composes their guard in local mode with hints on.
+  const childTrips = createChildTrips({ settings, api, log });
   const children = new Map<string, Child>();
   let skills: Array<{ name: string; filePath: string; baseDir: string }> = [];
   const skillPort: SkillPort = { find: (n) => skills.find((x) => x.name === n), read: (path) => readFileSync(path, "utf8") };
@@ -104,7 +107,7 @@ export function install(pi: PiLike, deps: Deps) {
     fs: deps.fs ?? { exists: existsSync, size: (p) => statSync(p).size, isDir: (p) => existsSync(p) && statSync(p).isDirectory() },
     sleep: deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))),
     probe: createProbes({ fetch: deps.fetch ?? (globalThis.fetch as unknown as FetchLike), now: nowMs }), counter, blocks: new Map(),
-    force: force.port,
+    force: force.port, childGuard: (child, parent) => childTrips.guard(child, parent),
   };
   const policy = createPolicy(pd);
   const failover = createFailover({ ...pd, log });
@@ -133,7 +136,7 @@ export function install(pi: PiLike, deps: Deps) {
     failover(e);
     gate(e);
     guards(e);
-    if (e.type === "kill") { log.killed(e.name); children.delete(e.name); }
+    if (e.type === "kill") { log.killed(e.name); children.delete(e.name); childTrips.forget(e.name); }
   };
   // The API may appear after this extension loads (load order), so connect at install and again at session_start.
   // Nothing is printed here: install runs at session_start, with the TUI up, so a console write would land in it.

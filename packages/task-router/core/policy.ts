@@ -9,7 +9,7 @@ import type { Named } from "./members.ts";
 import type { MemberCounter } from "./counter.ts";
 import type { Health } from "./health.ts";
 import { importanceOf } from "./importance.ts";
-import { isLocal } from "./local/mode.ts";
+import { componentOn, isLocal } from "./local/mode.ts";
 import { planSpawn } from "./pipeline.ts";
 import { profileFor, skillBlocks, skillNames } from "./profile.ts";
 import { pickMember } from "./select.ts";
@@ -17,7 +17,8 @@ import { capToTable } from "./table.ts";
 import type { MemberState } from "./select.ts";
 import { cardRejection } from "./prompt.ts";
 import type { SkillPort } from "./profile.ts";
-import { toolsFor } from "./toolguard.ts";
+import { composeGuards, toolsFor } from "./toolguard.ts";
+import type { ToolGuard } from "./toolguard.ts";
 import { resolveCwd, verifyT0 } from "./verify.ts";
 import type { FsPort } from "./verify.ts";
 import type { Forced } from "./outcome.ts";
@@ -49,6 +50,8 @@ export type PolicyDeps = {
   rng: () => number; home: string;
   /** The force override (design §3.6; plan D7): its owner is the shell; absent = never forced. */
   force?: ForcePort;
+  /** A routed child's tripwire guard (design §3.1.3, plan S13): local mode with hints on; absent = none. */
+  childGuard?: (child: string, parent: string) => ToolGuard;
 };
 
 const POLL_MS = 2000;
@@ -136,9 +139,15 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
       parent: caller.name, parentSession: caller.sessionId, card, plan, cwd, importance,
       ...(v.unresolved ? { unresolved: true as const } : {}), ...(sp.value.esc ? { esc: sp.value.esc } : {}),
     };
+    // Local mode (design §3.1.3, plan D19): the child's tripwires observe every call first and never block; otherwise
+    // toolsFor's result stays as it is.
+    const guarded = (t: ReturnType<typeof toolsFor>) => {
+      const trips = isLocal(s) && componentOn(s, "hints") ? d.childGuard?.(args.name, caller.name) : undefined;
+      return trips ? { ...t, toolGuard: composeGuards(trips, t.toolGuard) } : t;
+    };
     const result = (model: string, thinkingLevel: ThinkingLevel) => ({
       model, thinkingLevel, briefAppend: briefAppend(card, plan, v.t0.specified, prof.value, blocks.value, s.delegation.nudge !== "off"),
-      ...toolsFor(prof.value, card, cwd, caller.cwd), meta: { taskId: args.name, importance },
+      ...guarded(toolsFor(prof.value, card, cwd, caller.cwd)), meta: { taskId: args.name, importance },
     });
     if (f) {
       // Plan D9, D11: the forced effort, else the plan's effort literally. A member waits for its slot alone (pinned) and never

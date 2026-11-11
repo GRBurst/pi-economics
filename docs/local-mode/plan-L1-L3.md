@@ -210,7 +210,7 @@ failure, not a load error.
 | L2.T3 contract `force` taskId | rule `str` for all events | `test/contract.test.ts` › "force lines" | [x] |
 | L2.T3 analyse filter | revert to `e?.event !== "spawn"` | `test/analyse.test.ts` › "session-level lines are no data-quality defect" | [x] |
 | L2.T6 log-contract `force` | comment out `log.force(...)` in `used()` and `set` | `log-contract` "outcomes: no force event" | [x] |
-| L3.T8 trip guard never blocks | make the trip guard return its hint text | "AC-H6 no child call is blocked" | [ ] |
+| L3.T8 trip guard never blocks | make the trip guard return its hint text | "AC-H6 no child call is blocked" | [x] |
 | L3.T9 log-contract `hint` | drop the `log.hint` call in `installLocal` | `log-contract` "outcomes: no hint event" | [ ] |
 
 All other new tests are red by construction (the feature is absent); record the red in the task's status line.
@@ -850,7 +850,7 @@ names, comments citing `design §…`/`LD…`), then run the named nix checks. N
   `{}` → the L1.T1 inventory is unchanged (no extra hooks); `{hints: {enabled: "on"}}` → hooks present (OQ11).
 - **GREEN**: S12. **Check**: fast runner; `chk task-router typecheck-task-router`. **Keep green**: KG-R, L1.T1 inventory, `test/fresh.test.ts`. **ACs**: AC-H2, AC-H4 (L3), AC-H5.
 
-#### L3.T8 Child tripwires through the composed guard (AC-H6) `[ ] todo`
+#### L3.T8 Child tripwires through the composed guard (AC-H6) `[x] done`
 - **Files**: `core/local/childtrips.ts` (new, S13), `core/policy.ts` (compose when `isLocal(s) && componentOn(s, "hints")`), `core/shell.ts` (`pd.childGuard`, `forget` on `kill`), `test/local-child-hints.test.ts` (new).
 - **Depends**: L3.T6, L3.T7 (same `shell.ts`).
 - **RED**: "AC-H6": local mode, a routed child `c1` (profile `all`, so today no guard); call its `toolGuard("read", {path: "a"})`

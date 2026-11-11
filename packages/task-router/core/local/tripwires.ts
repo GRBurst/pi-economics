@@ -122,3 +122,13 @@ export const contextStall = (stall: number, progress: boolean, percent: number |
   if (typeof percent !== "number" || percent < h.contextPercent) return { stall, fire: false };
   return stall + 1 >= h.stallTurns ? { stall: 0, fire: true } : { stall: stall + 1, fire: false };
 };
+/** A child's trips (design §3.1.3, plan S10): its calls alone (no results, no hashes, `turn: 0`); a write with another key than
+ *  the last call's counts as a change. */
+export function childTrips(ring: CallRecord[], h: HintSettings): Trip[] {
+  if (!ring.length) return [];
+  const last = ring[ring.length - 1], ch: Changed = (x) => x.isWrite && x.key !== last.key;
+  const out: Trip[] = [];
+  if (identicalCall(ring, h, ch)) out.push("identical-call");
+  if (alternation(ring, h, ch)) out.push("alternation");
+  return out;
+}
