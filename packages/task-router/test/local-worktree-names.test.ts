@@ -61,7 +61,7 @@ test("worktreeDir is injective over slugs and plan units (without a `--` inside 
   assert.ok(seen.size > 300);
 });
 
-test("known limit: with a `--` in a part two branches share a directory (git then refuses the second `worktree add`)", () => {
+test("with a `--` in a part two branches share a directory; startBranch therefore refuses such a slug (local-start-branch)", () => {
   assert.equal(worktreeDir(ROOT, "/r/x", branchName("lm/", { slug: "p--m1" })), worktreeDir(ROOT, "/r/x", branchName("lm/", { plan: "p", id: "m1" })));
 });
 

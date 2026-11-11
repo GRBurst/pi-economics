@@ -480,7 +480,8 @@ the prompts), `core/local/schema.ts`, `core/local/verdict.ts`,
 
 **Worktrees (milestone L5).** With `worktrees` on (local mode, or `worktrees.enabled
 = "on"`) the main session makes its code changes on branches in git worktrees.
-The tool `start_branch` takes `slug` (`[a-z0-9-]{1,40}`), `goal` and `check` (each
+The tool `start_branch` takes `slug` (`[a-z0-9-]{1,40}`, without `--`: the worktree
+directory joins a plan unit's parts with it), `goal` and `check` (each
 at most 300 characters, both required), optionally `repo` (an absolute path in the
 repository; default: the session's cwd) and `plan` (refused until plans exist:
 `plans are not active`; give a slug or a plan, not both). It validates everything

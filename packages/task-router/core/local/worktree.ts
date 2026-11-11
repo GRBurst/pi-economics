@@ -12,7 +12,8 @@ export const branchName = (prefix: string, u: { slug: string } | { plan: string;
   "slug" in u ? prefix + u.slug : `${prefix}${u.plan}/${u.id}`;
 /** The worktree of `branch` (design §3.3.1, plan D36): `root` with `{repo}` replaced by the repository's directory name, a
  *  relative root resolved against the repository root, then the branch name with `/` → `--`. Two branches share a directory
- *  only when a name part holds `--` (`lm/p--m` and `lm/p/m`); git refuses the second `worktree add`. */
+ *  only when a name part holds `--` (`lm/p--m` and `lm/p/m`), so `startBranch` refuses such a slug (L5 follow-up); a plan
+ *  unit's parts (L7) also need no `-` at either end (`a-`/`b` and `a`/`-b`). */
 export const worktreeDir = (root: string, repo: string, branch: string): string =>
   join(resolve(repo, root.replaceAll("{repo}", basename(repo))), branch.replaceAll("/", "--"));
 /** `p` is `dir` or below it (compared as paths, not as strings: `/r/xy` is not inside `/r/x`). */
@@ -54,6 +55,7 @@ export async function startBranch(d: StartDeps, input: unknown, cwd: string): Pr
   if (i.slug === undefined && i.plan === undefined) return fail("a slug or a plan is required");
   if (i.plan !== undefined) return fail("plans are not active");
   if (typeof i.slug !== "string" || !SLUG.test(i.slug)) return fail("slug must match ^[a-z0-9-]{1,40}$");
+  if (i.slug.includes("--")) return fail('slug must not contain "--" (the worktree directory joins plan units with it)');
   for (const k of ["goal", "check"] as const) {
     if (typeof i[k] !== "string" || i[k] === "") return fail(`${k} is required`);
     if ((i[k] as string).length > MAX_TEXT) return fail(`${k} is longer than ${MAX_TEXT} characters`);

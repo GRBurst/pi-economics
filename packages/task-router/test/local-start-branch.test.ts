@@ -72,6 +72,8 @@ const FAILURES: [string, unknown, RegExp][] = [
   ["a slug outside the pattern", { ...X, slug: "X_y" }, /slug must match \^\[a-z0-9-\]\{1,40\}\$/],
   ["a slug that is no string", { ...X, slug: 7 }, /slug must match/],
   ["a 41 character slug", { ...X, slug: "a".repeat(41) }, /slug must match/],
+  // L5 follow-up: `lm/p--m1` and the plan unit `lm/p/m1` would share the directory `lm--p--m1`.
+  ["a slug with `--` (its directory could be a plan unit's)", { ...X, slug: "p--m1" }, /slug must not contain "--"/],
   ["no goal", { slug: "x", check: "true" }, /goal is required/],
   ["an empty goal", { ...X, goal: "" }, /goal is required/],
   ["a goal over 300 characters", { ...X, goal: "g".repeat(301) }, /goal is longer than 300 characters/],
