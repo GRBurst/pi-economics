@@ -113,3 +113,43 @@ test("reviewInput: the S27 text", () => {
   ].join("\n"));
   assert.ok(reviewInput({ checks: [], red: "skipped", risky: [], stat: [], base: "b", commit: "c", diff: "", maxLines: 150 }).startsWith("Goal: none\nSummary from the author: none\nCheck: none\n"));
 });
+
+// ── L6.T12 (design §3.2.2 steps 1 and 5, §3.0.4): a review that cannot run fails closed; a spent budget falls back ──
+async function committed(o: Parameters<typeof reviewRig>[0] = {}) {
+  const m = reviewRig(o);
+  const rec = await m.start("x");
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  return { ...m, rec, before: m.mainSha() };
+}
+
+test("AC-O5: both attempts fail to spawn → error review-unavailable, main unchanged, nothing approved", async () => {
+  const m = await committed();
+  m.h.a.control.spawnFail = "agent cap";
+  const res = await m.merge();
+  assert.deepEqual([res.status, res.reason, res.detail], ["error", "review-unavailable", "error: review unavailable"], JSON.stringify(res));
+  assert.equal(m.h.a.apiSpawns.length, 2, "the first attempt and its fallback");
+  assert.equal(m.mainSha(), m.before);
+  assert.equal(m.h.f.entries.filter((e) => e.type === APPROVAL_TYPE).length, 0);
+  assert.equal(m.h.router.branches.get(m.r.dir, "lm/x")!.rejections, 0, "no rejection either");
+});
+
+test("AC-O4: with the Opus budget spent the merge review runs on fallbackMember at fallbackEffort, logged fallback budget", async () => {
+  const m = await committed();
+  m.h.router.budget.opusUsed = m.h.router.settings.overseer.budget;
+  const res = await m.merge();
+  assert.equal(res.status, "merged", JSON.stringify(res));
+  assert.equal(m.h.a.apiSpawns.length, 1);
+  const p = m.h.a.apiSpawns[0]!.policy as Ok;
+  assert.deepEqual([p.model, p.thinkingLevel], [m.h.router.settings.models.sonnet!.model, "xhigh"]);
+  const lines = m.h.lines().filter((l) => l.event === "review");
+  assert.deepEqual(lines.map((l) => [l.role, l.member, l.fallback, l.outcome]), [["merge", "sonnet", "budget", "approve"]]);
+  assert.equal(m.h.router.budget.opusUsed, m.h.router.settings.overseer.budget, "a fallback is not charged");
+});
+
+test("no spawn API (design §3.0.4): review-unavailable without a spawn, main unchanged", async () => {
+  const m = await committed({ apiExt: false });
+  const res = await m.merge();
+  assert.deepEqual([res.status, res.reason, res.detail], ["error", "review-unavailable", "error: review unavailable"], JSON.stringify(res));
+  assert.equal(m.h.a.apiSpawns.length, 0);
+  assert.equal(m.mainSha(), m.before);
+});

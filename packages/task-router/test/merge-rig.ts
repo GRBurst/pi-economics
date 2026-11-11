@@ -75,10 +75,11 @@ export type MergeRig = ReturnType<typeof mergeRig>;
  *  session's cwd = the main checkout. A child submits the next scripted verdict (default: approve) at its first poll. `repo`
  *  and `entries`: a second session on the same repository, rebuilt from the first one's entries. */
 export function reviewRig(o: { settings?: Record<string, unknown>; repo?: TempRepo; entries?: Array<{ type: string; data: unknown }>;
-  /** More of the session's ctx (a model registry for a settings force). */ ctx?: Record<string, unknown> } = {}) {
+  /** More of the session's ctx (a model registry for a settings force). */ ctx?: Record<string, unknown>;
+  /** false: the actor without the spawn API (design §3.0.4). */ apiExt?: boolean } = {}) {
   const r = o.repo ?? tempRepo();
   const git = createGit(gitRunner("git", r.env));
-  const h = harness({ settings: { mode: "local", ...o.settings } as never, apiExt: true, extra: { git } });
+  const h = harness({ settings: { mode: "local", ...o.settings } as never, apiExt: o.apiExt ?? true, extra: { git } });
   h.f.entries.push(...(o.entries ?? []));
   const ctx = { ...o.ctx, cwd: r.dir, sessionManager: { getSessionId: () => "s-main", getBranch: () => h.f.entries.map((e) => ({ type: "custom", customType: e.type, data: e.data })) } };
   h.f.fire("session_start", {}, ctx);
