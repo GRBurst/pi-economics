@@ -967,7 +967,37 @@ message). Open notes, for L6 or later:
   every bash result on git). T14 adds `gatebypassEvent`/`log.gatebypass`, T15 the `merge` builder.
 - T15/T16: one `merge` line per call includes a `no-worktree` refusal before any branch is known: `taskId: ""`, which the
   contract accepts on `merge` as on `force`. The `REASONS` equality is in `checks/log-contract/contract.ts`, next to ROLES.
-- Open (L4 note): ticket spawns, the fixer included, still bypass member slots and `dailyCap`; not decided in L6.
+- Review fixes (L6 merge-gate review, branch `local-mode/L6-fix`; one commit each, every new test seen red):
+  - F1: `gitcmd.ts` keeps the words after `--` as positionals (except `checkout`/`restore`/`reset` paths); push and fetch
+    destinations match a main in every spelling (`main`, `heads/main`, `refs/heads/main`, `+main`, `:main`, `X:heads/main`,
+    `*`); a computed fetch/pull refspec is unclassified. The F1 forms × the five contexts are in the AC-M1 deny corpus.
+  - F6: `worktree add -b|-B <main>`, `symbolic-ref` of a main, aliases and unknown subcommands (`UNKNOWN_SUB`), `-c
+    remote.*.fetch|push|mirror` and config writes of them fail closed. A `git` token the parser cannot attribute to an
+    analysed git call (`function f {…}`, `coproc`, `watch`, `parallel`, `find -exec`, `nix develop -c`, a
+    `sh -c`/`eval` string it cannot read, heredoc bodies, a computed command name) makes the command unclassified (LD8:
+    only commands that contain git); wrappers it knows (`env`, `sudo`, `xargs`, `nohup`, …) and readable `-c`/`eval` strings are analysed. The allow corpus is unchanged and green.
+  - F2: `session_start` (merge gate on) and `start_branch` read the main refs once, so a move in the first bash call is a bypass.
+  - F3: step 9 (ref move, push, `task-router/main-ref`) runs on the bypass chain (`exclusive`): a concurrent check sees
+    the old tip or the recorded new one, never the gate's own move as a bypass.
+  - F4/F5: a fixer named by a branch record but not spawned by this process (a restored one) is killed on sight (at
+    `session_start` and on its first event), with a warning; a branch in state `fixer` whose fixer is gone or not ours
+    is `active` again (at start, and in request_merge). A fixer report or death before its record (spawn race) is kept
+    and applied. No actor patch change: restored routed children (spawn_subagent) still run unguarded (open, below).
+  - F7: the branch `check` passes the git classifier (cwd the worktree) in `start_branch` and before step 5 runs it;
+    a check that could move main is refused (`check`, "was not run"). `extraChecks` are settings, not vetted.
+  - F8: `branches.update` keeps a record's place; a rejected record-less branch gets a `handmade` record that is never
+    active and never cleaned up; rejections and fixer reports do not change the active branch; start_branch adopts it.
+  - F9: the review's diff budget is 8 × (`maxDiffLines` + `maxDiffFiles`) lines (never below what step 3 lets through);
+    a longer diff, or none while the numstat has changes, fails the review closed. The review input header shows the budget.
+  - F10: the `merge` line's `taskId` is the branch only when it is a branch name (`git check-ref-format --branch` rules),
+    else `""`.
+  - F11: Esc kills a running check or red run (`Runner` takes the signal; exit 130) and answers `aborted`;
+    `mergeGate.fixerRounds` may be 0 (no fixer: every rejection answers `revise`).
+  - Caps (the L4 note, decided by the orchestrator): ticket spawns count toward `dailyCap` and hold member slots; a
+    capped or full member refuses the spawn; with no member left the review fails closed and the merge is refused
+    (see the L4 note above). A failed review's detail now names the spawn refusal (`error: review unavailable: <why>`).
+- Open: the actor restores routed children (spawn_subagent) without their policy (no toolGuard, no cwd); only the fixer
+  is handled (killed). Re-running the spawn policy on restore needs an actor change beyond the spawn-API patch.
 
 ### L7 Plans
 
