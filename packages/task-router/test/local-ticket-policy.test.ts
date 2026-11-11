@@ -164,3 +164,32 @@ test("slots: routed spawns count the ticket children on a member (memberState)",
   tickets.forget("ovs-merge-1");
   assert.equal(memberState(d, m, new Map(), 1000).free, true, "another member's ticket child");
 });
+
+// ── L8 (open from the L6 fixes): ticket spawns respect health and provider blocks like routed spawns. A member whose server is
+// down or busy, or that a provider limit blocked, is unavailable: its ticket spawn is refused, so the overseer's fallback
+// attempt or the fail-closed path applies. ──
+test("health: a ticket spawn on a member whose server is down is refused; a busy server has no free slot; an up one runs", async () => {
+  const h = harness({ settings: { mode: "local", models: { opus: { health: "http://localhost:11546" } } } as never, apiExt: true });
+  h.health.health = 0;
+  const down = await apiSpawn(h, "ovs-merge-1", ticketOf(h));
+  assert.deepEqual(down, { ok: false, reason: "task-router: opus is down (its health check fails)" });
+  assert.equal(h.router.tickets.owner("ovs-merge-1"), undefined, "a refused ticket child is no owner");
+  h.health.health = 200; h.health.slots = 503; h.clock.t += 31_000; // past the probe's cache
+  const busy = await apiSpawn(h, "ovs-merge-2", ticketOf(h));
+  assert.deepEqual(busy, { ok: false, reason: "task-router: opus has no free slot (its server is busy)" });
+  h.health.slots = 200; h.clock.t += 31_000;
+  assert.equal((await apiSpawn(h, "ovs-merge-3", ticketOf(h))).ok, true);
+});
+
+test("blocks: a ticket spawn on a member a provider limit blocked is refused until the block ends", async () => {
+  const h = harness({ base: "today", settings: { mode: "local" } as never, apiExt: true });
+  accepted(await h.a.spawn({ name: "q1", task: card() })); // routed to the free cloud member
+  h.a.emit({ type: "error", name: "q1", reason: "429: free-models-per-day", ts: 1 });
+  await new Promise((r) => setImmediate(r));
+  const cloud = { member: "qwen-cloud", model: h.router.settings.models["qwen-cloud"]!.model };
+  const until = new Date(Date.UTC(2026, 9, 3)).toISOString(); // the harness clock's next midnight (UTC)
+  const r = await apiSpawn(h, "ovs-merge-1", ticketOf(h, cloud));
+  assert.deepEqual(r, { ok: false, reason: `task-router: qwen-cloud is blocked until ${until}` });
+  h.clock.t = Date.UTC(2026, 9, 3) + 1;
+  assert.equal((await apiSpawn(h, "ovs-merge-2", ticketOf(h, cloud))).ok, true);
+});

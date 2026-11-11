@@ -85,12 +85,18 @@ function load(d: PolicyDeps, member: string, listed: Map<string, string>, now: n
     (listed.get(n) === "running" || (t.takenAt ?? -Infinity) + PENDING_MS > now)).length;
   return routed + tickets;
 }
-/** Why the ticket child `name` may not start on its member (L4 note, decided in L6): the member's dailyCap is reached or its
- *  slots are taken. Health is not probed: the router's own reviews and fixer fail closed on a spawn that fails instead. */
-function ticketRoom(d: PolicyDeps, member: string, name: string): string | undefined {
+/** Why the ticket child `name` may not start on its member, as `memberState` judges a routed one but at once (no queue): a
+ *  provider limit blocks the member (L8), its dailyCap is reached (L4 note, decided in L6), its server is down or busy (its
+ *  `health`, L8) or its slots are taken. A refused ticket spawn takes the overseer's fallback or fails closed. */
+async function ticketRoom(d: PolicyDeps, member: string, name: string): Promise<string | undefined> {
   const m = d.settings.models[member];
   if (!m) return undefined;
+  const until = d.blocks.get(member) ?? 0;
+  if (until > d.now()) return `task-router: ${member} is blocked until ${new Date(until).toISOString()}`;
   if (m.dailyCap !== undefined && d.counter.today(member) >= m.dailyCap) return `task-router: ${member} reached its dailyCap (${m.dailyCap}) today`;
+  const h = m.health ? await d.probe(m.health) : undefined;
+  if (h && !h.up) return `task-router: ${member} is down (its health check fails)`;
+  if (h?.busy) return `task-router: ${member} has no free slot (its server is busy)`;
   if (m.slots !== undefined) {
     const now = d.now(), listed = new Map((d.api()?.list() ?? []).map((a) => [a.name, a.state]));
     if (load(d, member, listed, now, name) >= m.slots) return `task-router: ${member} has no free slot (${m.slots})`;
@@ -144,7 +150,7 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     // D25 (design §3.2.2 step 3): the router's own spawn first, whatever routing and a force say; an unknown ticket is no card field.
     const t = d.tickets?.take((args.task as { ticket?: unknown } | undefined)?.ticket, args.name, caller.sessionId, d.now());
     if (t) {
-      const why = t.forced ? undefined : ticketRoom(d, t.member, args.name);
+      const why = t.forced ? undefined : await ticketRoom(d, t.member, args.name);
       if (why !== undefined) { d.tickets!.forget(args.name); return { reject: why }; }
       return ticketPolicy(t);
     }

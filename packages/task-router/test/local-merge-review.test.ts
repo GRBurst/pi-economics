@@ -274,3 +274,30 @@ test("caps: the fixer member at its dailyCap: no fixer starts; revise says why",
   assert.match(r.detail, /the fixer could not start: .*sonnet reached its dailyCap \(1\)/);
   assert.equal(m.h.router.branches.get(m.r.dir, "lm/x")!.state, "active");
 });
+
+// ── L8 (open from the L6 fixes): health and provider blocks apply to ticket spawns too; a down member is unavailable. ──
+test("health: the Opus member down: the review's first attempt does not start, the fallback reviews", async () => {
+  const m = reviewRig({ settings: { models: { opus: { health: "http://localhost:11546" } }, mergeGate: { redRun: false } } });
+  m.h.health.health = 0; // only opus has a health URL
+  const rec = await m.start("x");
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  const r = await m.merge();
+  assert.equal(r.status, "merged", JSON.stringify(r));
+  assert.deepEqual(m.h.a.apiSpawns.map((s) => s.result.ok), [false, true]);
+  assert.equal((m.h.a.apiSpawns[1]!.policy as Ok).model, m.h.router.settings.models.sonnet!.model);
+});
+
+test("health: the overseer member and its fallback down: the review fails closed naming why; main unchanged", async () => {
+  const url = "http://localhost:11546";
+  const m = reviewRig({ settings: { models: { opus: { health: url }, sonnet: { health: url } }, mergeGate: { redRun: false } } });
+  m.h.health.health = 0;
+  const rec = await m.start("x");
+  m.r.commit("x.ts", "x\n", "x", rec.worktree);
+  const before = m.mainSha();
+  const r = await m.merge();
+  assert.deepEqual([r.status, r.reason], ["error", "review-unavailable"], JSON.stringify(r));
+  assert.match(r.detail, /opus is down \(its health check fails\)/);
+  assert.match(r.detail, /sonnet is down \(its health check fails\)/);
+  assert.equal(m.h.a.agents.length, 0, "no overseer ran");
+  assert.equal(m.mainSha(), before);
+});
