@@ -171,10 +171,10 @@ const checkFailing = (r: CallRecord[], h: HintSettings, checks: readonly string[
 /** After a write: the worktree's diff against its base holds more than `splitLines` changed lines (added + deleted) or more
  *  than `splitFiles` files (a binary or empty file counts as a file). The caller reads the diff (it needs git); this is the rule. */
 /** Spot-check F6: the size the active branch may grow to, the budget its merge enforces: a plan unit's `planBudget` (a milestone
- *  branch's unit id is the milestone's, `M1`; a task's is `M1.T1`), else the merge gate's. In the keys `overSize` and the hint read. */
+ *  branch's unit id is the milestone's, `M1`; a task's is `M1.T1`). A branch without a plan keeps a task's budget: the early
+ *  split nudge (small increments, design §3.3), below its merge gate. In the keys `overSize` and the hint read. */
 export const sizeBudget = (s: RouterSettings, b: { plan?: { id: string } }): Pick<RouterSettings["plans"], "splitLines" | "splitFiles"> => {
-  const x = b.plan === undefined ? { lines: s.mergeGate.maxDiffLines, files: s.mergeGate.maxDiffFiles }
-    : planBudget(s, /^M\d+$/.test(b.plan.id) ? "milestone" : "task");
+  const x = planBudget(s, b.plan !== undefined && /^M\d+$/.test(b.plan.id) ? "milestone" : "task");
   return { splitLines: x.lines, splitFiles: x.files };
 };
 export const overSize = (stat: Stat, p: Pick<RouterSettings["plans"], "splitLines" | "splitFiles">): boolean =>

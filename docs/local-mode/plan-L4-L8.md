@@ -1172,8 +1172,9 @@ message). Open notes, for L6 or later:
   order the actor has (its record not listed yet): the guard is `policyOn()` (one policy), documented. F5 at `session_start`
   with reason `reload` the listed agents (pending records too) are added to `placed`, so a spawn in flight across the reload
   is not killed as restored. F6 the `over-size` trip and its hint use the branch's merge budget (`sizeBudget`, `tripwires.ts`:
-  task `planBudget`, milestone `planBudget`, a branch without a plan the gate's `maxDiffLines`/`maxDiffFiles`; the hint
-  engine's `detected` takes it); the trip now fires at 150 lines/6 files for a branch without a plan. F7 validation refuses
+  task `planBudget`, milestone `planBudget`, a branch without a plan the task `planBudget`; the hint
+  engine's `detected` takes it). Orchestrator amendment: a branch without a plan keeps the early split nudge at 100
+  lines/3 files (small increments), not the gate's 150/6. F7 validation refuses
   `files`/`create` under `plans.dir`. F8 test only. F9 `forceRejection` names the settings force under a command force
   (`ForcePort.underneath`); the `down` cause is tested. Not fixed: ticket children's free-cap errors set no `blocks`
   (pre-existing, `failover.ts` watches `d.children`); a transient git error ends a `plan_request` without a resubmit.

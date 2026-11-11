@@ -117,11 +117,11 @@ async function tripped(o: Parameters<typeof rig>[0], stat: Stat): Promise<string
 }
 const budget = (splitLines: number, splitFiles: number) => block("over-size", 1, HINT_TEXT["over-size"](H, { ...P, splitLines, splitFiles }));
 
-test("spot-check F6: a branch without a plan trips at the merge gate's size (150 lines, 6 files), and its hint says so", async () => {
-  assert.equal(await tripped({ plan: null }, many(120, 4)), undefined, "100 < 120 lines and 3 < 4 files, within the gate");
-  assert.equal(await tripped({ plan: null }, many(150, 6)), undefined, "exactly the gate");
-  assert.equal(await tripped({ plan: null }, many(151, 2)), budget(150, 6));
-  assert.equal(await tripped({ plan: null }, many(6, 7)), budget(150, 6));
+test("spot-check F6: a branch without a plan keeps the early split nudge, a task's budget (100 lines, 3 files), never above the gate", async () => {
+  assert.equal(await tripped({ plan: null }, many(100, 3)), undefined, "exactly the split size");
+  assert.equal(await tripped({ plan: null }, many(101, 2)), budget(100, 3));
+  assert.equal(await tripped({ plan: null }, many(6, 4)), budget(100, 3));
+  assert.equal(await tripped({ plan: null, settings: { mergeGate: { maxDiffLines: 80, maxDiffFiles: 2 } } }, many(81, 1)), budget(80, 2));
 });
 
 test("spot-check F6: a milestone branch trips at planBudget(milestone): min(milestoneLines, maxDiffLines) lines, maxDiffFiles files", async () => {
