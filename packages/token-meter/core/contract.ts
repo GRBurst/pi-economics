@@ -13,10 +13,15 @@ const time = (v: unknown) => typeof v === "string" && !Number.isNaN(Date.parse(v
 const oneOf = (...xs: unknown[]) => (v: unknown) => xs.includes(v);
 const obj = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v);
 const int0 = (v: unknown) => Number.isInteger(v) && (v as number) >= 0;
+const int1 = (v: unknown) => Number.isInteger(v) && (v as number) >= 1;
+const bool = (v: unknown) => typeof v === "boolean";
+const sha = (v: unknown) => typeof v === "string" && /^[0-9a-f]{7,64}$/.test(v);
 
 /** task-router's tripwires (its core/local/tripwires.ts `TRIPS`; token-meter imports nothing of the router). */
 const TRIPS = ["identical-call", "no-change-writes", "alternation", "repeated-error", "churn", "check-failing",
   "over-size", "risky-path", "context-soft", "context-stall"];
+/** task-router's overseer roles (its core/local/overseer.ts `ROLES`; the log-contract check compares the two). */
+export const ROLES = ["merge", "plan-author", "delta", "plan-review", "steer"];
 
 type Rule = { field: string; why: string; when?: (l: any) => boolean; ok: (v: any, l: any) => boolean };
 const every = (fields: Record<string, (v: any) => boolean>, why: string, when?: (l: any) => boolean): Rule[] =>
@@ -33,7 +38,7 @@ const METER: Rule[] = [
 ];
 const OUTCOMES: Rule[] = [
   versioned,
-  ...every({ ts: time, event: oneOf("spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck", "force", "hint") }, "every outcome event"),
+  ...every({ ts: time, event: oneOf("spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck", "force", "hint", "review") }, "every outcome event"),
   // A session-level line (task-router local mode, design §3.0.3) has `taskId: ""`; only `force` is one.
   { field: "taskId", why: "every outcome event (force: a string, may be empty)", ok: (v, l) => (l?.event === "force" ? typeof v === "string" : str(v)) },
   ...every({ kind: str, workerTier: str, workerEffort: str, sessionId: str, parentSessionId: str }, "spawn: tier mix, child-session join", (l) => l.event === "spawn"),
@@ -56,6 +61,11 @@ const OUTCOMES: Rule[] = [
   // task-router local mode L3 (design §3.1): a hint to the main session (taskId "main") or a child
   ...every({ trip: oneOf(...TRIPS), stage: oneOf("hint", "steer", "parent") }, "hint", (l) => l.event === "hint"),
   ...optional({ count: int0, sessionId: str }, "hint", (l) => l.event === "hint"),
+  // task-router local mode L4 (design §3.0.3): an overseer attempt (taskId = the review id) and a ticket child's spawn
+  ...every({ role: oneOf(...ROLES), member: str, model: str, outcome: oneOf("approve", "revise", "invalid", "timeout", "error") }, "review", (l) => l.event === "review"),
+  ...optional({ blocking: int0, findings: int0, fallback: oneOf("budget", "error"), inconsistent: bool, attempt: int1, durationMs: int0, commit: sha, branch: str },
+    "review", (l) => l.event === "review"),
+  ...optional({ ticket: oneOf(...ROLES, "fixer") }, "spawn: the router's own child (overseer, fixer)", (l) => l.event === "spawn"),
 ];
 const ASSIGNMENTS: Rule[] = [
   versioned,

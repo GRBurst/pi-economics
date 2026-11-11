@@ -125,3 +125,18 @@ test("ticket spawn: no unjudged line after the kill; a card child still gets one
     assert.deepEqual(ls.filter((l) => l.event === "verdict").map((l) => [l.taskId, l.verdict]), routing ? [["c1", "unjudged"]] : []);
   }
 });
+
+test("a ticket spawn line carries the parent session's experiment arm (the contract requires it once the root is assigned)", async () => {
+  const g = globalThis as { __piExperimentsApi_v1?: unknown };
+  const saved = g.__piExperimentsApi_v1;
+  try {
+    g.__piExperimentsApi_v1 = { version: 1, flag: (_n: string, d: string) => d, armFor: (s: string) => (s === "s-main" ? { id: "+-+--", flags: {} } : undefined) };
+    const h = harness({ settings: { mode: "local" }, apiExt: true });
+    const s = h.router.settings;
+    const ticket = h.router.tickets.issue({ role: "steer", reviewId: "rv-0000abcd", member: "opus", model: s.models.opus!.model, effort: "high", cwd: "/wt", childTools: [] });
+    assert.ok((await h.a.api.spawn!({ name: "ovs-steer-1", systemPrompt: "s", message: "m", task: { ticket } }, { by: "main", quiet: true })).ok);
+    assert.equal(h.lines().find((l) => l.event === "spawn")!.arm, "+-+--");
+  } finally {
+    g.__piExperimentsApi_v1 = saved;
+  }
+});

@@ -162,3 +162,43 @@ test("hint lines: a valid line passes; trip and stage are required enums; count 
     assert.deepEqual(fields(check(x)), [`outcomes.${field}`], JSON.stringify(bad));
   }
 });
+
+// Local mode L4.T11 (design §3.0.3, AC-L1): the overseer's `review` line (taskId = the review id) and a ticket child's spawn.
+const REVIEW = { v: 1, ts: iso(T0 + 61 * MIN), event: "review", taskId: "rv-0000abcd", role: "merge", member: "opus", model: "anthropic/claude-opus-5-5", outcome: "approve" };
+
+test("review lines: a valid line passes; role, member, model and outcome are required; the optional keys typed", () => {
+  const w = world();
+  for (const role of ["merge", "plan-author", "plan-review", "delta", "steer"])
+    for (const outcome of ["approve", "revise", "invalid", "timeout", "error"]) w.outcomes.push({ ...REVIEW, role, outcome });
+  w.outcomes.push({ ...REVIEW, outcome: "revise", blocking: 1, findings: 2, fallback: "error", inconsistent: true, attempt: 2, durationMs: 9000,
+    commit: "0123abc", branch: "wt/a" }, { ...REVIEW, fallback: "budget", blocking: 0, findings: 0, inconsistent: false, attempt: 1, durationMs: 0, commit: "0".repeat(40) });
+  assert.deepEqual(check(JSON.parse(JSON.stringify(w))), []);
+  for (const [bad, field] of [
+    [{ outcome: undefined }, "outcome"], [{ outcome: "x" }, "outcome"], [{ role: undefined }, "role"], [{ role: "fixer" }, "role"],
+    [{ member: "" }, "member"], [{ model: undefined }, "model"], [{ taskId: "" }, "taskId"],
+    [{ blocking: -1 }, "blocking"], [{ findings: 1.5 }, "findings"], [{ fallback: "x" }, "fallback"], [{ inconsistent: "yes" }, "inconsistent"],
+    [{ attempt: 0 }, "attempt"], [{ durationMs: -1 }, "durationMs"], [{ commit: "main" }, "commit"], [{ branch: "" }, "branch"],
+  ] as const) {
+    const x = world();
+    x.outcomes.push(JSON.parse(JSON.stringify({ ...REVIEW, ...bad })));
+    assert.deepEqual(fields(check(x)), [`outcomes.${field}`], JSON.stringify(bad));
+  }
+});
+
+test("review without outcome: one outcomes.outcome problem", () => {
+  const x = world();
+  x.outcomes.push((({ outcome, ...r }) => r)(REVIEW));
+  assert.deepEqual(fields(check(x)), ["outcomes.outcome"]);
+});
+
+const TICKET = { v: 1, ts: iso(T0 + 63 * MIN), event: "spawn", taskId: "ovs-merge-1", kind: "overseer", ticket: "merge", workerTier: "T2",
+  workerEffort: "high", workerMember: "opus", workerModel: "anthropic/claude-opus-5-5", arm: "++++++", sessionId: "o1", parentSessionId: "m4" };
+
+test("spawn ticket: a ticket child's line passes for every role and fixer; another value fails", () => {
+  const w = world();
+  for (const ticket of ["merge", "plan-author", "plan-review", "delta", "steer", "fixer"]) w.outcomes.push({ ...TICKET, ticket, ...(ticket === "fixer" && { kind: "implement" }) });
+  assert.deepEqual(check(w), []);
+  const x = world();
+  x.outcomes.push({ ...TICKET, ticket: "x" });
+  assert.deepEqual(fields(check(x)), ["outcomes.ticket"]);
+});

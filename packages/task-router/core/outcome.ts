@@ -100,10 +100,10 @@ export const reviewEvent = (i: ReviewInput & { now: Date }) =>
     commit: i.commit, branch: i.branch,
   });
 /** A ticket child's spawn line (D26): no card, so no `cardHash`; kind `overseer` (a fixer: `implement`), `ticket` its role. */
-export const ticketSpawnEvent = (i: { now: Date; taskId: string; role: TicketRole; member: string; tier: string; model: string; effort: ThinkingLevel; sessionId?: string; parentSessionId?: string }) =>
+export const ticketSpawnEvent = (i: { now: Date; taskId: string; role: TicketRole; member: string; tier: string; model: string; effort: ThinkingLevel; arm?: string; sessionId?: string; parentSessionId?: string }) =>
   finish({
     ...base("spawn", i.now, i.taskId), kind: i.role === "fixer" ? "implement" : "overseer", ticket: i.role,
-    workerTier: i.tier, workerEffort: i.effort, workerMember: i.member, workerModel: i.model, sessionId: i.sessionId, parentSessionId: i.parentSessionId,
+    workerTier: i.tier, workerEffort: i.effort, workerMember: i.member, workerModel: i.model, arm: i.arm, sessionId: i.sessionId, parentSessionId: i.parentSessionId,
   });
 
 export const serializeEvent = (e: OutcomeEvent): string => `${JSON.stringify(e)}\n`;

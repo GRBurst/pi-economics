@@ -379,3 +379,21 @@ test("quality: hint lines are no data-quality defect", () => {
   assert.deepEqual(item(w), item(base));
   assert.equal(item(base).n, 1);
 });
+
+// Local mode L4.T11 (design §3.0.3): review lines (taskId = the review id) are no task events, and an overseer's session is
+// named by its ticket spawn line.
+test("quality: review lines and overseer sessions are no data-quality defect", () => {
+  const item = (w: Logs, what: string) => analyse(w).quality.unjoinable.find((x) => x.what === what)!;
+  const TASKS = "task events without a spawn", KIDS = "child sessions without a spawn event (their $ is in no tier)";
+  const base = world();
+  base.outcomes.push({ v: 1, ts: iso(T0), event: "verdict", taskId: "t9", verdict: "accepted" }); // one real defect
+  const w: Logs = JSON.parse(JSON.stringify(base));
+  w.outcomes.push({ v: 1, ts: iso(T0 + 63 * MIN), event: "spawn", taskId: "ovs-merge-1", kind: "overseer", ticket: "merge", workerTier: "T2",
+    workerEffort: "high", arm: "++++++", sessionId: "o1", parentSessionId: "m4" });
+  w.meter.push(...turns("o1", T0 + 63 * MIN, 2, { arm: "++++++", parentSessionId: "m4", model: "claude-opus" }));
+  for (const outcome of ["approve", "revise", "invalid", "timeout", "error"])
+    w.outcomes.push({ v: 1, ts: iso(T0 + 64 * MIN), event: "review", taskId: "rv-0000abcd", role: "merge", member: "opus", model: "anthropic/claude-opus-5-5", outcome });
+  assert.deepEqual(item(w, TASKS), item(base, TASKS));
+  assert.deepEqual(item(w, KIDS), item(base, KIDS));
+  assert.equal(item(base, TASKS).n, 1);
+});

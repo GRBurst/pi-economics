@@ -8,7 +8,9 @@ import type { ReviewInput } from "../outcome.ts";
 import type { Schema } from "./schema.ts";
 import { approve, inconsistent, VERDICT_SCHEMA, validateVerdict, type Verdict } from "./verdict.ts";
 
-export type Role = "merge" | "plan-author" | "delta" | "plan-review" | "steer";
+/** The overseer roles; token-meter's contract keeps a copy (`ROLES`), compared by the log-contract check. */
+export const ROLES = ["merge", "plan-author", "delta", "plan-review", "steer"] as const;
+export type Role = (typeof ROLES)[number];
 export type TicketRole = Role | "fixer";
 export type Ticket = { role: TicketRole; reviewId: string; member: string; model: string; effort: ThinkingLevel; cwd: string;
   tools?: string[]; childTools: ChildTool[]; toolGuard?: Guard; briefAppend?: string;

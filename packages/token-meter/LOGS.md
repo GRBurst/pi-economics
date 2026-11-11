@@ -99,11 +99,11 @@ the warm gets its own line. A warm aborted before its headers gets no line.
 ## task-router/outcomes/YYYY-MM.jsonl
 
 Common: `v` (int), `ts` (ISO), `event`, `taskId` (subagent name; `""` on `force` lines, which belong to the session,
-not to a task; `"main"` or the child's name on `hint` lines) — all required.
+not to a task; `"main"` or the child's name on `hint` lines; the review id on `review` lines) — all required.
 
 | event | fields (required **bold**) | meaning |
 | --- | --- | --- |
-| `spawn` | **`kind`**, **`workerTier`** (`qwen` \| `haiku` \| `T1` \| `T2` \| …), **`workerEffort`**, `reviewTier`, `reviewEffort`, `cardHash`, `base`, `importance`, `reasons` (string[]), `arm`*, **`sessionId`** (child), **`parentSessionId`**, `attemptOf`, `assigned`† (`router` \| `random`), `routeBase`† (tier), `unresolved`† (`true`), `reviewOf`†, `ability`†, `level`† (int ≥ 0), `draft`† (`true`), `workerLevel`†, `reviewLevel`† (int ≥ 0), `workerMember`†, `workerModel`†, `startEffort`†, `waitMs`† (≥ 0), `forced`‡ (`true`), `forceSource`‡ (`command` \| `settings`), `routedModel`‡, `routedEffort`‡ | a routed (or unrouted) spawn |
+| `spawn` | **`kind`**, **`workerTier`** (`qwen` \| `haiku` \| `T1` \| `T2` \| …), **`workerEffort`**, `reviewTier`, `reviewEffort`, `cardHash`, `base`, `importance`, `reasons` (string[]), `arm`*, **`sessionId`** (child), **`parentSessionId`**, `attemptOf`, `assigned`† (`router` \| `random`), `routeBase`† (tier), `unresolved`† (`true`), `reviewOf`†, `ability`†, `level`† (int ≥ 0), `draft`† (`true`), `workerLevel`†, `reviewLevel`† (int ≥ 0), `workerMember`†, `workerModel`†, `startEffort`†, `waitMs`† (≥ 0), `forced`‡ (`true`), `forceSource`‡ (`command` \| `settings`), `routedModel`‡, `routedEffort`‡, `ticket`§ (`merge` \| `plan-author` \| `plan-review` \| `delta` \| `steer` \| `fixer`) | a routed (or unrouted) spawn; with `ticket`, the router's own child (§) |
 | `reroute` | **`from`**, **`to`**, `reason`, `fromModel`†, `toModel`† | provider fallback (rate limit, outage) |
 | `check` | **`exit`**, `durationMs` | the card's check ran after the child reported |
 | `corrective` | — | one corrective message to the child |
@@ -112,6 +112,7 @@ not to a task; `"main"` or the child's name on `hint` lines) — all required.
 | `spotcheck` | `requested` (`true`) | an accepted verdict was drawn for a spot-check review (`spotCheck.share`); the parent was told to spawn a `review` card with `reviewOf` |
 | `force` | **`action`** (`set` \| `clear` \| `used` \| `expired` \| `rejected`), **`source`** (`command` \| `settings`), `model`, `effort`, `reason` (`unknown-model` \| `usage`) | the force override (task-router local mode): `/force` set, cleared or rejected; a forced spawn used it; a `next:N` force ran out; `taskId` is `""` |
 | `hint` | **`trip`** (`identical-call` \| `no-change-writes` \| `alternation` \| `repeated-error` \| `churn` \| `check-failing` \| `over-size` \| `risky-path` \| `context-soft` \| `context-stall`), **`stage`** (`hint` \| `steer` \| `parent`), `count` (int ≥ 0), `sessionId` | a tripwire fired (task-router local mode): `hint` = a `<router-hint>` went into the tool result (main) or a message (child); `steer` = the main session got the escalation; `parent` = a stuck child's parent was told; `count` = the trip's detections since the last progress; `taskId` is `"main"` or the child's name; the hint's text is never logged |
+| `review` | **`role`** (`merge` \| `plan-author` \| `plan-review` \| `delta` \| `steer`), **`member`**, **`model`**, **`outcome`** (`approve` \| `revise` \| `invalid` \| `timeout` \| `error`), `attempt` (int ≥ 1), `durationMs` (int ≥ 0), `fallback` (`budget` \| `error`), `findings`, `blocking` (int ≥ 0), `inconsistent` (bool), `commit` (sha), `branch` | one overseer attempt (task-router local mode, §): `taskId` is the review id; `outcome` is the verdict's approval (`approve` when no finding is blocking) or how the attempt failed (an aborted attempt is an `error`); `fallback` = the attempt ran on the fallback member because the Opus budget was spent (`budget`) or attempt 1 failed (`error`); `findings`/`blocking` count the verdict's findings, `inconsistent` marks a `verdict` field that disagrees with them; no verdict text is logged |
 
 \* `arm` is required on a spawn whose parent session (or its root) has an assignment.
 
@@ -147,6 +148,12 @@ are what routing would have chosen (the planned worker leg). `workerModel`/`star
 a forced model outside the router's members has no `workerMember`. A `force` line has no task, and a `hint` line's
 `taskId` may be `"main"`: `pi-analyse` counts only the task events (`reroute`, `check`, `corrective`, `escalate`,
 `verdict`, `spotcheck`) as "task events without a spawn".
+
+§ Optional, added with task-router's overseer (local mode L4, no `v` bump). The router spawns its own children (an
+overseer: `kind: "overseer"`; a fixer: `kind: "implement"`) with a ticket instead of a card: their `spawn` line has
+`ticket` (the role), the member's `workerTier`, `workerEffort`, `workerMember`, `workerModel`, no `cardHash` and no
+verdict (a kill logs no `unjudged`). Each overseer attempt adds a `review` line; a `review` is no task event, and the
+overseer's session is a child named by its ticket `spawn` line.
 
 ### Older lines: the old → new mapping
 

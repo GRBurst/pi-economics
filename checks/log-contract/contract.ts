@@ -11,6 +11,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { install as installMeter } from "../../packages/token-meter/core/shell.ts";
+import { ROLES as CONTRACT_ROLES } from "../../packages/token-meter/core/contract.ts";
+import { ROLES } from "../../packages/task-router/core/local/overseer.ts";
 import { fakeCtx as meterCtx, fakePi as meterPi } from "../../packages/token-meter/test/fake-pi.ts";
 import { harness, card } from "../../packages/task-router/test/harness.ts";
 import { install as installCache } from "../../packages/cache-lifecycle/core/shell.ts";
@@ -140,6 +142,9 @@ for (const [name, lines] of Object.entries(logs)) {
   if (old.length) failures.push(`${name}: ${old.length} line(s) without schema version v=1, e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
 }
 for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force", "hint"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
+// The contract keeps literal copies of the router's enums (token-meter imports nothing of the router): the overseer roles.
+const same = (a: readonly string[], b: readonly string[]) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+if (!same(CONTRACT_ROLES, ROLES)) failures.push(`contract ROLES ${JSON.stringify(CONTRACT_ROLES)} differ from the router's ${JSON.stringify(ROLES)}`);
 for (const e of ["correction", "rating", "peek-after-mask"]) if (!logs.guards.some((l) => l.event === e)) failures.push(`guards: no ${e} event`);
 
 // --- pi-analyse --check over the produced lines, then the full analysis

@@ -122,7 +122,7 @@ export function install(pi: PiLike, deps: Deps) {
     const t = e.type === "spawn" ? tickets.owner(e.name) : undefined;
     if (e.type === "spawn" && t) {
       log.ticketSpawn({ taskId: e.name, role: t.role, member: t.member, tier: settings.models[t.member]?.tier ?? "?", model: t.model, effort: t.effort,
-        sessionId: e.childSessionId, parentSessionId: t.parentSession });
+        arm: t.parentSession && armOf(t.parentSession), sessionId: e.childSessionId, parentSessionId: t.parentSession });
     }
     if (e.type === "spawn" && c) {
       log.spawn({ taskId: e.name, card: c.card, plan: c.plan, start: c.start, arm: armOf(c.parentSession), sessionId: e.childSessionId, parentSessionId: c.parentSession, unresolved: c.unresolved, forced: c.forced });
