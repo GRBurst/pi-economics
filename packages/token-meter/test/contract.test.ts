@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { check, renderProblems } from "../core/contract.ts";
+import { check, REASONS, renderProblems } from "../core/contract.ts";
 import { iso, MIN, T0, turn, world } from "./world.ts";
 
 const fields = (ps: ReturnType<typeof check>) => ps.map((p) => `${p.log}.${p.field}`);
@@ -208,4 +208,49 @@ test("spawn ticket: a ticket child's line passes for every role and fixer; anoth
   const x = world();
   x.outcomes.push({ ...TICKET, ticket: "x" });
   assert.deepEqual(fields(check(x)), ["outcomes.ticket"]);
+});
+
+// Local mode L6.T16 (design §3.0.3, AC-L1): the merge gate's `merge` line (taskId = the branch) and `gatebypass` line
+// (taskId = the main branch).
+const MERGE = { v: 1, ts: iso(T0 + 64 * MIN), event: "merge", taskId: "lm/x", outcome: "merged" };
+const MERGE_REASONS = ["main-branch", "dirty", "behind", "fixer-running", "abandoned", "blocked", "size", "scope", "check", "main-dirty",
+  "plan-changed", "no-worktree", "review-unavailable", "aborted", "git"];
+const BYPASS = { v: 1, ts: iso(T0 + 65 * MIN), event: "gatebypass", taskId: "main", from: "0123abc", to: "89abcdef" };
+
+test("merge lines: every outcome and reason passes; the optional keys typed; a refusal without a branch has taskId \"\"", () => {
+  const w = world();
+  for (const outcome of ["merged", "refused", "revise", "fixer", "failed"]) w.outcomes.push({ ...MERGE, outcome });
+  for (const reason of MERGE_REASONS) w.outcomes.push({ ...MERGE, outcome: "refused", reason });
+  w.outcomes.push({ ...MERGE, commit: "0".repeat(40), nLines: 0, nFiles: 0, reviewId: "rv-1", pushed: false },
+    { ...MERGE, outcome: "refused", reason: "no-worktree", taskId: "" });
+  assert.deepEqual(check(JSON.parse(JSON.stringify(w))), []);
+  for (const [bad, field] of [
+    [{ outcome: undefined }, "outcome"], [{ outcome: "error" }, "outcome"], [{ reason: "nope" }, "reason"], [{ commit: "main" }, "commit"],
+    [{ nLines: -1 }, "nLines"], [{ nFiles: 1.5 }, "nFiles"], [{ reviewId: "" }, "reviewId"], [{ pushed: "yes" }, "pushed"], [{ taskId: undefined }, "taskId"],
+  ] as const) {
+    const x = world();
+    x.outcomes.push(JSON.parse(JSON.stringify({ ...MERGE, ...bad })));
+    assert.deepEqual(fields(check(x)), [`outcomes.${field}`], JSON.stringify(bad));
+  }
+});
+
+test("merge reason: a value outside the router's codes fails", () => {
+  const x = world();
+  x.outcomes.push({ ...MERGE, outcome: "refused", reason: "nope" });
+  assert.deepEqual(fields(check(x)), ["outcomes.reason"]);
+});
+
+test("gatebypass lines: from and to are shas, repo optional; without to one problem", () => {
+  const w = world();
+  w.outcomes.push(BYPASS, { ...BYPASS, repo: "my-repo" });
+  assert.deepEqual(check(w), []);
+  for (const [bad, field] of [[{ to: undefined }, "to"], [{ from: "main" }, "from"], [{ repo: "" }, "repo"], [{ taskId: "" }, "taskId"]] as const) {
+    const x = world();
+    x.outcomes.push(JSON.parse(JSON.stringify({ ...BYPASS, ...bad })));
+    assert.deepEqual(fields(check(x)), [`outcomes.${field}`], JSON.stringify(bad));
+  }
+});
+
+test("REASONS: the contract's merge codes are the literal list above", () => {
+  assert.deepEqual(REASONS, MERGE_REASONS);
 });

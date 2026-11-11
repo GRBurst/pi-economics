@@ -22,6 +22,9 @@ export const TRIPS = ["identical-call", "no-change-writes", "alternation", "repe
   "over-size", "risky-path", "context-soft", "context-stall", "outside-worktree"];
 /** task-router's overseer roles (its core/local/overseer.ts `ROLES`; the log-contract check compares the two). */
 export const ROLES = ["merge", "plan-author", "delta", "plan-review", "steer"];
+/** task-router's merge refusal and error codes (its core/local/merge.ts `REASONS`; the log-contract check compares the two). */
+export const REASONS = ["main-branch", "dirty", "behind", "fixer-running", "abandoned", "blocked", "size", "scope", "check", "main-dirty",
+  "plan-changed", "no-worktree", "review-unavailable", "aborted", "git"];
 
 type Rule = { field: string; why: string; when?: (l: any) => boolean; ok: (v: any, l: any) => boolean };
 const every = (fields: Record<string, (v: any) => boolean>, why: string, when?: (l: any) => boolean): Rule[] =>
@@ -38,9 +41,10 @@ const METER: Rule[] = [
 ];
 const OUTCOMES: Rule[] = [
   versioned,
-  ...every({ ts: time, event: oneOf("spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck", "force", "hint", "review") }, "every outcome event"),
-  // A session-level line (task-router local mode, design §3.0.3) has `taskId: ""`; only `force` is one.
-  { field: "taskId", why: "every outcome event (force: a string, may be empty)", ok: (v, l) => (l?.event === "force" ? typeof v === "string" : str(v)) },
+  ...every({ ts: time, event: oneOf("spawn", "reroute", "check", "corrective", "escalate", "verdict", "spotcheck", "force", "hint", "review", "merge", "gatebypass") }, "every outcome event"),
+  // A session-level line (task-router local mode, design §3.0.3) has `taskId: ""`: `force`, and a `merge` refused before a
+  // branch was known (no branch given, none active).
+  { field: "taskId", why: "every outcome event (force, merge: a string, may be empty)", ok: (v, l) => (l?.event === "force" || l?.event === "merge" ? typeof v === "string" : str(v)) },
   ...every({ kind: str, workerTier: str, workerEffort: str, sessionId: str, parentSessionId: str }, "spawn: tier mix, child-session join", (l) => l.event === "spawn"),
   ...optional({ assigned: oneOf("router", "random"), routeBase: str, unresolved: (v) => typeof v === "boolean", cwd: str, reviewOf: str }, "spawn: randomized routing, unresolved cards, working directory, spot-check review", (l) => l.event === "spawn"),
   ...every({ verdict: oneOf("accepted", "partial", "rejected", "unjudged") }, "verdict", (l) => l.event === "verdict"),
@@ -66,6 +70,11 @@ const OUTCOMES: Rule[] = [
   ...optional({ blocking: int0, findings: int0, fallback: oneOf("budget", "error"), inconsistent: bool, attempt: int1, durationMs: int0, commit: sha, branch: str },
     "review", (l) => l.event === "review"),
   ...optional({ ticket: oneOf(...ROLES, "fixer") }, "spawn: the router's own child (overseer, fixer)", (l) => l.event === "spawn"),
+  // task-router local mode L6 (design §3.0.3): one request_merge call (taskId = the branch); main moved outside the gate
+  ...every({ outcome: oneOf("merged", "refused", "revise", "fixer", "failed") }, "merge", (l) => l.event === "merge"),
+  ...optional({ reason: oneOf(...REASONS), commit: sha, nLines: int0, nFiles: int0, reviewId: str, pushed: bool }, "merge", (l) => l.event === "merge"),
+  ...every({ from: sha, to: sha }, "gatebypass (taskId = the main branch)", (l) => l.event === "gatebypass"),
+  ...optional({ repo: str }, "gatebypass: the repository's directory name", (l) => l.event === "gatebypass"),
 ];
 const ASSIGNMENTS: Rule[] = [
   versioned,
