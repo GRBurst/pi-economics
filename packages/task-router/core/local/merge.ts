@@ -7,7 +7,7 @@ import type { Card, RouterSettings } from "../types.ts";
 import type { MergeInput } from "../outcome.ts";
 import type { Finding } from "./verdict.ts";
 import type { BranchRecord, BranchStore } from "./branches.ts";
-import type { Git, Stat } from "./git.ts";
+import { type Git, quotePath, type Stat } from "./git.ts";
 import type { createOverseer } from "./overseer.ts";
 import { cleanupBranch, refreshFacts, vetCheck } from "./worktree.ts";
 import { verdictSubmit } from "./overseer.ts";
@@ -104,10 +104,10 @@ export const reviewInput = (x: ReviewFacts): string => [
   `Summary from the author: ${none(x.summary)}`,
   ...(x.checks.length ? x.checks.flatMap((c) => [`Check: \`${c.cmd}\` exit ${c.exit}`, ...(c.output ? [c.output] : [])]) : ["Check: none"]),
   `Red run at base: ${RED_TEXT[x.red]}`,
-  `Risky paths: ${x.risky.length ? x.risky.join(", ") : "none"}`,
+  `Risky paths: ${x.risky.length ? x.risky.map(quotePath).join(", ") : "none"}`,
   `Invariants: ${none(x.invariants)}`,
   "Numstat:",
-  ...x.stat.map((f) => `${f.added}\t${f.deleted}\t${f.path}`),
+  ...x.stat.map((f) => `${f.added}\t${f.deleted}\t${quotePath(f.path)}`),
   `Diff ${x.base}..${x.commit} (≤ ${x.maxLines} lines):`,
   ...(x.diff ? [x.diff] : []),
 ].join("\n");
@@ -135,7 +135,7 @@ export const fixerCard = (changed: readonly string[], findings: readonly Finding
 export const fixerBrief = (c: FixerCard): string => [
   "Task card (from the merge review; the router spawned you):",
   `kind: ${c.kind}`,
-  `files: ${c.files.join(", ")}`,
+  `files: ${c.files.map(quotePath).join(", ")}`,
   ...(c.check !== undefined ? [`check: \`${c.check}\``] : []),
   "acceptance (the review's blocking findings):",
   ...c.acceptance.map((a) => `- ${a}`),

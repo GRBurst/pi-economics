@@ -238,3 +238,14 @@ export function parseNumstat(text: string): Stat {
   }
   return out;
 }
+
+const C_ESCAPES: Record<string, string> = { "\x07": "\\a", "\b": "\\b", "\t": "\\t", "\n": "\\n", "\v": "\\v", "\f": "\\f", "\r": "\\r", "\"": "\\\"", "\\": "\\\\" };
+/** A path as text for a model to read (spot-check F2): git's C-style quoting (`core.quotepath` only decides about non-ASCII
+ *  bytes, which stay as they are here): a path with a control character, a double quote or a backslash is wrapped in double
+ *  quotes with `\t`, `\n`, … and octal `\ooo` for the other controls, so no name can end its line and start a forged one.
+ *  Display only: the scope checks and the verdict targets keep the raw paths. */
+export function quotePath(path: string): string {
+  return /[\x00-\x1f\x7f"\\]/.test(path)
+    ? `"${path.replace(/[\x00-\x1f\x7f"\\]/g, (c) => C_ESCAPES[c] ?? `\\${c.charCodeAt(0).toString(8).padStart(3, "0")}`)}"`
+    : path;
+}

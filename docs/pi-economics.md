@@ -587,7 +587,10 @@ Opus last (`packages/task-router/core/local/merge.ts`):
    `(repo, branch, commit, tree)`; a new commit needs a new review;
 7. review: the `merge` overseer (above) in the main checkout, the worktree by
    its absolute path; its input is the goal, the summary, the check runs, the
-   red run, risky paths and the numstat and the whole diff. The diff is never
+   red run, risky paths and the numstat and the whole diff. A file name with a
+   control character, a double quote or a backslash is shown C-quoted, as git
+   quotes it (it cannot forge a line of the input); the scope check reads the
+   raw paths. The diff is never
    cut: its budget is 8 × (`maxDiffLines` + `maxDiffFiles`) lines, enough for
    any diff the size step lets through with git's 3 context lines; a longer
    one, or none while the numstat shows changes, fails the review closed
