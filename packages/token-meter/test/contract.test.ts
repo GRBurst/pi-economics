@@ -163,6 +163,13 @@ test("hint lines: a valid line passes; trip and stage are required enums; count 
   }
 });
 
+// Local mode L5.T8 (design §3.3.3, AC-L1): the write guard's trip, and the contract's list is the router's.
+test("hint lines: the outside-worktree trip passes", () => {
+  const w = world();
+  w.outcomes.push({ ...HINT, trip: "outside-worktree", count: 2 });
+  assert.deepEqual(check(JSON.parse(JSON.stringify(w))), []);
+});
+
 // Local mode L4.T11 (design §3.0.3, AC-L1): the overseer's `review` line (taskId = the review id) and a ticket child's spawn.
 const REVIEW = { v: 1, ts: iso(T0 + 61 * MIN), event: "review", taskId: "rv-0000abcd", role: "merge", member: "opus", model: "anthropic/claude-opus-5-5", outcome: "approve" };
 

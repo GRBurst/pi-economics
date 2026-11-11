@@ -836,7 +836,7 @@ message). Open notes, for L6 or later:
 - **RED**: "AC-W3" (temp repo): active worktree; `edit {path: <main>/a.ts}` → `{block: true, reason: "write in the worktree <wt>; use absolute paths under it"}`; `edit <wt>/a.ts` → `undefined`; relative `a.ts` with `ctx.cwd = <main>` → blocked; no active worktree → `undefined`; each block → one `hint` line `trip: "outside-worktree"`. Property: blocked ⇔ tool ∈ {edit, write} ∧ inside(p, main) ∧ ∄w inside(p, w) (plant §11).
 - **GREEN**: S23. **Check**: fast runner; `chk task-router typecheck-task-router`. **ACs**: AC-W3.
 
-#### L5.T8 Contract: trip `outside-worktree` `[ ] todo`
+#### L5.T8 Contract: trip `outside-worktree` `[x] done`
 - **Files**: token-meter `contract.ts` (TRIPS literal), `test/contract.test.ts`, `LOGS.md`. **Depends**: L5.T7.
 - **RED**: a hint line with that trip passes (fails before). **Check**: `chk token-meter typecheck-token-meter log-contract`. **ACs**: AC-L1 (hint).
 

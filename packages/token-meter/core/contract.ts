@@ -17,9 +17,9 @@ const int1 = (v: unknown) => Number.isInteger(v) && (v as number) >= 1;
 const bool = (v: unknown) => typeof v === "boolean";
 const sha = (v: unknown) => typeof v === "string" && /^[0-9a-f]{7,64}$/.test(v);
 
-/** task-router's tripwires (its core/local/tripwires.ts `TRIPS`; token-meter imports nothing of the router). */
-const TRIPS = ["identical-call", "no-change-writes", "alternation", "repeated-error", "churn", "check-failing",
-  "over-size", "risky-path", "context-soft", "context-stall"];
+/** task-router's tripwires (its core/local/tripwires.ts `TRIPS`; token-meter imports nothing of the router; the log-contract check compares the two). */
+export const TRIPS = ["identical-call", "no-change-writes", "alternation", "repeated-error", "churn", "check-failing",
+  "over-size", "risky-path", "context-soft", "context-stall", "outside-worktree"];
 /** task-router's overseer roles (its core/local/overseer.ts `ROLES`; the log-contract check compares the two). */
 export const ROLES = ["merge", "plan-author", "delta", "plan-review", "steer"];
 
