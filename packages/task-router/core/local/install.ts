@@ -22,7 +22,8 @@ import { gitGuard } from "./childguards.ts";
 import type { Guard } from "../toolguard.ts";
 import { inside, refreshAbandoned, refreshFacts, writeGuard } from "./worktree.ts";
 import { BUDGET_TYPE, budgetOf, createOverseer } from "./overseer.ts";
-import { createApprovals, requestMergeTool } from "./merge.ts";
+import { bypassHint, bypassText, checkBypass, createApprovals, createMainRefs, requestMergeTool } from "./merge.ts";
+import type { Bypass } from "./merge.ts";
 import { runCheck } from "../gate.ts";
 import type { Runner } from "../gate.ts";
 import { tmpdir } from "node:os";
@@ -38,7 +39,7 @@ type Pi = {
   registerTool?(tool: RouterTool): void;
 };
 export type LocalDeps = {
-  settings: RouterSettings; log: Pick<ReturnType<typeof createOutcomeLog>, "hint" | "review">; isChild(ctx: any): boolean; sessionId(): string | undefined;
+  settings: RouterSettings; log: Pick<ReturnType<typeof createOutcomeLog>, "hint" | "review" | "gatebypass">; isChild(ctx: any): boolean; sessionId(): string | undefined;
   /** The overseer's ports (plan S20): the actor API, the shell's tickets, random hex, the clock and its poll sleep. */
   api(): SubagentsApiV1 | undefined; tickets: Tickets; hex(bytes: number): string; now(): number; sleep(ms: number): Promise<void>;
   /** The router's spawn policy is registered (review F1). */
@@ -85,17 +86,35 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   const branches = createBranchStore((type, data) => pi.appendEntry?.(type, data));
   /** Merge approvals (design §3.4.3), rebuilt from the session at `start`. */
   const approvals = createApprovals((type, data) => pi.appendEntry?.(type, data));
+  /** The last known main tips (design §3.4.6), rebuilt at `start`; a merge's record reaches them through the merge's append. */
+  const refs = createMainRefs((type, data) => pi.appendEntry?.(type, data));
+  /** Bypass checks run off the event, one at a time; the line and the warning come when one finds a move, the hint waits for
+   *  the next main tool result (plan D17, as over-size). `mainCtx`: the main session's last ctx, for the warning. */
+  let bypassing: Promise<void> = Promise.resolve(), found: Bypass[] = [], mainCtx: any;
+  const checkRefs = (): Promise<void> => (bypassing = bypassing.then(async () => {
+    const repos = new Set<string>();
+    const root = base === undefined ? undefined : await git.root(base);
+    if (root !== undefined) repos.add(root);
+    for (const r of branches.all()) repos.add(r.repo);
+    for (const b of await checkBypass({ git, settings: d.settings, refs }, repos)) {
+      d.log.gatebypass({ branch: b.branch, from: b.from, to: b.to, repo: b.repo });
+      try { if (mainCtx?.hasUI && mainCtx.ui?.notify) mainCtx.ui.notify(`task-router: ${bypassText(b)}`, "warning"); } catch { /* the warning is best effort */ }
+      found.push(b);
+    }
+  }).catch(() => undefined));
   let ready: Promise<void> = Promise.resolve(), sizing: Promise<void> | undefined;
   const handle = {
     overseer, budget, branches, approvals,
     start(ctx: any): void {
       if (typeof ctx?.cwd === "string") base = ctx.cwd;
+      mainCtx = ctx;
       let branch: unknown;
       try { branch = ctx?.sessionManager?.getBranch?.(); } catch { branch = undefined; }
       const entries = Array.isArray(branch) ? branch : [];
       Object.assign(budget, budgetOf(entries));
       branches.rebuild(entries);
       approvals.rebuild(entries);
+      refs.rebuild(entries);
       // Off the event: branches whose worktree disappeared are abandoned (§3.3.4), then the guards' cached facts are refreshed for
       // every repository the session knows (plan D39). `start_branch` waits for it.
       const deps = { git, store: branches, settings: d.settings };
@@ -107,7 +126,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
     /** Resolves when the work `start` began has finished (a test seam, and what `start_branch` awaits). */
     ready: (): Promise<void> => ready,
     /** Resolves when no diff read is running or waiting (a test seam). */
-    settled: async (): Promise<void> => { while (sizing) await sizing; await ready; },
+    settled: async (): Promise<void> => { while (sizing) await sizing; await ready; await bypassing; },
     /** The git guard for a session in `cwd` (design §3.4.5) while the merge gate is on, else undefined: a routed child's. */
     /** Spawns the fixer (design §3.4.4). */
     fixer: ((x) => overseer.fixer({ ...x, toolGuard: handle.gitGuard(x.worktree) })) as FixerPort,
@@ -115,6 +134,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
      *  a fixer that reported (D46). Total. */
     onEvent(e: ApiEvent): void {
       try {
+        if (e.type === "turn" && activeSet(d.settings).mergeGate) { void checkRefs(); return; }
         const name = e.type === "route" ? (e.to === "main" ? e.from : undefined) : e.type === "kill" || e.type === "error" ? e.name : undefined;
         if (name === undefined) return;
         if (e.type === "kill" && d.tickets.owner(name)?.role === "fixer") d.tickets.forget(name);
@@ -133,7 +153,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   // request_merge (design §3.4.1) while the merge gate is active; one set of ports per call, with its AbortSignal (D49).
   if (activeSet(s).mergeGate) {
     pi.registerTool?.(requestMergeTool((signal) => ({ git, run: d.run ?? runCheck, overseer, branches, approvals, settings: s,
-      append: (type, data) => pi.appendEntry?.(type, data), tmp: () => join(tmpdir(), `task-router-red-${d.hex(6)}`), fixer: handle.fixer,
+      append: (type, data) => { pi.appendEntry?.(type, data); refs.observe(type, data); }, tmp: () => join(tmpdir(), `task-router-red-${d.hex(6)}`), fixer: handle.fixer,
       ...(signal && { signal }) }), () => ready));
   }
   // The main-checkout write guard (design §3.3.3). It blocks on purpose, so it is total itself: pi treats a throwing handler as a
@@ -170,7 +190,23 @@ export function installLocal(pi: Pi, d: LocalDeps) {
       return r instanceof Promise ? r.then(verdict) : verdict(r);
     });
   };
-  if (!componentOn(s, "hints")) { guardWrites(); guardMain(); return handle; }
+  // Bypass detection (design §3.4.6): every main `bash` result starts a read of the refs (a child's turn too, in onEvent); a
+  // main tool result delivers the hints found before it. Total: a failure adds nothing.
+  const watchMain = (): void => {
+    if (!activeSet(s).mergeGate) return;
+    pi.on("tool_result", (e, ctx) => {
+      try {
+        if (d.isChild(ctx) || nested(e)) return undefined;
+        mainCtx = ctx;
+        const out = found;
+        found = [];
+        if (String(e?.toolName) === "bash") void checkRefs();
+        if (!out.length) return undefined;
+        return { content: [...(Array.isArray(e.content) ? e.content : []), ...out.map((b) => ({ type: "text", text: bypassHint(b) }))] };
+      } catch { return undefined; }
+    });
+  };
+  if (!componentOn(s, "hints")) { guardWrites(); guardMain(); watchMain(); return handle; }
   // A persistent trip runs a steer overseer instead of the escalation block while one can run (design §3.1.2, AC-H4).
   const steer = createSteer({ settings: s, overseer, git,
     branch: () => { const a = branches.active(); return a && { worktree: a.worktree, base: a.base, goal: a.goal, check: a.check }; },
@@ -263,6 +299,7 @@ export function installLocal(pi: Pi, d: LocalDeps) {
   }));
   guardWrites();
   guardMain();
+  watchMain();
   pi.on("turn_end", (_e, ctx) => {
     safe(() => {
       if (d.isChild(ctx)) return;

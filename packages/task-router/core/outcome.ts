@@ -1,6 +1,6 @@
 // Outcome log events (spec §5.2.7, R2): allowlisted keys, bounded strings, no card or prompt text.
 import { createHash } from "node:crypto";
-import { isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import type { Role, TicketRole } from "./local/overseer.ts";
 import type { Trip } from "./local/tripwires.ts";
 import type { Card, LoggedPlan, Start, ThinkingLevel } from "./types.ts";
@@ -25,6 +25,8 @@ const KEYS = [
   "trip", "stage", "count",
   // local mode L4 (design §3.0.3): the review line; a ticket child's spawn line names its ticket role
   "role", "member", "outcome", "blocking", "findings", "fallback", "inconsistent", "attempt", "commit", "branch", "ticket",
+  // local mode L6 (design §3.0.3): the gatebypass line
+  "repo",
 ];
 const MAX_STR = 256;
 const MAX_ITEMS = 20;
@@ -106,6 +108,10 @@ export const ticketSpawnEvent = (i: { now: Date; taskId: string; role: TicketRol
     workerTier: i.tier, workerEffort: i.effort, workerMember: i.member, workerModel: i.model, arm: i.arm, sessionId: i.sessionId, parentSessionId: i.parentSessionId,
     ...(i.forced ? { forced: true, forceSource: i.forced.source, routedModel: i.forced.routedModel, routedEffort: i.forced.routedEffort } : {}),
   });
+/** Main moved outside the gate (design §3.4.6): `taskId` is the main branch, `from`/`to` its shas, `repo` the repository's
+ *  basename, never a path (D35). */
+export const gatebypassEvent = (i: { now: Date; branch: string; from: string; to: string; repo?: string }) =>
+  finish({ ...base("gatebypass", i.now, i.branch), from: i.from, to: i.to, repo: i.repo === undefined ? undefined : basename(i.repo) });
 
 export const serializeEvent = (e: OutcomeEvent): string => `${JSON.stringify(e)}\n`;
 

@@ -1,5 +1,5 @@
 // Outcome log with verdict tracking: a task killed without a verdict is logged `unjudged`.
-import { checkEvent, correctiveEvent, escalateEvent, forceEvent, hintEvent, rerouteEvent, reviewEvent, spawnEvent, spotcheckEvent, ticketSpawnEvent, verdictEvent } from "./outcome.ts";
+import { checkEvent, correctiveEvent, escalateEvent, forceEvent, gatebypassEvent, hintEvent, rerouteEvent, reviewEvent, spawnEvent, spotcheckEvent, ticketSpawnEvent, verdictEvent } from "./outcome.ts";
 import type { EscalateFields, HintStage, OutcomeEvent, ReviewInput, Verdict } from "./outcome.ts";
 import type { Trip } from "./local/tripwires.ts";
 
@@ -30,6 +30,7 @@ export function createOutcomeLog(d: OutcomeLogDeps) {
     force(i: Omit<Parameters<typeof forceEvent>[0], "now">) { w(forceEvent({ ...i, now: d.now() })); },
     hint(taskId: string, trip: Trip, stage: HintStage, count?: number, sessionId?: string) { w(hintEvent({ now: d.now(), taskId, trip, stage, count, sessionId })); },
     review(i: ReviewInput) { w(reviewEvent({ ...i, now: d.now() })); },
+    gatebypass(i: Omit<Parameters<typeof gatebypassEvent>[0], "now">) { w(gatebypassEvent({ ...i, now: d.now() })); },
     /** A ticket child (D26): no verdict slot, so its kill logs no `unjudged`. */
     ticketSpawn(i: Omit<Parameters<typeof ticketSpawnEvent>[0], "now">) { w(ticketSpawnEvent({ ...i, now: d.now() })); },
     killed(taskId: string) { if (open.delete(taskId)) w(verdictEvent({ now: d.now(), taskId, verdict: "unjudged" })); },

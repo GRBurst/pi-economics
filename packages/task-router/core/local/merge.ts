@@ -1,6 +1,7 @@
 // The merge gate's pipeline (design §3.4.2; plan S26): `request_merge` resolves the branch, refuses what must not merge
 // (cheap and deterministic first), runs the checks and the red run, reviews through the overseer (Opus last), then
 // fast-forwards main. Every git call goes through the port (core/local/git.ts), so a failure is a value, never an exception.
+import { basename } from "node:path";
 import type { Runner } from "../gate.ts";
 import type { Card, RouterSettings } from "../types.ts";
 import type { Finding } from "./verdict.ts";
@@ -336,3 +337,51 @@ export function requestMergeTool(ports: (signal: AbortSignal | undefined) => Mer
     },
   };
 }
+
+// ── bypass detection (design §3.4.6): main moved outside the gate ──
+export type MainRef = { repo: string; branch: string; sha: string };
+/** The last known main tip per repository (`task-router/main-ref`; the merge's step 9 writes it too), rebuilt from the session. */
+export type MainRefs = { get(repo: string): MainRef | undefined; put(r: MainRef): void; observe(type: string, data: unknown): void; rebuild(entries: unknown[]): void };
+const mainRefOf = (d: unknown): MainRef | undefined => {
+  const x = d as Record<string, unknown> | null;
+  return x !== null && typeof x === "object" && [x.repo, x.branch, x.sha].every((v) => typeof v === "string" && v !== "")
+    ? { repo: x.repo as string, branch: x.branch as string, sha: x.sha as string } : undefined;
+};
+export function createMainRefs(append: (customType: string, data: unknown) => void): MainRefs {
+  const refs = new Map<string, MainRef>();
+  const observe = (type: string, data: unknown): void => {
+    const r = type === MAIN_REF_TYPE ? mainRefOf(data) : undefined;
+    if (r) refs.set(r.repo, r);
+  };
+  return {
+    get: (repo) => refs.get(repo),
+    put(r) { refs.set(r.repo, r); append(MAIN_REF_TYPE, { repo: r.repo, branch: r.branch, sha: r.sha }); },
+    observe,
+    rebuild(entries) {
+      refs.clear();
+      for (const e of entries) { const x = e as { customType?: unknown; data?: unknown } | null; if (typeof x?.customType === "string") observe(x.customType, x.data); }
+    },
+  };
+}
+export type Bypass = { repo: string; branch: string; from: string; to: string };
+/** Reads each repository's main tip and compares it with the record: a moved tip is a bypass and updates the record; a
+ *  repository seen the first time (or whose main branch changed name) is recorded silently. A repository without a main
+ *  branch, or a failing read, is skipped. */
+export async function checkBypass(d: { git: Git; settings: RouterSettings; refs: MainRefs }, repos: Iterable<string>): Promise<Bypass[]> {
+  const out: Bypass[] = [];
+  for (const repo of repos) {
+    let main: { name: string; sha: string } | undefined;
+    for (const name of d.settings.mergeGate.mainBranches) { const sha = await d.git.sha(repo, name); if (sha !== undefined) { main = { name, sha }; break; } }
+    if (!main) continue;
+    const rec = d.refs.get(repo);
+    if (rec && rec.branch === main.name && rec.sha === main.sha) continue;
+    d.refs.put({ repo, branch: main.name, sha: main.sha });
+    if (rec && rec.branch === main.name) out.push({ repo, branch: main.name, from: rec.sha, to: main.sha });
+  }
+  return out;
+}
+/** Neutral wording: the router cannot tell who moved the ref (§3.4.6). */
+export const bypassText = (b: Bypass): string =>
+  `main moved outside the gate (${basename(b.repo)} ${b.branch} ${b.from.slice(0, 7)}→${b.to.slice(0, 7)})`;
+export const bypassHint = (b: Bypass): string =>
+  `<router-hint trip="gatebypass">${bypassText(b)}. The router does not revert it; merge into a main branch only with request_merge.</router-hint>`;
