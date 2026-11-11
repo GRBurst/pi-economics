@@ -263,7 +263,7 @@ inventory/keys tests; L6.T3 adds the default-mode `git push origin main` asserti
 | L5.T1 git in sandbox | remove `git` from `nativeCheckInputs` | `task-router` (exit 127) | [x] |
 | L5.T6 default inventory | register `start_branch` unconditionally | P13 "default mode: inventory" | [x] |
 | L5.T7 write guard property | `inside()` by string prefix without a separator (`/r/x` vs `/r/xy`) | "write guard property" | [x] |
-| L5.T9 default mode keys | return `cwd` always | "default mode: no cwd key" | [ ] |
+| L5.T9 default mode keys | return `cwd` always | "default mode: no cwd key" | [x] |
 | L6.T2 AC-M1 allow corpus | block every `push` | "AC-M1 allow corpus" | [ ] |
 | L6.T3 AC-N3 | register the bash guard regardless of `mergeGate` | "AC-N3 default mode push" | [ ] |
 | L6.T4 AC-M7 | compose the git guard after the files guard returns early | "AC-M7" | [ ] |
@@ -840,7 +840,7 @@ message). Open notes, for L6 or later:
 - **Files**: token-meter `contract.ts` (TRIPS literal), `test/contract.test.ts`, `LOGS.md`. **Depends**: L5.T7.
 - **RED**: a hint line with that trip passes (fails before). **Check**: `chk token-meter typecheck-token-meter log-contract`. **ACs**: AC-L1 (hint).
 
-#### L5.T9 Default child cwd (LD2) `[ ] todo`
+#### L5.T9 Default child cwd (LD2) `[x] done`
 - **Files**: `core/policy.ts` (`cwd` default `d.local?.activeWorktree()` when `isLocal(s)`; `PolicyResult.cwd` when ≠ `caller.cwd`; `toolsFor(…, own = cwd)`), `core/shell.ts` (`pd.local`), `test/local-child-cwd.test.ts`. **Depends**: L5.T6.
 - **RED**: local + active `/wt`: card without `cwd` → `cwd: "/wt"`, a `read-only+files` child with `files: ["src/a.ts"]` may `read {path: "src/a.ts"}` and is blocked on a foreign path; `card.cwd: "/other"` → `/other`; no active worktree → no `cwd` key; default mode → result keys ⊆ today's for every card of `test/policy.test.ts`'s fixtures (plant §11).
 - **GREEN**: as above. **Check**: fast runner; `chk task-router typecheck-task-router router-golden`. **ACs**: §2.2 item 2.

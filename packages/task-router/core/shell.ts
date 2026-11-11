@@ -22,7 +22,7 @@ import type { Runner } from "./gate.ts";
 import { createGuards } from "./guards.ts";
 import { createOutcomeLog } from "./log.ts";
 import { cardSection, localSection } from "./prompt.ts";
-import { activeSet, isLocal, opusLeft, statusText } from "./local/mode.ts";
+import { activeSet, componentOn, isLocal, opusLeft, statusText } from "./local/mode.ts";
 import { installLocal } from "./local/install.ts";
 import { createChildTrips } from "./local/childtrips.ts";
 import { createTickets, hasSpawnApi, NO_SPAWN_API } from "./local/overseer.ts";
@@ -114,6 +114,7 @@ export function install(pi: PiLike, deps: Deps) {
     sleep: deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))),
     probe: createProbes({ fetch: deps.fetch ?? (globalThis.fetch as unknown as FetchLike), now: nowMs }), counter, blocks: new Map(),
     force: force.port, childGuard: (child, parent) => childTrips.guard(child, parent), tickets,
+    local: { activeWorktree: () => (componentOn(settings, "worktrees") ? lm.branches.active()?.worktree : undefined) },
   };
   const policy = createPolicy(pd);
   const failover = createFailover({ ...pd, log });

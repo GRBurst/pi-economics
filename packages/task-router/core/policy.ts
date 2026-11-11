@@ -56,6 +56,8 @@ export type PolicyDeps = {
   childGuard?: (child: string, parent: string) => SyncGuard;
   /** The router's own spawns (design §3.2.2, plan S19): a known ticket in `task.ticket` is answered first. */
   tickets?: Tickets;
+  /** Local mode (design §2.2 item 2, LD2): the active worktree's directory, the default `cwd` of a card without one; absent = none. */
+  local?: { activeWorktree(): string | undefined };
 };
 
 const POLL_MS = 2000;
@@ -121,7 +123,9 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     const card = parsed.value;
     const prof = profileFor(card.kind, s);
     if (!prof.ok) return reject(prof.errors);
-    const cwd = resolveCwd(card.cwd, caller.cwd, d.home);
+    // LD2: in local mode a card without `cwd` gets the active worktree, and the child session starts in its task's directory.
+    const local = isLocal(s);
+    const cwd = resolveCwd(card.cwd, local ? d.local?.activeWorktree() ?? caller.cwd : caller.cwd, d.home);
     const v = verifyT0(card, cwd, d.fs, s);
     const parent = (caller.policyMeta as { importance?: Importance } | undefined)?.importance;
     // LD1 (design §2.2 item 1): in local mode the main's effort is no importance source (a Qwen main offers only xhigh).
@@ -154,7 +158,8 @@ export function createPolicy(d: PolicyDeps): SpawnPolicy {
     };
     const result = (model: string, thinkingLevel: ThinkingLevel) => ({
       model, thinkingLevel, briefAppend: briefAppend(card, plan, v.t0.specified, prof.value, blocks.value, s.delegation.nudge !== "off"),
-      ...guarded(toolsFor(prof.value, card, cwd, caller.cwd)), meta: { taskId: args.name, importance },
+      ...guarded(toolsFor(prof.value, card, cwd, local ? cwd : caller.cwd)), ...(local && cwd !== caller.cwd ? { cwd } : {}),
+      meta: { taskId: args.name, importance },
     });
     if (f) {
       // Plan D9, D11: the forced effort, else the plan's effort literally. A member waits for its slot alone (pinned) and never
