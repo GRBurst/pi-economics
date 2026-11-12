@@ -4,7 +4,8 @@
 # `bench.baseExtensions` and `bench.orchExtensions`, and nothing here may name
 # them. Fixed strings, case-insensitive, over every file's content (binary
 # files too) and every file and directory name, except the upstream provenance
-# (`NOTICE`, `LICENSE`, `patches/<input>/LICENSE`) and this directory, whose
+# (`NOTICE`, `LICENSE`, `patches/<input>/LICENSE`), the generated root
+# `flake.lock` (pi-setup's own inputs appear there) and this directory, whose
 # term list is the one place that has to name them. The list holds the names of
 # public extensions only; the names of the privately sourced ones are held, and
 # scanned for in this source, by the consumer that has them.
@@ -29,9 +30,11 @@ in rec {
         echo "pi-economics-boundary-scan: no files under $root" >&2
         exit 2
       fi
-      # Skipped: the top-level NOTICE and LICENSE, each upstream's LICENSE
-      # under patches/, and this check's own directory.
-      skipped='NOTICE|LICENSE|patches/[^/]+/LICENSE|checks/boundary(/[^:]*)?'
+      # Skipped: the top-level NOTICE and LICENSE, the top-level flake.lock
+      # (written by nix: its transitive nodes are pi-setup's inputs, which
+      # ship the extensions of the term list), each upstream's LICENSE under
+      # patches/, and this check's own directory.
+      skipped='NOTICE|LICENSE|flake\.lock|patches/[^/]+/LICENSE|checks/boundary(/[^:]*)?'
       rc=0
       # -a: a binary file is searched as text, not reported on stderr.
       hits=$(cd "$root" && grep -rnaiF --exclude-dir=.git --exclude=.git \
@@ -120,6 +123,7 @@ in rec {
     hit x/patches/y 'claude-auth'
     hit patches/up/x.patch '+ childExtensions: ["claude-auth"]'
     hit patches/up/LICENSE.patch 'claude-auth'
+    hit sub/flake.lock '"repo": "pi-claude-auth",'
     hit_bin data/blob.bin claude-auth
     hit_name extensions/claude-auth/index.ts
     hit_name docs/claudeAuth.md
@@ -137,7 +141,7 @@ in rec {
     echo "near misses: pass"
 
     mkdir -p excl/patches/up excl/checks/boundary excl/.git excl/docs
-    for f in NOTICE LICENSE patches/up/LICENSE checks/boundary/default.nix .git/HEAD; do
+    for f in NOTICE LICENSE flake.lock patches/up/LICENSE checks/boundary/default.nix .git/HEAD; do
       printf '%s\n' 'claude-auth session-name' >"excl/$f"
     done
     printf '%s\n' clean >excl/docs/ok.md
