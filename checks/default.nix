@@ -213,13 +213,13 @@ in {
     };
     consumer = subagentsProvider // {type = "PolicyResult";};
   };
-  # (T2.1) The four components' runtime check of __subagentsApi_v1 (core/runtime-guard.ts,
-  # identical in each package: runtime-guard-copies).
+  # (T2.1) The components' runtime check of __subagentsApi_v1 (core/runtime-guard.ts,
+  # identical in each package: runtime-guard-copies; token-meter's is the reference).
   iface-subagents-runtime-guard = iface.compare {
     name = "subagents-runtime-guard";
     provider = subagentsProvider;
     consumer = {
-      src = ../packages/task-router;
+      src = ../packages/token-meter;
       file = "core/runtime-guard.ts";
       type = "SubagentsApiShape";
     };
