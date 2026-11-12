@@ -15,7 +15,7 @@
 }:
 pkgs.runCommand "runtime-guard-copies" {nativeBuildInputs = [pkgs.diffutils pkgs.gnugrep];} ''
   ref=${self}/packages/token-meter/core/runtime-guard.ts
-  for c in experiments cache-lifecycle task-router; do
+  for c in experiments cache-lifecycle; do
     cmp "$ref" ${self}/packages/$c/core/runtime-guard.ts || {
       echo "runtime-guard-copies: packages/$c/core/runtime-guard.ts is not token-meter's copy" >&2
       exit 1

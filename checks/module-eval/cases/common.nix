@@ -35,8 +35,11 @@
     else e.data;
   runLine = cfg: file: "run ${lib.getExe (pe cfg).piSettings.package} ${lib.escapeShellArg file}\n";
 in {
-  # (M0.6)
-  exports = eq "homeModules" (lib.attrNames self.homeModules) ["default"];
+  # (M0.6) The packages are the components' builds; the task router's is the
+  # pi-task-router flake's (router-extraction design §7.3).
+  exports =
+    eq "homeModules" (lib.attrNames self.homeModules) ["default"]
+    ++ eq "packages" (lib.attrNames self.packages.x86_64-linux) ["actor-subagents" "bench" "cache-lifecycle" "experiments" "infinite-context" "retry" "token-meter"];
 
   # (M0.6) With every default the module renders nothing.
   inert = let

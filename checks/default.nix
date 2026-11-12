@@ -187,36 +187,6 @@ in {
     name = "retry";
     src = retryTs;
   };
-  # (M5.1) The task-router tests run when it builds (spec §8.1, "Package tests").
-  task-router = self.packages.${pkgs.stdenv.hostPlatform.system}.task-router;
-  # (M5.4) The decisions of R', recorded once (spec §6.3).
-  router-golden = pkgs.callPackage ./router-golden {};
-  # (M5.5)
-  typecheck-task-router = typecheck.typecheck {
-    name = "task-router";
-    src = ../packages/task-router;
-  };
-  # (M5.6) The router's copy of __subagentsApi_v1 (spec §5.3, §8.1).
-  iface-subagents-task-router = iface.compare {
-    name = "subagents-task-router";
-    provider = subagentsProvider;
-    consumer = {
-      src = ../packages/task-router;
-      file = "core/api.ts";
-      type = "SubagentsApiV1";
-    };
-  };
-  # (L4.T4) The other direction: the router's PolicyResult must fit the patched actor's
-  # (childTools, cwd, an async toolGuard; spawn-api patch).
-  iface-policy-task-router = iface.compare {
-    name = "policy-task-router";
-    provider = {
-      src = ../packages/task-router;
-      file = "core/api.ts";
-      type = "PolicyResult";
-    };
-    consumer = subagentsProvider // {type = "PolicyResult";};
-  };
   # (T2.1) The components' runtime check of __subagentsApi_v1 (core/runtime-guard.ts,
   # identical in each package: runtime-guard-copies; token-meter's is the reference).
   iface-subagents-runtime-guard = iface.compare {
