@@ -250,8 +250,12 @@ in {
   pi-install-smoke = import ./pi-package/smoke.nix {inherit (pkgPi) installed;};
   # (AC10) The npm step of the git route is a no-op offline.
   pi-git-route = import ./pi-package/git-route.nix {inherit pkgs self;};
-  # (AC8) The four runtime-guard.ts copies are identical.
-  runtime-guard-copies = import ./runtime-guard-copies.nix {inherit pkgs self;};
+  # (AC8) The runtime-guard.ts copies are token-meter's; its claim channel line
+  # stands in the router's copy too (router-extraction design §8.5).
+  runtime-guard-copies = import ./runtime-guard-copies.nix {
+    inherit pkgs self;
+    router = routerSrc;
+  };
   # (AC5) The package next to the patched actor: no warning, task_verdict.
   pi-install-actor = import ./pi-package/actor.nix {
     inherit (pkgPi) installed;
