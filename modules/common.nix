@@ -192,7 +192,8 @@ in {
       '';
     };
 
-    # (M2.5) The registry's children, rendered for actorSubagents.
+    # (M2.5) The registry's children; pi-setup's economics bridge hands them to
+    # the actor's settings file (router-extraction design §7.2).
     childExtensions = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       readOnly = true;

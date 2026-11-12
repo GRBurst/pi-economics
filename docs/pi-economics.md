@@ -26,9 +26,12 @@ sets this option.
   at the unpatched input's entry file (probing a build output would be
   import-from-derivation); its message names `input`.
 - `forChildren` selects the extensions actor-subagents children load: their
-  link paths `<home>/<agentDir>/extensions/<name>`, sorted by name, are
-  `childExtensions` in `actor-subagents/settings.json` while `actorSubagents`
-  is enabled.
+  link paths `<home>/<agentDir>/extensions/<name>`, sorted by name, are the
+  internal option `childExtensions`, which pi-setup's economics bridge hands
+  to its `programs.pi.actorSubagents` for `actor-subagents/settings.json`.
+- An entry named `actor-subagents` (pi-setup's patched actor, forwarded by
+  the bridge) is how the components learn the actor is there: without it
+  `cacheLifecycle` and `experiments` warn and `retry` adds no child rule.
 
 ### `piSettings`
 
@@ -111,32 +114,26 @@ assertion, `pi-economics: …bench.baseExtensions names …`, and the same for
 `<data>/arms.json` that names one of your extensions still runs, and its
 runs still report and judge, as long as `extensions` defines the name.
 
-### `actorSubagents` (`modules/actor-subagents.nix`)
+### `actorSubagents` (moved)
 
-pi-actor-subagents (upstream input `pi-actor-subagents`) with three patches
-from `patches/pi-actor-subagents`: child prompt, spawn policy (the
-`globalThis.__subagentsApi_v1` other extensions drive) and spawn API (local
-mode L4: the API's optional `spawn(args, {by, quiet})` and `kill(names)` for
-the router's own agents, where `quiet` sends no notice to the spawner,
-keeps the child out of the persisted roster and lets only the API and the
-user act on it: no agent, its spawner included, may message, retune, pause,
-resume or kill it (`api.kill` acts as the reserved actor `api`), and its system prompt has no agent
-preamble (no handshake); a spawn policy may give a child
-extra tools (`childTools`) and a working directory (`cwd`), and its tool
-guard may answer with a Promise; the API's `version` stays 1).
-After a restart the actor restores the persisted agents without what a spawn
-policy gave them (tool guard, child tools, cwd); in local mode the task router
-kills the routed ones it restores (pi-task-router's local-mode reference).
+The patched pi-actor-subagents (its three patches, the package
+`pi-actor-subagents-patched` with `passthru.spawnPolicyApi = 2`, its suite and
+its settings file `<agentDir>/actor-subagents/settings.json`) is pi-setup's
+`programs.pi.actorSubagents` (router-extraction design §7.2). Here
+`programs.piEconomics.actorSubagents` is a hidden stub (`modules/removed.nix`):
+any definition fails the assertion
 
-| Option | Default | Effect |
-|---|---|---|
-| `enable` | `false` | registry entry `actor-subagents` (link `<agentDir>/extensions/actor-subagents`, not loaded into children) and the settings file |
-| `package` | the flake's `packages/actor-subagents` | the patched source; its `passthru` carries `spawnPolicyApi` = 2, the version of `__subagentsApi_v1` it provides (1: the spawn policy; 2: also `spawn`/`kill`, child tools and cwd) |
-| `settings` | `{}` | merged into `<agentDir>/actor-subagents/settings.json` (`maxAgents`, `maxSpawnDepth`, `errorNoticeGraceMs`); `childExtensions` there is always the registry's, and setting it here is an assertion error |
-| `src` (internal) | set by `homeModules.default` from the input | the unpatched source the existence assertion probes |
+    pi-economics: programs.piEconomics.actorSubagents moved to pi-setup (programs.pi.actorSubagents)
 
-With `settings = {}` the file is `{"childExtensions":[…]}`, the children's
-link paths, as the original system configuration wrote it.
+and has no other effect; a definition under `lib.mkIf false` is none.
+
+What still refers to the actor here: the registry entry `actor-subagents`
+(above), which the components read for its presence and the bench links;
+`childExtensions`, the list pi-setup's bridge hands back for the actor's
+settings file; the copies of `__subagentsApi_v1` in cache-lifecycle,
+experiments, the bench probe and the runtime guard, compared with pi-setup's
+provider (`iface-subagents-*`); and the checks that load pi-setup's actor
+(`pi-install-actor`, `home-files`, `nix-route-smoke`).
 
 ### `tokenMeter` (`modules/token-meter.nix`)
 
@@ -151,8 +148,8 @@ reports over every log pi writes about itself.
 | `package` | the flake's `packages/token-meter` | the extension; `passthru.report` and `passthru.analyse` are the two commands |
 | `settings` | `{}` | written to `<agentDir>/token-meter/settings.json` when non-empty (`enabled`, `dir`, `rawRatelimit`; each has a default in the package) |
 
-Without `actorSubagents` there are no children to meter and no
-`parentSessionId`; without `experiments` the lines carry no arm; without
+Without the actor (`extensions.actor-subagents`) there are no children to
+meter and no `parentSessionId`; without `experiments` the lines carry no arm; without
 the task router (pi-task-router) and `experiments` the reports lack their tier
 and arm sections.
 None of these warns.
@@ -188,7 +185,8 @@ pi asks for a warming decision only while its `settings.json` says
 `cacheWarming` is `"idle"`, and pi's default is `streaming`. The op edits an
 existing file only: standalone, pi keeps its default while there is no
 `settings.json`, and while `piSettings.enable` is `false`. Without
-`actorSubagents` it warns: no warming while a session waits on its children.
+the actor in the registry (`extensions.actor-subagents`) it warns: no
+warming while a session waits on its children.
 Without `infiniteContext` the `context_peek` guard has nothing to log; without
 `experiments` its own settings decide every factor. Neither warns.
 
@@ -207,7 +205,8 @@ is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 | `package` | the flake's `packages/experiments` | the extension |
 | `settings` | `{}` | written to `<agentDir>/experiments/settings.json` as given, `{}` as `{"mode": "explore"}` (`mode`, `factors`, `maxArms`, `minExplore`, `baseline`, `guards`, `correctionRegex`); the file is the extension's opt-in: without it experiments is inert |
 
-Without `actorSubagents` it warns: children do not inherit an arm.
+Without the actor in the registry (`extensions.actor-subagents`) it warns:
+children do not inherit an arm.
 
 ### `infiniteContext` (`modules/infinite-context.nix`)
 
@@ -260,11 +259,11 @@ it. The package is the whole repository: pi finds `retry.ts` through
 
 No file of its own. `piSettings.ops.retry`: remove the two stale package
 entries (`https://github.com/monotykamary/pi-retry` and
-`git:github.com/monotykamary/pi-retry`), then, only while `actorSubagents` is
-enabled, `ensureContains` the child rule `^You were spawned by "` (flag `m`)
+`git:github.com/monotykamary/pi-retry`), then, only while the registry has
+`actor-subagents`, `ensureContains` the child rule `^You were spawned by "` (flag `m`)
 in `piRetry.subagents.match.systemPromptRegex`; `settings` leaves come at
 order 500, so they run first. The ops run only while `piSettings.enable` is
-`true`. Without `actorSubagents` there is no child rule and no warning.
+`true`. Without the actor there is no child rule and no warning.
 
 ### `taskRouter` (moved)
 
@@ -296,8 +295,8 @@ the two CLIs (`bin`). A user without Nix installs it with `pi install git:github
 
 **Render rule.** Only `nix run .#render` writes `package.json`. `render/default.nix` evaluates the module for one
 fixture (every component on but `bench`), maps the registry's own names to `./packages/<n>/index.ts` (a name without a
-package directory is a render error; the prerequisites `actor-subagents`, `infinite-context`, `pi-retry` are skipped,
-the user installs them) and adds `bin` when `tokenMeter` is on. `render-package` compares the committed file with it;
+package directory is a render error; the patched upstreams `infinite-context`, `pi-retry` are skipped, the user
+installs them; the actor, pi-setup's, is never in the fixture's registry) and adds `bin` when `tokenMeter` is on. `render-package` compares the committed file with it;
 `pi-package-manifest` states the manifest's laws one by one (private, keyword, semver, peers = pi's five host
 packages, imported-is-peer, no dependencies, paths, bin shebang and mode, skill fallback paths). The version is the
 constant in `render/default.nix`; the tag is `v` + version. `render-package` also requires every `packages/<c>/package.json` to carry it (see AGENTS.md, "Versions").
@@ -331,7 +330,7 @@ router keeps a copy of its own that claims on the same channel):
 - Nix route deltas: N2 the actor-missing warnings are runtime warnings as well; N3 the single-copy guard; N4 the
   settings file; N5 the sources of the three packages (N1, `task_verdict` at `session_start`, left with the router).
 
-Without the actor the package prints the warnings and keeps working; with the patched actor next to it none appears
+Without the actor the package prints the warnings and keeps working; with pi-setup's patched actor next to it none appears
 (`pi-install-actor`). The package checks load pi 1.4 offline (`pi -p`); they find the loaded extensions by pi's
 `PI_TIMING=1` factory lines, an undocumented output pinned to the locked `pkgs.pi-coding-agent`: a pi that no longer
 prints the block fails them with one message ("pi printed no PI_TIMING block").
@@ -340,8 +339,7 @@ prints the block fails them with one message ("pi printed no PI_TIMING block").
 
 A component built from an upstream repository takes it as a `flake = false`
 input. Its patches live in `patches/<input>/` under the file names of the author's system configuration, so
-the derivation is that configuration's, bar two one-line differences (see "Resync") and the actor's third
-patch (`pi-actor-subagents-spawn-api.patch`, local mode L4), which was written in this repository; `homeModules.default` hands the input to the
+the derivation is that configuration's, bar two one-line differences (see "Resync"); `homeModules.default` hands the input to the
 component as its internal option `src`, and the registry entry's `checkPath`
 points into `src`.
 
@@ -355,8 +353,6 @@ points into `src`.
 | `typecheck-harness` | the `tsc` runner accepts and rejects what it must |
 | `bench` | the bench's own tests (`node --test`), run when its code builds |
 | `typecheck-bench` | `tsc --strict` over the bench |
-| `actor-subagents` | the patched pi-actor-subagents' own suite and the host's checks of each patch's wiring |
-| `typecheck-actor-subagents` | `tsc --strict` over the patched pi-actor-subagents |
 | `token-meter` | the token meter's own tests (`node --test`), run when it builds; they include the runtime guard's (token-meter's copy is the reference) and the claim protocol shared with the router |
 | `typecheck-token-meter` | `tsc --strict` over the token meter |
 | `home-files` | the rendered sources exist and are what pi and the harnesses read: the extension, `LOGS.md`, both commands on an empty agent dir, the skill directory, the cache-lifecycle and experiments directories, cacheLifecycle's op through the activation's script, infinite-context's rendered settings through the extension's own parser, pi-retry's entry point, `ops.retry` through the script |
@@ -373,19 +369,19 @@ points into `src`.
 | `iface-experiments-task-router` | the router's copy of `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`, read from the `pi-task-router` input) is satisfied by this flake's `ExperimentsApiV1` |
 | `log-contract` | every log writer through `pi-analyse --check` and a full report; the router's writer and vocabularies are the `pi-task-router` input's |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths (`/home/<name>`), `git+ssh` URLs, private (RFC 1918) or Tailscale addresses, LAN host URLs (`http://<one-label host>`, not `localhost`) or names under `.local`, `.lan`, `.home.arpa`, `.ts.net` in tracked files (a worktree's `.git` file is skipped) |
-| `license` | `LICENSE` is MIT, every package declares MIT, `NOTICE` has a section per patched upstream |
+| `license` | `LICENSE` is MIT, every package declares MIT, `NOTICE` has a section per patched upstream and none for another |
 | `boundary`, `boundary-selftest` | no file's content (binary files too), file name or directory name names an extension this repository does not ship, in the spellings `x-y`, `x_y`, `xy` and `xY` (case ignored); `NOTICE`, `LICENSE`, the root `flake.lock` and `patches/<input>/LICENSE` are skipped, the patches themselves are scanned; the selftest has a hit and a near miss for each kind of place |
 | `render-package` | the committed `package.json` is the render of the module (AC2) |
 | `pi-package-manifest` | the manifest's laws, each reported under its own name (AC3) |
 | `pi-install-smoke` | `pi install ./pkg` offline: settings entry, `pi list`, every manifest extension loads, cache-lifecycle warns once, no task router loads, experiments stays inert (AC1) |
 | `pi-git-route` | the npm step of a git install (`--omit=dev --legacy-peer-deps`) is a no-op offline (AC10) |
-| `pi-install-actor` | the package next to the patched actor: the actor and every manifest extension load, no actor-missing warning (AC5) |
+| `pi-install-actor` | the package next to pi-setup's patched actor: the actor and every manifest extension load, no actor-missing warning (AC5) |
 | `pi-install-duplicate` | the package next to the Nix links: one `loaded twice` per component, exactly one bound copy (cache-lifecycle's actor warning appears once), no tool conflict, pi's skill loader reports the collision (AC7) |
 | `pi-install-scope-replaced`, `pi-install-scope-both` | the package in two scopes of a trusted project (user `pi install` plus `.pi/settings.json`): where the project entry replaces the user's package, no `loaded twice` and one bound copy; where a second copy joins it, one `loaded twice` per component and one bound copy (AC7, review M1) |
 | `pi-install-subset` | the README's filter loads only the listed extensions (AC4) |
 | `bins-smoke` | `npm install -g <dir>` offline, both CLIs run through an explicit node, the shipped shebang, the `node_modules` failure the README states (AC9) |
 | `runtime-guard-copies`, `iface-subagents-runtime-guard` | the three `runtime-guard.ts` copies equal token-meter's (AC8), whose claim channel line stands verbatim in the `pi-task-router` input's copy too; `SubagentsApiV1` satisfies their `SubagentsApiShape` |
-| `nix-route-smoke` | the Home Manager route's agent directory under real pi: every extension loads, no duplicate or missing-actor warning, `task_verdict` active (the router as a registry entry from the `pi-task-router` input's package: its claim and the three copies' share one channel), experiments' settings file (AC15) |
+| `nix-route-smoke` | the Home Manager route's agent directory under real pi: every extension loads, no duplicate or missing-actor warning, `task_verdict` active (pi-setup's actor and the router as registry entries from the `pi-setup` and `pi-task-router` inputs' packages; the router's claim and the three copies' share one channel), experiments' settings file (AC15) |
 
 How to run them: `AGENTS.md`, "Commands".
 
@@ -395,7 +391,7 @@ That configuration moved the shared upstreams and the npm lock after the first
 milestones copied them, so M6 resynced them first: the lock nodes `nixpkgs`
 and `home-manager`, the shared npm lock (`checks/npm`, now pi 1.3.0 with
 vitest and TypeScript 6), `pi-actor-subagents`, its check and its two
-patches. Three patches that earlier documents name no longer exist, because
+patches (all three actor patches have since moved to pi-setup). Three patches that earlier documents name no longer exist, because
 the upstreams or pi absorbed them: actor-subagents' `first-turn` (pi 1.2.0
 runs `before_agent_start` for extension-triggered runs), infinite-context's
 `foreign-messages` (upstream matches the projection as an ordered

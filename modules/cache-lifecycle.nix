@@ -13,7 +13,7 @@
   pe = config.programs.piEconomics;
   cfg = pe.cacheLifecycle;
   # The actor is there when the registry holds it (router-extraction design
-  # §7.3): pi-setup's programs.pi.actorSubagents, forwarded by its economics
+  # §7.3): pi-setup's patched actor, forwarded by its economics
   # bridge, or any entry of that name.
   hasActor = pe.extensions ? actor-subagents;
 in {

@@ -25,7 +25,8 @@
   fixtureJson = builtins.fromJSON fixtureText;
 
   install = "pi install git:github.com/GRBurst/pi-economics@v${version}";
-  pinned = "Patched build via the pi-economics Nix modules; upstream support pending.";
+  # The patched actor is pi-setup's (router-extraction design §7.3), as the runtime warning says.
+  pinned = "Patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending.";
   # review L1: the upstream already gives the fold reminders and the retry events the meter reads
   partial = {
     pi-infinite-context = "the upstream's fold reminders work as they are";

@@ -8,7 +8,11 @@ framework ([docs/scope.md](docs/scope.md)). The task router that picks the
 cheapest member that can do a job, with its local mode and research, is a flake
 of its own, [pi-task-router](https://github.com/GRBurst/pi-task-router)
 (`programs.piTaskRouter`; a definition of the former
-`programs.piEconomics.taskRouter` fails with that pointer). Each component is
+`programs.piEconomics.taskRouter` fails with that pointer). The patched
+pi-actor-subagents that two components use is
+[pi-setup](https://github.com/GRBurst/pi-setup)'s
+(`programs.pi.actorSubagents`; the former
+`programs.piEconomics.actorSubagents` fails likewise). Each component is
 an option under `programs.piEconomics` and is off until you enable it (the
 `piSettings` migration of pi's `settings.json` is the one default-on switch,
 see Requirements).
@@ -17,7 +21,6 @@ see Requirements).
 
 | Option | What it does |
 |---|---|
-| `actorSubagents` | pi-actor-subagents with three patches (child prompt, spawn policy, spawn API); the base for the task router's spawn policy and the meter's child accounting |
 | `tokenMeter` | one JSON line per provider request (tokens, cost, quota headers, retries; no prompt text); `meter-report` and `pi-analyse` |
 | `analysisSkill` | an agent skill that runs `pi-analyse` and proposes decisions from the logs |
 | `cacheLifecycle` | elides stale tool results and thinking after the prompt cache expired; cache warming |
@@ -35,7 +38,7 @@ What is logged and measured, and how to run the reports and the bench:
 ## Use
 
 Add the flake as an input and let it follow your `nixpkgs` and `home-manager`
-(its three patched upstreams are `flake = false` inputs; the patches apply to
+(its two patched upstreams are `flake = false` inputs; the patches apply to
 the revisions in this flake's `flake.lock`, so let them follow another
 revision of yours only if the patches still apply):
 
@@ -73,6 +76,15 @@ configuration (for example `home-manager.sharedModules =
 The agent directory defaults to `~/.pi/agent`;
 `programs.piEconomics.agentDir` moves it.
 
+The patched actor-subagents comes from pi-setup: its `homeModules.default`
+with `programs.pi.actorSubagents.enable = true`, and its economics bridge
+`homeModules.piEconomics`, which forwards `programs.pi.extensions` (the
+actor's entry included) to `programs.piEconomics.extensions` and hands the
+children's list (`childExtensions`) back to the actor's settings file. The
+components see the actor when `programs.piEconomics.extensions` has an entry
+`actor-subagents`; without one, `cacheLifecycle` and `experiments` warn and
+`retry` adds no child rule.
+
 ## Without Nix
 
 The repository is also a pi package: the three own extensions (token meter,
@@ -96,7 +108,7 @@ it misses the API and switches off only what needs it.
 
 | Package | Used by | Without it |
 |---|---|---|
-| pi-actor-subagents | used by `cache-lifecycle`, `experiments` | cache lifecycle does not keep sessions waiting on children warm; experiments children do not inherit an arm. Patched build via the pi-economics Nix modules; upstream support pending. |
+| pi-actor-subagents | used by `cache-lifecycle`, `experiments` | cache lifecycle does not keep sessions waiting on children warm; experiments children do not inherit an arm. Patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending. |
 | pi-infinite-context | optional | the upstream's fold reminders work as they are; the per-model reminder thresholds and the cost-aware fold hint come only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
 | pi-retry | optional | the meter's retry accounting works with the upstream (it reads its `pi-retry:*` events); the handling of OpenRouter's daily free cap (that 429 is not retried) comes only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
 
@@ -174,8 +186,8 @@ twice, and nothing is said. Remove one of them.
 
 Home Manager on Linux (the checks run on `x86_64-linux`) and the pi coding
 agent: the checks build and test against pi 1.3.0 (`checks/npm`), the
-components declare `>=1.0.0`, and the patched actor-subagents assumes pi 1.2.0
-or later. Nothing is installed or patched globally: each component is linked
+components declare `>=1.0.0`, and pi-setup's patched actor-subagents assumes
+pi 1.2.0 or later. Nothing is installed or patched globally: each component is linked
 into `<agentDir>/extensions`.
 
 `piSettings` is on by default and edits pi's mutable
