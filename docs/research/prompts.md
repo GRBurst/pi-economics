@@ -1,12 +1,14 @@
 # The research prompts
 
-The eleven Gemini Deep Research prompts behind the reports, as sent. Prompts 1–3 went out first; 4–6
+The twelve Gemini Deep Research prompts behind the reports, as sent. Prompts 1–3 went out first; 4–6
 after the decision to review plans and merges with Opus. The evidence rules at the end were meant for 4–6;
 the user's own prompt carried similar rules. Prompt 7 was added with `docs/local-mode/design.md` (its
 OQ10); prompts 7 and 8 went out with the evidence rules appended, and both reports are in. Prompt 9 was
-added after the first `size` refusals hit real work and went out with the evidence rules appended; its
-report is in `originals/` awaiting the next cleanup batch. Prompts 10 and 11 were added after the
-review-economics report; send them with the evidence rules appended.
+added after the first `size` refusals hit real work and went out with the evidence rules appended.
+Prompts 10 and 11 were added after the review-economics report (prompt 9's) and went out with the
+evidence rules appended; the reports for prompts 9, 10 and 11 are in `originals/` awaiting the next
+cleanup batch. Prompt 12 was added after the risk-classification and review-economics reports;
+send it with the evidence rules appended.
 
 | Prompt | Report |
 |---|---|
@@ -19,8 +21,9 @@ review-economics report; send them with the evidence rules appended.
 | 7 | `coding-agent-loop-harness-research.md` |
 | 8 | `autonomous-merge-pipeline-size-limits.md` |
 | 9 | `LLM Code Review Economics.md` (in `originals/`, cleanup pending) |
-| 10 | not yet run |
-| 11 | not yet run |
+| 10 | `Code Review Risk Classification.md` (in `originals/`, cleanup pending) |
+| 11 | `Autonomous Code Review Economics.md` (in `originals/`, cleanup pending) |
+| 12 | not yet run |
 
 ## 1. Open-weight routing models that run on a CPU
 
@@ -241,7 +244,81 @@ Questions:
 Output: for each question the evidence with exact numbers and sources; a verdict on the multi-turn-local vs single-turn-frontier claim (supported, refuted, or setup-dependent, naming the exact setups); the recommendation; and the list of least-certain claims.
 ```
 
-## Evidence rules (for prompts 4–11)
+## 12. Review structure: batched, specialized, interleaved, adversarial
+
+```
+Research four structural variants of LLM code review for an autonomous merge
+pipeline, against the default of one frontier-model single pass per diff:
+(a) batching several independent diffs into one review call, (b) several
+role-specialized single passes (conformance, defects, security) instead of
+one generalist pass, (c) interleaved per-task (checkpoint) review versus
+end-of-branch review, and (d) an adversarial reviewer whose product is
+failing tests instead of a judgement.
+
+Setting: a local coding agent (Qwen 3.8, 27B, one consumer GPU, one
+inference slot) lands work as small git-worktree branches, each with a check
+command that must pass. A deterministic gate classifies each branch (inert:
+no LLM review, checks only; standard; elevated) and reviews standard
+branches with one frontier model (Claude Opus 5.5) in a single fresh
+session: the reviewer sees the unified diff, the check output, and the goal
+plus acceptance criteria, and returns a typed approve/reject verdict with
+findings. Branches are capped near 150 changed lines (added + deleted) and
+6 files. The measured cost structure of such a review is
+fixed-cost-dominated: for a 150-line diff the per-review fixed component
+(system prompt, framing, repo context, check output) is 73–96% of total
+review cost, so the variants are judged on cost per accepted-and-correct
+merge, not on cost per review call. Companion research has already compared
+local multi-turn against frontier single-pass review; this prompt is about
+the structure of the review itself, not about which model runs it.
+
+Questions:
+1. Batched review: evidence on reviewing several independent diffs in one
+   LLM call (or one session in sequence): the per-diff defect recall and
+   precision as the number of diffs in context grows (attention dilution,
+   lost-in-the-middle with multiple items), against the fixed-cost
+   amortization. Which studies or production systems reviewed more than one
+   diff per call, with what count and per-diff size, and what did they
+   measure per diff versus reviewing them separately? Compute from cited
+   numbers: with fixed cost F per call and per-line cost v, for which count
+   and diff size does batching win on cost per accepted-and-correct merge,
+   and does the measured per-diff recall loss eat the gain?
+2. Role-specialized single-pass panels: evidence on running separate
+   single-pass reviews with different objectives — plan/goal conformance,
+   defect detection, security — versus one generalist review of the same
+   diff. For each objective: does a dedicated prompt measurably beat the
+   generalist prompt at the same model tier (F1, recall, precision, exact
+   numbers)? When does the union of panel findings beat the best single
+   reviewer, and what is the duplicate-finding rate (the cost multiplier)?
+   Any data on whether a conformance-only review can be downgraded to a
+   cheaper model tier.
+3. Interleaved versus end-of-branch review: for long-horizon work split
+   into tasks (each task a checkpoint inside one milestone, or its own
+   branch), evidence on reviewing at each checkpoint versus reviewing only
+   the final diff: drift and accumulated-defect detection, cost per
+   accepted-and-correct milestone, and the fix-cost asymmetry (a defect
+   caught at a checkpoint versus at the end, with numbers where reported).
+   Include plan-review-then-diff-review pipelines that report which stage
+   catches which defect classes.
+4. Adversarial / test-generation reviewers: evidence on reviewers whose
+   output is executable failing tests (or mutation-killing attempts) rather
+   than a judgement: measured yield (share of generated tests that fail on
+   the diff and expose a real defect) versus judgement-style review at the
+   same model tier, whether it works on diffs rather than whole
+   repositories, and the cost per true defect found.
+5. Concrete recommendation: for our gate (a standard branch of ~150 lines /
+   6 files, one Opus 5.5 single pass in a fresh session today,
+   fixed-cost-dominated), recommend per variant — adopt, adopt with
+   changes, or do not adopt — with the expected change in cost per
+   accepted-and-correct merge and in recall, computed from cited numbers;
+   flag every number that rests on extrapolation beyond the cited setup.
+
+Output: for each question the evidence with exact numbers and sources; a
+comparison table of the four variants (setup, what was measured, cost and
+recall effect per variant); the recommendation; and the list of
+least-certain claims.
+```
+
+## Evidence rules (for prompts 4–12)
 
 ```
 Evidence rules:
