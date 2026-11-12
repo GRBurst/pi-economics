@@ -128,6 +128,30 @@ in {
     holds "Home Manager's conflicting-target assertion fires"
     (lib.any (lib.hasPrefix "Conflicting managed target files: .pi/agent/extensions/ext-a") (failed "" c));
 
+  # (M2.5) The registry's children: link paths of the forChildren entries,
+  # sorted by name, whatever else the registry holds; pi-setup's economics
+  # bridge hands the list to the actor's settings file (router-extraction
+  # design §7.2). Two children, out of name order, and one entry withheld.
+  child-extensions = lib.concatMap (dir: let
+    c = hm.eval {
+      programs.piEconomics = {
+        agentDir = dir;
+        extensions = {
+          zeta = extA;
+          alpha = extA // {description = "fixture alpha";};
+          mid = extB;
+        };
+      };
+    };
+    kids = (pe c).childExtensions;
+    targets = map (f: f.target) (lib.attrValues c.home.file);
+  in
+    eq "childExtensions (${dir})" kids ["/home/u/${dir}/extensions/alpha" "/home/u/${dir}/extensions/zeta"]
+    ++ holds "every child is a link the registry renders (${dir})"
+    (lib.all (p: lib.elem p (map (t: "${c.home.homeDirectory}/${t}") targets)) kids)
+    ++ eq "names from the last path component (${dir})" (map (p: lib.last (lib.splitString "/" p)) kids) ["alpha" "zeta"])
+  [".pi/agent" "custom/agent"];
+
   # (M0.11; the ops and order lines: M0.12)
   pisettings-defaults = let
     s = (pe (hm.eval {})).piSettings;

@@ -10,6 +10,7 @@
 }: let
   removed = {
     taskRouter = "pi-economics: programs.piEconomics.taskRouter moved to the pi-task-router flake (programs.piTaskRouter)";
+    actorSubagents = "pi-economics: programs.piEconomics.actorSubagents moved to pi-setup (programs.pi.actorSubagents)";
   };
 in {
   options.programs.piEconomics = lib.mapAttrs (_: message:

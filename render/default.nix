@@ -20,15 +20,15 @@
   # Spec §7 Q6: one constant; the tag is `v` + version.
   version = "0.1.2";
 
-  # F_P: every component on but bench (Nix-only, spec D10), the
-  # prerequisites included, so the registry is the whole set the flake knows.
+  # F_P: every component on but bench (Nix-only, spec D10), the patched
+  # upstreams included, so the registry is the whole set the flake knows.
+  # actor-subagents is pi-setup's (router-extraction design §7.3): never here.
   fp = hm.eval {
     programs.piEconomics = {
       tokenMeter.enable = true;
       analysisSkill.enable = true;
       cacheLifecycle.enable = true;
       experiments.enable = true;
-      actorSubagents.enable = true;
       infiniteContext.enable = true;
       retry.enable = true;
     };
@@ -38,8 +38,8 @@
   # `rawModule` skips Home Manager's assertion check: the render does it.
   failed = map (a: a.message) (lib.filter (a: !a.assertion) fp.assertions);
 
-  # Spec D2: installed by the user, never shipped.
-  prereq = ["actor-subagents" "infinite-context" "pi-retry"];
+  # Spec D2: installed by the user, never shipped (the patched upstreams).
+  prereq = ["infinite-context" "pi-retry"];
   names = lib.attrNames pe.extensions;
   own = lib.filter (n: !lib.elem n prereq) names;
   entry = n:

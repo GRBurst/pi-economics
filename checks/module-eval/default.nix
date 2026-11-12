@@ -13,7 +13,6 @@
   caseFiles = [
     ./cases/common.nix
     ./cases/bench.nix
-    ./cases/actor-subagents.nix
     ./cases/token-meter.nix
     ./cases/analysis-skill.nix
     ./cases/cache-lifecycle.nix

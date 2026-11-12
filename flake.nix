@@ -73,7 +73,6 @@
     homeModules.default = {
       imports = [./modules];
       # The upstream sources the patched components build from (spec §3).
-      programs.piEconomics.actorSubagents.src = lib.mkDefault pi-actor-subagents;
       programs.piEconomics.infiniteContext.src = lib.mkDefault pi-infinite-context;
       programs.piEconomics.retry.src = lib.mkDefault pi-retry;
     };
