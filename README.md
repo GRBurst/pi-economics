@@ -4,7 +4,10 @@ The [pi](https://github.com/earendil-works/pi) coding agent's token-economics
 stack as Home Manager components: a meter that logs every provider request, a
 task router that picks the cheapest member that can do a job, prompt-cache and
 context-window management, online experiments, retries, and a bench to measure
-all of it on your own work. Each component is an option under
+all of it on your own work. Scope: a purely exploratory framework — the model
+router (`taskRouter`, including local mode) is slated to be extracted into a
+separate plugin, and the research cleanup tool into its own repository
+([docs/scope.md](docs/scope.md)). Each component is an option under
 `programs.piEconomics` and is off until you enable it (the `piSettings`
 migration of pi's `settings.json` is the one default-on switch, see
 Requirements).
@@ -18,7 +21,7 @@ Requirements).
 | `analysisSkill` | an agent skill that runs `pi-analyse` and proposes decisions from the logs |
 | `cacheLifecycle` | elides stale tool results and thinking after the prompt cache expired; cache warming |
 | `experiments` | one fractional-factorial arm per main session, recorded for the reports |
-| `taskRouter` | routes subagent spawns by task card to the cheapest capable member (local, free-cloud, Haiku, Sonnet, …); `/force` fixes the model; local mode, for a main session on a local model: hints, an Opus overseer, worktree branches, a merge gate and plans |
+| `taskRouter` | routes subagent spawns by task card to the cheapest capable member (local, free-cloud, Haiku, Sonnet, …); `/force` fixes the model; local mode, for a main session on a local model: hints, an Opus overseer, worktree branches, a merge gate and plans; slated to be extracted into a separate plugin ([docs/scope.md](docs/scope.md)) |
 | `infiniteContext` | pi-infinite-context with two patches: absolute fold-reminder thresholds, a cost-aware fold hint |
 | `retry` | pi-retry with a patch for OpenRouter's daily free-tier cap |
 | `bench` | `pi-bench` and `bench-report`: arms, blind judges, bootstrap reports |
