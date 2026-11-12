@@ -24,6 +24,9 @@
     inherit lib pkgs;
     inherit (npm) nodeModules;
   };
+  # The task router's package, as the pi-task-router input ships it
+  # (router-extraction design §7.3), for the checks that observe the router.
+  routerSrc = "${pi-task-router}/packages/task-router";
   # (M2.1)
   actorSubagents = self.packages.${pkgs.stdenv.hostPlatform.system}.actor-subagents;
   # (M2.2) The patched source without upstream's tsconfig.json: tsc refuses
@@ -231,8 +234,9 @@ in {
       type = "ExperimentsApi";
     };
   };
-  # (M5.11) Every log writer through pi-analyse (spec §8.1).
-  log-contract = pkgs.callPackage ./log-contract {};
+  # (M5.11) Every log writer through pi-analyse (spec §8.1); the router's
+  # writer is the pi-task-router input's (router-extraction design §7.3).
+  log-contract = pkgs.callPackage ./log-contract {router = routerSrc;};
   home-files = import ./home-files {inherit lib pkgs hm;};
   # (AC2) The committed package.json against the render.
   render-package = import ./render.nix {inherit lib pkgs self render;};

@@ -4,17 +4,23 @@
 # test fakes stand in for pi) into one agent dir, then requires
 # `pi-analyse --check` to pass, every line to carry the current schema version
 # and every report section to have data.
+#
+# The router is the pi-task-router input's (router-extraction design §7.3,
+# §8.6): its `packages/task-router` is copied next to this repository's
+# packages, so contract.ts's relative imports read the router's real writer,
+# enums and test harness.
 {
   lib,
   runCommand,
   nodejs,
+  # The router's package directory (a store path).
+  router,
 }: let
-  src = lib.fileset.toSource {
+  own = lib.fileset.toSource {
     root = ../..;
     fileset = lib.fileset.unions [
       ./contract.ts
       ../../packages/token-meter
-      ../../packages/task-router
       ../../packages/cache-lifecycle
       ../../packages/experiments
     ];
@@ -24,6 +30,10 @@ in
     set -euo pipefail
     export HOME=$TMPDIR/home
     mkdir -p "$HOME"
-    node --experimental-strip-types --no-warnings ${src}/checks/log-contract/contract.ts "$TMPDIR/work"
+    tree=$TMPDIR/tree
+    cp -r ${own} "$tree"
+    chmod -R u+w "$tree"
+    cp -r ${router} "$tree/packages/task-router"
+    node --experimental-strip-types --no-warnings "$tree/checks/log-contract/contract.ts" "$TMPDIR/work"
     touch "$out"
   ''
