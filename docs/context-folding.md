@@ -47,6 +47,15 @@ kept as history under the corrected projection.
   then fails to fold on its own (`"not a root"`; `context_peek` says "not in
   the archive on this branch"). It stays in context for the whole session.
   Prefer a start that includes both halves of each pair.
+- **A range boundary must not split a tool unit, even between sibling
+  results.** When one assistant message issues several tool calls, *all* of
+  its results belong to one indivisible unit. Ending range A at the first
+  result and starting range B at a sibling result of the same call message
+  is rejected: `Items 1 and 2 overlap after tool-unit expansion (roots
+  "…".."…" and "…".."…"). Combine them into one item.` The error prints the
+  *expanded* ranges, so you can see exactly where they touch. Fix: move the
+  boundary to after the unit's last result, or combine the two items into
+  one range (a single item from the first start to the later end).
 - **Re-map right before folding.** Fold responses return new fold ids, and
   your next call must use current ids. A stale id fails loudly ("is not a
   root"), so the cost of re-mapping is small.
@@ -117,3 +126,14 @@ file the floor was ~174k of 262k after three fold batches (146.4k + 91.4k +
 The same session orphaned one assistant message (mid-pair start) and recovered
 its content's only consumer by `context_search` + `context_peek` — both
 incidents are the source of the rules above.
+
+## Follow-up session (next day, same conversation)
+
+The conversation had grown to 169 roots; one two-item call freed 160.1k
+(≈ 75k per item, so the per-item cache rewrite cost is real). One new
+incident: the sibling-result overlap above — a range ended at one of two
+`request_merge` results issued by the same assistant message, and the next
+range started at the sibling; combining the two items into one range (user-id
+start to later end) fixed it. Also confirmed again: a range `to` at an
+assistant message is accepted, and a fold of a *custom* message (a system
+notice) is a valid single-root fold.
