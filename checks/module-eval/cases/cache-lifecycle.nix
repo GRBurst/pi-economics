@@ -23,7 +23,7 @@
   targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
   fileAt = target: cfg: lib.findFirst (f: f.target == target) null (lib.attrValues cfg.home.file);
   bare = hm.evalBare {};
-  warning = "pi-economics: cacheLifecycle without actorSubagents loses warming while a session waits on its children (the warm policy reads __subagentsApi_v1)";
+  warning = "pi-economics: cacheLifecycle without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses warming while a session waits on its children (the warm policy reads __subagentsApi_v1)";
 in {
   # (M4.9) Off by default: no registry entry, no file, no op.
   cache-lifecycle-off = let

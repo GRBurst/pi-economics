@@ -12,6 +12,10 @@
 }: let
   pe = config.programs.piEconomics;
   cfg = pe.cacheLifecycle;
+  # The actor is there when the registry holds it (router-extraction design
+  # §7.3): pi-setup's programs.pi.actorSubagents, forwarded by its economics
+  # bridge, or any entry of that name.
+  hasActor = pe.extensions ? actor-subagents;
 in {
   options.programs.piEconomics.cacheLifecycle = {
     enable = lib.mkEnableOption ''
@@ -73,6 +77,6 @@ in {
     ];
 
     # (M4.12) A soft dependency (spec §4.1): shell.ts tolerates a missing API.
-    warnings = lib.optional (!pe.actorSubagents.enable) "pi-economics: cacheLifecycle without actorSubagents loses warming while a session waits on its children (the warm policy reads __subagentsApi_v1)";
+    warnings = lib.optional (!hasActor) "pi-economics: cacheLifecycle without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses warming while a session waits on its children (the warm policy reads __subagentsApi_v1)";
   };
 }

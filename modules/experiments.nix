@@ -14,6 +14,10 @@
 }: let
   pe = config.programs.piEconomics;
   cfg = pe.experiments;
+  # The actor is there when the registry holds it (router-extraction design
+  # §7.3): pi-setup's programs.pi.actorSubagents, forwarded by its economics
+  # bridge, or any entry of that name.
+  hasActor = pe.extensions ? actor-subagents;
 in {
   options.programs.piEconomics.experiments = {
     enable = lib.mkEnableOption "the pi experiments extension (one fractional-factorial arm per main session; explore/exploit assignment, spawn inheritance for children)";
@@ -63,6 +67,6 @@ in {
     );
 
     # (M4.15) A soft dependency (spec §4.1): shell.ts tolerates a missing API.
-    warnings = lib.optional (!pe.actorSubagents.enable) "pi-economics: experiments without actorSubagents loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
+    warnings = lib.optional (!hasActor) "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
   };
 }

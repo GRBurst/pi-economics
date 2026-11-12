@@ -16,7 +16,31 @@
   packages = cfg: lib.filter (p: !lib.hasSuffix "-hm-session-vars.sh" p) (map toString cfg.home.packages);
   union = f: set (lib.concatMap (c: f (with' [c])) components);
   all = with' components;
+  # Whether the actor is there is read from the registry (router-extraction
+  # design §7.3): the warnings of cacheLifecycle and experiments, retry's child rule.
+  actor = import ../fixtures/actor-entry.nix;
+  warnCl = "pi-economics: cacheLifecycle without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses warming while a session waits on its children (the warm policy reads __subagentsApi_v1)";
+  warnEx = "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
+  users = registry:
+    hm.eval {
+      programs.piEconomics =
+        lib.genAttrs ["cacheLifecycle" "experiments" "retry"] (_: {enable = true;})
+        // {extensions = registry;};
+    };
+  childRule = cfg: lib.any (o: o.op == "ensureContains") cfg.programs.piEconomics.piSettings.ops.retry;
 in {
+  actor-presence = let
+    present = users {actor-subagents = actor;};
+    absent = users {};
+    bare = hm.evalBare {};
+  in
+    eq "registry entry: no new warning" present.warnings bare.warnings
+    ++ holds "registry entry: retry's child rule" (childRule present)
+    ++ eq "registry entry: failed assertions" (failed "" present) []
+    ++ eq "no entry: one warning each" (lib.sort lib.lessThan (lib.subtractLists bare.warnings absent.warnings)) [warnCl warnEx]
+    ++ holds "no entry: no child rule" (!childRule absent)
+    ++ eq "no entry: failed assertions" (failed "" absent) [];
+
   components-together =
     eq "home.file targets" (set (targets all)) (union targets)
     ++ eq "home.packages" (set (packages all)) (union packages)

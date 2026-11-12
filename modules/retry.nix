@@ -11,6 +11,10 @@
 }: let
   pe = config.programs.piEconomics;
   cfg = pe.retry;
+  # The actor is there when the registry holds it (router-extraction design
+  # §7.3): pi-setup's programs.pi.actorSubagents, forwarded by its economics
+  # bridge, or any entry of that name.
+  hasActor = pe.extensions ? actor-subagents;
 
   removePackage = value: {
     op = "removeWhere";
@@ -76,7 +80,7 @@ in {
         `maxRetriesAtMaxDelay`, `baseDelayMs`, `maxDelayMs`, `multiplier`,
         `messageFreeRetries`, `subagents.*`). Applied by the activation entry
         `piSettingsMigrate`, so only while `piSettings.enable`. With
-        actorSubagents enabled, the child rule is added to
+        `actor-subagents` in `extensions`, the child rule is added to
         `piRetry.subagents.match.systemPromptRegex` after these. An empty
         attribute set below a key is an error (it would set nothing).
       '';
@@ -100,14 +104,14 @@ in {
     };
 
     # (M6.12) Today's ops (checks/pi-settings-migrate/today-ops.nix): the two
-    # stale-package removals, then the child rule only with actorSubagents
-    # (spec §4.1, no warning), then the settings' leaves.
+    # stale-package removals, then the child rule only with the actor in the
+    # registry (spec §4.1, no warning), then the settings' leaves.
     programs.piEconomics.piSettings.ops.retry =
       [
         (removePackage "https://github.com/monotykamary/pi-retry")
         (removePackage "git:github.com/monotykamary/pi-retry")
       ]
-      ++ lib.optional pe.actorSubagents.enable {
+      ++ lib.optional hasActor {
         op = "ensureContains";
         path = ["piRetry" "subagents" "match" "systemPromptRegex"];
         value = {
