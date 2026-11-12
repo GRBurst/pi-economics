@@ -14,10 +14,6 @@
 
     # The patched upstreams (spec §3), locked to the revisions the patches were
     # made against; a consumer makes them follow its own inputs.
-    pi-actor-subagents = {
-      url = "github:fdietze/pi-actor-subagents";
-      flake = false;
-    };
     pi-infinite-context = {
       url = "github:fdietze/pi-infinite-context";
       flake = false;
@@ -29,7 +25,9 @@
 
     # Checks only (router-extraction design §7.3, §8.3): the provider of
     # __subagentsApi_v1, pi-setup's patched actor-subagents
-    # (`packages.<system>.actor-subagents`), for the interface comparisons.
+    # (`packages.<system>.actor-subagents`), for the interface comparisons and
+    # the package checks that load it beside the components (its input
+    # `pi-actor-subagents` is the source the registry's existence probe reads).
     pi-setup = {
       url = "github:GRBurst/pi-setup";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -52,7 +50,6 @@
     self,
     nixpkgs,
     home-manager,
-    pi-actor-subagents,
     pi-infinite-context,
     pi-retry,
     pi-setup,
@@ -81,7 +78,6 @@
     # builds the same derivation from the consumer's pkgs.
     packages.${system} = {
       bench = pkgs.callPackage ./packages/bench/package.nix {};
-      actor-subagents = pkgs.callPackage ./packages/actor-subagents/package.nix {src = pi-actor-subagents;};
       token-meter = pkgs.callPackage ./packages/token-meter/package.nix {};
       cache-lifecycle = pkgs.callPackage ./packages/cache-lifecycle/package.nix {};
       experiments = pkgs.callPackage ./packages/experiments/package.nix {};

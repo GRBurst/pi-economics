@@ -27,20 +27,13 @@
   # The task router's package, as the pi-task-router input ships it
   # (router-extraction design §7.3), for the checks that observe the router.
   routerSrc = "${pi-task-router}/packages/task-router";
-  # (M2.1)
-  actorSubagents = self.packages.${pkgs.stdenv.hostPlatform.system}.actor-subagents;
-  # (M2.2) The patched source without upstream's tsconfig.json: tsc refuses
-  # files named on its command line next to one (TS5112), and the type check's
-  # flags are ours. package.json keeps the files ESM ("type": "module").
-  actorSubagentsTs = pkgs.runCommand "actor-subagents-ts" {} ''
-    mkdir $out
-    cp -r ${actorSubagents}/extensions ${actorSubagents}/package.json $out/
-  '';
   # (M2.3)
   iface = import ./iface {inherit lib pkgs typecheck;};
   # pi-setup's patched actor-subagents, the provider of __subagentsApi_v1 the
-  # consumers meet (router-extraction design §8.3); its type-check copy as
-  # actorSubagentsTs.
+  # consumers meet (router-extraction design §8.3). Its type-check copy
+  # (M2.2): the patched source without upstream's tsconfig.json (tsc refuses
+  # files named on its command line next to one, TS5112; the type check's
+  # flags are ours); package.json keeps the files ESM ("type": "module").
   setupActor = pi-setup.packages.${pkgs.stdenv.hostPlatform.system}.actor-subagents;
   setupActorTs = pkgs.runCommand "setup-actor-subagents-ts" {} ''
     mkdir $out
@@ -107,16 +100,6 @@ in {
   typecheck-bench = typecheck.typecheck {
     name = "bench";
     src = ../packages/bench;
-  };
-  # The upstream suite of the patched pi-actor-subagents (spec §8.1), with the
-  # host's check (checks/actor-subagents/default.nix, copied).
-  actor-subagents = pkgs.callPackage ./actor-subagents {
-    src = actorSubagents;
-    inherit (npm) nodeModules;
-  };
-  typecheck-actor-subagents = typecheck.typecheck {
-    name = "actor-subagents";
-    src = actorSubagentsTs;
   };
   # The bench probe's copy of __subagentsApi_v1 (spec §5.3, §8.1).
   iface-subagents-bench-probe = iface.compare {
