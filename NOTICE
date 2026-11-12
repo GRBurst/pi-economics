@@ -1,12 +1,8 @@
-pi-economics is MIT-licensed (LICENSE). It builds three upstream extensions
+pi-economics is MIT-licensed (LICENSE). It builds two upstream extensions
 from their sources and applies the patches under patches/<input>/ to them.
 The patches are derived from those projects and are distributed under their
 licences; each upstream's licence text, with its permission notice, is kept
 next to its patches as patches/<input>/LICENSE.
-
-## pi-actor-subagents
-https://github.com/fdietze/pi-actor-subagents — MIT, Copyright (c) 2026 Felix Dietze
-Licence text: patches/pi-actor-subagents/LICENSE
 
 ## pi-infinite-context
 https://github.com/fdietze/pi-infinite-context — MIT, Copyright (c) 2026 Felix Dietze

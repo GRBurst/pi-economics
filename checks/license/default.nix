@@ -1,6 +1,7 @@
 # The licence (spec §8.3): LICENSE is MIT, every package declares MIT, and
-# NOTICE has a section per patched upstream (patches/<input>), and each
-# patches/<input>/LICENSE carries the upstream's MIT permission notice.
+# NOTICE has a section per patched upstream (patches/<input>) and none for an
+# upstream this flake no longer patches, and each patches/<input>/LICENSE
+# carries the upstream's MIT permission notice.
 {
   lib,
   pkgs,
@@ -13,6 +14,7 @@
   licenseOf = d: (builtins.fromJSON (builtins.readFile (root + "/packages/${d}/package.json"))).license or null;
   patched = lib.attrNames (builtins.readDir (root + "/patches"));
   notice = lib.optionals (has "/NOTICE") (lines (root + "/NOTICE"));
+  sections = map (lib.removePrefix "## ") (lib.filter (lib.hasPrefix "## ") notice);
   permission = "Permission is hereby granted";
   licenseFailure = d:
     if !has "/patches/${d}/LICENSE"
@@ -25,6 +27,7 @@
     ++ map (d: "packages/${d}/package.json: license ${builtins.toJSON (licenseOf d)}, want \"MIT\"") (lib.filter (d: licenseOf d != "MIT") jsons)
     ++ lib.optional (!has "/NOTICE") "NOTICE missing"
     ++ map (d: "NOTICE: no section for patches/${d} (a line '## ${d}')") (lib.filter (d: !lib.elem "## ${d}" notice) patched)
+    ++ map (s: "NOTICE: section '## ${s}' has no patches/${s}") (lib.filter (s: !lib.elem s patched) sections)
     ++ lib.concatMap licenseFailure patched;
 in
   pkgs.runCommand "license" {
