@@ -102,96 +102,63 @@ in
     in
       eq "PI_BENCH_ROUTER" (lib.importJSON v.PI_BENCH_ROUTER) router;
 
-    # (M5.12) With taskRouter, the arms get its model keys (every one of
-    # routerModelKeys, the legacy ones too: review-m5 L1) and both switches off;
-    # a definition replaces one leaf; without taskRouter nothing (spec §7).
+    # The router base of the orchestrator arms is read at run time from the
+    # live router settings (router-extraction design §7.3; the bench's
+    # router.test.ts holds the property): with the router enabled and
+    # `router` unset, Nix defines no base and exports no PI_BENCH_ROUTER, and
+    # the file the bench reads (`PI_BENCH_AGENT_SRC`/task-router/settings.json)
+    # is the one the router's module writes. A definition is exported as it
+    # is, the explicit override. Two ways to enable the router: the in-tree
+    # module, and a registry entry beside the settings file (as the router's
+    # own flake does).
     bench-router-default = let
       s = {
         models.sonnet.model = "m";
         localHealthUrl = "http://h:1";
         queueMaxSec = 5;
-        contextFit = 1;
-        cloudDailyCap = 7;
-        contextWindow.T1 = 200000;
         randomize = {
           enabled = true;
           share = 0.2;
         };
-        spotCheck = {
-          enabled = true;
-          share = 0.1;
-        };
         t0Limits.files = 3;
-        profiles.x.ability = "read";
       };
-      ev = more:
-        hm.eval {
-          programs.piEconomics =
-            {
-              bench.enable = true;
-              actorSubagents.enable = true;
-              taskRouter = {
-                enable = true;
-                settings = s;
-              };
-            }
-            // more;
-        };
-      want = {
-        models.sonnet.model = "m";
-        localHealthUrl = "http://h:1";
-        queueMaxSec = 5;
-        contextFit = 1;
-        cloudDailyCap = 7;
-        contextWindow.T1 = 200000;
-        randomize.enabled = false;
-        spotCheck.enabled = false;
-      };
-      c = ev {};
-    in
-      eq "router" (pe c).bench.router want
-      ++ eq "PI_BENCH_ROUTER" (lib.importJSON c.home.sessionVariables.PI_BENCH_ROUTER) want
-      ++ eq "a definition replaces one key"
-      (pe (ev {
-        bench = {
-          enable = true;
-          router.queueMaxSec = 9;
-        };
-      })).bench.router (want // {queueMaxSec = 9;})
-      ++ eq "empty settings: the switches only" (pe (ev {taskRouter.enable = true;})).bench.router {
-        randomize.enabled = false;
-        spotCheck.enabled = false;
-      }
-      ++ holds "without taskRouter: nothing exported" (!((hm.eval {programs.piEconomics.bench.enable = true;}).home.sessionVariables ? PI_BENCH_ROUTER));
-
-    # (review-m5 M2, FU1) The projection is one mkDefault per leaf: a host's
-    # definition of one member's model replaces that leaf only; the member's other
-    # keys and the other members stay, a blank one among them (spec §7).
-    bench-router-leaf = let
-      s.models = {
-        qwen-local = {
-          model = "llama/q";
-          health = "http://h:2";
-        };
-        qwen-cloud.model = "";
-        sonnet.model = "m";
-      };
-      c = hm.eval {
-        programs.piEconomics = {
-          bench = {
-            enable = true;
-            router.models.qwen-local.model = "llama/other";
-          };
+      live = "task-router/settings.json";
+      routerOn = {
+        in-tree.programs.piEconomics = {
           actorSubagents.enable = true;
           taskRouter = {
             enable = true;
             settings = s;
           };
         };
+        registry = {
+          programs.piEconomics.extensions.task-router = {
+            path = fx + "/ext-b";
+            forChildren = false;
+            description = "a router";
+          };
+          home.file.".pi/agent/${live}".text = builtins.toJSON s;
+        };
       };
+      one = name: router: let
+        ev = bench:
+          hm.eval {
+            imports = [router];
+            programs.piEconomics.bench = {enable = true;} // bench;
+          };
+        c = ev {};
+        v = c.home.sessionVariables;
+        set = ev {router.queueMaxSec = 9;};
+      in
+        eq "router (${name})" (pe c).bench.router {}
+        ++ holds "unset: no PI_BENCH_ROUTER (${name})" (!(v ? PI_BENCH_ROUTER))
+        ++ eq "the live file is the router's (${name})" (builtins.fromJSON c.home.file.".pi/agent/${live}".text) s
+        ++ eq "the bench reads it (${name})" "${v.PI_BENCH_AGENT_SRC}/${live}" "${c.home.homeDirectory}/${c.home.file.".pi/agent/${live}".target}"
+        ++ eq "set: exported as defined (${name})" (lib.importJSON set.home.sessionVariables.PI_BENCH_ROUTER) {queueMaxSec = 9;}
+        ++ eq "failed assertions (${name})" (failed "" c) [];
     in
-      eq "router.models" (pe c).bench.router.models (lib.recursiveUpdate s.models {qwen-local.model = "llama/other";})
-      ++ eq "failed assertions" (failed "" c) [];
+      lib.concatLists (lib.mapAttrsToList one routerOn)
+      ++ holds "without the router: nothing exported" (!((on {}).home.sessionVariables ? PI_BENCH_ROUTER));
 
     # The consumer's own extensions (a provider login, a search tool) come in
     # through two lists of names from `extensions`, exported comma-separated:

@@ -10,13 +10,6 @@
   pe = config.programs.piEconomics;
   cfg = pe.bench;
   agentSrc = "${config.home.homeDirectory}/${pe.agentDir}";
-  # (M5.12) The router's keys that say which models exist and where to reach
-  # them (spec §7), in R's schema and in the legacy forms its loader still
-  # maps (core/settings.ts); `contextFit` too, since the context filter picks
-  # among the models by it (plan router-g3-g7, D15).
-  routerModelKeys = ["models" "queueMaxSec" "contextFit" "localHealthUrl" "cloudDailyCap" "contextWindow"];
-  # One mkDefault per leaf (an attribute set is descended, a list is a leaf): a
-  # host's definition of one leaf replaces that leaf only (review-m5 M2).
   # The consumer's own extensions, by the options that list them and the
   # variables they are exported as (comma-separated, so a name has no comma; the
   # bench trims each entry, so none has white space either).
@@ -25,10 +18,6 @@
     orchExtensions = "PI_BENCH_ORCH_EXTENSIONS";
   };
   nameList = lib.types.listOf (lib.types.strMatching "[^,[:space:]]+");
-  mkDefaultLeaves = v:
-    if lib.isAttrs v
-    then lib.mapAttrs (_: mkDefaultLeaves) v
-    else lib.mkDefault v;
 in {
   options.programs.piEconomics.bench = {
     enable = lib.mkEnableOption "the pi-bench harness (pi-bench, bench-report)";
@@ -119,19 +108,18 @@ in {
       type = lib.types.attrsOf (pkgs.formats.json {}).type;
       default = {};
       description = ''
-        The base of the `task-router/settings.json` an orchestrator arm writes;
-        the arm's own keys (`routing`, `delegation`, `t0Limits`) are merged over
-        it as `lib.recursiveUpdate` does. Exported as a JSON file
-        (`PI_BENCH_ROUTER`, made with `builtins.toFile`, so no value may carry
-        a store path's context); `{}` exports nothing, and an arm's file is the
-        arm's keys alone.
-        While taskRouter is enabled it is defined, one `mkDefault` per leaf
-        (a list is a leaf), as the keys of taskRouter.settings that name the
-        models and where to reach them (`models`, `queueMaxSec`, `contextFit`,
-        `localHealthUrl`, `cloudDailyCap`, `contextWindow`) with
-        `randomize.enabled` and `spotCheck.enabled` set to `false`: a
-        definition of one leaf (`router.models.<m>.model`) replaces that leaf
-        only, and the other members stay.
+        An override of the base of the `task-router/settings.json` an
+        orchestrator arm writes. The bench reads that base at run time from the
+        live router settings (`<agent source>/task-router/settings.json`): the
+        keys that name the models and where to reach them (`models`,
+        `queueMaxSec`, `contextFit`, `localHealthUrl`, `cloudDailyCap`,
+        `contextWindow`), with `randomize.enabled` and `spotCheck.enabled` set
+        to `false`; without that file the base is empty. This override is
+        merged over the base, and the arm's own keys (`routing`, `delegation`,
+        `t0Limits`) over both, as `lib.recursiveUpdate` does: a definition of
+        one leaf (`router.models.<m>.model`) replaces that leaf only.
+        Exported as a JSON file (`PI_BENCH_ROUTER`, made with `builtins.toFile`,
+        so no value may carry a store path's context); `{}` exports nothing.
       '';
     };
 
@@ -170,14 +158,6 @@ in {
       token-meter = "${pe.tokenMeter.package}";
       task-router = "${pe.taskRouter.package}"; # (M5.13)
     };
-    # (M5.12) The arms run on the models the host configures, never with its
-    # randomization or spot checks (spec §7).
-    programs.piEconomics.bench.router = lib.mkIf pe.taskRouter.enable (mkDefaultLeaves (lib.recursiveUpdate
-      (lib.filterAttrs (n: _: lib.elem n routerModelKeys) pe.taskRouter.settings)
-      {
-        randomize.enabled = false;
-        spotCheck.enabled = false;
-      }));
     home.sessionVariables =
       {
         PI_BENCH_DATA = cfg.dataDir;

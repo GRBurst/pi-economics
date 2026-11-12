@@ -132,11 +132,8 @@ in {
     ++ eq "links" (sorted (lib.filter (lib.hasPrefix ".pi/agent/extensions/") (targets c)))
     (map (n: ".pi/agent/extensions/${n}") ["actor-subagents" "cache-lifecycle" "experiments" "infinite-context" "pi-retry" "task-router" "token-meter"])
     ++ eq "task-router/settings.json" (builtins.fromJSON (fileAt ".pi/agent/task-router/settings.json" c).text) host
-    ++ eq "PI_BENCH_ROUTER" (lib.importJSON c.home.sessionVariables.PI_BENCH_ROUTER) {
-      inherit (host) models;
-      randomize.enabled = false;
-      spotCheck.enabled = false;
-    }
+    # The bench reads these settings at run time (router-extraction design §7.3).
+    ++ holds "no PI_BENCH_ROUTER" (!(c.home.sessionVariables ? PI_BENCH_ROUTER))
     ++ eq "failed assertions" (failed "" c) []
     ++ eq "warnings" c.warnings bare.warnings;
 
