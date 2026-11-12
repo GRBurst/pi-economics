@@ -58,13 +58,32 @@ export function recursiveUpdate(left: Record<string, unknown>, right: Record<str
 	return out;
 }
 
-/** The base of every orch arm's task-router settings (paths.router, PI_BENCH_ROUTER): {} when unset. */
-export function routerBase(file: string | undefined): Record<string, unknown> {
-	if (file === undefined) return {};
-	if (!existsSync(file)) throw new Error(`router base not found: ${file}`);
-	const base: unknown = JSON.parse(readFileSync(file, "utf8"));
-	if (!isObject(base)) throw new Error(`router base is not a JSON object: ${file}`);
-	return base;
+/**
+ * The router's keys that say which models exist and where to reach them, in its schema and in the legacy forms its
+ * loader still maps; `contextFit` too, since the context filter picks among the models by it.
+ */
+export const ROUTER_MODEL_KEYS: readonly string[] = ["models", "queueMaxSec", "contextFit", "localHealthUrl", "cloudDailyCap", "contextWindow"];
+
+/** The arms run on the models the host configures, never with its randomization or spot checks. */
+const SWITCHES_OFF = { randomize: { enabled: false }, spotCheck: { enabled: false } };
+
+function readObject(file: string, what: string): Record<string, unknown> {
+	const v: unknown = JSON.parse(readFileSync(file, "utf8"));
+	if (!isObject(v)) throw new Error(`${what} is not a JSON object: ${file}`);
+	return v;
+}
+
+/**
+ * The base of every orch arm's task-router settings, read at run time (router-extraction design §7.3): the live
+ * router settings' (paths.routerLive) model keys with randomize and spotCheck off, {} without that file; the explicit
+ * override (paths.router, PI_BENCH_ROUTER) merged over it.
+ */
+export function routerBase(paths: Pick<Paths, "routerLive" | "router">): Record<string, unknown> {
+	const live = existsSync(paths.routerLive) ? readObject(paths.routerLive, "router settings") : undefined;
+	const base = live === undefined ? {} : recursiveUpdate(Object.fromEntries(Object.entries(live).filter(([k]) => ROUTER_MODEL_KEYS.includes(k))), SWITCHES_OFF);
+	if (paths.router === undefined) return base;
+	if (!existsSync(paths.router)) throw new Error(`router base not found: ${paths.router}`);
+	return recursiveUpdate(base, readObject(paths.router, "router base"));
 }
 
 /**
@@ -86,7 +105,7 @@ export function materializeAgentDir(o: { dir: string; arm: Arm; paths: Paths }):
 	};
 	mkdirSync(dir, { recursive: true });
 	put("settings.json", JSON.stringify(piSettings(), null, 2) + "\n");
-	put("task-router/settings.json", JSON.stringify(recursiveUpdate(routerBase(paths.router), {
+	put("task-router/settings.json", JSON.stringify(recursiveUpdate(routerBase(paths), {
 		routing,
 		delegation: { nudge: on(f.delegation) ? "on" : "off" },
 		t0Limits: T0_LIMITS[on(f.t0Widened) ? "on" : "off"],
