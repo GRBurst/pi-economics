@@ -1,12 +1,13 @@
-// Runtime helpers shared by the four pi-economics extensions (identical copies; checks/runtime-guard-copies.nix).
+// Runtime helpers shared by the three pi-economics extensions (identical copies; checks/runtime-guard-copies.nix).
 // The provider check (spec D5), the once-per-process warning, and the single-copy claim on pi.events (spec D6): made at session_start, not at load.
-export type Component = "token-meter" | "experiments" | "cache-lifecycle" | "task-router";
+// The task router (pi-task-router) keeps its own copy and claims on the same channel (router-extraction design §8.5).
+export type Component = "token-meter" | "experiments" | "cache-lifecycle";
 /** What the components check of actor-subagents' globalThis.__subagentsApi_v1; the type check compares it with the provider's SubagentsApiV1 (spec §5.3). */
 export type SubagentsApiShape = { version: 1; registerSpawnPolicy(...a: any[]): unknown; subscribe(...a: any[]): unknown; list(): unknown; send(...a: any[]): unknown };
 type Ctx = { hasUI?: boolean; ui?: { notify?(text: string, level: "warning"): void } };
 type Bus = { emit(channel: string, data: unknown): void; on(channel: string, h: (d: any) => void): () => void };
 
-const OPTION: Record<Component, string> = { "token-meter": "tokenMeter", experiments: "experiments", "cache-lifecycle": "cacheLifecycle", "task-router": "taskRouter" };
+const OPTION: Record<Component, string> = { "token-meter": "tokenMeter", experiments: "experiments", "cache-lifecycle": "cacheLifecycle" };
 const KEYS = ["registerSpawnPolicy", "subscribe", "list", "send"] as const;
 
 /** The patched actor's API, version 1, with the functions the components call. */

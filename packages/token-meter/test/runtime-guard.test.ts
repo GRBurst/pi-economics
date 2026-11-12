@@ -3,7 +3,7 @@
 // them). Copied from task-router's tests before the router moved to its own repository (router-extraction design §7.3).
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { actorMissing, claimSingleCopy, guardSingleCopy, hasSubagentsApiV1, loadedTwice, warnOnce } from "../core/runtime-guard.ts";
+import { actorMissing, claimSingleCopy, guardSingleCopy, hasSubagentsApiV1, loadedTwice, warnOnce, type Component } from "../core/runtime-guard.ts";
 
 type G = { __piEconomicsWarned_v1?: Set<string> };
 beforeEach(() => void delete (globalThis as G).__piEconomicsWarned_v1);
@@ -62,7 +62,7 @@ test("claimSingleCopy: the first copy wins; a second and a third copy learn the 
 test("claimSingleCopy: components do not see each other's claims", () => {
   const b = bus();
   assert.equal(claimSingleCopy(b, "token-meter", "/x/index.ts").first, true);
-  assert.equal(claimSingleCopy(b, "task-router", "/y/index.ts").first, true);
+  assert.equal(claimSingleCopy(b, "cache-lifecycle", "/y/index.ts").first, true);
 });
 
 test("claimSingleCopy: the same path twice is no duplicate (no owner, both first)", () => {
@@ -172,8 +172,8 @@ test("guardSingleCopy: a copy that never gets session_start (pi dropped it after
   const b = bus();
   const dropped = fakePi(b), kept = fakePi(b);
   const installed: string[] = [];
-  guardSingleCopy(dropped.pi, "task-router", "/user/pkg/packages/task-router/index.ts", () => void installed.push("dropped"));
-  guardSingleCopy(kept.pi, "task-router", "/project/pkg/packages/task-router/index.ts", () => void installed.push("kept"));
+  guardSingleCopy(dropped.pi, "cache-lifecycle", "/user/pkg/packages/cache-lifecycle/index.ts", () => void installed.push("dropped"));
+  guardSingleCopy(kept.pi, "cache-lifecycle", "/project/pkg/packages/cache-lifecycle/index.ts", () => void installed.push("kept"));
   const { notes, ctx } = ui();
   await kept.fire("session_start", ctx); // pi's final set holds only the second copy
   assert.deepEqual(installed, ["kept"]);
@@ -227,14 +227,14 @@ test("guardSingleCopy: an install that throws keeps its claim and goes inert: it
   const b = bus();
   const bad = fakePi(b), later = fakePi(b);
   const ran: string[] = [];
-  guardSingleCopy(bad.pi, "task-router", "/bad/index.ts", (p) => {
+  guardSingleCopy(bad.pi, "cache-lifecycle", "/bad/index.ts", (p) => {
     p.on("session_start", () => void ran.push("held"));
     p.on("message_end" as "session_start", () => void ran.push("plain"));
     p.events.on("pi-retry:x", () => void ran.push("bus"));
     throw new Error("no install");
   });
   let installed = false;
-  guardSingleCopy(later.pi, "task-router", "/good/index.ts", () => void (installed = true));
+  guardSingleCopy(later.pi, "cache-lifecycle", "/good/index.ts", () => void (installed = true));
   await assert.rejects(bad.fire("session_start"), /no install/);
   await bad.fire("session_start"); // again on the same instance: inert, no second install, no throw
   await bad.fire("message_end");
@@ -243,7 +243,7 @@ test("guardSingleCopy: an install that throws keeps its claim and goes inert: it
   const { notes, ctx } = ui();
   await later.fire("session_start", ctx);
   assert.equal(installed, false, "no partial set next to a full one");
-  assert.deepEqual(notes.map((n) => n.text), [twice("task-router", "/bad/index.ts", "/good/index.ts", "taskRouter")]);
+  assert.deepEqual(notes.map((n) => n.text), [twice("cache-lifecycle", "/bad/index.ts", "/good/index.ts", "cacheLifecycle")]);
 });
 
 test("guardSingleCopy: every failing held session_start handler is reported, not only the first (one error as itself, several as one AggregateError naming all)", async () => {
@@ -274,19 +274,23 @@ test("guardSingleCopy: the first copy releases its claim at session_shutdown", a
 });
 
 test("loadedTwice names the Nix option of each component", () => {
-  const option = { "token-meter": "tokenMeter", experiments: "experiments", "cache-lifecycle": "cacheLifecycle", "task-router": "taskRouter" } as const;
+  const option = { "token-meter": "tokenMeter", experiments: "experiments", "cache-lifecycle": "cacheLifecycle" } as const;
   for (const [c, o] of Object.entries(option)) {
     assert.equal(loadedTwice(c as keyof typeof option, "/o", "/p"),
       `pi-economics: ${c} is loaded twice (/o and /p); this copy stays inert. Keep one: remove the pi package (pi remove <source>) or disable programs.piEconomics.${o} in Nix.`);
   }
 });
 
-test("actorMissing: the pinned texts of the three components that use the actor's API (spec §4.2)", () => {
+test("actorMissing: the pinned texts of the two components that use the actor's API (spec §4.2)", () => {
   const tail = " Get the patched build via the pi-economics Nix modules; upstream support pending.";
-  assert.equal(actorMissing("task-router", "task-router routing is off (no task_verdict, no task_cards, no nudge); the effort guard and fresh-on-cold stay on"),
-    "task-router: needs pi-actor-subagents with the spawn-policy API (__subagentsApi_v1), which is not loaded; task-router routing is off (no task_verdict, no task_cards, no nudge); the effort guard and fresh-on-cold stay on." + tail);
   assert.equal(actorMissing("cache-lifecycle", "sessions waiting on their children are not kept warm"),
     "cache-lifecycle: needs pi-actor-subagents with the spawn-policy API (__subagentsApi_v1), which is not loaded; sessions waiting on their children are not kept warm." + tail);
   assert.equal(actorMissing("experiments", "child agents do not inherit their parent's arm"),
     "experiments: needs pi-actor-subagents with the spawn-policy API (__subagentsApi_v1), which is not loaded; child agents do not inherit their parent's arm." + tail);
+});
+
+test("Component: the task router is not one of this package's components (it is pi-task-router's, router-extraction design §7.3)", () => {
+  // @ts-expect-error the router's own copy of the guard claims "task-router"; this copy never does
+  const notOwn: Component = "task-router";
+  assert.equal(typeof notOwn, "string");
 });
