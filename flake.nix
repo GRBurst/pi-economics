@@ -26,6 +26,26 @@
       url = "github:monotykamary/pi-retry";
       flake = false;
     };
+
+    # Checks only (router-extraction design §7.3, §8.3): the provider of
+    # __subagentsApi_v1, pi-setup's patched actor-subagents
+    # (`packages.<system>.actor-subagents`), for the interface comparisons.
+    pi-setup = {
+      url = "github:GRBurst/pi-setup";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.home-manager.follows = "home-manager";
+    };
+    # Checks only (router-extraction design §7.3, §8.4, §8.5): the task router
+    # whose outcome log token-meter reads (`log-contract`), whose copy of
+    # __piExperimentsApi_v1 experiments provides and whose claim channel the
+    # runtime guards share (`runtime-guard-copies`). Not locked until it is
+    # published: evaluate with `--override-input pi-task-router <checkout>`.
+    pi-task-router = {
+      url = "github:GRBurst/pi-task-router";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.home-manager.follows = "home-manager";
+      inputs.pi-setup.follows = "pi-setup";
+    };
   };
 
   outputs = {
@@ -35,6 +55,8 @@
     pi-actor-subagents,
     pi-infinite-context,
     pi-retry,
+    pi-setup,
+    pi-task-router,
   }: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
@@ -82,7 +104,7 @@
     };
 
     checks.${system} = import ./checks {
-      inherit self pkgs lib home-manager;
+      inherit self pkgs lib home-manager pi-setup pi-task-router;
       render = renderOf pkgs;
     };
   };

@@ -6,6 +6,10 @@
   lib,
   home-manager,
   render,
+  # Check-only inputs (flake.nix): pi-setup's patched actor-subagents and the
+  # task router's sources.
+  pi-setup,
+  pi-task-router,
 }: let
   leakLib = import ./leak {inherit lib pkgs;};
   boundaryLib = import ./boundary {inherit lib pkgs;};
