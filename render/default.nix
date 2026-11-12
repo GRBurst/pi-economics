@@ -28,7 +28,6 @@
       analysisSkill.enable = true;
       cacheLifecycle.enable = true;
       experiments.enable = true;
-      taskRouter.enable = true;
       actorSubagents.enable = true;
       infiniteContext.enable = true;
       retry.enable = true;
@@ -64,7 +63,7 @@
     type = "module";
     license = "MIT";
     keywords = ["pi-package"];
-    description = "pi token economics: a token meter, online experiments, prompt-cache lifecycle and a task-card router, plus an analysis skill.";
+    description = "pi token economics: a token meter, online experiments and prompt-cache lifecycle, plus an analysis skill.";
     peerDependencies = lib.genAttrs host (_: "*");
     # The token meter's two CLIs (spec D8): `npm install -g <the pi clone>` links them.
     bin = lib.optionalAttrs pe.tokenMeter.enable {

@@ -75,9 +75,10 @@ The agent directory defaults to `~/.pi/agent`;
 
 ## Without Nix
 
-The repository is also a pi package: the four own extensions (token meter,
-experiments, cache lifecycle, task router) and the analysis skill, without
-Home Manager.
+The repository is also a pi package: the three own extensions (token meter,
+experiments, cache lifecycle) and the analysis skill, without Home Manager.
+The task router is a package of its own,
+[pi-task-router](https://github.com/GRBurst/pi-task-router).
 
 ```sh
 pi install git:github.com/GRBurst/pi-economics@v0.1.2
@@ -113,7 +114,7 @@ smallest file:
 ### Load a subset
 
 Use pi's object form of a `packages` entry in `~/.pi/agent/settings.json`, or
-`pi config`. This entry loads two of the four extensions:
+`pi config`. This entry loads two of the three extensions:
 
 <!-- checked: checks/pi-package/subset.json -->
 ```json

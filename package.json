@@ -3,7 +3,7 @@
     "meter-report": "./packages/token-meter/bin/meter-report.ts",
     "pi-analyse": "./packages/token-meter/bin/pi-analyse.ts"
   },
-  "description": "pi token economics: a token meter, online experiments, prompt-cache lifecycle and a task-card router, plus an analysis skill.",
+  "description": "pi token economics: a token meter, online experiments and prompt-cache lifecycle, plus an analysis skill.",
   "keywords": [
     "pi-package"
   ],
@@ -20,7 +20,6 @@
     "extensions": [
       "./packages/cache-lifecycle/index.ts",
       "./packages/experiments/index.ts",
-      "./packages/task-router/index.ts",
       "./packages/token-meter/index.ts"
     ],
     "skills": [

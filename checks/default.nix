@@ -265,11 +265,6 @@ in {
     inherit (pkgPi) installed;
     actor = actorSubagents;
   };
-  # (local mode L4.T17, design §3.0.4) Local mode next to the patched actor: the spawn API is found, task_verdict.
-  pi-install-local = import ./pi-package/local.nix {
-    inherit (pkgPi) installed;
-    actor = actorSubagents;
-  };
   # (AC7) The package next to the Nix links: each duplicate says so once.
   pi-install-duplicate = import ./pi-package/duplicate.nix {
     inherit lib pkgs self;
