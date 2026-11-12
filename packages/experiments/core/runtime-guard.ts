@@ -17,7 +17,7 @@ export const hasSubagentsApiV1 = (a: unknown): a is SubagentsApiShape =>
 
 export const actorMissing = (c: Component, consequence: string): string =>
   `${c}: needs pi-actor-subagents with the spawn-policy API (__subagentsApi_v1), which is not loaded; ${consequence}. ` +
-  "Get the patched build via the pi-economics Nix modules; upstream support pending.";
+  "Get the patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending.";
 
 export const loadedTwice = (c: Component, owner: string, path: string): string =>
   `pi-economics: ${c} is loaded twice (${owner} and ${path}); this copy stays inert. ` +

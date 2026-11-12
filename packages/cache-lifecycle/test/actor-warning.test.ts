@@ -10,7 +10,7 @@ beforeEach(() => void delete (globalThis as { __piEconomicsWarned_v1?: Set<strin
 
 const WARNING =
   "cache-lifecycle: needs pi-actor-subagents with the spawn-policy API (__subagentsApi_v1), which is not loaded; " +
-  "sessions waiting on their children are not kept warm. Get the patched build via the pi-economics Nix modules; upstream support pending.";
+  "sessions waiting on their children are not kept warm. Get the patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending.";
 
 const fn = () => () => {};
 const full = { version: 1, registerSpawnPolicy: fn, subscribe: fn, list: () => [], send: async () => {} };

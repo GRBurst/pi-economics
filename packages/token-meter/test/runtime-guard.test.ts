@@ -281,8 +281,8 @@ test("loadedTwice names the Nix option of each component", () => {
   }
 });
 
-test("actorMissing: the pinned texts of the two components that use the actor's API (spec §4.2)", () => {
-  const tail = " Get the patched build via the pi-economics Nix modules; upstream support pending.";
+test("actorMissing: the pinned texts of the two components that use the actor's API (spec §4.2); the actor is pi-setup's (router-extraction design §7.3)", () => {
+  const tail = " Get the patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending.";
   assert.equal(actorMissing("cache-lifecycle", "sessions waiting on their children are not kept warm"),
     "cache-lifecycle: needs pi-actor-subagents with the spawn-policy API (__subagentsApi_v1), which is not loaded; sessions waiting on their children are not kept warm." + tail);
   assert.equal(actorMissing("experiments", "child agents do not inherit their parent's arm"),
