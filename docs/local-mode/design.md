@@ -1120,8 +1120,9 @@ Worktrees come before the gate so that L5 is usable on its own, and plans build 
 **Resolution:** every recommendation below is accepted for the first version, except OQ21,
 which is open (a proposal in `merge-gate-sizing.md`; the current values stay until its phases land).
 OQ18: a new patch file. OQ7: `quiet`.
-Revisit OQ6, OQ10 and OQ19 with meter data and the answers to research prompts 7 and 8 (the batch-3
-reports land with branch `lm/research-reports-batch-7-8`).
+Revisit OQ6, OQ10 and OQ19 with meter data and the answers to research prompts 7 and 8
+(`docs/research/coding-agent-loop-harness-research.md`,
+`docs/research/autonomous-merge-pipeline-size-limits.md`).
 
 - **OQ1. Paths in worktrees.** Block writes to the main checkout and instruct (LD6), or rewrite relative paths
   and prefix bash with `cd <wt> &&` through the mutable `tool_call` input? *Recommend* blocking for L5. Count

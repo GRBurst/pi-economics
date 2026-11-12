@@ -1,9 +1,10 @@
 # Merge-gate sizing: class, atomic units, and the review's fixed cost (proposal)
 
 Status: proposal (OQ21) — open, not accepted; the current budgets stay: 150
-lines / 6 files (gate), 100/3 (task), 250/6 (milestone). The batch-3 report
-and prompts 8–9 live on branch `lm/research-reports-batch-7-8` (checks green,
-awaiting merge); the references below resolve on main once that branch lands.
+lines / 6 files (gate), 100/3 (task), 250/6 (milestone; clamped to 150/6 by
+the gate). The batch-3 report
+(`docs/research/autonomous-merge-pipeline-size-limits.md`) and prompts 8–9
+(`docs/research/prompts.md`) are on main.
 Triggered by `size` refusals on real work (a docs branch of 1148 lines / 8
 files adding user-supplied references; a CI-images migration of 13299/136;
 repeated hits in other sessions) and one metered waste: a 46 s cold Opus
@@ -54,15 +55,26 @@ risk), not diff size.**
 ### 2.1 A deterministic branch class
 
 From the numstat; no model-declared exemption. Setting
-`mergeGate.inertGlobs` (default `["*.md", "*.txt", "*.rst", "LICENSE",
-"NOTICE"]`). Excluded from inert (routed to code): agent-instruction files —
-`AGENTS.md` and `CLAUDE.md` at any level, and anything under `.pi/`,
-`skills/` or a prompts directory — and matches of the router's riskGlobs.
+`mergeGate.inertGlobs` (default `["**/*.md", "**/*.txt", "**/*.rst",
+"**/LICENSE", "**/NOTICE"]`; globs are anchored and `*` stays within one
+path segment, so the `**/` prefix is what matches at any depth, as in the
+riskGlobs). Excluded from inert (routed to code): agent-instruction files —
+`AGENTS.md` and `CLAUDE.md` at any level, anything under `.pi/`, the
+`skills` and `prompts` paths the repository's package manifest declares (a
+pi package can declare them anywhere) and anything under a directory named
+`skills` or `prompts` at any depth — files under `plans.dir` (a branch that
+rewrites the plan, including marking a milestone `atomic`, goes through a
+code review; that trust is the premise of §2.2) — and matches of the
+router's riskGlobs.
 An unreviewed rewrite of the base's AGENTS.md would re-poison every later
 review: the overseer uses the base's AGENTS.md precisely because it is
-trusted (LD14). An inert branch must have at least one check running
-(branch check or `extraChecks`), else it is refused (`no-check`): an inert
-merge with no checks at all is just a bypass with better manners.
+trusted (LD14). An inert branch must have at least one user-configured
+`mergeGate.extraChecks` entry; the model-supplied branch check does not
+count — for a non-plan branch it is written by the model at `start_branch`,
+and the inert red run is skipped, so a vacuous check (`true`) would go
+unflagged. Without an `extraChecks` entry the branch is refused
+(`no-check`): an inert merge with no real check is just a bypass with
+better manners.
 
 | | inert (all files match) | code |
 |---|---|---|
@@ -78,8 +90,10 @@ branch, the gate, done — no Opus, no splitting.
 
 ### 2.2 An atomic override for unsplittable code units
 
-A plan milestone the author marks `atomic` (the plan is Opus-approved, so
-the exemption is not model-declared) merges at `atomicFactor × (150/6)`
+A plan milestone the author marks `atomic` in the plan file (trusted only
+through an Opus-approved plan — the marker in the working copy alone is not
+evidence; §2.1 keeps plan files out of the inert class for the same reason)
+merges at `atomicFactor × (150/6)`
 (default factor 5 → 750/30); the reviewer is told the unit is atomic
 (review it whole; invariants and the check first); the merge line logs
 `atomic: true`. Capped at 2 atomic units per session. 750 lines is above
