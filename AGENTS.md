@@ -90,7 +90,7 @@ The Nix derivation names (`pi-<c>-<version>`) follow the manifests; module-eval 
 - The root `package.json` (the pi package manifest) is written only by
   `nix run .#render` and compared by `render-package`; never edit it by hand.
   Its `bin` files carry the pinned shebang and mode 755 (`pi-package-manifest`).
-- The four `packages/<c>/core/runtime-guard.ts` are identical copies of
+- The three `packages/<c>/core/runtime-guard.ts` are identical copies of
   token-meter's (`runtime-guard-copies`; its tests stand for all): change one,
   `cp` it to the others. Its line `const CHANNEL = "pi-economics:claim:v1";`
   is a wire protocol shared with the pi-task-router package, whose own copy

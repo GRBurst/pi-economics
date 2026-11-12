@@ -91,7 +91,7 @@ in {
   dirs;
 
   # (M2.6) The package is the flake's, and carries the spawn-policy API version
-  # that taskRouter's assertion reads (spec §4.1).
+  # that the task router's assertion (pi-task-router) reads (spec §4.1).
   actor-subagents-package = let
     a = (pe (eval ".pi/agent" {})).actorSubagents;
   in

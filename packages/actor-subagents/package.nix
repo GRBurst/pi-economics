@@ -35,7 +35,7 @@
     ../../patches/pi-actor-subagents/pi-actor-subagents-spawn-api.patch
   ];
 }).overrideAttrs (old: {
-  # The version of __subagentsApi_v1 this build provides; taskRouter asserts
+  # The version of __subagentsApi_v1 this build provides; the task router (pi-task-router) asserts
   # it (spec §4.1): 1 for routing, 2 (the spawn-api patch) for local mode. Through overrideAttrs: applyPatches refuses `passthru`.
   passthru = (old.passthru or {}) // {spawnPolicyApi = 2;};
 })

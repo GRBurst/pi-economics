@@ -13,7 +13,7 @@ Paths are relative to this repository's root, unless noted.
 | Component | What it is | Loaded in |
 |---|---|---|
 | `packages/token-meter/` (`pi-token-meter`) | One JSONL line per provider request (tokens, cost, quota headers, retries) into `<agentDir>/meter/YYYY-MM.jsonl`; no prompt/response text. Also the `meter-report` and `pi-analyse` binaries and the log manual `LOGS.md` (linked to `~/.pi/agent/LOGS.md`). | main + children |
-| `packages/task-router/` (`pi-task-router`) | Routes `spawn_subagent` calls by task card: a required ability and level by rule, legs from the importance tables, the cheapest free member that meets a leg (cost order, slots, health probes, daily caps, a queue wait), failover of an erroring child to another provider, attempts (a re-spawn goes one level above the member the failed task ran on), verify gate, runaway/context/effort guards, delegation nudge, fresh-on-cold, outcome log, `task_verdict` tool, system-prompt card section. | main only |
+| `packages/task-router/` of the [pi-task-router](https://github.com/GRBurst/pi-task-router) flake (`pi-task-router`) | Routes `spawn_subagent` calls by task card: a required ability and level by rule, legs from the importance tables, the cheapest free member that meets a leg (cost order, slots, health probes, daily caps, a queue wait), failover of an erroring child to another provider, attempts (a re-spawn goes one level above the member the failed task ran on), verify gate, runaway/context/effort guards, delegation nudge, fresh-on-cold, outcome log, `task_verdict` tool, system-prompt card section. | main only |
 | `packages/cache-lifecycle/` (`pi-cache-lifecycle`) | Warming decision (main with running children, child awaiting a reply → warm; capped), elision of stale tool results/thinking after cache expiry, optional 1 h cache TTL for main, the pi-1.0.0 message-identity shim that keeps cache warming alive past custom messages, `peek-after-mask` guard log. | main + children |
 | `packages/experiments/` (`pi-experiments`) | One fractional-factorial arm per main session (explore/exploit/off); children inherit; other extensions read factor flags through `__piExperimentsApi_v1.flag(name, default)`; correction guard log and `/rate 1-5`. | main only |
 | `packages/retry/package.nix` + `patches/pi-retry/pi-retry-free-cap.patch` | Pinned input `inputs.pi-retry` (rev `60a3b08`, 0.11.3) with a local patch: the OpenRouter free-tier daily cap is not retried (it lasts until 00:00 UTC). Print/json mode retries inline upstream since 0.11.0 (it was the local `pi-retry-print-mode.patch` until the 2026-10-25 lock update), so `pi -p` retries 429s. Upstream vitest suite on the patched source = flake check `retry`. | main + children (linked child extension) |
@@ -46,12 +46,12 @@ version, integer, 1 since 2026-10-03; absent = 0, legacy).
 | `reports/YYYY-MM-DD-HHMM-analysis.{md,json}` | Written by `pi-analyse` (on demand; UTC time of the run, so runs of one day keep their reports). |
 | `LOGS.md` | Log manual (Home Manager link into the token-meter package). |
 | `experiments/settings.json` | Written by Home Manager from `programs.piEconomics.experiments.settings` whenever experiments is enabled (`{"mode": "explore"}` for `{}`): the extension's opt-in; without the file experiments is inert (no arm, no assignments.jsonl). |
-| `{token-meter,task-router,cache-lifecycle}/settings.json` | Same: written only when the corresponding `programs.piEconomics.<x>.settings` is non-empty. Every key has a code default, so a missing file means "defaults". |
+| `{token-meter,cache-lifecycle}/settings.json` | Same: written only when the corresponding `programs.piEconomics.<x>.settings` is non-empty (`task-router/settings.json`: pi-task-router's module). Every key has a code default, so a missing file means "defaults". |
 | `bench/` | `tasks.json` + `tasks/<id>/` (meta.json, users.md, ref_answer.md, extra files), `refs/` (`pi-bench refs`), `runs/<id>.<arm>.<rep>/` (result.json, prompt.md, final.md, diff.patch, check.log, session/, events.jsonl, and `agent/` for factor arms), `judge/`, `reports/`, `pilot/`, `smoke/`, `src/` (task generator), `run-h6.sh`. |
 
 ## Settings and defaults
 
-Nix options, per component: `programs.piEconomics.{tokenMeter,taskRouter,cacheLifecycle,experiments}.{enable, package, settings}` (the router's, cache-lifecycle's and experiments' `settings` and the others' are described in `docs/pi-economics.md`). The registry (`programs.piEconomics.extensions`) selects the packages and links them, so the link and the selection never disagree.
+Nix options, per component: `programs.piEconomics.{tokenMeter,cacheLifecycle,experiments}.{enable, package, settings}` (cache-lifecycle's and experiments' `settings` and the others' are described in `docs/pi-economics.md`; the router's are pi-task-router's `programs.piTaskRouter`). The registry (`programs.piEconomics.extensions`) selects the packages and links them, so the link and the selection never disagree.
 
 Code defaults (a settings file only overrides; unknown keys are ignored):
 
@@ -96,10 +96,10 @@ Code defaults (a settings file only overrides; unknown keys are ignored):
   `delegation {nudge: "on", afterCalls: 6, tools: [edit, write, bash, grep, find, read], rule: "off"}`
   (`rule: "on"` opens the main session's Task cards section with the orchestrator rule; flag `delegationRule`);
   flags `routing / verifyGate / autoEscalate: true`.
-  **Rollback:** `packages/task-router/test/fixtures/today-config.json` as the
+  **Rollback:** pi-task-router's `packages/task-router/test/fixtures/today-config.json` as the
   settings restores the routing before these defaults (the free cloud model
   at `order: -1`, Haiku removed, read row 2 critical on Opus,
-  `readOnlyReview: "review"`, `contextFit: 0`); `router-golden` records its
+  `readOnlyReview: "review"`, `contextFit: 0`); its `router-golden` records its
   decisions as the fixture `today`. **Legacy keys** are mapped, each with a
   problem: `models.{qwenLocal,qwenCloud,T1,T2}` to `models.<member>.model`,
   `localHealthUrl` to `models.qwen-local.health`, `cloudDailyCap` to

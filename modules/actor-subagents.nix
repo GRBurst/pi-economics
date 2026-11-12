@@ -31,8 +31,8 @@ in {
       description = ''
         The patched extension source (`extensions/actor-subagents`).
         `passthru.spawnPolicyApi` is the version of `globalThis.__subagentsApi_v1`
-        it provides (2: the spawn-policy and spawn-api patches); taskRouter
-        requires it.
+        it provides (2: the spawn-policy and spawn-api patches); the task router
+        (pi-task-router) requires it.
       '';
     };
 

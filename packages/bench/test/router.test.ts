@@ -96,7 +96,7 @@ test("router base: a missing file or a non-object is an error naming the file", 
 });
 
 // The run-time base (router-extraction design §7.3): what the Nix default of bench.router was, read from the
-// live router settings instead of taskRouter.settings.
+// live router settings instead of the former router option's settings.
 
 /** The keys that name the models and where to reach them (formerly routerModelKeys in modules/bench.nix). */
 const K = ["models", "queueMaxSec", "contextFit", "localHealthUrl", "cloudDailyCap", "contextWindow"];

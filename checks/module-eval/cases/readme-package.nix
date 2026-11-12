@@ -3,7 +3,7 @@
 # is the checked fixture line by line, every upstream has its prerequisites
 # row with the pinned wording (the actor: patched build, upstream support
 # pending; the other two: what the upstream does as it is, and what only the
-# patched build adds; the actor row also says local mode needs the spawn API), the experiments opt-in block, the skill collision note
+# patched build adds), the experiments opt-in block, the skill collision note
 # and the duplicate guard's version note are there. Lines are compared whole or searched with
 # `replaceStrings` (no regex over the README).
 {
@@ -26,8 +26,6 @@
 
   install = "pi install git:github.com/GRBurst/pi-economics@v${version}";
   pinned = "Patched build via the pi-economics Nix modules; upstream support pending.";
-  # local mode L8.T4: the router's local mode needs the third patch
-  localNeeds = "local mode needs the actor's spawn API (the third patch)";
   # review L1: the upstream already gives the fold reminders and the retry events the meter reads
   partial = {
     pi-infinite-context = "the upstream's fold reminders work as they are";
@@ -52,7 +50,7 @@ in {
         ++ lib.concatMap (
           r:
             if u == "pi-actor-subagents"
-            then expect.holds "the ${u} row says: ${pinned}" (has pinned r) ++ expect.holds "the ${u} row says: ${localNeeds}" (has localNeeds r)
+            then expect.holds "the ${u} row says: ${pinned}" (has pinned r)
             else
               expect.holds "the ${u} row says: ${partial.${u}}" (has partial.${u} r)
               ++ expect.holds "the ${u} row says: ${onlyPatched}" (has onlyPatched r)
