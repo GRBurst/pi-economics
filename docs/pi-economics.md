@@ -390,8 +390,8 @@ How to run them: `AGENTS.md`, "Commands".
 That configuration moved the shared upstreams and the npm lock after the first
 milestones copied them, so M6 resynced them first: the lock nodes `nixpkgs`
 and `home-manager`, the shared npm lock (`checks/npm`, now pi 1.3.0 with
-vitest and TypeScript 6), `pi-actor-subagents`, its check and its two
-patches (all three actor patches have since moved to pi-setup). Three patches that earlier documents name no longer exist, because
+vitest and TypeScript 6), `pi-actor-subagents`, its check and its patches (the
+actor with all its patches has since moved to pi-setup). Three patches that earlier documents name no longer exist, because
 the upstreams or pi absorbed them: actor-subagents' `first-turn` (pi 1.2.0
 runs `before_agent_start` for extension-triggered runs), infinite-context's
 `foreign-messages` (upstream matches the projection as an ordered
