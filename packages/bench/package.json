@@ -1,6 +1,6 @@
 {
   "name": "pi-bench",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Bench harness for pi token economics: single-agent and orchestrator runs, blind judging, report.",
   "type": "module",
   "license": "MIT",

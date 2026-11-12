@@ -1,6 +1,6 @@
 {
   "name": "pi-cache-lifecycle",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Prompt-cache lifecycle for pi: elides stale tool results and thinking after the cache expires, optional 1 h cache TTL for the main session.",
   "type": "module",
   "keywords": ["pi-package"],

@@ -93,7 +93,7 @@ The task router is a package of its own,
 [pi-task-router](https://github.com/GRBurst/pi-task-router).
 
 ```sh
-pi install git:github.com/GRBurst/pi-economics@v0.1.2
+pi install git:github.com/GRBurst/pi-economics@v0.2.0
 ```
 
 Nix only: `bench`, the `piSettings` migration, the Home Manager options and
@@ -131,7 +131,7 @@ Use pi's object form of a `packages` entry in `~/.pi/agent/settings.json`, or
 <!-- checked: checks/pi-package/subset.json -->
 ```json
 {
-  "source": "git:github.com/GRBurst/pi-economics@v0.1.2",
+  "source": "git:github.com/GRBurst/pi-economics@v0.2.0",
   "extensions": [
     "packages/token-meter/index.ts",
     "packages/cache-lifecycle/index.ts"

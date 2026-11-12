@@ -1,6 +1,6 @@
 {
   "name": "pi-token-meter",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Logs tokens, cost and subscription quota of every pi provider request to <agentDir>/meter/YYYY-MM.jsonl.",
   "type": "module",
   "keywords": ["pi-package"],
