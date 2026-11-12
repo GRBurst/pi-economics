@@ -17,13 +17,13 @@ function add(r: Row, l: any): void {
     r.warmingCostUsd += num(l.costUsd);
     return;
   }
-  r.requests += 1;
+  if (l.status === "error") r.errors += 1; // a failed request is counted apart, not as a request
+  else r.requests += 1;
   r.input += num(l.input);
   r.cacheRead += num(l.cacheRead);
   r.cacheWrite += num(l.cacheWrite);
   r.output += num(l.output);
   r.costUsd += num(l.costUsd);
-  if (l.status === "error") r.errors += 1;
 }
 
 function group(lines: any[], keyOf: (l: any) => string): Row[] {
@@ -74,7 +74,7 @@ export function quotaRegression(all: any[]): Regression {
   for (const l of all) {
     if (!l || typeof l.ts !== "string") continue;
     const h = l.ts.slice(0, 13);
-    hours.set(h, [...(hours.get(h) ?? []), l]);
+    { const xs = hours.get(h); if (xs) xs.push(l); else hours.set(h, [l]); }
   }
   const X: number[][] = [];
   const y: number[] = [];

@@ -282,3 +282,34 @@ test("property: the attribution does not depend on the order of the input lines"
     for (const k of Object.keys(a)) close(a[k], b[k] ?? NaN, `seed ${seed} ${k}`);
   }
 });
+
+// ---- error lines (status "error": no usage, no request) ----
+
+const E = (arm: string, sid: string, at: number, extra: Record<string, unknown> = {}) =>
+  L(arm, sid, at, 0, { status: "error", input: 0, cacheRead: 0, cacheWrite: 0, output: 0, ...extra });
+
+test("error lines are not activity: they add no active hours", () => {
+  const u = rootUnits([L("+", "m", 0, 1), L("+", "m", 10, 1), E("+", "m", 20), E("+", "m", 25)]);
+  assert.equal(u.length, 1);
+  assert.ok(Math.abs(u[0].hours - 10 / 60) < 1e-9, String(u[0].hours));
+});
+
+test("an error line is no fold (its zero context is not a shrink)", () => {
+  const lines = [L("+", "m", 0, 1), L("+", "m", 1, 1), E("+", "m", 2), L("+", "m", 3, 1), L("+", "m", 4, 1), L("+", "m", 5, 1)];
+  assert.equal(byArm(lines)["+"].fold.n, 0);
+});
+
+test("a cold resume starts on a real request and its window holds real requests only", () => {
+  const lines = [L("+", "m", 0, 1), L("+", "m", 1, 1), E("+", "m", 20), L("+", "m", 21, 4), L("+", "m", 22, 4), L("+", "m", 23, 4)];
+  const s = byArm(lines)["+"];
+  assert.equal(s.coldResume.n, 1);
+  assert.equal(s.coldResume.meanCost, 12);
+});
+
+test("a long session is analysed in linear time", () => {
+  const n = 100_000;
+  const lines = Array.from({ length: n }, (_, i) => L("+", "m", i / 60, 0.001));
+  const t = Date.now();
+  assert.equal(byArm(lines)["+"].units, 1);
+  assert.ok(Date.now() - t < 5_000, `${Date.now() - t} ms`);
+});

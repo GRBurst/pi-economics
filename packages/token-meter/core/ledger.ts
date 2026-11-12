@@ -76,7 +76,7 @@ export function foldLedger(all: any[], opt: LedgerOpts = {}): FoldEntry[] {
   const lines = all.filter((l) => l && typeof l.ts === "string" && !Number.isNaN(t(l)) && typeof l.sessionId === "string" && isClaude(l)).sort((a, b) => t(a) - t(b));
   const price = prices(lines);
   const sessions = new Map<string, any[]>();
-  for (const l of lines) if (prompt(l) > 0) sessions.set(l.sessionId, [...(sessions.get(l.sessionId) ?? []), l]);
+  for (const l of lines) if (prompt(l) > 0) { const xs = sessions.get(l.sessionId); if (xs) xs.push(l); else sessions.set(l.sessionId, [l]); }
   const out: FoldEntry[] = [];
   for (const [sessionId, reqs] of sessions) {
     const arm = typeof reqs[0].arm === "string" ? reqs[0].arm : "";
@@ -84,18 +84,20 @@ export function foldLedger(all: any[], opt: LedgerOpts = {}): FoldEntry[] {
     const cold = (i: number): boolean => i > 0 && t(reqs[i]) - t(reqs[i - 1]) >= ttl;
     const turns = reqs.map((l, i) => i).filter((i) => reqs[i].kind !== "warming");
     const folds = turns.filter((i, j) => j > 0 && prompt(reqs[i]) < FOLD_SHRINK * prompt(reqs[turns[j - 1]]));
+    const prevTurn = new Map(turns.slice(1).map((i, j) => [i, turns[j]])); // turn → the turn before it
     const isFold = new Set(folds);
+    const after = new Array<number>(reqs.length).fill(0); // requests after i until the first cold gap or the end
+    for (let i = reqs.length - 2; i >= 0; i--) after[i] = cold(i + 1) ? 0 : 1 + after[i + 1];
     const typical = median(turns.slice(1).filter((i) => !isFold.has(i) && !cold(i)).map((i) => num(reqs[i].cacheWrite)));
     for (const i of folds) {
       const l = reqs[i];
       const p = price.get(String(l.model));
       if (!p) continue;
-      const prev = reqs[turns[turns.indexOf(i) - 1]];
+      const prev = reqs[prevTurn.get(i)!];
       const R = prompt(prev) - prompt(l);
       const wasCold = cold(i);
       const K = wasCold ? 0 : Math.max(0, num(l.cacheWrite) - typical);
-      let n = 0;
-      for (let j = i + 1; j < reqs.length && !cold(j); j++) n += 1;
+      const n = after[i];
       out.push({ sessionId, root: reqs[0].parentSessionId ?? sessionId, arm, model: String(l.model), ts: l.ts, R, K, n, cold: wasCold, ...value(R, K, n, p) });
     }
   }
@@ -125,7 +127,7 @@ function row(name: string, es: FoldEntry[]): LedgerRow {
 }
 const groups = (es: FoldEntry[], key: (e: FoldEntry) => string): LedgerRow[] => {
   const m = new Map<string, FoldEntry[]>();
-  for (const e of es) m.set(key(e), [...(m.get(key(e)) ?? []), e]);
+  for (const e of es) { const k = key(e), xs = m.get(k); if (xs) xs.push(e); else m.set(k, [e]); }
   return [...m].sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, v]) => row(k, v));
 };
 

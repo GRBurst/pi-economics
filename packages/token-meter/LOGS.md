@@ -53,6 +53,8 @@ field does not bump it). `pi-analyse` reports the versions per log under *Data q
   has `meter.parentSessionId` = its spawner's session id. The **root** of a session is
   found by following `parentSessionId` up; the root session is the unit of the
   experiment (arm, active hours, $ per active hour).
+  The analyser counts a `status: "error"` line apart: it is no request (request totals,
+  runaway limit, folds, cold resumes) and no activity (active hours).
 - **Task ↔ child session.** `outcomes[event=spawn].sessionId` is the child's session id
   (`= meter.sessionId` of the child's lines), `parentSessionId` the spawner's. Every other
   outcome event joins the spawn by `taskId` (the subagent's name).

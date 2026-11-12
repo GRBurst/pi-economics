@@ -32,15 +32,15 @@ test("aggregate: totals per day, session and model; warming kept apart", () => {
   assert.deepEqual([d1.requests, d1.input, d1.cacheRead, d1.cacheWrite, d1.output, d1.errors, d1.warming], [4, 6, 100, 180, 22, 0, 0]);
   assert.ok(Math.abs(d1.costUsd - 1.8) < 1e-9);
   const d2 = a.byDay.find((r) => r.key === "2026-10-02")!;
-  assert.equal(d2.requests, 4); assert.equal(d2.errors, 1); assert.equal(d2.warming, 2);
+  assert.equal(d2.requests, 3); assert.equal(d2.errors, 1); assert.equal(d2.warming, 2);
   assert.ok(Math.abs(d2.warmingCostUsd - 0.07) < 1e-9);
   assert.equal(d2.cacheRead, 260); // warming reads not mixed into turns
   const s1 = a.bySession.find((r) => r.key === "s1")!;
   assert.deepEqual([s1.requests, s1.cacheWrite, s1.warming], [4, 180, 1]);
   const m = a.byModel.find((r) => r.key === "sonnet")!;
-  assert.deepEqual([m.requests, m.errors, m.warming, m.cacheWrite], [4, 1, 1, 70]);
+  assert.deepEqual([m.requests, m.errors, m.warming, m.cacheWrite], [3, 1, 1, 70]);
   assert.equal(a.byModel.length, 2); assert.equal(a.bySession.length, 2);
-  assert.equal(a.total.requests, 8);
+  assert.equal(a.total.requests, 7); assert.equal(a.total.errors, 1);
 });
 
 test("aggregate: rewrite share = cacheWrite after each session's first request / all cacheWrite", () => {
@@ -105,6 +105,14 @@ test("bin/meter-report.ts prints the report for a directory", () => {
   writeFileSync(join(dir, "2026-10.jsonl"), fixture.map((l) => JSON.stringify(l)).join("\n") + "\nnot json\n");
   const bin = resolve(dirname(fileURLToPath(import.meta.url)), "..", "bin", "meter-report.ts");
   const out = execFileSync(process.execPath, ["--experimental-strip-types", bin, "--dir", dir, "--from", "2026-10-02"], { encoding: "utf8" });
-  assert.match(out, /\| 2026-10-02 \| 4 \|/);
+  assert.match(out, /\| 2026-10-02 \| 3 \|/);
   assert.doesNotMatch(out, /2026-10-01/);
+});
+
+test("aggregate: a long log is grouped in linear time", () => {
+  const n = 100_000;
+  const lines = Array.from({ length: n }, (_, i) => L(new Date(Date.UTC(2026, 9, 1) + i * 1000).toISOString(), "s", "opus", [1, 2, 3, 4, 0.1], { q5h: 10 + (i % 5), q5hReset: 1 }));
+  const t = Date.now();
+  assert.equal(aggregate(lines).total.requests, n);
+  assert.ok(Date.now() - t < 5_000, `${Date.now() - t} ms`);
 });

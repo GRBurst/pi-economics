@@ -64,6 +64,33 @@ test("cost: a fold (context shrink) is found and charged with the next 3 request
   close(fold.usd, 1.5);
 });
 
+const errLine = (sid: string, at: number, extra: Record<string, unknown> = {}) =>
+  turn(sid, T0 + at * MIN, { status: "error", input: 0, cacheRead: 0, cacheWrite: 0, output: 0, costUsd: 0, ...extra });
+const none = (meter: any[], extra: Partial<Logs> = {}): Logs => ({ meter, outcomes: [], assignments: [], guards: [], ...extra });
+
+test("cost: error lines are not requests (counted apart), nor active hours", () => {
+  const meter = [...turns("e", T0, 2, { arm: "-----" }, 10), errLine("e", 20, { arm: "-----" }), errLine("e", 25, { arm: "-----" })];
+  const a = analyse(none(meter));
+  assert.equal(a.cost.requests, 2);
+  assert.equal(a.cost.errors, 2);
+  close(a.cost.activeHours, 10 / 60);
+  assert.equal(a.cost.byModel[0].requests, 2);
+  assert.ok(renderAnalysis(a).includes("| errors | 2 |"));
+});
+
+test("cost: an error line makes no fold", () => {
+  const meter = [...turns("f", T0, 3, { arm: "-----" }, 1), errLine("f", 3, { arm: "-----" }), ...turns("f", T0 + 4 * MIN, 3, { arm: "-----" }, 1)];
+  assert.equal(analyse(none(meter)).cost.splits.find((s) => s.name === "after folds")!.n, 0);
+});
+
+test("cost: a long log is analysed in linear time; a huge quota window does not overflow Math.max", () => {
+  const n = 200_000;
+  const meter = Array.from({ length: n }, (_, i) => turn("big", T0 + i * 1000, { arm: "-----", q5h: 10 + (i % 7), q5hReset: 1, costUsd: 0.001 }));
+  const t = Date.now();
+  assert.equal(analyse(none(meter)).cost.requests, n);
+  assert.ok(Date.now() - t < 10_000, `${Date.now() - t} ms`);
+});
+
 // ---- period ------------------------------------------------------------------------------------
 
 test("period: --since/--until are inclusive UTC days and filter every log but assignments", () => {
@@ -159,6 +186,15 @@ test("delegation: runaway alerts use the router's runaway limits", () => {
   const w = { ...world(), routerSettings: { runaway: { requests: 4, usd: 100 } } };
   const d = analyse(w).delegation;
   assert.deepEqual(d.runaways.map((r) => [r.sessionId, r.taskId, r.requests]), [["c3", "t3", 5]]);
+});
+
+test("delegation: error lines do not count towards the runaway request limit or the child request share", () => {
+  const kid = { parentSessionId: "m" };
+  const meter = [...turns("m", T0, 2), ...turns("k", T0, 3, { ...kid, costUsd: 0.01 }, 1), errLine("k", 4, kid), errLine("k", 5, kid), errLine("k", 6, kid)];
+  const d = analyse(none(meter, { routerSettings: { runaway: { requests: 3, usd: 100 } } })).delegation;
+  assert.deepEqual(d.runaways, []);
+  close(d.childRequestShare, 3 / 5);
+  assert.equal(d.childModels[0].requests, 3);
 });
 
 // ---- (d) guards --------------------------------------------------------------------------------

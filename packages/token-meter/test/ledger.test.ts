@@ -125,3 +125,11 @@ test("summary: count, sum, share negative, K/R buckets, groups and models", () =
   assert.deepEqual(sum.byModel.map((m) => [m.name, m.n]), [["claude-x", 3]]);
   assert.equal(bucketOf(0.5), "0.5 – 1");
 });
+
+test("a long session with many folds is ledgered in linear time", () => {
+  const n = 60_000;
+  const lines = Array.from({ length: n }, (_, i) => L("s", i / 60, i % 10 === 9 ? 10_000 : 100_000, 10));
+  const t = Date.now();
+  assert.ok(foldLedger(lines).length >= n / 10 - 1);
+  assert.ok(Date.now() - t < 5_000, `${Date.now() - t} ms`);
+});

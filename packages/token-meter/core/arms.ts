@@ -14,6 +14,8 @@ const FOLD_SHRINK = 0.8; // a warm turn whose context fell below this share of t
 const BOOT = 1000;
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+/** A failed request: the log line has no usage and is not a request (it is neither a fold, nor activity). */
+export const isError = (l: any): boolean => l.status === "error";
 const ctx = (l: any): number => num(l.input) + num(l.cacheRead) + num(l.cacheWrite);
 
 function mulberry32(seed: number): () => number {
@@ -100,14 +102,20 @@ export function rootUnits(all: any[], quota: Record<QuotaKey, QuotaAttribution> 
   const t = (l: any): number => Date.parse(l.ts);
   const lines = all.filter((l) => l && typeof l.ts === "string" && !Number.isNaN(t(l)) && typeof l.sessionId === "string").sort((a, b) => t(a) - t(b));
   const groups = new Map<string, any[]>();
-  for (const l of lines) { const k = l.parentSessionId ?? l.sessionId; groups.set(k, [...(groups.get(k) ?? []), l]); }
+  for (const l of lines) push(groups, l.parentSessionId ?? l.sessionId, l);
   return [...groups].map(([root, us]) => {
     const share = (turns: any[], key: QuotaKey): number | undefined =>
       turns.some((l) => typeof l[key] === "number") || quota[key].perRoot.has(root) ? quota[key].perRoot.get(root) ?? 0 : undefined;
-    const turns = us.filter((l) => l.kind !== "warming");
+    const turns = us.filter((l) => l.kind !== "warming" && !isError(l)); // activity = successful requests
     const hours = turns.reduce((s, l, i) => s + (i && t(l) - t(turns[i - 1]) < IDLE_MS ? t(l) - t(turns[i - 1]) : 0), 0) / (60 * MIN);
     return { root, arm: typeof us[0].arm === "string" ? us[0].arm : "", cost: us.reduce((s, l) => s + num(l.costUsd), 0), hours, q5h: share(turns, "q5h"), q7d: share(turns, "q7d") };
   });
+}
+
+/** Append to the list under `k` (linear; never copy the list). */
+export function push<K, V>(m: Map<K, V[]>, k: K, v: V): void {
+  const xs = m.get(k);
+  if (xs) xs.push(v); else m.set(k, [v]);
 }
 
 const ev = (costs: number[]): Ev => ({ n: costs.length, meanCost: costs.length ? costs.reduce((s, c) => s + c, 0) / costs.length : 0 });
@@ -117,7 +125,8 @@ export function armStats(all: any[], opt: { flags?: Record<string, Record<string
   const quota = opt.quota ?? quotaAttribution(all); // over every line, before the arm filter
   const t = (l: any): number => Date.parse(l.ts);
   const lines = all.filter((l) => l && typeof l.ts === "string" && !Number.isNaN(t(l)) && typeof l.sessionId === "string" && typeof l.arm === "string" && l.arm).sort((a, b) => t(a) - t(b));
-  const group = <K>(key: (l: any) => K): Map<K, any[]> => lines.reduce((m, l) => m.set(key(l), [...(m.get(key(l)) ?? []), l]), new Map<K, any[]>());
+  const bySession = new Map<string, any[]>();
+  for (const l of lines) push(bySession, l.sessionId, l);
   const arms = new Map<string, { units: Unit[]; cost: number; cold: number[]; fold: number[] }>();
   const slot = (arm: string) => arms.get(arm) ?? arms.set(arm, { units: [], cost: 0, cold: [], fold: [] }).get(arm)!;
 
@@ -126,11 +135,15 @@ export function armStats(all: any[], opt: { flags?: Record<string, Record<string
     a.cost += u.cost;
     if (u.hours >= MIN_HOURS) a.units.push({ cost: u.cost, hours: u.hours, q5h: u.q5h, q7d: u.q7d });
   }
-  for (const ss of group((l) => l.sessionId).values()) {
+  for (const ss of bySession.values()) {
     const ttl = (ss[0].parentSessionId === undefined && opt.flags?.[ss[0].arm]?.mainCacheTtl === "1h" ? 60 : 5) * MIN;
-    const turns = ss.filter((l) => l.kind !== "warming");
+    // Warming is not a turn; a failed request is neither (no usage), so it starts no event and sits in no window.
+    const reqs = ss.filter((l) => !isError(l));
+    const turns = reqs.filter((l) => l.kind !== "warming");
+    let at = 0; // index in `reqs` of turns[i]
     turns.forEach((l, i) => {
-      const prev = ss[ss.indexOf(l) - 1];
+      while (reqs[at] !== l) at++;
+      const prev = reqs[at - 1];
       const window = turns.slice(i, i + N_AFTER);
       if (!prev || window.length < N_AFTER) return;
       const cost = window.reduce((s, x) => s + num(x.costUsd), 0);

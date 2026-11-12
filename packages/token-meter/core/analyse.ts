@@ -1,7 +1,7 @@
 // On-demand analysis of pi's own logs: cost, experiment, delegation & routing, guards, data quality.
 // Pure; bin/pi-analyse.ts does the I/O. Reads the meter log, the task-router outcome log, experiments/assignments.jsonl
 // and guards/events.jsonl as plain JSON (packages do not import each other; <agentDir>/LOGS.md is the contract).
-import { armStats, attributeQuota, MIN_HOURS, nextState, quotaAttribution, rootUnits, type ArmStat } from "./arms.ts";
+import { armStats, attributeQuota, isError, MIN_HOURS, nextState, push, quotaAttribution, rootUnits, type ArmStat } from "./arms.ts";
 import { check, type Problem } from "./contract.ts";
 import { acceptance, killSwitch, signals, type Limits } from "./guards.ts";
 import { foldLedger, summarise, type LedgerSection } from "./ledger.ts";
@@ -85,7 +85,7 @@ function allocate(l: any): Record<Component, number> {
 }
 
 export type Split = { name: string; n: number; usd: number; share: number; perHour: number };
-export type CostSection = { totalUsd: number; requests: number; warming: number; units: number; activeHours: number;
+export type CostSection = { totalUsd: number; requests: number; errors: number; warming: number; units: number; activeHours: number;
   usdPerHour: CI; q5hPerHour: number; q7dPerHour: number; perAccepted: TaskCost;
   byModel: Array<{ model: string; requests: number; usd: number; share: number; perHour: number }>;
   splits: Split[]; components: Record<Component, number>; folds: LedgerSection };
@@ -97,8 +97,9 @@ export type CostSection = { totalUsd: number; requests: number; warming: number;
  */
 function quotaShare(meter: any[], key: "q5h" | "q7d"): { pi: number; total: number; share: number } {
   const windows = new Map<unknown, number[]>();
-  for (const l of meter) if (typeof l[key] === "number") windows.set(l[`${key}Reset`], [...(windows.get(l[`${key}Reset`]) ?? []), l[key]]);
-  const total = sum([...windows.values()].map((v) => Math.max(...v) - Math.min(...v)));
+  for (const l of meter) if (typeof l[key] === "number") push(windows, l[`${key}Reset`], l[key]);
+  const spread = (v: number[]): number => { let lo = Infinity, hi = -Infinity; for (const x of v) { if (x < lo) lo = x; if (x > hi) hi = x; } return hi - lo; }; // not Math.max(...v): a spread overflows the stack on a long window
+  const total = sum([...windows.values()].map(spread));
   const pi = attributeQuota(meter, key).total;
   return { pi, total, share: total ? pi / total : NaN };
 }
@@ -116,7 +117,7 @@ function cost(meter: any[], outcomes: any[], flags: Record<string, Record<string
   const models = new Map<string, { requests: number; usd: number }>();
   for (const l of lines) {
     const m = models.get(String(l.model)) ?? models.set(String(l.model), { requests: 0, usd: 0 }).get(String(l.model))!;
-    m.requests += 1;
+    if (l.kind !== "warming" && !isError(l)) m.requests += 1;
     m.usd += num(l.costUsd);
   }
   const components = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, unallocated: 0 };
@@ -136,7 +137,7 @@ function cost(meter: any[], outcomes: any[], flags: Record<string, Record<string
   const split = (name: string, n: number, usd: number): Split => ({ name, n, usd, share: totalUsd ? usd / totalUsd : NaN, perHour: perHour(usd) });
   const all = taskCosts(lines, outcomes.map((e) => (e?.event === "spawn" ? { ...e, arm: "all" } : e))).all;
   return {
-    totalUsd, requests: lines.length - warm.length, warming: warm.length, units: units.length, activeHours, usdPerHour,
+    totalUsd, requests: lines.filter((l) => l.kind !== "warming" && !isError(l)).length, errors: lines.filter((l) => l.kind !== "warming" && isError(l)).length, warming: warm.length, units: units.length, activeHours, usdPerHour,
     q5hPerHour: perHour(quotaShare(lines, "q5h").pi), q7dPerHour: perHour(quotaShare(lines, "q7d").pi),
     perAccepted: all ?? { accepted: 0, judged: 0, costUsd: 0, perAccepted: NaN },
     byModel: [...models].map(([model, m]) => ({ model, ...m, share: totalUsd ? m.usd / totalUsd : NaN, perHour: perHour(m.usd) })).sort((a, b) => b.usd - a.usd),
@@ -336,7 +337,7 @@ function delegation(meter: any[], outcomes: any[], routerSettings: any): Delegat
   const tiers = countBy(spawns, tierOf);
   const children = lines.filter((l) => typeof l.parentSessionId === "string");
   const total = sum(lines.map((l) => num(l.costUsd)));
-  const requests = (ls: any[]) => ls.filter((l) => l.kind !== "warming").length;
+  const requests = (ls: any[]) => ls.filter((l) => l.kind !== "warming" && !isError(l)).length;
   const group = <K extends string>(es: any[], keys: K[]) => Object.values(es.reduce((m, e) => {
     const k = keys.map((x) => String(e[x])).join("\u0000");
     m[k] ??= { ...Object.fromEntries(keys.map((x) => [x, String(e[x])])), n: 0 };
@@ -346,13 +347,13 @@ function delegation(meter: any[], outcomes: any[], routerSettings: any): Delegat
   const models = new Map<string, { requests: number; usd: number }>();
   for (const l of children) {
     const m = models.get(String(l.model)) ?? models.set(String(l.model), { requests: 0, usd: 0 }).get(String(l.model))!;
-    if (l.kind !== "warming") m.requests += 1;
+    if (l.kind !== "warming" && !isError(l)) m.requests += 1;
     m.usd += num(l.costUsd);
   }
   const limits = { requests: routerSettings?.runaway?.requests ?? 150, usd: routerSettings?.runaway?.usd ?? 10 };
   const taskOf = new Map(allSpawns.filter((e) => typeof e.sessionId === "string").map((e) => [e.sessionId as string, e.taskId as string]));
   const perChild = new Map<string, any[]>();
-  for (const l of children) perChild.set(l.sessionId, [...(perChild.get(l.sessionId) ?? []), l]);
+  for (const l of children) push(perChild, l.sessionId, l);
   const runaways: Runaway[] = [];
   for (const [sid, ls] of perChild) {
     const r = requests(ls);
@@ -491,7 +492,7 @@ function renderCost(c: CostSection): string {
   if (!c.requests && !c.warming) return NO_DATA;
   return [
     table(["metric", "value"], [
-      ["total $", f2(c.totalUsd)], ["requests (warming)", `${c.requests} (${c.warming})`], ["root sessions", String(c.units)], ["active hours", f2(c.activeHours)],
+      ["total $", f2(c.totalUsd)], ["requests (warming)", `${c.requests} (${c.warming})`], ["errors", String(c.errors)], ["root sessions", String(c.units)], ["active hours", f2(c.activeHours)],
       ["$/active hour (95% CI)", `${f2(c.usdPerHour.mean)} (${ci(c.usdPerHour)})`], ["q5h %/active hour", f2(c.q5hPerHour)], ["q7d %/active hour", f2(c.q7dPerHour)],
       ["$/accepted task (accepted/judged)", `${f2(c.perAccepted.perAccepted)} (${c.perAccepted.accepted}/${c.perAccepted.judged})`],
     ]),
