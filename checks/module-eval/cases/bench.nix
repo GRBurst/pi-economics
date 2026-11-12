@@ -11,6 +11,27 @@
   fx = ../fixtures;
   benchVars = cfg: lib.filterAttrs (n: _: lib.hasPrefix "PI_BENCH_" n) cfg.home.sessionVariables;
   on = extra: hm.eval {programs.piEconomics.bench = {enable = true;} // extra;};
+  # Registry entries of the two names the bench takes from the registry, as a
+  # consumer's setup provides them (router-extraction design §7.3, §8.2).
+  registry = {
+    actor-subagents = {
+      path = fx + "/ext-a";
+      forChildren = false;
+      description = "an actor";
+    };
+    task-router = {
+      path = fx + "/ext-b";
+      forChildren = false;
+      description = "a router";
+    };
+  };
+  onRegistry = extra:
+    hm.eval {
+      programs.piEconomics = {
+        bench = {enable = true;} // extra;
+        extensions = registry;
+      };
+    };
 in
   {
     # (M1.5) Off by default: no variable, no package.
@@ -76,19 +97,35 @@ in
       # (M6.14) Definitions add to the defaults.
       eq "PI_BENCH_EXT_DIR" v.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" ((pe (on {})).bench.extensions // exts)}";
 
-    # (M6.14) The default: the flake's packages the bench loads by name (spec
-    # §7), each the path its registry entry links; mkForce {} exports nothing.
+    # (M6.14) The default: the extensions the bench loads by name (spec §7).
+    # This flake's own three from their packages; actor-subagents and
+    # task-router from the registry entry of that name, and absent without one
+    # (router-extraction design §7.3). PI_BENCH_EXT_DIR links exactly these;
+    # mkForce {} exports nothing.
     bench-extensions-default = let
-      c = on {};
-      p = pe c;
-    in
-      eq "extensions" p.bench.extensions {
-        actor-subagents = "${p.actorSubagents.package}/extensions/actor-subagents";
+      own = p: {
         infinite-context = "${p.infiniteContext.package}/extensions/infinite-context";
         pi-retry = "${p.retry.package}";
         token-meter = "${p.tokenMeter.package}";
-        task-router = "${p.taskRouter.package}";
-      }
+      };
+      alone = on {};
+      reg = onRegistry {};
+      # Every component of this flake, the registry filled by its modules.
+      all = hm.eval {
+        programs.piEconomics = lib.genAttrs ["bench" "actorSubagents" "tokenMeter" "cacheLifecycle" "experiments" "infiniteContext" "retry" "taskRouter"] (_: {enable = true;});
+      };
+      ext = c: (pe c).bench.extensions;
+      shared = c: lib.intersectLists (lib.attrNames (ext c)) (lib.attrNames (pe c).extensions);
+      farm = name: c: eq "PI_BENCH_EXT_DIR (${name})" c.home.sessionVariables.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" (ext c)}";
+    in
+      eq "without registry entries: the own three" (ext alone) (own (pe alone))
+      ++ eq "with registry entries: theirs too" (ext reg) (own (pe reg) // lib.mapAttrs (_: e: e.path) registry)
+      ++ holds "every component: both registered names" (lib.all (n: lib.elem n (shared all)) ["actor-subagents" "task-router"])
+      ++ eq "every component: each name the registry holds is its path" (lib.genAttrs (shared all) (n: (ext all).${n})) (lib.genAttrs (shared all) (n: (pe all).extensions.${n}.path))
+      ++ farm "alone" alone
+      ++ farm "registry" reg
+      ++ farm "every component" all
+      ++ eq "failed assertions" (failed "" reg ++ failed "" all) []
       ++ holds "mkForce {} exports nothing" (!((on {extensions = lib.mkForce {};}).home.sessionVariables ? PI_BENCH_EXT_DIR));
 
     # (M1.8) The router base as a JSON file, read back without building.
@@ -230,15 +267,15 @@ in
     # §7): checked for every name the default holds, pi-retry and task-router
     # among them.
     bench-extensions-override = let
-      defaults = (pe (on {})).bench.extensions;
+      defaults = (pe (onRegistry {})).bench.extensions;
       one = name: let
-        c = on {extensions.${name} = "/x";};
+        c = onRegistry {extensions.${name} = "/x";};
         got = (pe c).bench.extensions;
       in
         eq "${name} is the host's" got.${name} "/x"
         ++ eq "the other defaults stay (${name})" (removeAttrs got [name]) (removeAttrs defaults [name])
         ++ eq "failed assertions (${name})" (failed "" c) [];
     in
-      holds "the defaults hold pi-retry and task-router" (defaults ? pi-retry && defaults ? task-router)
+      holds "the defaults hold pi-retry, actor-subagents and task-router" (defaults ? pi-retry && defaults ? actor-subagents && defaults ? task-router)
       ++ lib.concatMap one (lib.attrNames defaults);
   }

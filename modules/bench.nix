@@ -57,10 +57,12 @@ in {
         the registry: the arms load extensions the registry does not hold, and
         leave out some it does. Exported as a directory of links
         (`PI_BENCH_EXT_DIR`). Defined by default, one `mkDefault` each, for the
-        flake's packages the bench loads by name: `actor-subagents`,
-        `infinite-context`, `pi-retry`, `task-router`, `token-meter`. A definition adds names
-        or replaces one; `lib.mkForce {}` exports nothing, and the bench then
-        looks the names up in `~/.pi/agent/extensions`.
+        extensions the bench loads by name: this flake's `infinite-context`,
+        `pi-retry` and `token-meter`, and `actor-subagents` and `task-router`
+        at the path of their entry in `programs.piEconomics.extensions` when
+        it has one. A definition adds names or replaces one; `lib.mkForce {}`
+        exports nothing, and the bench then looks the names up in
+        `~/.pi/agent/extensions`.
         A name missing here fails its arm at run time (the link does not
         exist): your own extensions, named in `baseExtensions`,
         `orchExtensions` or an arm of `<data>/arms.json`, need a definition
@@ -148,16 +150,18 @@ in {
         message = "pi-economics: programs.piEconomics.bench.${opt} names ${lib.concatStringsSep ", " missing}, which programs.piEconomics.bench.extensions does not define (the runs load each from the link of that name: define it there or leave it out)";
       })
       nameLists;
-    # (M6.14) The flake's packages that the bench loads by name (spec §7), one
-    # mkDefault definition each: a consumer adds its own extensions beside them
-    # (for `baseExtensions`, `orchExtensions`) and may replace one by name.
-    programs.piEconomics.bench.extensions = lib.mapAttrs (_: lib.mkDefault) {
-      actor-subagents = "${pe.actorSubagents.package}/extensions/actor-subagents";
-      infinite-context = "${pe.infiniteContext.package}/extensions/infinite-context";
-      pi-retry = "${pe.retry.package}";
-      token-meter = "${pe.tokenMeter.package}";
-      task-router = "${pe.taskRouter.package}"; # (M5.13)
-    };
+    # (M6.14) The extensions the bench loads by name (spec §7), one mkDefault
+    # definition each: a consumer adds its own extensions beside them (for
+    # `baseExtensions`, `orchExtensions`) and may replace one by name. This
+    # flake's own three from their packages; actor-subagents and task-router
+    # from the registry entry of that name, when there is one (router-extraction
+    # design §7.3: they come from other flakes).
+    programs.piEconomics.bench.extensions = lib.mapAttrs (_: lib.mkDefault) ({
+        infinite-context = "${pe.infiniteContext.package}/extensions/infinite-context";
+        pi-retry = "${pe.retry.package}";
+        token-meter = "${pe.tokenMeter.package}";
+      }
+      // lib.mapAttrs (_: e: e.path) (lib.filterAttrs (n: _: lib.elem n ["actor-subagents" "task-router"]) pe.extensions));
     home.sessionVariables =
       {
         PI_BENCH_DATA = cfg.dataDir;
