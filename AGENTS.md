@@ -20,11 +20,15 @@ The flake is read through git, so Nix sees only files in the index:
 `git add` a new file before building.
 
 The inputs `pi-setup` (its patched actor-subagents) and `pi-task-router` (the
-router this repository observes) serve the checks only. `pi-task-router` is not
-locked until it is published: until then add
+router this repository observes) serve the checks only: neither is a component
+of this repository (`docs/scope.md`). `pi-task-router` is not locked until it
+is published, and the locked `pi-setup` has no actor yet: until then add
 `--override-input pi-task-router git+file://<a checkout of it>` and
-`--no-write-lock-file` to `o` below, and keep any local node out of
-`flake.lock`.
+`--override-input pi-setup git+file://<a checkout of one that has it>`
+and `--no-write-lock-file` to `o` below, and keep any local node out of
+`flake.lock`. A change there (a router's test harness, a registry key) surfaces
+here when the input moves: `log-contract` imports the router's `test/harness.ts`
+and `test/fake-git.ts`.
 
 Checks, one capped `nix build` each; never `nix flake check` without a memory cap:
 
@@ -79,6 +83,10 @@ The Nix derivation names (`pi-<c>-<version>`) follow the manifests; module-eval 
   `NOTICE`, `LICENSE`, the root `flake.lock` (pi-setup's inputs are locked
   there) and `patches/<input>/LICENSE` (it scans contents, binary ones too, and file and
   directory names, in the spellings `x-y`, `x_y`, `xy`).
+- This repository measures and experiments; it does not route, gate, review or
+  drive work (`docs/scope.md`). The router and the patched actor are other
+  repositories', observed or used here through the check-only inputs, never
+  copied back.
 - A consumer's copy of a cross-extension API type gets an `iface.compare`
   check in `checks/default.nix` (spec §5.3); its sources hold no
   `tsconfig.json`.
