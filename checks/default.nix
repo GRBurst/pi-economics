@@ -87,6 +87,10 @@ in {
   boundary = boundaryLib.check ../.;
   boundary-selftest = boundaryLib.selftest;
   license = import ./license {inherit lib pkgs;};
+  doc-pointers = import ./doc-pointers.nix {
+    inherit lib pkgs;
+    router = pi-task-router;
+  };
   npm-deps = npm.check;
   typecheck-harness = typecheck.selftest;
   iface-harness = iface.selftest;
