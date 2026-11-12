@@ -17,7 +17,7 @@ import { runOne } from "../src/run.ts";
 import { fakePrintPi, fakeRpcPi, script, sourceRepo, tmp } from "./helpers.ts";
 import { cand, cliRun, judgeBench, OLD_QWEN } from "./q-fixtures.ts";
 
-/** The flake's own extensions the bench may name (modules/bench.nix, the default of `bench.extensions`). */
+/** The extensions the bench names itself (modules/bench.nix, the default of `bench.extensions`: the flake's own and the registry's `actor-subagents`, `task-router`). */
 const OWN = ["actor-subagents", "infinite-context", "pi-retry", "task-router", "token-meter"];
 
 const env = (base?: string, orch?: string): Record<string, string> => ({

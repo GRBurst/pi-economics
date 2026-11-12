@@ -58,14 +58,16 @@ loaded with `routing: false`, so spawns, verdicts and `unjudged` are still writt
 
 Every run of a factor arm gets its own **agent dir** `runs/<run>/agent/` (`PI_CODING_AGENT_DIR`), written by
 `materializeAgentDir` (`src/orch.ts`): `settings.json` (pi-retry as live, incl. the subagent regex),
-`task-router/settings.json` (`routing`, `delegation.nudge`, `t0Limits`), `actor-subagents/settings.json`
+`task-router/settings.json` (the router base, then `routing`, `delegation.nudge`, `t0Limits`), `actor-subagents/settings.json`
 (`childExtensions`: the base extensions, infinite-context, pi-retry, token-meter, the orchestrator's extras; task-router is main only),
 `AGENTS.md` (routing on → `~/.pi/agent/AGENTS.md`, off → `~/.pi/agent/notes/2026-10-03-AGENTS.md.before`),
 `infinite-context/settings.json` (copy), and symlinks `auth.json`, `models.json`, `models-store.json` to the live
 agent dir (no secrets are copied; a login extension that seeds `auth.json` writes through the link). Meter (`agent/meter/`) and outcome (`agent/task-router/outcomes/`) logs of the run land there.
-Sources are overridable: `PI_BENCH_AGENT_SRC`, `PI_BENCH_AGENTS_ON`, `PI_BENCH_AGENTS_OFF`. `PI_BENCH_ROUTER` names a JSON
-file that is the base of `task-router/settings.json`: the arm's keys are merged over it as `lib.recursiveUpdate` does
-(unset: the arm's keys alone). Arms with `factors`
+Sources are overridable: `PI_BENCH_AGENT_SRC`, `PI_BENCH_AGENTS_ON`, `PI_BENCH_AGENTS_OFF`. The router base is read at
+run time (`routerBase`, `src/orch.ts`) from the live router settings `<agent source>/task-router/settings.json`: its
+model keys (`models`, `queueMaxSec`, `contextFit`, `localHealthUrl`, `cloudDailyCap`, `contextWindow`) with
+`randomize.enabled` and `spotCheck.enabled` false (no file: `{}`). `PI_BENCH_ROUTER` names a JSON file merged over that
+base, and the arm's keys over both, as `lib.recursiveUpdate` does (unset: the live base and the arm's keys). Arms with `factors`
 (also from `arms.json`) get this treatment; other arms use the live agent dir as before. `bench-report --factors
 routing,delegation,t0Widened` reads the factor levels from the arm.
 
