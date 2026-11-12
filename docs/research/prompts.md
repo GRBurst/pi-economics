@@ -1,10 +1,12 @@
 # The research prompts
 
-The eight Gemini Deep Research prompts behind the reports, as sent. Prompts 1–3 went out first; 4–6 after
-the decision to review plans and merges with Opus. The evidence rules at the end were meant for 4–6; the
-user's own prompt carried similar rules. Prompt 7 was added with `docs/local-mode/design.md` (its OQ10);
-prompts 7 and 8 went out with the evidence rules appended, and both reports are in. Prompt 9 was added
-after the first `size` refusals hit real work; send it with the evidence rules appended.
+The eleven Gemini Deep Research prompts behind the reports, as sent. Prompts 1–3 went out first; 4–6
+after the decision to review plans and merges with Opus. The evidence rules at the end were meant for 4–6;
+the user's own prompt carried similar rules. Prompt 7 was added with `docs/local-mode/design.md` (its
+OQ10); prompts 7 and 8 went out with the evidence rules appended, and both reports are in. Prompt 9 was
+added after the first `size` refusals hit real work and went out with the evidence rules appended; its
+report is in `originals/` awaiting the next cleanup batch. Prompts 10 and 11 were added after the
+review-economics report; send them with the evidence rules appended.
 
 | Prompt | Report |
 |---|---|
@@ -16,7 +18,9 @@ after the first `size` refusals hit real work; send it with the evidence rules a
 | 6 | `frontier-model-plan-review-protocol.md` |
 | 7 | `coding-agent-loop-harness-research.md` |
 | 8 | `autonomous-merge-pipeline-size-limits.md` |
-| 9 | not yet run |
+| 9 | `LLM Code Review Economics.md` (in `originals/`, cleanup pending) |
+| 10 | not yet run |
+| 11 | not yet run |
 
 ## 1. Open-weight routing models that run on a CPU
 
@@ -201,7 +205,43 @@ Questions:
 Output: for each question the evidence with exact numbers and sources; a cost model (fixed per review F, per-line v) with your best estimates for a 5.x-class reviewer and the implied optimal split granularity for low-risk versus high-risk work; and the list of least-certain claims.
 ```
 
-## Evidence rules (for prompts 4–9)
+## 10. Classifying changes: who already decides which diff gets which review
+
+```
+Research whether and how people already classify individual code changes (diffs / pull requests) into risk or value classes to decide how much — or what kind — of automated review each change gets, in autonomous or semi-autonomous merge pipelines.
+
+Setting: a local coding agent (Qwen 3.8, 27B) lands work through a merge gate. Each merge request currently gets the same treatment: a deterministic check, a second run of that check at the base commit, and one frontier-model (Claude Opus 5.5) review of the diff in a fresh session. We suspect this is the wrong default: for some changes (e.g. user-supplied reference material under docs/) an LLM review detects essentially nothing and the deterministic checks are the real gate, while for other changes (security-relevant, cross-module, concurrency) the review is the only real gate. We want to assign each change to a class — e.g. inert (no LLM review, checks only), light (cheaper reviewer or a smaller review), deep (frontier reviewer) — deterministically, from the diff itself (file types, paths, changed symbols and modules, test coverage, change type) rather than from the model's self-declaration.
+
+Questions:
+1. State of the art: what published work and production systems already do change classification or risk scoring for review allocation — PR risk-prediction models (Microsoft, Google, GitHub, GitLab studies), production review bots (CodeRabbit, Greptile, Graphite, Snyk, SonarQube) and their triage or classification features, security triage (SAST/CodeQL finding prioritization), risk-based code-review literature (IEEE/ACM), and any LLM-agent pipeline that routes diffs by class? For each: the features used, the classes, and the measured effectiveness.
+2. Features that predict review value or defect likelihood per change: file/path history (churn, past defect density), change type (docs vs code vs config vs generated), blast radius (call graph, symbols touched), test coverage of the touched lines, diff size, dependency distance from entry points. Which of these have measured predictive power for "this change will contain a real defect" or "this change is worth deep review", and with what precision and recall?
+3. Rules vs learned classifiers: evidence comparing simple deterministic rules (path and file-type heuristics, symbol allow-lists) with learned risk models for the same job — when do learned models beat rules enough to justify their cost, and how much labeled data do they need?
+4. The inert class: evidence that LLM code review adds little for specific change classes (documentation, configuration, test-only, formatting, dependency bumps) — measured review precision in those classes, or production data on defect-discovery rate by file type?
+5. Failure cost of miscategorization: what happens when a high-risk change is classified low-risk (missed defects, with numbers where available) versus when a low-risk change is classified high-risk (wasted review cost)? Evidence on the asymmetry, and how production systems hedge (sampling, periodic re-audit of the inert class).
+6. Concrete recommendation: for our gate (numstat, paths, changed file types and check output available at classification time), propose (a) the feature set, (b) the classes and their assignment rules, (c) the review treatment per class, and (d) the hedge for miscategorization — each with its evidence and a confidence rating, and every number that rests on extrapolation beyond the cited setup flagged as such.
+
+Output: for each question the evidence with exact numbers and sources; a comparison table of the systems and studies (features, classes, measured effect); the recommendation; and the list of least-certain claims.
+```
+
+## 11. Which model reviews: local multi-turn versus frontier single-turn
+
+```
+Research which model — and how many turns — should perform the merge review in an autonomous pipeline, specifically to evaluate the claim that multi-turn (iterative) review with a local model beats single-turn review with a frontier model.
+
+Setting: a local coding agent (Qwen 3.8, 27B, open-weight, one consumer GPU with a single inference slot, 262K context) lands work through a merge gate. Each merge request is currently reviewed by one frontier model (Claude Opus 5.5) in a single fresh session — cold cache, the reviewer system prompt and framing re-prefilled at full price — with a typed approve/reject verdict. A report we have seen claims that multi-turn review with a local Qwen 3.8-class model produces better results than single-turn review with an Opus-class model. We need that claim located and evaluated, and a model/turn policy for the gate.
+
+Questions:
+1. The claim itself: locate published or practitioner evidence comparing multi-turn (iterative, multi-pass, self-refining, panel or debate) review by a local/mid-size open model (Qwen 3.8 class, 27B–32B) against single-turn review by a frontier model (Claude Opus class). What exactly was measured (F1, recall, cost, task), on what benchmark, and under what prompt and turn budget? Separate the cases where the local model spent more total tokens or turns from the cases where it did not.
+2. Single vs multi-pass review, same model: evidence on whether a second review pass (self-refinement, a fresh-session re-review, self-consistency over k reviews, a two-model panel) raises defect detection over a single pass — the measured increment per pass, its cost, and the pass number at which the curve flattens? Include context-rot and self-anchoring effects on multi-turn reviewers.
+3. Local models as code reviewers: what do studies report for Qwen 3.x-class (27B–32B, Coder variants) defect-detection quality (F1, precision, recall) on code review, against Claude and GPT tiers — exact numbers, benchmarks, and how far results for 32B or Coder variants transfer to a 27B instruct model doing agentic review with the diff, check output and goal in context?
+4. Turn economics on one inference slot: the local reviewer shares its GPU with the main executor. Evidence on prefill/decode cost of multi-turn review sessions for 27B-class models (KV-cache reuse across turns, prefix caching), and on the throughput interaction when review and execution contend for one slot.
+5. Cost model: given that a frontier single-turn review of a ~150-line diff costs on the order of $0.09–0.12 all-in (cold prefill, framing, CI runs) and a local 27B reviewer has near-zero marginal cost but higher latency: at what review quality (F1) does a local multi-turn stack beat the frontier single pass on cost per accepted-and-correct merge, for low-risk versus high-risk classes? Compute it from cited numbers, not assumptions.
+6. Concrete recommendation: propose (a) which model per risk class, (b) how many review turns per class and the early-stopping rule, (c) whether the frontier pass should come first (triage) or second (confirmation) after a local one, and (d) an A/B design to test the local multi-turn claim on our own pipeline — each with its evidence and a confidence rating; flag every extrapolation.
+
+Output: for each question the evidence with exact numbers and sources; a verdict on the multi-turn-local vs single-turn-frontier claim (supported, refuted, or setup-dependent, naming the exact setups); the recommendation; and the list of least-certain claims.
+```
+
+## Evidence rules (for prompts 4–11)
 
 ```
 Evidence rules:
