@@ -38,9 +38,17 @@
   '';
   # (M2.3)
   iface = import ./iface {inherit lib pkgs typecheck;};
+  # pi-setup's patched actor-subagents, the provider of __subagentsApi_v1 the
+  # consumers meet (router-extraction design §8.3); its type-check copy as
+  # actorSubagentsTs.
+  setupActor = pi-setup.packages.${pkgs.stdenv.hostPlatform.system}.actor-subagents;
+  setupActorTs = pkgs.runCommand "setup-actor-subagents-ts" {} ''
+    mkdir $out
+    cp -r ${setupActor}/extensions ${setupActor}/package.json $out/
+  '';
   # (M4.5) The provider of the globalThis API __subagentsApi_v1 (spec §5.3).
   subagentsProvider = {
-    src = actorSubagentsTs;
+    src = setupActorTs;
     file = "extensions/actor-subagents/api.ts";
     type = "SubagentsApiV1";
   };
@@ -102,11 +110,7 @@ in {
   # The bench probe's copy of __subagentsApi_v1 (spec §5.3, §8.1).
   iface-subagents-bench-probe = iface.compare {
     name = "subagents-bench-probe";
-    provider = {
-      src = actorSubagentsTs;
-      file = "extensions/actor-subagents/api.ts";
-      type = "SubagentsApiV1";
-    };
+    provider = subagentsProvider;
     consumer = {
       src = ../packages/bench;
       file = "probe/index.ts";
