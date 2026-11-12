@@ -260,7 +260,7 @@ in {
     inherit pkgs self;
     router = routerSrc;
   };
-  # (AC5) The package next to the patched actor: no warning, task_verdict.
+  # (AC5) The package next to the patched actor: every extension loads, no warning.
   pi-install-actor = import ./pi-package/actor.nix {
     inherit (pkgPi) installed;
     actor = actorSubagents;
@@ -293,6 +293,13 @@ in {
   bins-smoke = import ./pi-package/bins.nix {inherit pkgs self;};
   # (AC4) The README's filter loads only the listed extensions.
   pi-install-subset = import ./pi-package/subset.nix {inherit (pkgPi) installed;};
-  # (AC15) The Nix route under real pi: the home-files fixture's agent directory, pi -p offline.
-  nix-route-smoke = import ./pi-package/nix-route.nix {inherit lib pkgs hm;};
+  # (AC15) The Nix route under real pi: the home-files fixture's agent directory with
+  # the pi-task-router input's router as a registry entry, pi -p offline.
+  nix-route-smoke = import ./pi-package/nix-route.nix {
+    inherit lib pkgs hm;
+    router = {
+      package = pi-task-router.packages.${pkgs.stdenv.hostPlatform.system}.task-router;
+      src = pi-task-router;
+    };
+  };
 }

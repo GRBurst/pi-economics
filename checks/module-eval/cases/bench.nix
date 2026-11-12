@@ -110,9 +110,12 @@ in
       };
       alone = on {};
       reg = onRegistry {};
-      # Every component of this flake, the registry filled by its modules.
+      # Every component of this flake, the registry filled by its modules,
+      # and the router's entry as its own flake adds it.
       all = hm.eval {
-        programs.piEconomics = lib.genAttrs ["bench" "actorSubagents" "tokenMeter" "cacheLifecycle" "experiments" "infiniteContext" "retry" "taskRouter"] (_: {enable = true;});
+        programs.piEconomics =
+          lib.genAttrs ["bench" "actorSubagents" "tokenMeter" "cacheLifecycle" "experiments" "infiniteContext" "retry"] (_: {enable = true;})
+          // {extensions = {inherit (registry) task-router;};};
       };
       ext = c: (pe c).bench.extensions;
       shared = c: lib.intersectLists (lib.attrNames (ext c)) (lib.attrNames (pe c).extensions);
@@ -145,9 +148,8 @@ in
     # `router` unset, Nix defines no base and exports no PI_BENCH_ROUTER, and
     # the file the bench reads (`PI_BENCH_AGENT_SRC`/task-router/settings.json)
     # is the one the router's module writes. A definition is exported as it
-    # is, the explicit override. Two ways to enable the router: the in-tree
-    # module, and a registry entry beside the settings file (as the router's
-    # own flake does).
+    # is, the explicit override. The router is enabled as its own flake does
+    # it: a registry entry beside the settings file.
     bench-router-default = let
       s = {
         models.sonnet.model = "m";
@@ -161,13 +163,6 @@ in
       };
       live = "task-router/settings.json";
       routerOn = {
-        in-tree.programs.piEconomics = {
-          actorSubagents.enable = true;
-          taskRouter = {
-            enable = true;
-            settings = s;
-          };
-        };
         registry = {
           programs.piEconomics.extensions.task-router = {
             path = fx + "/ext-b";

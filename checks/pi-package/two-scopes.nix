@@ -4,8 +4,8 @@
 # project is trusted, then the final set (the project's packages first, then
 # the user's) is built, and a bootstrap extension that is not in it is dropped
 # without a word. Exactly one copy of every component must be bound: the one
-# that really starts. The actor warnings of task-router and cache-lifecycle
-# print once only from a bound copy (one per process).
+# that really starts. The actor warning of cache-lifecycle prints once only
+# from a bound copy (one per process).
 #   replaced: the project entry takes the user's package out of the final set
 #             (an empty filter), next to a second copy of it at another path;
 #   both:     a second copy at another path joins the user's in the final set.
@@ -43,7 +43,7 @@ in
         [ "$(grep -cF "pi-economics: $c is loaded twice" run.all)" = ${toString twice.${variant}} ] \
           || fail "$c: expected ${toString twice.${variant}} 'loaded twice' line(s), got $(grep -cF "pi-economics: $c is loaded twice" run.all)"
       done
-      for c in task-router cache-lifecycle; do
+      for c in cache-lifecycle; do
         [ "$(grep -cF "$c: needs pi-actor-subagents" run.all)" = 1 ] \
           || fail "$c: not exactly one bound copy (its actor warning appears $(grep -cF "$c: needs pi-actor-subagents" run.all) times)"
       done

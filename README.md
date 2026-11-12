@@ -62,25 +62,16 @@ configuration (for example `home-manager.sharedModules =
 ```nix
 {
   programs.piEconomics = {
-    # The patched subagent runner; the router and the meter hook into it.
+    # The patched subagent runner; the meter hooks into it.
     actorSubagents.enable = true;
     tokenMeter.enable = true;
-    taskRouter = {
-      enable = true;
-      # Optional: a local model server, with a pi provider named `llama` in
-      # your models.json. Without one answering on `health`, the router
-      # routes on to the next member.
-      settings.models."qwen-local" = {
-        model = "llama/qwen3.8";
-        health = "http://localhost:11545";
-      };
-    };
+    cacheLifecycle.enable = true;
   };
 }
 ```
 
-`taskRouter` needs `actorSubagents` (an assertion says so). The agent
-directory defaults to `~/.pi/agent`; `programs.piEconomics.agentDir` moves it.
+The agent directory defaults to `~/.pi/agent`;
+`programs.piEconomics.agentDir` moves it.
 
 ## Without Nix
 

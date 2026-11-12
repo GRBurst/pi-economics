@@ -25,8 +25,8 @@ installed {
     for c in ${lib.escapeShellArgs own}; do
       [ "$(grep -cF "pi-economics: $c is loaded twice" run.all)" = 1 ] || fail "$c: not exactly one 'loaded twice' line"
     done
-    # the winner is bound, not only a loser that said so: its actor warnings (one per process) print from a bound copy alone
-    for c in task-router cache-lifecycle; do
+    # the winner is bound, not only a loser that said so: its actor warning (one per process) prints from a bound copy alone
+    for c in cache-lifecycle; do
       [ "$(grep -cF "$c: needs pi-actor-subagents" run.all)" = 1 ] || fail "$c: not exactly one bound copy (its actor warning appears $(grep -cF "$c: needs pi-actor-subagents" run.all) times)"
     done
     if grep -qF 'conflicts with' run.all; then fail "pi reports a tool or flag conflict between the copies"; fi

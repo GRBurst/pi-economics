@@ -1,15 +1,22 @@
 # The Nix route under real pi (AC15): the agent directory Home Manager
 # renders for the home-files fixture (every component on, the patched actor
-# included), each `home.file` under it linked as Home Manager links it, then
-# `pi -p x` offline with the probe (./probe.ts). Every registry entry loads
-# (pi prints each extension's factory under PI_TIMING=1; a factory that throws
-# prints none), no load error, no duplicate or missing-actor warning of
-# pi-economics, the router's tool task_verdict exists, and experiments
-# assigns an arm from the settings file the module writes (N4).
+# included) with the task router as its own flake adds it (a registry entry
+# of the pi-task-router input's package; router-extraction design §7.3), each
+# `home.file` under it linked as Home Manager links it, then `pi -p x` offline
+# with the probe (./probe.ts). Every registry entry loads (pi prints each
+# extension's factory under PI_TIMING=1; a factory that throws prints none),
+# no load error, no duplicate or missing-actor warning of pi-economics or of
+# the router (whose copy of the runtime guard shares the claim channel), the
+# router's tool task_verdict exists, and experiments assigns an arm from the
+# settings file the module writes (N4).
 {
   lib,
   pkgs,
   hm,
+  # The task router: its package (`package`) and its source tree (`src`),
+  # which the existence assertion probes (a source path, not the build
+  # output: no import-from-derivation).
+  router,
 }: let
   dir = ".pi/agent";
   # The home-files fixture's options for the default agentDir.
@@ -35,7 +42,12 @@
       };
       retry.enable = true;
       actorSubagents.enable = true;
-      taskRouter.enable = true;
+      extensions.task-router = {
+        path = "${router.package}";
+        checkPath = "${router.src}/packages/task-router/index.ts";
+        forChildren = false;
+        description = "the task router (pi-task-router)";
+      };
     };
   };
   files = lib.filter (f: lib.hasPrefix "${dir}/" f.target) (lib.attrValues c.home.file);
