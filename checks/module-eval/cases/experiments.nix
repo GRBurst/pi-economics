@@ -24,6 +24,8 @@
   fileAt = target: cfg: lib.findFirst (f: f.target == target) null (lib.attrValues cfg.home.file);
   units = cfg: lib.attrNames cfg.systemd.user.services ++ lib.attrNames cfg.systemd.user.timers;
   bare = hm.evalBare {};
+  # The actor in the registry, as pi-setup's bridge puts it there.
+  withActor = {extensions.actor-subagents = import ../fixtures/actor-entry.nix;};
   warning = "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
 in {
   # (M4.13) Off by default: no registry entry, no file.
@@ -33,11 +35,11 @@ in {
     holds "no registry entry" (!(pe c).extensions ? experiments)
     ++ eq "home.file targets" (targets c) (targets bare);
 
-  # (M4.13) On, with actorSubagents (no warning): the registry entry, main
+  # (M4.13) On, with the actor in the registry (no warning): the registry entry, main
   # session only, its link following agentDir; no timer (the host's
   # checks/pi-extensions.nix:264-269).
   experiments-defaults = lib.concatMap (dir: let
-    c = eval dir {} {actorSubagents.enable = true;};
+    c = eval dir {} withActor;
     e = (pe c).extensions.experiments;
   in
     eq "registry entry (${dir})" {inherit (e) path input forChildren;} {
@@ -92,7 +94,7 @@ in {
     s)
   dirs;
 
-  # (M4.15) Alone, without actorSubagents: one warning, no assertion.
+  # (M4.15) Alone, without the actor: one warning, no assertion.
   experiments-warning = let
     c = eval ".pi/agent" {} {};
   in
@@ -101,12 +103,13 @@ in {
 
   # (M4.16) The host's combination from W3 on (spec §9.1): M2–M4's extension
   # components, piSettings off (the host's own script runs until W6). Children
-  # load cache-lifecycle and token-meter, not experiments: today's file
-  # (host pi-extensions.nix:389-390) for that registry.
+  # load cache-lifecycle and token-meter, not experiments: the list pi-setup's
+  # bridge writes into the actor's settings file (host pi-extensions.nix:389-390);
+  # the file is pi-setup's (router-extraction design §7.2).
   cache-experiments-host-like = let
     c = hm.eval {
       programs.piEconomics = {
-        actorSubagents.enable = true;
+        inherit (withActor) extensions;
         tokenMeter.enable = true;
         cacheLifecycle.enable = true;
         experiments.enable = true;
@@ -116,7 +119,7 @@ in {
     kids = ["/home/u/.pi/agent/extensions/cache-lifecycle" "/home/u/.pi/agent/extensions/token-meter"];
   in
     eq "childExtensions" (pe c).childExtensions kids
-    ++ eq "actor-subagents/settings.json" (fileAt ".pi/agent/actor-subagents/settings.json" c).text (builtins.toJSON {childExtensions = kids;})
+    ++ eq "no actor-subagents/settings.json here" (fileAt ".pi/agent/actor-subagents/settings.json" c) null
     ++ eq "links" (sorted (lib.filter (lib.hasPrefix ".pi/agent/extensions/") (targets c)))
     (map (n: ".pi/agent/extensions/${n}") ["actor-subagents" "cache-lifecycle" "experiments" "token-meter"])
     ++ holds "no piSettingsMigrate entry" (!(c.home.activation ? piSettingsMigrate))

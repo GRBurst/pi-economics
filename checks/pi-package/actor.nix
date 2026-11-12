@@ -3,7 +3,7 @@
 # extension loads and no component warns that it misses the actor's API.
 {
   installed,
-  # The patched pi-actor-subagents (the flake's package); a copy is installed.
+  # The patched pi-actor-subagents (the pi-setup input's package); a copy is installed.
   actor,
 }:
 installed {

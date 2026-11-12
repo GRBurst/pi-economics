@@ -46,6 +46,17 @@
     mkdir $out
     cp -r ${setupActor}/extensions ${setupActor}/package.json $out/
   '';
+  # pi-setup's actor as a registry entry, as its economics bridge forwards
+  # programs.pi.extensions.actor-subagents (router-extraction design §7.3,
+  # §8.2): the existence assertion probes the unpatched input, a source (no
+  # import-from-derivation).
+  actorEntry = {
+    path = "${setupActor}/extensions/actor-subagents";
+    checkPath = "${pi-setup.inputs.pi-actor-subagents}/extensions/actor-subagents/index.ts";
+    input = "pi-actor-subagents";
+    forChildren = false;
+    description = "the patched actor-subagents (pi-setup)";
+  };
   # (M4.5) The provider of the globalThis API __subagentsApi_v1 (spec §5.3).
   subagentsProvider = {
     src = setupActorTs;
@@ -212,7 +223,7 @@ in {
   # (M5.11) Every log writer through pi-analyse (spec §8.1); the router's
   # writer is the pi-task-router input's (router-extraction design §7.3).
   log-contract = pkgs.callPackage ./log-contract {router = routerSrc;};
-  home-files = import ./home-files {inherit lib pkgs hm;};
+  home-files = import ./home-files {inherit lib pkgs hm actorEntry;};
   # (AC2) The committed package.json against the render.
   render-package = import ./render.nix {inherit lib pkgs self render;};
   # (AC3) The manifest's laws, each named.
@@ -230,10 +241,10 @@ in {
     inherit pkgs self;
     router = routerSrc;
   };
-  # (AC5) The package next to the patched actor: every extension loads, no warning.
+  # (AC5) The package next to pi-setup's patched actor: every extension loads, no warning.
   pi-install-actor = import ./pi-package/actor.nix {
     inherit (pkgPi) installed;
-    actor = actorSubagents;
+    actor = setupActor;
   };
   # (AC7) The package next to the Nix links: each duplicate says so once.
   pi-install-duplicate = import ./pi-package/duplicate.nix {
@@ -259,9 +270,9 @@ in {
   # (AC4) The README's filter loads only the listed extensions.
   pi-install-subset = import ./pi-package/subset.nix {inherit (pkgPi) installed;};
   # (AC15) The Nix route under real pi: the home-files fixture's agent directory with
-  # the pi-task-router input's router as a registry entry, pi -p offline.
+  # pi-setup's actor and the pi-task-router input's router as registry entries, pi -p offline.
   nix-route-smoke = import ./pi-package/nix-route.nix {
-    inherit lib pkgs hm;
+    inherit lib pkgs hm actorEntry;
     router = {
       package = pi-task-router.packages.${pkgs.stdenv.hostPlatform.system}.task-router;
       src = pi-task-router;

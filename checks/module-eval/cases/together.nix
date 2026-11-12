@@ -8,8 +8,9 @@
   expect,
 }: let
   inherit (expect) eq holds failed;
-  components = ["bench" "actorSubagents" "tokenMeter" "analysisSkill" "cacheLifecycle" "experiments" "infiniteContext" "retry"];
-  with' = cs: hm.eval {programs.piEconomics = lib.genAttrs cs (_: {enable = true;});};
+  components = ["bench" "tokenMeter" "analysisSkill" "cacheLifecycle" "experiments" "infiniteContext" "retry"];
+  # Each evaluation has the actor in the registry, as pi-setup's bridge puts it there.
+  with' = cs: hm.eval {programs.piEconomics = lib.genAttrs cs (_: {enable = true;}) // {extensions.actor-subagents = actor;};};
   set = l: lib.sort lib.lessThan (lib.unique l);
   targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
   # hm-session-vars.sh is built from the session variables, compared below.

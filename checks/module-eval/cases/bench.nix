@@ -111,11 +111,12 @@ in
       alone = on {};
       reg = onRegistry {};
       # Every component of this flake, the registry filled by its modules,
-      # and the router's entry as its own flake adds it.
+      # and the actor's and the router's entries as pi-setup and the
+      # router's flake add them.
       all = hm.eval {
         programs.piEconomics =
-          lib.genAttrs ["bench" "actorSubagents" "tokenMeter" "cacheLifecycle" "experiments" "infiniteContext" "retry"] (_: {enable = true;})
-          // {extensions = {inherit (registry) task-router;};};
+          lib.genAttrs ["bench" "tokenMeter" "cacheLifecycle" "experiments" "infiniteContext" "retry"] (_: {enable = true;})
+          // {extensions = registry;};
       };
       ext = c: (pe c).bench.extensions;
       shared = c: lib.intersectLists (lib.attrNames (ext c)) (lib.attrNames (pe c).extensions);

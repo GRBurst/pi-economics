@@ -5,6 +5,8 @@
   lib,
   pkgs,
   hm,
+  # pi-setup's patched actor-subagents as a registry entry (checks/default.nix).
+  actorEntry,
 }: let
   dirs = [".pi/agent" "custom/agent"];
   case = dir: let
@@ -30,8 +32,8 @@
           };
         };
         retry.enable = true;
-        # (M5.15)
-        actorSubagents.enable = true;
+        # (M5.15) The actor in the registry, as pi-setup's bridge puts it there.
+        extensions.actor-subagents = actorEntry;
       };
     };
     pe = c.programs.piEconomics;
@@ -64,7 +66,7 @@
       done
     done
     # cacheLifecycle's op, through the script the activation entry runs.
-    # (M5.15) actorSubagents adds its own piRetry op.
+    # (M5.15) The actor in the registry adds retry's child rule (a piRetry op).
     printf '{"theme":"dark"}\n' >"$TMPDIR/settings.json"
     ${lib.getExe pe.piSettings.package} "$TMPDIR/settings.json" 2>/dev/null
     jq -e 'del(.piRetry) == {theme: "dark", cacheWarming: "idle"}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the op: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }

@@ -23,6 +23,8 @@
   targets = cfg: map (f: f.target) (lib.attrValues cfg.home.file);
   fileAt = target: cfg: lib.findFirst (f: f.target == target) null (lib.attrValues cfg.home.file);
   bare = hm.evalBare {};
+  # The actor in the registry, as pi-setup's bridge puts it there.
+  withActor = {extensions.actor-subagents = import ../fixtures/actor-entry.nix;};
   warning = "pi-economics: cacheLifecycle without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses warming while a session waits on its children (the warm policy reads __subagentsApi_v1)";
 in {
   # (M4.9) Off by default: no registry entry, no file, no op.
@@ -33,11 +35,11 @@ in {
     ++ eq "home.file targets" (targets c) (targets bare)
     ++ eq "piSettings ops" (pe c).piSettings.ops {};
 
-  # (M4.9) On, with actorSubagents (no warning): the registry entry, loaded
+  # (M4.9) On, with the actor in the registry (no warning): the registry entry, loaded
   # into children, its link following agentDir; the existence probe reads the
   # source, so evaluation builds nothing.
   cache-lifecycle-defaults = lib.concatMap (dir: let
-    c = eval dir {} {actorSubagents.enable = true;};
+    c = eval dir {} withActor;
     e = (pe c).extensions.cache-lifecycle;
   in
     eq "registry entry (${dir})" {inherit (e) path input forChildren;} {
@@ -99,7 +101,7 @@ in {
     ++ holds "the description states the standalone caveat"
     (lib.all (w: lib.hasInfix w description) ["cacheWarming" "settings.json" "piSettings.enable"]);
 
-  # (M4.12) Alone, without actorSubagents: one warning, no assertion.
+  # (M4.12) Alone, without the actor: one warning, no assertion.
   cache-lifecycle-warning = let
     c = eval ".pi/agent" {} {};
   in

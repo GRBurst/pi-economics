@@ -91,17 +91,18 @@ in {
     s)
   dirs;
 
-  # (M3.6) With actorSubagents, children load the meter: today's
-  # actor-subagents/settings.json (host pi-extensions.nix:389-390) names it.
+  # (M3.6) With the actor in the registry, children load the meter: the list
+  # pi-setup's bridge writes into actor-subagents/settings.json (host
+  # pi-extensions.nix:389-390) names it; the file is pi-setup's
+  # (router-extraction design §7.2).
   token-meter-children = let
     c = hm.eval {
       programs.piEconomics = {
         tokenMeter.enable = true;
-        actorSubagents.enable = true;
+        extensions.actor-subagents = import ../fixtures/actor-entry.nix;
       };
     };
   in
     eq "childExtensions" (pe c).childExtensions ["/home/u/.pi/agent/extensions/token-meter"]
-    ++ eq "actor-subagents/settings.json" (fileAt ".pi/agent/actor-subagents/settings.json" c).text
-    ''{"childExtensions":["/home/u/.pi/agent/extensions/token-meter"]}'';
+    ++ eq "no actor-subagents/settings.json here" (fileAt ".pi/agent/actor-subagents/settings.json" c) null;
 }

@@ -24,7 +24,8 @@
   # (order, key, op, path) of every op, in the order the program runs them.
   sequence = cfg: map (o: "${toString o.order}:${o.key}:${o.op}:${lib.concatStringsSep "." o.path}") (pe cfg).piSettings.sortedOps;
   bare = hm.evalBare {};
-  asOn = {actorSubagents.enable = true;};
+  # The actor in the registry, as pi-setup's bridge puts it there.
+  asOn = {extensions.actor-subagents = import ../fixtures/actor-entry.nix;};
 in {
   # (M6.11) Off by default: no registry entry, no file, no op.
   retry-off = let
@@ -58,7 +59,7 @@ in {
     eq "drvPath" rt.package.drvPath self.packages.x86_64-linux.retry.drvPath
     ++ eq "name" rt.package.name "pi-retry-patched";
 
-  # (M6.12) With actorSubagents: today's ops; with the host's op the program
+  # (M6.12) With the actor in the registry: today's ops; with the host's op the program
   # is the one pi-settings-migrate compares with the legacy script.
   retry-pisettings = let
     c = eval ".pi/agent" {} asOn;
@@ -69,7 +70,7 @@ in {
     ++ eq "program with the host's op" (pe withHost).piSettings.program (pe todays).piSettings.program
     ++ holds "activation entry piSettingsMigrate" (c.home.activation ? piSettingsMigrate);
 
-  # (M6.12) Without actorSubagents: the two removals, no child rule, no
+  # (M6.12) Without the actor: the two removals, no child rule, no
   # warning (spec §4.1).
   retry-alone = let
     c = eval ".pi/agent" {} {};
@@ -122,11 +123,12 @@ in {
     ++ eq "no failure without an empty set" (failed "pi-economics: retry.settings" ok) [];
 
   # (M6.15) The host's combination of M2-M6 from W5 on (spec §9.1): the
-  # flake's children, no activation entry while the host's script runs.
+  # flake's children (the list pi-setup's bridge writes into the actor's
+  # settings file), no activation entry while the host's script runs.
   m6-host-like = let
     c = hm.eval {
       programs.piEconomics = {
-        actorSubagents.enable = true;
+        inherit (asOn) extensions;
         tokenMeter.enable = true;
         cacheLifecycle.enable = true;
         experiments.enable = true;
@@ -135,7 +137,7 @@ in {
         piSettings.enable = false;
       };
     };
-    childNames = map baseNameOf (builtins.fromJSON (lib.findFirst (f: f.target == ".pi/agent/actor-subagents/settings.json") null (lib.attrValues c.home.file)).text).childExtensions;
+    childNames = map baseNameOf c.programs.piEconomics.childExtensions;
   in
     eq "children" childNames ["cache-lifecycle" "infinite-context" "pi-retry" "token-meter"]
     ++ holds "no activation entry" (!(c.home.activation ? piSettingsMigrate))

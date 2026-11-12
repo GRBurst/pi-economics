@@ -1,7 +1,8 @@
 # The Nix route under real pi (AC15): the agent directory Home Manager
-# renders for the home-files fixture (every component on, the patched actor
-# included) with the task router as its own flake adds it (a registry entry
-# of the pi-task-router input's package; router-extraction design §7.3), each
+# renders for the home-files fixture (every component on) with the patched
+# actor and the task router as pi-setup and the router's flake add them
+# (registry entries of the pi-setup and pi-task-router inputs' packages;
+# router-extraction design §7.3), each
 # `home.file` under it linked as Home Manager links it, then `pi -p x` offline
 # with the probe (./probe.ts). Every registry entry loads (pi prints each
 # extension's factory under PI_TIMING=1; a factory that throws prints none),
@@ -13,6 +14,8 @@
   lib,
   pkgs,
   hm,
+  # pi-setup's patched actor-subagents as a registry entry (checks/default.nix).
+  actorEntry,
   # The task router: its package (`package`) and its source tree (`src`),
   # which the existence assertion probes (a source path, not the build
   # output: no import-from-derivation).
@@ -41,7 +44,7 @@
         };
       };
       retry.enable = true;
-      actorSubagents.enable = true;
+      extensions.actor-subagents = actorEntry;
       extensions.task-router = {
         path = "${router.package}";
         checkPath = "${router.src}/packages/task-router/index.ts";
