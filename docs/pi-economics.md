@@ -1016,10 +1016,11 @@ header `# R' = <source>, <date>`) and puts the diff of old and new file in its
 record. The redesign's Groups 3–7 are closed; Group 6 re-recorded nothing.
 
 **Log contract.** `log-contract` runs the real code path of every log writer
-(token-meter, task-router, cache-lifecycle, experiments) into one agent dir and
-requires `pi-analyse --check` to pass and every report section to have data;
-the merge gate runs there on the fake git (one merged and one refused request,
-one bypass), since the check has no git.
+(token-meter, task-router, cache-lifecycle, experiments; the router's from the
+`pi-task-router` input) into one agent dir and requires `pi-analyse --check` to
+pass and every report section to have data; the merge gate runs there on the
+fake git (one merged and one refused request, one bypass), since the check has
+no git.
 
 Checks: `task-router`, `typecheck-task-router`, `iface-subagents-task-router`,
 `iface-experiments-task-router`, `iface-policy-task-router`, `router-golden`,
@@ -1095,11 +1096,11 @@ points into `src`.
 | `typecheck-bench` | `tsc --strict` over the bench |
 | `actor-subagents` | the patched pi-actor-subagents' own suite and the host's checks of each patch's wiring |
 | `typecheck-actor-subagents` | `tsc --strict` over the patched pi-actor-subagents |
-| `token-meter` | the token meter's own tests (`node --test`), run when it builds |
+| `token-meter` | the token meter's own tests (`node --test`), run when it builds; they include the runtime guard's (token-meter's copy is the reference) and the claim protocol shared with the router |
 | `typecheck-token-meter` | `tsc --strict` over the token meter |
 | `home-files` | the rendered sources exist and are what pi and the harnesses read: the extension, `LOGS.md`, both commands on an empty agent dir, the skill directory, the cache-lifecycle and experiments directories, cacheLifecycle's op through the activation's script, infinite-context's rendered settings through the extension's own parser, pi-retry's entry point, `ops.retry` through the script |
 | `iface-harness` | the interface-comparison harness accepts a satisfied copy and rejects an unsatisfied one |
-| `iface-subagents-bench-probe` | the bench probe's copy of `__subagentsApi_v1` is satisfied by the provider's `SubagentsApiV1` |
+| `iface-subagents-bench-probe` | the bench probe's copy of `__subagentsApi_v1` is satisfied by the provider's `SubagentsApiV1` (here and below: the `pi-setup` input's patched actor-subagents) |
 | `cache-lifecycle`, `experiments` | each package's own tests (`node --test`), run when it builds |
 | `typecheck-cache-lifecycle`, `typecheck-experiments` | `tsc --strict` over each package |
 | `iface-subagents-cache-lifecycle`, `iface-subagents-experiments` | their copies of `__subagentsApi_v1` are satisfied by the provider's `SubagentsApiV1` |
@@ -1110,13 +1111,13 @@ points into `src`.
 | `typecheck-retry` | `tsc --strict` over `retry.ts` and `src/`; the tests stay out (one upstream test and the free-cap patch's own test do not type-check; vitest runs them) |
 | `task-router` | the router's own tests (`node --test`, 743), run when it builds; includes the redesign's golden grid against its frozen oracle, under the today fixture and under the defaults (the oracle with the default deltas) |
 | `typecheck-task-router` | `tsc --strict` over `index.ts`, `core/` and `test/` |
-| `iface-subagents-task-router`, `iface-experiments-task-router` | the router's copies of `__subagentsApi_v1` and `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`) are satisfied by the providers' types |
+| `iface-subagents-task-router`, `iface-experiments-task-router` | the router's copies of `__subagentsApi_v1` and `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`; the latter read from the `pi-task-router` input) are satisfied by the providers' types |
 | `iface-policy-task-router` | the router's copy of the spawn policy's result (`PolicyResult` in `core/api.ts`: tool guard, `childTools`, `cwd`) is satisfied by the actor's type |
 | `router-golden` | every decision of the router on the golden grid and the selection, equal to the recorded ones; P2 (the invariance) over the empty-slot `select` lines |
-| `log-contract` | every log writer through `pi-analyse --check` and a full report |
+| `log-contract` | every log writer through `pi-analyse --check` and a full report; the router's writer and vocabularies are the `pi-task-router` input's |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths (`/home/<name>`), `git+ssh` URLs, private (RFC 1918) or Tailscale addresses, LAN host URLs (`http://<one-label host>`, not `localhost`) or names under `.local`, `.lan`, `.home.arpa`, `.ts.net` in tracked files (a worktree's `.git` file is skipped) |
 | `license` | `LICENSE` is MIT, every package declares MIT, `NOTICE` has a section per patched upstream |
-| `boundary`, `boundary-selftest` | no file's content (binary files too), file name or directory name names an extension this repository does not ship, in the spellings `x-y`, `x_y`, `xy` and `xY` (case ignored); `NOTICE`, `LICENSE` and `patches/<input>/LICENSE` are skipped, the patches themselves are scanned; the selftest has a hit and a near miss for each kind of place |
+| `boundary`, `boundary-selftest` | no file's content (binary files too), file name or directory name names an extension this repository does not ship, in the spellings `x-y`, `x_y`, `xy` and `xY` (case ignored); `NOTICE`, `LICENSE`, the root `flake.lock` and `patches/<input>/LICENSE` are skipped, the patches themselves are scanned; the selftest has a hit and a near miss for each kind of place |
 | `render-package` | the committed `package.json` is the render of the module (AC2) |
 | `pi-package-manifest` | the manifest's laws, each reported under its own name (AC3) |
 | `pi-install-smoke` | `pi install ./pkg` offline: settings entry, `pi list`, every manifest extension loads, the router warns once, experiments stays inert (AC1) |
@@ -1127,7 +1128,7 @@ points into `src`.
 | `pi-install-scope-replaced`, `pi-install-scope-both` | the package in two scopes of a trusted project (user `pi install` plus `.pi/settings.json`): where the project entry replaces the user's package, no `loaded twice` and one bound copy; where a second copy joins it, one `loaded twice` per component and one bound copy (AC7, review M1) |
 | `pi-install-subset` | the README's filter loads only the listed extensions (AC4) |
 | `bins-smoke` | `npm install -g <dir>` offline, both CLIs run through an explicit node, the shipped shebang, the `node_modules` failure the README states (AC9) |
-| `runtime-guard-copies`, `iface-subagents-runtime-guard` | the four `runtime-guard.ts` copies are identical (AC8); `SubagentsApiV1` satisfies their `SubagentsApiShape` |
+| `runtime-guard-copies`, `iface-subagents-runtime-guard` | the four `runtime-guard.ts` copies equal token-meter's (AC8), whose claim channel line stands verbatim in the `pi-task-router` input's copy too; `SubagentsApiV1` satisfies their `SubagentsApiShape` |
 | `nix-route-smoke` | the Home Manager route's agent directory under real pi: every extension loads, no duplicate or missing-actor warning, `task_verdict` active, experiments' settings file (AC15) |
 
 How to run them: `AGENTS.md`, "Commands".

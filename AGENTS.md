@@ -19,6 +19,13 @@ If a sandbox denies `~/.cache/nix`, point `XDG_CACHE_HOME` and
 The flake is read through git, so Nix sees only files in the index:
 `git add` a new file before building.
 
+The inputs `pi-setup` (its patched actor-subagents) and `pi-task-router` (the
+router this repository observes) serve the checks only. `pi-task-router` is not
+locked until it is published: until then add
+`--override-input pi-task-router git+file://<a checkout of it>` and
+`--no-write-lock-file` to `o` below, and keep any local node out of
+`flake.lock`.
+
 Checks, one capped `nix build` each; never `nix flake check` without a memory cap:
 
     F=git+file://$PWD o=(--option eval-cache false) cap=$((20 * 1024 * 1024))
@@ -69,7 +76,8 @@ The Nix derivation names (`pi-<c>-<version>`) follow the manifests; module-eval 
   under neutral names (`auth-ext`, `search-ext`, `my-login`,
   `git:github.com/example/pi-auth@main`); the `boundary` check fails on the
   names of particular setups (its term list in `checks/boundary/`), outside
-  `NOTICE`, `LICENSE` and `patches/<input>/LICENSE` (it scans contents, binary ones too, and file and
+  `NOTICE`, `LICENSE`, the root `flake.lock` (pi-setup's inputs are locked
+  there) and `patches/<input>/LICENSE` (it scans contents, binary ones too, and file and
   directory names, in the spellings `x-y`, `x_y`, `xy`).
 - A consumer's copy of a cross-extension API type gets an `iface.compare`
   check in `checks/default.nix` (spec §5.3); its sources hold no
@@ -83,7 +91,11 @@ The Nix derivation names (`pi-<c>-<version>`) follow the manifests; module-eval 
   `nix run .#render` and compared by `render-package`; never edit it by hand.
   Its `bin` files carry the pinned shebang and mode 755 (`pi-package-manifest`).
 - The four `packages/<c>/core/runtime-guard.ts` are identical copies of
-  task-router's (`runtime-guard-copies`): change one, `cp` it to the others.
+  token-meter's (`runtime-guard-copies`; its tests stand for all): change one,
+  `cp` it to the others. Its line `const CHANNEL = "pi-economics:claim:v1";`
+  is a wire protocol shared with the pi-task-router package, whose own copy
+  must hold the same line (`runtime-guard-copies` reads the input): never
+  change it.
   Each `index.ts` wraps its body in `guardSingleCopy`, which claims the
   component and runs the body at `session_start`, never at load (pi may load a
   copy and drop it from the final set; only a copy that starts competes). A
