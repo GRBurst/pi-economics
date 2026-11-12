@@ -121,7 +121,7 @@ Use pi's object form of a `packages` entry in `~/.pi/agent/settings.json`, or
   "source": "git:github.com/GRBurst/pi-economics@v0.1.2",
   "extensions": [
     "packages/token-meter/index.ts",
-    "packages/task-router/index.ts"
+    "packages/cache-lifecycle/index.ts"
   ]
 }
 ```
