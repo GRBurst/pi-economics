@@ -254,6 +254,12 @@ if (!same(CONTRACT_TRIGGERS, TRIGGERS)) failures.push(`contract TRIGGERS ${JSON.
 for (const k of ["turn", "levers", "compaction"]) if (!logs.meter.some((l) => l.kind === k)) failures.push(`meter: no kind ${k} line`);
 if (!logs.meter.some((l) => typeof l.systemHash === "string")) failures.push("meter: no turn line with a systemHash");
 for (const e of ["correction", "rating", "peek-after-mask"]) if (!logs.guards.some((l) => l.event === e)) failures.push(`guards: no ${e} event`);
+// M5b.2: a child runtime's experiments never draws (a child has no row) and serves its root's arm to the child's meter.
+const childIds = new Set(logs.outcomes.filter((l) => l.event === "spawn").map((l) => l.sessionId));
+if (logs.assignments.some((r) => childIds.has(r.sessionId))) failures.push("assignments: a child session has a row of its own (a child runtime drew)");
+const rootArm = new Map(logs.assignments.map((r) => [r.sessionId, r.arm]));
+const stray = logs.meter.find((l) => typeof l.parentSessionId === "string" && l.arm !== rootArm.get(l.parentSessionId));
+if (stray) failures.push(`meter: child ${stray.sessionId} runs arm ${stray.arm}, its root ${stray.parentSessionId} ${rootArm.get(stray.parentSessionId)}`);
 
 // --- pi-analyse --check over the produced lines, then the full analysis
 const run = (args: string[]): { code: number; out: string } => {
