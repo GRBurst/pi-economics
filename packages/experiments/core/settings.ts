@@ -97,7 +97,8 @@ export function loadSettings(file: string): Settings {
 
 /**
  * What a stratum's experiment minimises per active hour (redesign §9.4): API-equivalent USD, cash USD, local cost,
- * wall time, or the 5 h / 7 d quota points. Defined here (the experiments setting); the analyser imports the type.
+ * wall time, or the 5 h / 7 d quota points. Defined here (the experiments setting); token-meter's analyser keeps its
+ * own copy of the literal set (core/analyse/experiment.ts, no cross-import); TODO(M5b.1): a drift guard compares them.
  */
 export type Objective = (typeof OBJECTIVES)[number];
 const OBJECTIVES = ["apiUsd", "cashUsd", "localCost", "wallMs", "points5h", "points7d"] as const;
