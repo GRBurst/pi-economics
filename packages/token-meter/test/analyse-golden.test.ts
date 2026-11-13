@@ -104,6 +104,23 @@ function goldenLogs(): Logs {
   };
 }
 
+/**
+ * Design v4 in three strata (redesign M2c): subscription (anthropic, 3 + 3 roots, 1 h each, one more under MIN_HOURS), api (a provider
+ * without a plan: 1 + 1 roots, no CI), local (llama with a rate, meter v2 lines with durationMs, 2 + 2 roots of 0.5 h).
+ */
+function strataLogs(): Logs {
+  const root = (id: string, arm: string, start: number, extra: Record<string, unknown>, n = 7, gap = 10) => turns(id, at(start), n, { arm, ...extra }, gap);
+  const meter: Record<string, unknown>[] = [];
+  const sub: Array<[string, string, number]> = [["s1", "---", 7], ["s2", "---", 8.4], ["s3", "---", 6.3], ["s4", "+--", 14], ["s5", "+--", 11.2], ["s6", "+--", 16.1]];
+  sub.forEach(([id, arm, usd], i) => meter.push(...root(id, arm, 70 * i, { costUsd: usd / 7 })));
+  meter.push(...root("s7", "---", 500, { costUsd: 50 }, 2, 0.6));
+  meter.push(...root("a1", "---", 600, { provider: "openrouter", model: "glm", costUsd: 0.3 }), ...root("a2", "+--", 700, { provider: "openrouter", model: "glm", costUsd: 0.6 }));
+  const loc: Array<[string, string, number]> = [["l1", "---", 800_000], ["l2", "---", 1_000_000], ["l3", "+--", 1_500_000], ["l4", "+--", 1_300_000]];
+  loc.forEach(([id, arm, ms], i) => meter.push(...root(id, arm, 800 + 40 * i, { v: 2, provider: "llama", model: "qwen", costUsd: 0, durationMs: ms }, 4)));
+  const plans = { anthropic: { billing: "subscription" as const, windows: ["5h" as const] }, llama: { billing: "local" as const, windows: [], rate: { amount: 2, currency: "EUR", per: "hour" as const } } };
+  return { meter, outcomes: [], guards: [], plans, assignments: [...new Set(meter.map((l) => String(l.sessionId)))].map((id) => assignment(id, String(meter.find((l) => l.sessionId === id)!.arm), at(0))) };
+}
+
 const PERIOD = { since: "2026-10-05", until: "2026-10-05" };
 const GENERATED = new Date("2026-10-06T08:30:00Z");
 const a = analyse(goldenLogs(), PERIOD);
@@ -113,6 +130,7 @@ const sections: Record<string, () => string> = {
   cache: () => renderCache(a.cost.cache),
   folds: () => renderFolds(a.cost.folds),
   experiment: () => renderExperiment(a.experiment.designs),
+  "experiment-strata": () => renderExperiment(analyse(strataLogs()).experiment.designs),
   randomized: () => renderRandomized(a.delegation.randomized),
   spotchecks: () => renderSpotChecks(a.delegation.spotChecks),
   delegation: () => renderDelegation(a.delegation),

@@ -1,0 +1,61 @@
+### Design v4 (3 factors, baseline `---`, 12 units with ≥ 0.05 active h)
+
+Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. A negative effect of a cost objective is cheaper.
+
+#### stratum subscription (objective apiUsd per active hour)
+
+| factor | low → high | n low | n high | ratio low | ratio high | effect | 95% CI | MDE |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 3 | 3 | 7.23 | 13.77 | +90% | +53% – +136% | ±60% |
+| mainCacheTtl | – | – | – | – | – | not measurable: no unit at level 1h | – | – |
+| maskOnCold | – | – | – | – | – | not measurable: no unit at level on | – | – |
+
+Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estimate and counted here):
+
+| arm | units | active h | excluded (< 0.05 h) | no objective |
+| --- | --- | --- | --- | --- |
+| `+--` | 3 | 3.00 | 0 | 0 |
+| `---` | 3 | 3.00 | 1 | 0 |
+
+Power: at the current n the smallest detectable effect (α .05 two-sided, power .8) is ±60% (warmPolicy), the largest ±60% (warmPolicy); a smaller true effect is not distinguishable from noise.
+
+#### stratum api (objective apiUsd per active hour)
+
+| factor | low → high | n low | n high | ratio low | ratio high | effect | 95% CI | MDE |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 1 | 1 | 2.10 | 4.20 | +100% | – | – |
+| mainCacheTtl | – | – | – | – | – | not measurable: no unit at level 1h | – | – |
+| maskOnCold | – | – | – | – | – | not measurable: no unit at level on | – | – |
+
+Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estimate and counted here):
+
+| arm | units | active h | excluded (< 0.05 h) | no objective |
+| --- | --- | --- | --- | --- |
+| `+--` | 1 | 1.00 | 0 | 0 |
+| `---` | 1 | 1.00 | 0 | 0 |
+
+Power: not estimable (fewer than 2 units at a level of every factor).
+
+#### stratum local (objective localCost per active hour)
+
+| factor | low → high | n low | n high | ratio low | ratio high | effect | 95% CI | MDE |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 2 | 2 | 4.00 | 6.22 | +56% | +30% – +88% | ±41% |
+| mainCacheTtl | – | – | – | – | – | not measurable: no unit at level 1h | – | – |
+| maskOnCold | – | – | – | – | – | not measurable: no unit at level on | – | – |
+
+Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estimate and counted here):
+
+| arm | units | active h | excluded (< 0.05 h) | no objective |
+| --- | --- | --- | --- | --- |
+| `+--` | 2 | 1.00 | 0 | 0 |
+| `---` | 2 | 1.00 | 0 | 0 |
+
+Power: at the current n the smallest detectable effect (α .05 two-sided, power .8) is ±41% (warmPolicy), the largest ±41% (warmPolicy); a smaller true effect is not distinguishable from noise.
+
+Per arm (pooled over the design's strata: the arm statistics and posterior feed the kill switch and the arm posterior, not an effect estimate):
+
+| arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `+--` | 6 | 5.00 | 9.10 | 3.85 – 13.36 | -9.10 | 2.48 | 7% |
+| `---` | 6 | 5.00 | 4.76 | 2.00 – 7.00 | -4.76 | 1.31 | 93% |

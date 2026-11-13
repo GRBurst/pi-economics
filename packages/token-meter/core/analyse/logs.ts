@@ -1,12 +1,16 @@
 // The analyser's log types, the four log names and the line helpers shared by every section.
 
+import { type Plans } from "../plans.ts";
+
 export type LogName = "meter" | "outcomes" | "assignments" | "guards";
 export type FileInfo = { log: LogName; file: string; lines: number; unparsable: number };
 export type Logs = { meter: any[]; outcomes: any[]; assignments: any[]; guards: any[];
   /** Per file read (torn or foreign lines are counted, not parsed). */
   files?: FileInfo[];
   /** experiments/settings.json and task-router/settings.json, when present. */
-  expSettings?: any; routerSettings?: any };
+  expSettings?: any; routerSettings?: any;
+  /** token-meter's `plans` setting (billing class per provider), parsed; absent = not known: every unit is then in stratum "api". */
+  plans?: Plans };
 /** Inclusive UTC days, YYYY-MM-DD. */
 export type Period = { since?: string; until?: string };
 

@@ -156,21 +156,26 @@ test("experiment: design v1 (5 factors, legacy rows) and v2 (6 factors, design:\
   assert.equal(v1.units, 2); assert.equal(v2.units, 4);
 });
 
-test("experiment: per-factor effect = mean(high) − mean(low) of unit $/h, with a bootstrap CI containing it", () => {
+test("experiment: per-factor effect = ratio(high) ÷ ratio(low) − 1 (ratio of sums over the units, B8)", () => {
   const [v1, v2] = analyse(world()).experiment.designs;
-  for (const f of v1.effects) { close(f.diff, 8); contains(f, f.diff); assert.equal(f.nLow + f.nHigh, 2); }
-  // v2: high (m4 30, m6 24) − low (m3 9.4, m5 8)
-  for (const f of v2.effects) { close(f.diff, 27 - 8.7); contains(f, f.diff); }
-  const w = v2.effects.find((f) => f.factor === "warmPolicy")!;
-  assert.equal(w.low, "native"); assert.equal(w.high, "orchestrator-aware");
+  const eff = (d: typeof v1) => d.strata[0].effects.flatMap((e) => ("notMeasurable" in e ? [] : [e]));
+  assert.equal(v1.strata.length, 1);
+  assert.equal(eff(v1).length, 5);
+  for (const f of eff(v1)) { close(f.ratioA, 8); close(f.ratioB, 16); close(f.effect, 1); assert.equal(f.nA + f.nB, 2); }
+  // v2: high (m4 $15 + m6 $12 over 1 h) ÷ low (m3 $4.7 + m5 $4 over 1 h): the ratio of sums, not the mean of 30 and 24
+  for (const f of eff(v2)) { close(f.ratioA, 8.7); close(f.ratioB, 27); close(f.effect, 27 / 8.7 - 1); contains({ lo: f.ci[0], hi: f.ci[1] }, f.effect); }
+  const w = eff(v2).find((f) => f.factor === "warmPolicy")!;
+  assert.equal(w.a, "native"); assert.equal(w.b, "orchestrator-aware");
 });
 
 test("experiment: arm ids without an assignment row are decoded by length", () => {
   const meter = [...turns("x", T0, 4, { arm: "------" }), ...turns("y", T0, 4, { arm: "+++++-", costUsd: 2 })];
   const [d] = analyse({ meter, outcomes: [], assignments: [], guards: [] }).experiment.designs;
   assert.equal(d.design, "v2");
-  assert.equal(d.effects.find((f) => f.factor === "delegationRule")!.nHigh, 0);
-  close(d.effects.find((f) => f.factor === "warmPolicy")!.diff, 8);
+  assert.ok("notMeasurable" in d.strata[0].effects.find((f) => f.factor === "delegationRule")!, "no unit at the high level");
+  const w = d.strata[0].effects.find((f) => f.factor === "warmPolicy")!;
+  assert.ok(!("notMeasurable" in w));
+  if (!("notMeasurable" in w)) close(w.effect, 1); // $2 vs $1 a turn
 });
 
 test("experiment: quota per active hour is the root's share of the account's rise — parallel roots (even unarmed ones) do not each count all of it (T13.8)", () => {
@@ -180,25 +185,6 @@ test("experiment: quota per active hour is the root's share of the account's ris
   const lo = d.arms.find((a) => a.arm === "------")!;
   close(lo.q5hPerHour, 1 / 0.5); // 3 points over 3 roots = 1 point each, in 30 min; per-root summing gave 3 / 0.5
   close(analyse({ meter, outcomes: [], assignments: [], guards: [] }).cost.q5hPerHour, 3 / 1.5);
-});
-
-test("experiment: OLS with two-way interactions recovers additive main effects in a full 2^2 design", () => {
-  const meter: Record<string, unknown>[] = [];
-  const assignments: Record<string, unknown>[] = [];
-  let k = 0;
-  for (const arm of ["-----", "+----", "-+---", "++---"]) for (let r = 0; r < 3; r++) {
-    const id = `u${k++}`;
-    const cost = (1 + (arm[0] === "+" ? 1 : 0) + (arm[1] === "+" ? 0.5 : 0)) / 8; // 4 turns in 0.5 h → $/h = 8 · cost
-    meter.push(...turns(id, T0 + k * 100 * MIN, 4, { arm, costUsd: cost * (1 + 0.01 * r) }));
-    assignments.push(assignment(id, arm, T0));
-  }
-  const [d] = analyse({ meter, outcomes: [], assignments, guards: [] }).experiment.designs;
-  const term = (n: string) => d.ols!.terms.find((t) => t.name === n)!;
-  assert.ok(d.ols && d.ols.n === 12);
-  assert.ok(term("warmPolicy=orchestrator-aware").coef > 0);
-  assert.ok(term("mainCacheTtl=1h").coef > 0);
-  assert.ok(term("warmPolicy=orchestrator-aware").coef > term("mainCacheTtl=1h").coef);
-  assert.ok(d.ols!.terms.some((t) => t.name === "warmPolicy=orchestrator-aware:mainCacheTtl=1h"));
 });
 
 test("experiment: posterior per arm (reward −$/h) with P(best) summing to 1, cheaper arm best", () => {
@@ -485,17 +471,18 @@ test("experiment: design v4 has the experiments package's three factors in their
   assert.equal(d.design, "v4");
   assert.deepEqual(d.factors, ["warmPolicy", "mainCacheTtl", "maskOnCold"]);
   assert.equal(d.baseline, "---");
-  assert.deepEqual(d.effects.map((e) => [e.factor, e.low, e.high]), [["warmPolicy", "native", "orchestrator-aware"], ["mainCacheTtl", "5m", "1h"], ["maskOnCold", "off", "on"]]);
-  for (const e of d.effects) close(e.diff, 24 - 8); // 4 turns × $3 vs × $1 over 0.5 active h
+  const es = d.strata[0].effects.flatMap((e) => ("notMeasurable" in e ? [] : [e]));
+  assert.deepEqual(es.map((e) => [e.factor, e.a, e.b]), [["warmPolicy", "native", "orchestrator-aware"], ["mainCacheTtl", "5m", "1h"], ["maskOnCold", "off", "on"]]);
+  for (const e of es) close(e.effect, 24 / 8 - 1); // 4 turns × $3 vs × $1 over 0.5 active h
 });
 
 test("experiment: 3-char arm ids without an assignment row are decoded as v4", () => {
   const meter = [...turns("x", T0, 4, { arm: "---" }), ...turns("y", T0, 4, { arm: "-+-", costUsd: 2 })];
   const [d] = analyse({ meter, outcomes: [], assignments: [], guards: [] }).experiment.designs;
   assert.equal(d.design, "v4");
-  const ttl = d.effects.find((f) => f.factor === "mainCacheTtl")!;
-  assert.deepEqual([ttl.low, ttl.high, ttl.nHigh], ["5m", "1h", 1]);
-  close(ttl.diff, 8);
+  const ttl = d.strata[0].effects.find((f) => f.factor === "mainCacheTtl")!;
+  assert.ok(!("notMeasurable" in ttl));
+  if (!("notMeasurable" in ttl)) { assert.deepEqual([ttl.a, ttl.b, ttl.nB], ["5m", "1h", 1]); close(ttl.effect, 1); }
 });
 
 test("cost: v4 folds form their own ledger group; v4 has no foldHint level", () => {

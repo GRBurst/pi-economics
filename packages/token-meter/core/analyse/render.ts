@@ -5,7 +5,7 @@ import { type CI } from "../stats.ts";
 import { sum } from "./logs.ts";
 import { type CostSection } from "./cost.ts";
 import { type CacheSection } from "./cache.ts";
-import { type DesignResult } from "./experiment.ts";
+import { type DesignResult, type StratumResult } from "./experiment.ts";
 import { MIN_CI_N, type DelegationSection, type Randomized, type SpotChecks } from "./delegation.ts";
 import { type GuardsSection } from "./guards.ts";
 import { type QualitySection } from "./quality.ts";
@@ -66,16 +66,34 @@ export function renderFolds(f: LedgerSection): string {
   ].join("\n");
 }
 
+const pp = (n: number): string => (Number.isFinite(n) ? `${n >= 0 ? "+" : ""}${(100 * n).toFixed(0)}%` : "–");
+
+function renderStratum(s: StratumResult): string {
+  const measurable = s.effects.flatMap((e) => ("notMeasurable" in e ? [] : [e]));
+  const mdes = measurable.filter((e) => Number.isFinite(e.mde));
+  const lo = mdes.reduce((m, e) => (e.mde < m.mde ? e : m), mdes[0]), hi = mdes.reduce((m, e) => (e.mde > m.mde ? e : m), mdes[0]);
+  const reasons = [...new Set(s.effects.flatMap((e) => ("notMeasurable" in e ? [e.notMeasurable] : [])))];
+  return [
+    `#### stratum ${s.stratum} (objective ${s.objective} per active hour)\n`,
+    table(["factor", "low → high", "n low", "n high", "ratio low", "ratio high", "effect", "95% CI", "MDE"], s.effects.map((e) => "notMeasurable" in e
+      ? [e.factor, "–", "–", "–", "–", "–", e.notMeasurable, "–", "–"]
+      : [e.factor, `${e.a} → ${e.b}`, String(e.nA), String(e.nB), f2(e.ratioA), f2(e.ratioB), pp(e.effect), Number.isFinite(e.ci[0]) ? `${pp(e.ci[0])} – ${pp(e.ci[1])}` : "–", Number.isFinite(e.mde) ? `±${pp(e.mde).replace("+", "")}` : "–"])),
+    "\nBalance (units with ≥ " + MIN_HOURS + " active h; shorter ones are excluded from the estimate and counted here):\n",
+    table(["arm", "units", "active h", "excluded (< " + MIN_HOURS + " h)", "no objective"], s.balance.map((b) => [`\`${b.arm}\``, String(b.units), f2(b.hours), String(b.excluded), String(b.unmeasured)])),
+    mdes.length ? `\nPower: at the current n the smallest detectable effect (α .05 two-sided, power .8) is ${pp(lo.mde).replace("+", "±")} (${lo.factor}), the largest ${pp(hi.mde).replace("+", "±")} (${hi.factor}); a smaller true effect is not distinguishable from noise.`
+      : measurable.length ? "\nPower: not estimable (fewer than 2 units at a level of every factor)." : reasons.length ? `\nPower: not estimable (${reasons[0]}).` : "",
+  ].join("\n");
+}
+
 export function renderExperiment(ds: DesignResult[]): string {
   if (!ds.length) return `${NO_DATA}: no meter line carries an arm`;
   const pooled = ds.some((d) => d.design === "v2") && ds.some((d) => d.design === "v3");
   return (pooled ? "Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware means something else in v3 (a system-prompt paragraph): they are analysed in separate tables and never pooled; guard signals and the kill switch are per design too.\n\n" : "") + ds.map((d) => [
     `### Design ${d.design} (${d.factors.length} factors, baseline \`${d.baseline}\`, ${d.units} units with ≥ ${MIN_HOURS} active h)\n`,
-    "Effect = mean $/active hour of the units at the high level − at the low level (bootstrap 95% CI); negative is cheaper.\n",
-    table(["factor", "low → high", "n low", "n high", "Δ $/h", "95% CI"], d.effects.map((e) => [e.factor, `${e.low} → ${e.high}`, String(e.nLow), String(e.nHigh), f2(e.diff), ci(e)])),
-    d.ols ? `\nOLS with two-way interactions (n ${d.ols.n}, df ${d.ols.df}, R² ${f2(d.ols.r2)}${d.ols.aliased.length ? `; aliased or not estimable: ${d.ols.aliased.join(", ")}` : ""}):\n\n` +
-      table(["term", "coef", "se"], d.ols.terms.map((t) => [t.name, f2(t.coef), t.se === null ? "–" : f2(t.se)])) : "\nOLS: too few units.",
-    "\n",
+    "Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. A negative effect of a cost objective is cheaper.\n",
+    ...(d.plansAbsent ? ["plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.\n"] : []),
+    d.strata.map(renderStratum).join("\n\n"),
+    "\nPer arm (pooled over the design's strata: the arm statistics and posterior feed the kill switch and the arm posterior, not an effect estimate):\n",
     table(["arm", "units", "active h", "$/h", "95% CI", "posterior reward", "sd", "P(best)"], d.arms.map((s) => {
       const p = d.posterior.find((x) => x.arm === s.arm);
       return [`\`${s.arm}\``, String(s.units), f2(s.activeHours), f2(s.costPerHour), ci({ lo: s.ci[0], hi: s.ci[1] }), p ? f2(p.mean) : "–", p ? f2(p.sd) : "–", p ? pc(p.pBest) : "–"];

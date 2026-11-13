@@ -49,6 +49,29 @@ export function bootstrapRatioCI(units: Array<{ num: number; den: number }>, o: 
   return boot(() => ratio(units.map(() => units[Math.floor(rng() * units.length)])), o, ratio(units), units.length);
 }
 
+/** A unit of an estimate: its objective (undefined = not measurable) over its active hours. */
+export type RatioUnit = { objective?: number; hours: number };
+const ratioOf = (us: RatioUnit[]): number => us.reduce((s, u) => s + (u.objective ?? 0), 0) / us.reduce((s, u) => s + u.hours, 0);
+
+/**
+ * Bootstrap of the effect ratio(B) / ratio(A) − 1 (ratio = Σ objective / Σ hours; redesign M2c, B8): B draws, each resamples the units
+ * of A and of B independently with replacement (PRNG mulberry32(seed), A's units first). Non-finite draws (a ratio without hours) are
+ * dropped. ci = the 2.5 and 97.5 percentiles, sd = the draws' standard deviation (population); both NaN without a finite draw.
+ */
+export function bootstrapRatio(unitsA: RatioUnit[], unitsB: RatioUnit[], B: number, seed: number): { ci: [number, number]; sd: number } {
+  if (!unitsA.length || !unitsB.length) return { ci: [NaN, NaN], sd: NaN };
+  const rng = mulberry32(seed);
+  const resample = (us: RatioUnit[]): RatioUnit[] => us.map(() => us[Math.floor(rng() * us.length)]);
+  const draws = Array.from({ length: B }, () => ratioOf(resample(unitsB)) / ratioOf(resample(unitsA)) - 1).filter(Number.isFinite);
+  if (!draws.length) return { ci: [NaN, NaN], sd: NaN };
+  const m = mean(draws);
+  const sorted = [...draws].sort((a, b) => a - b);
+  return { ci: [percentile(sorted, 0.025), percentile(sorted, 0.975)], sd: Math.sqrt(mean(draws.map((x) => (x - m) ** 2))) };
+}
+
+/** Σ objective / Σ hours of the units. */
+export const ratio = ratioOf;
+
 // --- OLS with two-way interactions ---------------------------------------------------------------
 
 function invert(m: number[][]): number[][] {
