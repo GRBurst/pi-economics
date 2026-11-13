@@ -109,7 +109,7 @@ in {
     in [
       {
         assertion = bad == [];
-        message = "pi-economics: tokenMeter.plans.${lib.head bad}.rate is set but its billing is not \"local\"";
+        message = "pi-economics: tokenMeter.plans: a rate is set but billing is not \"local\" for ${lib.concatStringsSep ", " bad}";
       }
     ];
 

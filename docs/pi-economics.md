@@ -147,7 +147,7 @@ reports over every log pi writes about itself.
 | `enable` | `false` | registry entry `token-meter` (`forChildren = true`); `meter-report` and `pi-analyse` on `PATH`; `<agentDir>/LOGS.md`, the manual of every log `pi-analyse` reads |
 | `package` | the flake's `packages/token-meter` | the extension; `passthru.report` and `passthru.analyse` are the two commands |
 | `settings` | `{}` | written to `<agentDir>/token-meter/settings.json` when non-empty (`enabled`, `dir`, `rawRatelimit`; each has a default in the package) |
-| `plans` | `{}` | per provider name: `billing` (`subscription`, `api`, `free`, `local`; a provider without a plan is `api`), `windows` (`5h`, `7d`), `rate` (`amount`, `currency`, `per = "hour"`; only with `billing = "local"`, an assertion: `pi-economics: tokenMeter.plans.<name>.rate is set but its billing is not "local"`); written to the key `plans` of the same file when non-empty (an unset `rate` is left out); the meter writes `billing` on every line (LOGS.md, *Meter line v2*) |
+| `plans` | `{}` | per provider name: `billing` (`subscription`, `api`, `free`, `local`; a provider without a plan is `api`), `windows` (`5h`, `7d`), `rate` (`amount`, `currency`, `per = "hour"`; only with `billing = "local"`, else an assertion names every such provider: `pi-economics: tokenMeter.plans: a rate is set but billing is not "local" for <names>`); written to the key `plans` of the same file when non-empty (an unset `rate` is left out); the meter writes `billing` on every line (LOGS.md, *Meter line v2*) |
 
 Without the actor (`extensions.actor-subagents`) there are no children to
 meter and no `parentSessionId`; without `experiments` the lines carry no arm; without
