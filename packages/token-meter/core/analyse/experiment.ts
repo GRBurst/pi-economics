@@ -8,11 +8,11 @@ import { armInfo, DESIGNS, designOf, designOfLine, rowsBySession, v2Levels } fro
 
 /**
  * What a stratum's effects are measured in, per active hour. token-meter keeps its own copy of experiments' `Objective` literal set (core/settings.ts, M5a):
- * a package imports no other, so there is no cross-import.
- * TODO(M5b.1): owner of the drift guard (a check that compares the two literal sets; the analyser reads `strata.<billing class>.objective`, experiments keys strata by name).
+ * a package imports no other, so there is no cross-import. The checks iface-objective-* (checks/default.nix, M5b.1) keep the
+ * two sets equal; the analyser reads `strata.<stratum>.objective` (the assignment's recorded stratum, else the billing class).
  */
-export type Objective = "apiUsd" | "cashUsd" | "localCost" | "wallMs" | "points5h" | "points7d";
-const OBJECTIVES: readonly string[] = ["apiUsd", "cashUsd", "localCost", "wallMs", "points5h", "points7d"];
+export type Objective = (typeof OBJECTIVES)[number];
+const OBJECTIVES = ["apiUsd", "cashUsd", "localCost", "wallMs", "points5h", "points7d"] as const;
 
 /** A root session as the estimate sees it: its stratum (billing class of its main's provider), arm, factor levels, active hours and objective (undefined = not measurable). */
 export type Unit = { sessionId: string; design: string; stratum: string; arm: string; levels: Record<string, string | number | boolean>;
@@ -60,7 +60,7 @@ const plainObject = (v: unknown): v is Record<string, any> => v !== null && type
 /** The objective of a stratum: experiments' `strata.<class>.objective` when valid, else `localCost` (`wallMs` when no local plan has a rate) for the local stratum, `apiUsd` for the others (design §9.4). */
 function objectiveFor(stratum: string, plans: Plans, expSettings: any): Objective {
   const set = plainObject(expSettings?.strata) ? expSettings.strata[stratum]?.objective : undefined;
-  if (typeof set === "string" && OBJECTIVES.includes(set)) return set as Objective;
+  if (typeof set === "string" && (OBJECTIVES as readonly string[]).includes(set)) return set as Objective;
   if (stratum === "local") return Object.values(plans).some((p) => p.billing === "local" && p.rate) ? "localCost" : "wallMs";
   return "apiUsd";
 }

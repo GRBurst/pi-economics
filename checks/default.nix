@@ -266,4 +266,32 @@ in {
   identity-shim-probe = import ./identity-shim-probe {inherit pkgs;};
   # redesign M6
   load-order = import ./load-order {inherit lib pkgs hm actorEntry;};
+  # redesign M5b.1: the analyser's copy of experiments' Objective literal set
+  # (packages never import each other), compared both ways: equal sets.
+  iface-objective-experiments-token-meter = iface.compare {
+    name = "objective-experiments-token-meter";
+    provider = {
+      src = experimentsTs;
+      file = "experiments/core/settings.ts";
+      type = "Objective";
+    };
+    consumer = {
+      src = ../packages/token-meter;
+      file = "core/analyse/experiment.ts";
+      type = "Objective";
+    };
+  };
+  iface-objective-token-meter-experiments = iface.compare {
+    name = "objective-token-meter-experiments";
+    provider = {
+      src = ../packages/token-meter;
+      file = "core/analyse/experiment.ts";
+      type = "Objective";
+    };
+    consumer = {
+      src = experimentsTs;
+      file = "experiments/core/settings.ts";
+      type = "Objective";
+    };
+  };
 }
