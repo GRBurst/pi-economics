@@ -32,7 +32,7 @@ const MAX_STR = 256;
 const MAX_BYTES = 4096;
 /** Schema version of a meter line (LOGS.md); readers treat an absent `v` as 0 (legacy). */
 export const SCHEMA_VERSION = 2;
-const KEYS = ["v", "ts", "sessionId", "parentSessionId", "arm", "design", "provider", "model", "effort", "kind", "billing",
+export const KEYS = ["v", "ts", "sessionId", "parentSessionId", "arm", "design", "provider", "model", "effort", "kind", "billing",
   "input", "cacheRead", "cacheWrite", "cacheWrite1h", "output", "reasoning", "costUsd", "status", "retries", "retryWaitMs",
   "errorClass", "errorKind", "durationMs", "ttftMs",
   "q5h", "q5hReset", "q7d", "q7dReset", "overage", "claim", "fallback", "rawRatelimit"] as const;

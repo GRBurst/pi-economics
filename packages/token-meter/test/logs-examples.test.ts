@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { check, renderProblems } from "../core/contract.ts";
+import { KEYS } from "../core/line.ts";
 
 const HEADING = "### Examples: task-router local mode";
 /** The events the examples cover, one line each; a ticket `spawn` counts as its own kind. */
@@ -39,5 +40,28 @@ test("LOGS.md: one example line per local-mode event, each passing the contract"
   const kinds = lines.map((l) => (l.event === "spawn" && "ticket" in l ? "spawn+ticket" : l.event)).sort();
   assert.deepEqual(kinds, KINDS);
   const ps = check({ meter: [], outcomes: lines, assignments: [], guards: [] } as Parameters<typeof check>[0]);
+  assert.deepEqual(ps, [], renderProblems(ps));
+});
+
+// M3a T3a.11: the meter line v2 section shows lines as the v2 writer writes them; each passes the contract, carries only
+// keys the writer emits, and together they show every v2 field, a native retry and a warming line without retries.
+const V2_HEADING = "### Meter line v2";
+const V2_FIELDS = ["billing", "cacheWrite1h", "durationMs", "ttftMs", "errorKind", "retries", "retryWaitMs"];
+
+test("LOGS.md: meter line v2 examples, each a v2 line the writer could write, passing the contract", () => {
+  const block = exampleBlock(md, V2_HEADING);
+  assert.ok(block, `LOGS.md: no \`\`\`jsonl block under "${V2_HEADING}"`);
+  const lines = block.map((l, i) => {
+    try { return JSON.parse(l); } catch { assert.fail(`example line ${i + 1} is no JSON: ${l}`); }
+  });
+  const keys = new Set<string>(KEYS);
+  for (const [i, l] of lines.entries()) {
+    assert.equal(l.v, 2, `example line ${i + 1}: v`);
+    for (const k of Object.keys(l)) assert.ok(keys.has(k), `example line ${i + 1}: ${k} is no meter key`);
+  }
+  for (const f of V2_FIELDS) assert.ok(lines.some((l) => f in l), `no example line shows ${f}`);
+  assert.ok(lines.some((l) => l.retries >= 1 && l.retryWaitMs > 0), "no native retry");
+  assert.ok(lines.some((l) => l.kind === "warming" && !("retries" in l)), "no warming line without retries");
+  const ps = check({ meter: lines, outcomes: [], assignments: [], guards: [] } as Parameters<typeof check>[0]);
   assert.deepEqual(ps, [], renderProblems(ps));
 });

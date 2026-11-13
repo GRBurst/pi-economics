@@ -83,7 +83,7 @@ field does not bump it). `pi-analyse` reports the versions per log under *Data q
 | `costUsd` | number | when `status` ≠ `error` | pi's API-price cost of the request |
 | `status` | int \| `error` | yes | HTTP status, or `error` |
 | `errorClass` | string | on error | leading HTTP code of the error message, else `error` |
-| `retries`, `retryWaitMs` | number | yes | retries before this request and the time waited |
+| `retries`, `retryWaitMs` | number | up to v1; v2: turn lines | v1: retries before this request and the time waited, counted by the pi-retry extension; v2: pi's native retry (*Meter line v2*) |
 | `q5h`, `q7d` | number (%) | no | account utilisation of the 5-hour and 7-day windows, as read from the response headers of THIS request (parallel sessions log interleaved, slightly stale readings) |
 | `q5hReset`, `q7dReset` | ISO time | no | window resets |
 | `overage`, `claim`, `fallback` | string | no | raw Anthropic unified-ratelimit headers |
@@ -97,6 +97,47 @@ long turn streams (its timer runs from the turn's request start, 270 s for a 5-m
 TTL): a response between an assistant `message_start` and its `message_end` is always the
 warm's, never the turn's, so the turn line keeps its own headers (`q5h`, `status`) and
 the warm gets its own line. A warm aborted before its headers gets no line.
+
+### Meter line v2
+
+The writer emits `v: 2`: the v1 line plus the optional fields below. `v` was bumped because
+`retries` and `retryWaitMs` changed source and meaning and are no longer on every line. A v2
+field is present iff it was measured: **absent = unknown, never 0**. The readers (`pi-analyse`,
+`meter-report`) take v0, v1 and v2 lines alike; a line stays below 4 KiB with every field at its
+largest (`rawRatelimit` is dropped first).
+
+| field | type | present | meaning |
+| --- | --- | --- | --- |
+| `billing` | `subscription` \| `api` \| `free` \| `local` | every line | billing class of the provider, from `plans` in `token-meter/settings.json` (Home Manager: `tokenMeter.plans`); a provider without a plan is `api` |
+| `design` | string | when the experiments extension names the session's design | the experiment design of `arm` (not written yet: the extension names none) |
+| `cacheWrite1h` | number | when the provider reports the split (Anthropic) | the part of `cacheWrite` written with the 1-hour TTL |
+| `durationMs` | int (ms) | turn lines whose request the session sent | the session's last provider request (`before_provider_request`) to this `message_end`; a resend restarts it |
+| `ttftMs` | int (ms) | when a stream event followed that request | the request to its first `provider_stream_event` |
+| `errorKind` | `context_overflow` \| `rate_limit` \| `other` | `status: "error"` | class of the error message: HTTP 429, rate limit, quota or overloaded → `rate_limit` (tested first); prompt too long, context length or window → `context_overflow`; else `other`. The message itself is never written |
+| `retries`, `retryWaitMs` | int, int (ms) | turn lines | pi's native retry: `retries` = 1 when this request is pi's resend of the session's previous request that failed (an `error` line, not a context overflow, with no other message and no end of the run in between), else 0; `retryWaitMs` = that failure's `message_end` to this request. Absent on warming lines (pi never resends a warm) |
+
+The count is per request: a failed attempt is an `error` line of its own, and each resend
+carries `retries: 1`, so Σ `retries` over lines is the number of resends (three failures
+before a success: four lines, `retries` 0, 1, 1, 1). pi does not retry a context overflow (it
+compacts), so the next request after one is no retry. v1 lines counted the retries of the
+pi-retry extension (its own backoff) on every line; the two counts are not comparable.
+
+`plans` (`token-meter/settings.json`) maps a provider name to `{ "billing", "windows", "rate" }`:
+`windows` (`5h`, `7d`) are a subscription's quota windows, `rate` (`{ "amount", "currency",
+"per": "hour" }`, only with `billing: "local"`) the price of a local provider's active time. The
+meter writes only `billing`; the analysis reads the rest from the same file.
+
+A subscription turn on a 1-hour cache, a rate-limited attempt and its retry, a warm, a
+context overflow and a local child turn:
+
+```jsonl
+{"v":2,"ts":"2026-11-03T10:00:04.200Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":12,"cacheRead":48000,"cacheWrite":1500,"cacheWrite1h":1500,"output":420,"costUsd":0.06,"status":200,"retries":0,"retryWaitMs":0,"durationMs":4200,"ttftMs":900,"q5h":12,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
+{"v":2,"ts":"2026-11-03T10:01:00.300Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"429","errorKind":"rate_limit","durationMs":300}
+{"v":2,"ts":"2026-11-03T10:01:07.400Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":30,"cacheRead":49500,"cacheWrite":800,"cacheWrite1h":800,"output":510,"costUsd":0.05,"status":200,"retries":1,"retryWaitMs":2000,"durationMs":5100,"ttftMs":1100,"q5h":13,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
+{"v":2,"ts":"2026-11-03T10:55:37.000Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","kind":"warming","billing":"subscription","input":0,"cacheRead":50300,"cacheWrite":0,"output":1,"costUsd":0.03,"status":200}
+{"v":2,"ts":"2026-11-03T11:02:00.800Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"400","errorKind":"context_overflow","durationMs":800}
+{"v":2,"ts":"2026-11-03T11:10:21.000Z","sessionId":"s-child","parentSessionId":"s-main","arm":"-+-","provider":"llama","model":"qwen3.8","kind":"turn","billing":"local","input":2400,"cacheRead":0,"cacheWrite":0,"output":350,"costUsd":0,"status":200,"retries":0,"retryWaitMs":0,"durationMs":21000,"ttftMs":2600}
+```
 
 ## task-router/outcomes/YYYY-MM.jsonl
 

@@ -148,6 +148,24 @@ test("P-size: serialize < 4096 bytes with 200 raw headers and over generated inp
   }
 });
 
+// M3a T3a.11: the v2 fields fit the cap next to the v1 ones; only rawRatelimit goes, nothing is shrunk.
+test("P-size v2: every field at its largest (256-character strings, the largest numbers, 200 raw headers) → < 4096 bytes, only rawRatelimit dropped", () => {
+  const s = "x".repeat(300), big = Number.MAX_SAFE_INTEGER;
+  const headers: Record<string, string> = { [P + "unified-5h-utilization"]: "0.99", [P + "unified-7d-utilization"]: "0.99",
+    [P + "unified-5h-reset"]: "4102444800", [P + "unified-7d-reset"]: "4102444800", [P + "unified-overage-status"]: s,
+    [P + "unified-representative-claim"]: s, [P + "unified-fallback-percentage"]: s };
+  for (let i = 0; i < 200; i++) headers[P + "h" + i] = "v".repeat(200);
+  const l = buildLine({ now, sessionId: s, parentSessionId: s, arm: s, design: s, provider: s, model: s, effort: s,
+    kind: "warming", billing: "subscription", status: "error", errorMessage: "400 prompt is too long",
+    usage: { input: big, cacheRead: big, cacheWrite: big, cacheWrite1h: big, output: big, reasoning: big, costUsd: Number.MAX_VALUE },
+    retries: big, retryWaitMs: big, durationMs: big, ttftMs: big, snap: { status: 200, at: 1, headers } });
+  for (const k of K_ALLOWED) assert.ok(k in l, `${k} missing from the largest line`);
+  const out = serialize(l);
+  assert.ok(Buffer.byteLength(out) < 4096, `${Buffer.byteLength(out)} bytes`);
+  const { rawRatelimit, ...rest } = l;
+  assert.deepEqual(JSON.parse(out), rest);
+});
+
 // Absent = unknown, never 0 (design §5.2): a v2 field is on the line iff its input carries a measurement, with its value.
 test("P-absent: every v2 field is present iff given, numbers as given (0 included), over 300 generated inputs", () => {
   const r = prng(11);
