@@ -66,10 +66,10 @@ function goldenLogs(): Logs {
   // router tasks on qwen (the control; c2 is rerouted below to another model: a fallback run; c6 and c7 are old lines) and random ones on qwen, haiku, T1: eight judged tasks each
   const verdicts = ["accepted", "accepted", "rejected", "accepted", "partial", "accepted", "rejected", "accepted"];
   verdicts.forEach((v, i) => {
-    outcomes.push(spawn(`c${i}`, `kc${i}`, "qwen", i < 6 ? { assigned: "router", routeBase: "qwen" } : {}), verdict(`c${i}`, v, 110 + i)); // c6, c7: from before the randomization (no assigned)
+    outcomes.push(spawn(`c${i}`, `kc${i}`, "qwen", i < 6 ? { assigned: "router", routeBase: "qwen", factors: { rule: "off" } } : {}), verdict(`c${i}`, v, 110 + i)); // c6, c7: from before the randomization (no assigned, no factors)
     meter.push(child(`kc${i}`, 0.1 + 0.05 * i, 101 + i));
     const tier = ["qwen", "haiku", "T1", "qwen"][i % 4];
-    outcomes.push(spawn(`r${i}`, `kr${i}`, tier, { assigned: "random", routeBase: "qwen" }), verdict(`r${i}`, verdicts[(i + 3) % 8], 120 + i));
+    outcomes.push(spawn(`r${i}`, `kr${i}`, tier, { assigned: "random", routeBase: "qwen", factors: { rule: "on", cap: 2 + 2 * (i % 2) } }), verdict(`r${i}`, verdicts[(i + 3) % 8], 120 + i));
     meter.push(child(`kr${i}`, tier === "qwen" ? 0.1 : tier === "haiku" ? 0.3 : 0.9, 105 + i));
   });
   outcomes.push(spawn("rx", "krx", "T2", { assigned: "random", routeBase: "T1" }), verdict("rx", "accepted", 130));

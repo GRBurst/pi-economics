@@ -310,6 +310,17 @@ Spawns whose router base was qwen, in the profiles the router randomized (implem
 
 1 randomized spawn(s) with another router base are not compared.
 
+### Router factors (randomized by the router (ext))
+
+The router randomizes these levers itself and records each task's levels on its spawn line (`factors`); one row per factor and level, by assignment (intention to treat), over the routed tasks that carry it. Not an experiment of pi-economics: nothing here enters its design. 95% bootstrap CIs from 5 judged tasks on.
+
+| factor | level | tasks | accepted/judged | acceptance (95% CI) | $/accepted (95% CI) |
+| --- | --- | --- | --- | --- | --- |
+| cap | 2 | 4 | 4/4 | 100% | 0.50 |
+| cap | 4 | 4 | 1/4 | 25% | 0.80 |
+| rule | off | 6 | 4/6 | 67% (33% – 100%) | 0.34 (0.18 – 0.83) |
+| rule | on | 8 | 5/8 | 63% (25% – 88%) | 0.56 (0.24 – 1.07) |
+
 ### Spot checks
 
 An accepted task re-judged by a review child. Agreement = the reviewer's own verdict (`reviewerVerdict`) and the original verdict at the draw both accept or both do not; κ = Cohen's κ over the same two classes, – when one of the two never varies (spot checks are drawn from accepted tasks). The parent's verdict of the review child is no part of it.

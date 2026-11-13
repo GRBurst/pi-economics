@@ -6,7 +6,7 @@ import { sum } from "./logs.ts";
 import { type CostSection } from "./cost.ts";
 import { type CacheSection } from "./cache.ts";
 import { type DesignResult, type StratumResult } from "./experiment.ts";
-import { MIN_CI_N, type CostPerAccepted, type DelegationSection, type Randomized, type Row, type SpotChecks } from "./delegation.ts";
+import { MIN_CI_N, type CostPerAccepted, type DelegationSection, type Randomized, type Row, type RouterFactor, type SpotChecks } from "./delegation.ts";
 import { type GuardsSection } from "./guards.ts";
 import { type QualitySection } from "./quality.ts";
 import { type Analysis } from "./index.ts";
@@ -128,6 +128,16 @@ export function renderRandomized(r: Randomized): string {
   ].join("\n");
 }
 
+export function renderRouterFactors(f: RouterFactor[]): string {
+  if (!f.length) return "\nrouter factors: not recorded (no spawn line carries `factors`)";
+  return [
+    "\n### Router factors (randomized by the router (ext))\n",
+    "The router randomizes these levers itself and records each task's levels on its spawn line (`factors`); one row per factor and level, by assignment (intention to treat), over the routed tasks that carry it. Not an experiment of pi-economics: nothing here enters its design. 95% bootstrap CIs from " + MIN_CI_N + " judged tasks on.\n",
+    table(["factor", "level", "tasks", "accepted/judged", "acceptance (95% CI)", "$/accepted (95% CI)"],
+      f.map((x) => [x.factor, x.level, String(x.row.tasks), `${x.row.accepted}/${x.row.judged}`, withCI(x.row.acceptance, pc), withCI(x.row.perAccepted, f2)])),
+  ].join("\n");
+}
+
 export function renderSpotChecks(s: SpotChecks): string {
   if (!s.requested && !s.reviewed) return "\n### Spot checks\n\n_no spot checks in the period_ (`spotcheck` events, `reviewOf` on spawn and verdict lines)";
   const a = s.agreement;
@@ -161,7 +171,7 @@ export function renderDelegation(d: DelegationSection): string {
     "\n### By profile and tier\n\nProfile = the card kind; acceptance = accepted ÷ judged; $/accepted = subtree cost of the judged tasks ÷ accepted ones; escalations = re-spawns one level up (D7) from this cell's failed tasks; checks = the card's check ran after the child reported.\n",
     table(["profile", "tier", "tasks", "accepted", "partial", "rejected", "unjudged", "acceptance", "$/accepted", "escalations", "checks passed"],
       d.profileTiers.map((c) => [c.kind, c.tier, String(c.tasks), String(c.accepted), String(c.partial), String(c.rejected), String(c.unjudged), pc(c.acceptance), f2(c.perAccepted), String(c.escalations), c.checks.n ? `${c.checks.passed}/${c.checks.n} (${pc(c.passRate)})` : "–"])),
-    renderRandomized(d.randomized), renderSpotChecks(d.spotChecks),
+    renderRandomized(d.randomized), renderRouterFactors(d.routerFactors), renderSpotChecks(d.spotChecks),
     "\n### Child models\n", table(["model", "requests", "$"], d.childModels.map((m) => [m.model, String(m.requests), f2(m.usd)])),
     d.escalations.length ? "\n### Escalations\n\n" + table(["from", "to", "n"], d.escalations.map((e) => [e.from, e.to, String(e.n)])) : "",
     d.reroutes.length ? "\n### Reroutes\n\n" + table(["from", "to", "reason", "n"], d.reroutes.map((r) => [r.from, r.to, r.reason, String(r.n)])) : "",

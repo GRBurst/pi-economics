@@ -22,6 +22,8 @@ export type RandomRow = Row & { tier: string };
  * router-assigned tasks that ran on another model; `itt` = every task it randomized (`assigned: "random"`), by assignment, whatever ran.
  */
 export type ControlRows = { randomizedControl: Row; preRandomization: Row; fallback: Row; itt?: Row };
+/** A lever the router randomizes itself (Q4), one level of it: the routed tasks that carry that level on their spawn line (`factors`). */
+export type RouterFactor = { factor: string; level: string; row: Row };
 export type Randomized = { kinds: string[]; reference?: string; rows: RandomRow[]; otherBase: number; control: ControlRows;
   /** Why the ITT row is not measurable: no spawn carries `assigned`. */
   ittNote?: string };
@@ -37,7 +39,7 @@ export type Runaway = { sessionId: string; taskId?: string; requests: number; us
 /** How many of the routed tasks, by the tier the router planned and the model they ran on (B6). */
 export type MatrixCell = { planned: string; executed: string; n: number };
 export type DelegationSection = { spawns: number; unresolved: number; reviewSpawns: number; qwenShare: number; childUsdShare: number; childRequestShare: number;
-  profileTiers: ProfileTier[]; matrix: MatrixCell[]; randomized: Randomized; spotChecks: SpotChecks;
+  profileTiers: ProfileTier[]; matrix: MatrixCell[]; randomized: Randomized; routerFactors: RouterFactor[]; spotChecks: SpotChecks;
   byTier: Array<{ tier: string; spawns: number; share: number; accepted: number; judged: number; acceptance: number; cost: CostPerAccepted }>;
   /** The "all" row of the tier table: every routed task; `cost` is the report's headline $/accepted. */
   all: { tasks: number; accepted: number; judged: number; acceptance: number; cost: CostPerAccepted };
@@ -241,6 +243,27 @@ function randomization(routed: readonly TaskRow[], order: (a: string, b: string)
   };
 }
 
+/**
+ * The levers the router randomizes itself (Q4: a router backlog item records them per task, the field is `factors`, an object of factor →
+ * level, read untyped): one row per factor and level, over the routed tasks that carry it, by assignment. A value that is not a string, a
+ * finite number or a boolean, and a name that is empty, is no factor level. Factors by name, levels numerically when both are numbers.
+ */
+function routerFactors(routed: readonly TaskRow[]): RouterFactor[] {
+  const byLevel = new Map<string, Map<string, TaskRow[]>>();
+  for (const r of routed) {
+    const f = r.spawn.factors;
+    if (!f || typeof f !== "object" || Array.isArray(f)) continue;
+    for (const [name, v] of Object.entries(f)) {
+      if (!name || !(typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)))) continue;
+      const levels = byLevel.get(name) ?? byLevel.set(name, new Map()).get(name)!;
+      push(levels, String(v), r);
+    }
+  }
+  const cmp = (a: string, b: string): number => (a !== "" && b !== "" && !Number.isNaN(Number(a)) && !Number.isNaN(Number(b)) ? Number(a) - Number(b) : a < b ? -1 : a > b ? 1 : 0);
+  return [...byLevel].sort((a, b) => cmp(a[0], b[0])).flatMap(([factor, levels]) =>
+    [...levels].sort((a, b) => cmp(a[0], b[0])).map(([level, rs]) => ({ factor, level, row: groupRow(rs.map((r) => ({ verdict: r.verdict, cost: r.cost }))) })));
+}
+
 export function delegation(meter: any[], outcomes: any[], routerSettings: any): DelegationSection {
   const lines = meter.filter((l) => isLine(l) && typeof l.sessionId === "string");
   const allSpawns = outcomes.filter((e) => e?.event === "spawn" && typeof e.taskId === "string");
@@ -321,7 +344,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   const totalAccepted = sum(Object.values(acc).map((g) => g.accepted)), totalJudged = sum(Object.values(acc).map((g) => g.judged));
   return {
     spawns: allSpawns.length, unresolved: unresolved.length, reviewSpawns: allSpawns.filter((e) => reviewIds.has(e.taskId)).length,
-    profileTiers, matrix, randomized, spotChecks, qwenShare: routed.length ? routed.filter((r) => r.planned === "qwen").length / routed.length : NaN,
+    profileTiers, matrix, randomized, routerFactors: routerFactors(routed), spotChecks, qwenShare: routed.length ? routed.filter((r) => r.planned === "qwen").length / routed.length : NaN,
     childUsdShare: total ? sum(children.map((l) => apiUsd(l))) / total : NaN,
     childRequestShare: requests(lines) ? requests(children) / requests(lines) : NaN,
     byTier: Object.entries(tiers).sort((a, b) => b[1] - a[1] || order(a[0], b[0])).map(([tier, n]) => {

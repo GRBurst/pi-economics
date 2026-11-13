@@ -58,7 +58,8 @@ without the user's explicit approval.
   or drew to another tier): the randomized control, the ITT row (every task it randomized), the
   randomized tasks by the model they ran on, and the pre-randomization and fallback runs as rows of
   their own; **only ITT against the randomized control is a randomized comparison**; "not measurable"
-  without `assigned` in the log. *Spot checks*: how often the reviewer's own verdict on a spot-checked task agrees with
+  without `assigned` in the log. *Router factors*: acceptance and $/accepted per level of
+  the levers the router randomizes itself (when its spawn lines record them; else "not recorded"). *Spot checks*: how often the reviewer's own verdict on a spot-checked task agrees with
   the original verdict, with Cohen's κ (a low rate = the parent's acceptance is too lenient); "not
   measurable" while the router logs no reviewer verdict (never read the parent's verdict of the review
   child as agreement: it is always `accepted`). Spawns whose

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { analyse, renderAnalysis, type Logs } from "../core/analyse.ts";
 import { costPerAccepted, executedTier, taskRows } from "../core/analyse/delegation.ts";
+import { check } from "../core/contract.ts";
 import { iso, MIN, T0, turn } from "./world.ts";
 
 const close = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -348,6 +349,39 @@ test("B14: no spawn carries assigned → the ITT row is not measurable, said so;
   assert.match(sec, /pre-randomization/);
   assert.match(sec, /fallback/);
   assert.match(sec, /ITT/);
+});
+
+// ---- router-owned factors (Q4): the router randomizes them itself; its outcome log records each task's levels (a router backlog item) ----
+
+test("T2b.7: when spawn lines carry per-task factor levels, one ITT row per factor and level, labelled 'randomized by the router (ext)'", () => {
+  const f = (factors: unknown) => ({ spawn: { factors } });
+  const d = analyse(logsOf([
+    { id: "a1", verdict: "accepted", cost: 1, ...f({ rule: "on", cap: 2 }) },
+    { id: "a2", verdict: "rejected", cost: 3, ...f({ rule: "on", cap: 4 }) },
+    { id: "a3", verdict: "accepted", cost: 2, ...f({ rule: "off", cap: 2 }) },
+    { id: "a4", verdict: "accepted", cost: 2, ...f({ rule: "off", cap: 4, fast: true }) },
+    { id: "a5", verdict: "accepted", cost: 9 }, // no factors: in no row
+    { id: "a6", verdict: "accepted", cost: 9, ...f(["rule"]) }, { id: "a7", verdict: "accepted", cost: 9, ...f("rule") }, { id: "a8", verdict: "accepted", cost: 9, ...f(null) },
+    { id: "a9", verdict: "accepted", cost: 9, ...f({ rule: { nested: 1 }, "": "x", bad: NaN }) }, // not a factor level: ignored
+  ])).delegation;
+  assert.deepEqual(d.routerFactors.map((r) => `${r.factor}=${r.level}:${r.row.tasks}:${r.row.accepted}`), ["cap=2:2:2", "cap=4:2:1", "fast=true:1:1", "rule=off:2:2", "rule=on:2:1"]);
+  close(d.routerFactors[0].row.perAccepted.mean, 3 / 2);
+  close(d.routerFactors[1].row.perAccepted.mean, 5);
+  close(d.routerFactors[4].row.perAccepted.mean, 4);
+  const md = renderAnalysis(analyse(logsOf([{ id: "a1", verdict: "accepted", cost: 1, ...f({ cap: 2 }) }])), new Date("2026-10-06T00:00:00Z"));
+  assert.match(md, /### Router factors \(randomized by the router \(ext\)\)/);
+  assert.match(md, /\| factor \| level \| tasks \| accepted\/judged \| acceptance \(95% CI\) \| \$\/accepted \(95% CI\) \|/);
+  assert.match(md, /\| cap \| 2 \| 1 \| 1\/1 \| 100% \| 1\.00 \|/);
+  assert.ok(!md.includes("router factors: not recorded"));
+  assert.deepEqual(check(logsOf([{ id: "a1", verdict: "accepted", cost: 1, ...f({ cap: 2 }) }])).filter((p) => p.field === "factors"), []); // the contract copy neither requires nor types the field
+});
+
+test("T2b.7: without per-task factor levels the report says so in one line; the contract copy is untouched by the field", () => {
+  const d = analyse(logsOf([{ id: "a", verdict: "accepted" }])).delegation;
+  assert.deepEqual(d.routerFactors, []);
+  const md = renderAnalysis(analyse(logsOf([{ id: "a", verdict: "accepted" }])), new Date("2026-10-06T00:00:00Z"));
+  assert.equal(md.split("router factors: not recorded").length - 1, 1);
+  assert.ok(!md.includes("### Router factors"));
 });
 
 // ---- spot-check agreement ------------------------------------------------------------------------

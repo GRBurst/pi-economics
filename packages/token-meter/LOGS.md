@@ -413,6 +413,11 @@ as "not measurable", never as a number.
   still holds the tasks the router never drew (a pinned profile, a re-spawn): a marker on the spawn line that a task was in the draw (a router
   backlog item) would let the analyser drop them. A log in which no spawn carries `assigned` reads "ITT: not measurable". Acceptance
   and $/accepted of a row are over its judged tasks (bootstrap CI from 5 judged tasks on); unresolved cards and spot-check reviews are in no row.
+- **Router factors** (Q4). The router randomizes some levers itself (local-first settings, delegation rules). When its spawn lines carry the level
+  each task got, `factors`: an object factor → level (a string, a finite number or a boolean; anything else is ignored), the report has one
+  row per factor and level over the routed tasks that carry it: acceptance and $/accepted by assignment (intention to treat), labelled
+  "randomized by the router (ext)". Nothing of it enters pi-economics' own experiment design. Without such lines the report says "router factors:
+  not recorded". The router does not write `factors` yet (a router backlog item; the name is this reader's proposal).
 - **Spot-check agreement** (B7). `requested` = tasks with a `spotcheck` event; `reviewed` = those whose review child the parent judged
   (the verdict event of the review task, with `reviewOf` = the original task) while the original's verdict at the draw (the last one at or
   before the `spotcheck` event) is judged; `pending` = requested without that. The **agreement** compares the original's verdict at the draw
