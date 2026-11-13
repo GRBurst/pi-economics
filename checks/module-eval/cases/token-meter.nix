@@ -91,6 +91,64 @@ in {
     s)
   dirs;
 
+  # (M3a T3a.1) plans: rendered into settings.json next to `settings`, `rate`
+  # only when set, `per` defaulted; no plans and no settings write no file.
+  token-meter-plans = let
+    plans = {
+      p-sub = {
+        billing = "subscription";
+        windows = ["5h" "7d"];
+      };
+      p-local = {
+        billing = "local";
+        rate = {
+          amount = 0.13;
+          currency = "EUR";
+        };
+      };
+      p-free.billing = "free";
+    };
+    json = tm: let
+      f = fileAt ".pi/agent/token-meter/settings.json" (eval ".pi/agent" tm);
+    in
+      if f == null
+      then null
+      else builtins.fromJSON f.text;
+  in
+    eq "plans only" (json {inherit plans;}) {
+      plans = {
+        p-sub = {
+          billing = "subscription";
+          windows = ["5h" "7d"];
+        };
+        p-local = {
+          billing = "local";
+          windows = [];
+          rate = {
+            amount = 0.13;
+            currency = "EUR";
+            per = "hour";
+          };
+        };
+        p-free = {
+          billing = "free";
+          windows = [];
+        };
+      };
+    }
+    ++ eq "plans next to settings" (json {
+      plans.p-free.billing = "free";
+      settings.dir = "m";
+    }) {
+      dir = "m";
+      plans.p-free = {
+        billing = "free";
+        windows = [];
+      };
+    }
+    ++ eq "no plans, no settings: no file" (json {}) null
+    ++ eq "failed assertions" (failed "" (eval ".pi/agent" {inherit plans;})) [];
+
   # (M3.6) With the actor in the registry, children load the meter: the list
   # pi-setup's bridge writes into actor-subagents/settings.json (host
   # pi-extensions.nix:389-390) names it; the file is pi-setup's

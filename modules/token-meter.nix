@@ -10,6 +10,9 @@
 }: let
   pe = config.programs.piEconomics;
   cfg = pe.tokenMeter;
+  # settings.json: `settings`, and `plans` without unset rates.
+  plan = p: {inherit (p) billing windows;} // lib.optionalAttrs (p.rate != null) {inherit (p) rate;};
+  file = cfg.settings // lib.optionalAttrs (cfg.plans != {}) {plans = lib.mapAttrs (_: plan) cfg.plans;};
 in {
   options.programs.piEconomics.tokenMeter = {
     enable = lib.mkEnableOption "the pi token-meter extension (per-request token, cost and quota log) and its reports";
@@ -35,6 +38,58 @@ in {
         `dir`, `rawRatelimit`), so `{}` writes no file.
       '';
     };
+
+    # (M3a, design §9.2) The meter's input for `billing` on every line; the
+    # analysis reads windows and the local rate from the same file.
+    plans = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          billing = lib.mkOption {
+            type = lib.types.enum ["subscription" "api" "free" "local"];
+            description = "Billing class of the provider's requests.";
+          };
+          windows = lib.mkOption {
+            type = lib.types.listOf (lib.types.enum ["5h" "7d"]);
+            default = [];
+            description = "Quota windows of a subscription.";
+          };
+          rate = lib.mkOption {
+            type = lib.types.nullOr (lib.types.submodule {
+              options = {
+                amount = lib.mkOption {type = lib.types.numbers.nonnegative;};
+                currency = lib.mkOption {type = lib.types.strMatching "[A-Z]{3}";};
+                per = lib.mkOption {
+                  type = lib.types.enum ["hour"];
+                  default = "hour";
+                };
+              };
+            });
+            default = null;
+            description = "Price of a local provider's active (serving) time; only with `billing = \"local\"`.";
+          };
+        };
+      });
+      default = {};
+      example = {
+        anthropic = {
+          billing = "subscription";
+          windows = ["5h" "7d"];
+        };
+        llama = {
+          billing = "local";
+          rate = {
+            amount = 0.13;
+            currency = "EUR";
+          };
+        };
+      };
+      description = ''
+        Billing class, quota windows and local rate per provider name;
+        unknown providers count as "api". Written to the key `plans` of
+        `<agentDir>/token-meter/settings.json` when non-empty (it replaces a
+        `plans` key in `settings`).
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -54,6 +109,6 @@ in {
 
     # (M3.5) Literal text (spec §4): checks read it with builtins.fromJSON.
     home.file."${pe.agentDir}/token-meter/settings.json" =
-      lib.mkIf (cfg.settings != {}) {text = builtins.toJSON cfg.settings;};
+      lib.mkIf (file != {}) {text = builtins.toJSON file;};
   };
 }
