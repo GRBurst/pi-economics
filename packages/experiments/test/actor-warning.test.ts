@@ -13,7 +13,7 @@ beforeEach(() => void delete (globalThis as G).__piEconomicsWarned_v1);
 
 const WARNING =
   "experiments: needs pi-actor-subagents with the spawn-policy API (__subagentsApi_v1), which is not loaded; " +
-  "child agents do not inherit their parent's arm. Get the patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending.";
+  "in-memory child agents are not recognised (children with a session file still run their root's arm). Get the patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending.";
 
 const fn = () => () => {};
 const full = { version: 1, registerSpawnPolicy: fn, subscribe: fn, list: () => [], send: async () => {} };

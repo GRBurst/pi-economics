@@ -167,9 +167,11 @@ of the meter yourself. Afterwards: `pi-bench judge --all`, then
   the user's return).
 - **Experiments**: only main sessions get assignment rows; children inherit.
   `explore` balances over all-time counts; in `exploit` an arm with < 2 units
-  is treated as mean 0 (optimistic, tried first). Children inherit only on the spawn event: a
-  **resumed child** session has no arm (seen live 2026-10-03; `pi-analyse
-  --check` names its lines).
+  is treated as mean 0 (optimistic, tried first). Since M5b.2 a child's runtime
+  derives its root's arm (the session file's `subagents/<root>/` directory, or
+  the actor's agent list for an in-memory child), so a **resumed child** runs
+  it too; before, children inherited only on the spawn event and a resumed
+  child had no arm (seen live 2026-10-03; `pi-analyse --check` names those lines).
 - **Masking is request-local**: it rewrites the outgoing wire, not the stored
   transcript — `context_map` still lists originals and previews; recovery is
   `context_peek`.

@@ -51,7 +51,9 @@
     # replaced them.
     ++ lib.concatMap (d: lib.optional (lib.any (l: has "__piExperimentsApi" l && !has "removed" l && !has "no `__piExperimentsApi" l) d.ls) "${lib.removePrefix "/" d.f} still describes __piExperimentsApi_v1 as present") documents
     ++ lib.concatMap (d: lib.optional (anyLine "iface-experiments-" d.ls) "${lib.removePrefix "/" d.f} still names an iface-experiments check") documents
-    ++ lib.concatMap (c: lib.optional (!lib.any (lib.hasPrefix "| `${c}` |") economics) "docs/pi-economics.md has no check row for ${c}") ["internal-channel" "dependency-direction"];
+    ++ lib.concatMap (c: lib.optional (!lib.any (lib.hasPrefix "| `${c}` |") economics) "docs/pi-economics.md has no check row for ${c}") ["internal-channel" "dependency-direction"]
+    # (redesign M5b.2, review m3) Children no longer inherit through spawn events: a child runtime derives its root's arm.
+    ++ lib.concatMap (t: lib.concatMap (d: lib.optional (anyLine t d.ls) "${lib.removePrefix "/" d.f} still says children ${t}") documents) ["inherit only on the spawn event" "do not inherit an arm" "spawn inheritance"];
 in
   pkgs.runCommand "doc-pointers" {
     report = lib.concatStringsSep "\n" (map (f: "doc-pointers: ${f}") failures);

@@ -109,7 +109,7 @@ it misses the API and switches off only what needs it.
 
 | Package | Used by | Without it |
 |---|---|---|
-| pi-actor-subagents | used by `cache-lifecycle`, `experiments` | cache lifecycle does not keep sessions waiting on children warm; experiments children do not inherit an arm. Patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending. |
+| pi-actor-subagents | used by `cache-lifecycle`, `experiments` | cache lifecycle does not keep sessions waiting on children warm; experiments does not recognise in-memory children (children with a session file still run their root's arm). Patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending. |
 | pi-infinite-context | optional | the upstream's fold reminders work as they are; the reminder limits per provider or model come only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
 
 ### Experiments are opt-in

@@ -41,7 +41,7 @@
   legacyKeys = lib.filter (k: cfg.settings ? ${k}) ["factors" "maxArms" "baseline"];
 in {
   options.programs.piEconomics.experiments = {
-    enable = lib.mkEnableOption "the pi experiments extension (one fractional-factorial arm per main session; explore/exploit assignment, spawn inheritance for children)";
+    enable = lib.mkEnableOption "the pi experiments extension (one fractional-factorial arm per main session; explore/exploit assignment; a child runtime runs its root's arm)";
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -115,7 +115,7 @@ in {
 
     # (M4.15) A soft dependency (spec §4.1): shell.ts tolerates a missing API.
     warnings =
-      lib.optional (!hasActor) "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)"
+      lib.optional (!hasActor) "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) does not recognise in-memory children (it reads the actor's agent list from __subagentsApi_v1; children with a session file still run their root's arm)"
       # (redesign M5b.1, review m3) The v1 engine's keys, set on purpose:
       # its factors are no longer drawn (the package warns too).
       ++ lib.optional (legacyKeys != []) "pi-economics: experiments ignores ${lib.concatMapStringsSep ", " (k: "settings.${k}") legacyKeys} (the v1 engine's): its factors come from settings.strata (default: one stratum per billing class); baseline only labels the analyses of v1–v4 designs";

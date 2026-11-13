@@ -21,7 +21,7 @@
   # design §7.3): the warnings of cacheLifecycle and experiments.
   actor = import ../fixtures/actor-entry.nix;
   warnCl = "pi-economics: cacheLifecycle without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses warming while a session waits on its children (the warm policy reads __subagentsApi_v1)";
-  warnEx = "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
+  warnEx = "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) does not recognise in-memory children (it reads the actor's agent list from __subagentsApi_v1; children with a session file still run their root's arm)";
   users = registry:
     hm.eval {
       programs.piEconomics =

@@ -232,7 +232,8 @@ is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 | `settings` | `{}` | written to `<agentDir>/experiments/settings.json` as given, `{}` as `{"mode": "explore"}` (`mode`, `minExplore`, `strata` (default: one per billing class of `tokenMeter.plans`, and `api`), `guards`, `correctionRegex`; the v1 engine's `factors`, `maxArms`, `baseline` are not applied and draw a warning; `baseline` still labels the analyses of v1–v4 designs); the file is the extension's opt-in: without it experiments is inert |
 
 Without the actor in the registry (`extensions.actor-subagents`) it warns:
-children do not inherit an arm.
+in-memory children are not recognised (it reads the actor's agent list; children
+with a session file still run their root's arm).
 
 ### `infiniteContext` (`modules/infinite-context.nix`)
 
@@ -319,7 +320,7 @@ router keeps a copy of its own that claims on the same channel):
 
 - `hasSubagentsApiV1`, checked at `session_start` (every factory has run by then, so the check does not depend on
   load order). `cache-lifecycle` warns once and does not keep sessions waiting on
-  their children warm. `experiments` warns once (only with its settings file) and children do not inherit an arm.
+  their children warm. `experiments` warns once (only with its settings file) and does not recognise in-memory children.
   The text is `actorMissing(...)`, printed through `warnOnce` (once per process; `ctx.ui.notify` with a UI,
   `console.warn` without).
 - `guardSingleCopy`: each extension claims its component on `pi.events` at `session_start` and installs then, not at

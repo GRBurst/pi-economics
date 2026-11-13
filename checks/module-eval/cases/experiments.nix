@@ -26,7 +26,7 @@
   bare = hm.evalBare {};
   # The actor in the registry, as pi-setup's bridge puts it there.
   withActor = {extensions.actor-subagents = import ../fixtures/actor-entry.nix;};
-  warning = "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
+  warning = "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) does not recognise in-memory children (it reads the actor's agent list from __subagentsApi_v1; children with a session file still run their root's arm)";
 in {
   # (M4.13) Off by default: no registry entry, no file.
   experiments-off = let
