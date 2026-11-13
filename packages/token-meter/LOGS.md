@@ -228,7 +228,12 @@ cache-lifecycle applies the assigned level itself; a lever starts only once cach
 runtime). `mainCacheTtl` is read back from each assistant `message_end`'s usage (`cacheWrite1h` > 0: `1h`, other cache
 writes: `5m`, no cache write: nothing seen); `warmPolicy` and `maskOnCold` have no observer and stay `unverified`. In a
 child `mainCacheTtl` is infeasible (only a main takes the 1 h TTL): its state is what the child observed, `refused`
-when that is not its root's level. A level name may start with a digit (`5m`, `1h`). A read-back that changes
+when that is not its root's level.
+The seed tier adds `infinite-context.nudgeAtTokens` (redesign M7a) in a session whose factor is on it: `v` and `a` are
+tokens (the level is a fraction of the matched rule's range), `rb` is read from infinite-context's settings record on the branch
+(`confirmed`; an extension that redrew: `refused`, `s: "ext"`, `v` = its draw), and a rule that is a fixed number gives `refused`,
+`s: "fixed"`, `a` = the level (a fraction: there are no tokens to assign).
+A level name may start with a digit (`5m`, `1h`). A read-back that changes
 a state writes a new levers line. A child runtime's experiments never draws: it derives its root's assignment (the
 session file's directory `subagents/<root>/`, or for an in-memory child the actor's agent list) and serves it on the
 child's own channel, so an in-memory child (no session file) takes its `parentSessionId` and the root's `arm`, `design`

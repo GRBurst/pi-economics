@@ -175,3 +175,61 @@ test("review m2: the cache-lifecycle levers are feasible only at the levels cach
   assert.deepEqual(f("mainCacheTtl", ["5m", "1h"], true), []);
   assert.deepEqual(f("maskOnCold", ["off", "on", "tools+thinking"]), ["off", "on"]);
 });
+
+// M7a: a lever whose level is a fraction of a range the target's rule gives (valueFor), and a lever that follows the
+// session's model (follow, modelChanged). The infinite-context add-on is the user; the framework is tested with doubles.
+test("M7a registry: valueFor maps the level to the lever's own value; read-back compares that value and the state records it", () => {
+  const applied: Array<[string, Level]> = [];
+  let seen: Observed = undefined;
+  const lever: Lever = {
+    id: "x.q", target: "pi", scope: "session", tier: "seed", readBackAt: "before_agent_start",
+    feasible: (_env, levels) => levels,
+    valueFor: (_ctx, level) => (level as number) * 1000,
+    apply: (_ctx, level) => void applied.push(["s1", level]),
+    observe: () => seen,
+  };
+  const s = sessionLevers(createRegistry([lever]), assignedTo({ q: ["x.q", 0.25] }), { child: false }, () => [0.25, 0.75]);
+  s.refresh();
+  assert.deepEqual(applied, [["s1", 0.25]], "apply gets the level");
+  assert.deepEqual(s.states()["x.q"], { v: 250, s: "pe", a: 250, rb: "unverified", tier: "seed" });
+  seen = { v: 250, s: "fixed" };
+  s.observe("before_agent_start", { sessionId: "s1" });
+  assert.deepEqual(s.states()["x.q"], { v: 250, s: "pe", a: 250, rb: "confirmed", tier: "seed" });
+  seen = { v: 0.25, s: "ext" };
+  s.observe("before_agent_start", { sessionId: "s1" });
+  assert.deepEqual(s.states()["x.q"], { v: 0.25, s: "ext", a: 250, rb: "refused", tier: "seed" }, "the level itself is not the value");
+});
+
+test("M7a registry: the session's ctx reaches feasible (env.model), valueFor and apply; modelChanged re-evaluates only the levers that follow the model", () => {
+  const log: string[] = [];
+  let model: { provider?: string; id?: string } | undefined = { provider: "p1", id: "m1" };
+  let seen: Observed = undefined;
+  const range: Record<string, readonly Level[]> = { p1: [0.25], p2: [] };
+  const following: Lever = {
+    id: "x.f", target: "pi", scope: "session", tier: "seed", readBackAt: "before_agent_start", follow: "model",
+    feasible: (env) => (range[env.model?.provider ?? ""] ?? []),
+    valueFor: (ctx, level) => `${ctx.model?.provider}:${level}`.length,
+    apply: (ctx, level) => void log.push(`follow ${ctx.model?.provider} ${level}`),
+    observe: () => seen,
+  };
+  const fixed = fakeLever("x.g", "pi");
+  const s = sessionLevers(createRegistry([following, fixed.lever]), assignedTo({ f: ["x.f", 0.25], g: ["x.g", "on"] }), { child: false }, (n) => (n === "f" ? [0.25] : ["off", "on"]), () => ({ sessionId: "s1", ...(model === undefined ? {} : { model }) }));
+  s.refresh();
+  assert.deepEqual(log, ["follow p1 0.25"]);
+  seen = { v: "p1:0.25".length, s: "ext" };
+  s.observe("before_agent_start", { sessionId: "s1" });
+  assert.equal(s.states()["x.f"].rb, "confirmed");
+  // A switch to a model the lever cannot set: refused up front, the earlier observation dropped (nothing observed under the new model).
+  model = { provider: "p2", id: "m2" };
+  assert.equal(s.modelChanged(), true);
+  assert.deepEqual(log, ["follow p1 0.25"], "nothing applied for an infeasible level");
+  assert.equal(s.states()["x.f"], undefined);
+  // Back: applied again under the model it follows; unverified until read back.
+  model = { provider: "p1", id: "m1" };
+  assert.equal(s.modelChanged(), true);
+  assert.deepEqual(log, ["follow p1 0.25", "follow p1 0.25"]);
+  assert.equal(s.states()["x.f"].rb, "unverified");
+  assert.equal(s.modelChanged(), false, "no change of state, no announcement");
+  assert.deepEqual(fixed.applied, [["s1", "on"]], "a lever that does not follow the model is not applied again");
+  assert.equal(s.states()["x.g"].rb, "unverified");
+});

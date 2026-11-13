@@ -157,6 +157,21 @@ in {
     name = "infinite-context";
     src = infiniteContextTs;
   };
+  # (redesign M7a, plan T7a.7) The engine's copy of the extension's settings record, the type the seed is written as:
+  # the extension's `Settings` must be assignable to it (the seed's fields, same names and types).
+  iface-infinite-context-seed = iface.compare {
+    name = "infinite-context-seed";
+    provider = {
+      src = infiniteContextTs;
+      file = "extensions/infinite-context/settings.ts";
+      type = "Settings";
+    };
+    consumer = {
+      src = experimentsTs;
+      file = "experiments/addons/infinite-context.ts";
+      type = "IcRecord";
+    };
+  };
   # (redesign M7a) The seed contract on the real code of the extension, the engine and the meter.
   ic-seed-contract = import ./ic-seed-contract {
     inherit pkgs;
