@@ -25,7 +25,8 @@ export const shrinkFold = (a: any, b: any): boolean => prompt(b) < FOLD_SHRINK *
  * so cacheWrite_i = growth_i + the rewrite (≈ miss_i). The previous request's uncached input tail is not part of the cache, so it is no miss.
  * A miss has a cause, the first that holds (P8: a gap beyond the TTL loses the prefix whatever else happened): `ttl` when the gap since the
  * previous request outlived the TTL in force there (`ttlMs(previous)`; a warming request is a previous request: it refreshed the prefix),
- * `fold` when `eventBetween(previous, this)` (a fold or compaction), `model` when the model changed, else `other`.
+ * `fold` when `eventBetween(previous, this)` (a fold or compaction), `model` when the model changed, else `other`: a prefix change inside
+ * the TTL that the lines do not show (a system-prompt or tool-list change, a small fold or mask, an injected agent message).
  */
 export function cacheSteps(branch: readonly any[], ttlMs: (l: any) => number, eventBetween: (a: any, b: any) => boolean): CacheStep[] {
   const steps: CacheStep[] = [];

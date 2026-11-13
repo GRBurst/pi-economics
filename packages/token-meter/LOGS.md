@@ -285,7 +285,9 @@ request is no row of its own (it only refreshes the prefix).
 - **Cause** of a miss, the first that holds: `ttl` — the gap since the previous request (warming included) is longer than the TTL in force
   after it: 1 h if that line has `cacheWrite1h` > 0 or is a main session's in an arm with `mainCacheTtl` = `1h`, else 5 min; `fold` — the
   prompt fell below 80 % of the previous request's (the fold rule of the other tables; real fold and compaction entries live in session
-  files, not in the meter log); `model` — the model changed (its own cache); `other`.
+  files, not in the meter log); `model` — the model changed (its own cache); `other` — a prefix change inside the TTL that the meter
+  lines do not show: typically a system-prompt or tool-list change, a small fold or mask, an injected agent message. A real cost (the lost
+  prefix is paid at the write price), not noise; the session files hold the reason, the meter line does not.
 - **Fold and cold-resume events** (the rows *after folds* / *after cold resumes*): a **cold resume** is a turn request after a gap beyond
   the TTL in force (above); a **fold** is a turn request whose prompt fell below 80 % of the previous request's, unless the gap came
   first (a cold fold is a cold resume). An event's **window** is its request and the next two turn requests of the branch, cut short by
