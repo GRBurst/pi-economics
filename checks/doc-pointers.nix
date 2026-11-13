@@ -21,6 +21,7 @@
   logs = lines "/packages/token-meter/LOGS.md";
   scope = lines "/docs/scope.md";
   agents = lines "/AGENTS.md";
+  economics = lines "/docs/pi-economics.md";
   # Every document that could still point at the specification that moved.
   documents = lib.concatMap (f:
     lib.optional (builtins.pathExists (root + f)) {
@@ -44,7 +45,13 @@
     ++ lib.optional (!anyLine "gdr-clean" (lib.drop (lib.length stays) scope)) "scope.md does not name the tool's command gdr-clean"
     ++ lib.optional (builtins.pathExists (root + "/docs/prompts/research-cleanup-tool.md")) "docs/prompts/research-cleanup-tool.md is still here (the specification lives in gemini-research-cleanup)"
     ++ lib.concatMap (d: lib.optional (anyLine spec d.ls) "${lib.removePrefix "/" d.f} still names the moved specification (${spec})") documents
-    ++ lib.concatMap (t: lib.optional (anyLine t agents) "AGENTS.md still carries ${t}") ["router-golden" "local mode" "patches/pi-actor-subagents" "task-router/core"];
+    ++ lib.concatMap (t: lib.optional (anyLine t agents) "AGENTS.md still carries ${t}") ["router-golden" "local mode" "patches/pi-actor-subagents" "task-router/core"]
+    # (redesign M5b.2) The global __piExperimentsApi_v1 and its iface checks are gone: a document names the global only
+    # as removed (or as what a grep must not find), names no iface-experiments check, and lists the checks that
+    # replaced them.
+    ++ lib.concatMap (d: lib.optional (lib.any (l: has "__piExperimentsApi" l && !has "removed" l && !has "no `__piExperimentsApi" l) d.ls) "${lib.removePrefix "/" d.f} still describes __piExperimentsApi_v1 as present") documents
+    ++ lib.concatMap (d: lib.optional (anyLine "iface-experiments-" d.ls) "${lib.removePrefix "/" d.f} still names an iface-experiments check") documents
+    ++ lib.concatMap (c: lib.optional (!lib.any (lib.hasPrefix "| `${c}` |") economics) "docs/pi-economics.md has no check row for ${c}") ["internal-channel" "dependency-direction"];
 in
   pkgs.runCommand "doc-pointers" {
     report = lib.concatStringsSep "\n" (map (f: "doc-pointers: ${f}") failures);

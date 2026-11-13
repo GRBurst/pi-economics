@@ -82,6 +82,9 @@ const passes = (meter: any[]) => {
   assert.deepEqual(ps, [], renderProblems(ps));
 };
 
+// M5b.2: the levers of the experiments engine's add-ons (packages/experiments/addons/cache-lifecycle.ts).
+const ADDON_IDS = ["cache-lifecycle.warmPolicy", "cache-lifecycle.mainCacheTtl", "cache-lifecycle.maskOnCold"];
+
 test("LOGS.md: levers line examples, each one the builder writes byte for byte, passing the contract", () => {
   const heading = "### Levers lines";
   const block = exampleBlock(md, heading)!;
@@ -90,14 +93,24 @@ test("LOGS.md: levers line examples, each one the builder writes byte for byte, 
     const { v, kind, ...base } = l;
     assert.deepEqual([v, kind], [2, "levers"], `example line ${i + 1}`);
     assert.equal(serializeLevers(leversLine(base)), block[i] + "\n", `example line ${i + 1} is not what the writer writes`);
-    for (const id of Object.keys(l.levers)) assert.ok(LEVER_IDS.includes(id), `example line ${i + 1}: ${id} is no lever the observer writes`);
+    for (const id of Object.keys(l.levers)) assert.ok(LEVER_IDS.includes(id) || ADDON_IDS.includes(id), `example line ${i + 1}: ${id} is no lever the observer or the engine's add-ons write`);
   }
   const states = lines.flatMap((l) => Object.values(l.levers) as any[]);
   for (const s of ["pe", "ext", "fixed"]) assert.ok(states.some((x) => x.s === s), `no lever with source ${s}`);
   for (const rb of ["confirmed", "refused", "unverified"]) assert.ok(states.some((x) => x.rb === rb), `no lever read back ${rb}`);
   assert.ok(lines.some((l) => typeof l.parentSessionId === "string" && l.eligible === false), "no child line");
   assert.ok(lines.some((l) => l.levers["pi.compaction.enabled"]?.s === "ext"), "no infinite-context line");
+  for (const id of ADDON_IDS) assert.ok(lines.some((l) => l.levers[id]?.tier === "replace"), `no line with the engine's ${id}`);
+  assert.ok(states.some((x) => typeof x.v === "string" && /^[0-9]/.test(x.v)), "no level name starting with a digit");
   passes(lines);
+});
+
+// M5b.2: where the engine's states come from, when they change the line, and how an in-memory child finds its parent.
+test("LOGS.md: the Levers lines describe the engine's add-ons, read-back changes and the internal channel (M5b.2)", () => {
+  const levers = md.slice(md.indexOf("### Levers lines"), md.indexOf("## task-router/"));
+  for (const s of ["`pi-economics:levers:v1`", "read-back", "may start with a digit", "in-memory child"]) assert.ok(levers.includes(s), `Levers lines: ${s}`);
+  assert.ok(!levers.includes("will write"), "Levers lines: the add-ons' line is still announced as future");
+  assert.ok(!md.includes("__piExperimentsApi"), "LOGS.md names the removed global");
 });
 
 test("LOGS.md: compaction line examples, v2 meter lines of kind compaction without timing or retries, passing the contract", () => {

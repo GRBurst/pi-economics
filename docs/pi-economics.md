@@ -214,7 +214,11 @@ Without `infiniteContext` the `context_peek` guard has nothing to log; without
 
 The online experiment (`packages/experiments`): one fractional-factorial arm
 per main session, recorded in `<agentDir>/experiments/assignments.jsonl` and
-published as `globalThis.__piExperimentsApi_v1`. Design v4's factors
+served with its levers' states on each runtime's internal channel
+`pi-economics:levers:v1` (`pi.events`; the former global `__piExperimentsApi_v1` is removed).
+A lever starts once its target extension asked the channel in that runtime; its
+add-on (`packages/experiments/addons/`) reads it back. A child runtime never draws:
+it derives its root's assignment and serves it on the child's own channel. Design v4's factors
 (`warmPolicy`, `mainCacheTtl`, `maskOnCold`, the full 2³: 8 arms) are
 `cacheLifecycle`'s; `tokenMeter` records the arm ids; the task router's levers
 are no factors any more: its reads find its own settings.
@@ -223,7 +227,7 @@ is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 
 | Option | Default | Effect |
 |---|---|---|
-| `enable` | `false` | registry entry `experiments` (`forChildren = false`: children inherit their parent's arm) |
+| `enable` | `false` | registry entry `experiments` (`forChildren = true`: in a child it draws nothing and serves its root's arm and levers) |
 | `package` | the flake's `packages/experiments` | the extension |
 | `settings` | `{}` | written to `<agentDir>/experiments/settings.json` as given, `{}` as `{"mode": "explore"}` (`mode`, `minExplore`, `strata` (default: one per billing class of `tokenMeter.plans`, and `api`), `guards`, `correctionRegex`; the v1 engine's `factors`, `maxArms`, `baseline` are not applied and draw a warning; `baseline` still labels the analyses of v1–v4 designs); the file is the extension's opt-in: without it experiments is inert |
 
@@ -291,7 +295,7 @@ guarded leftover still evaluates.
 What still refers to the router here, by its registry name `task-router` or its
 input: the bench's `extensions` default and run-time base (above); the reports'
 tier sections, which read its outcome log; its experiment factor; the checks
-`log-contract`, `iface-experiments-task-router` and `nix-route-smoke`, which read
+`log-contract` and `nix-route-smoke`, which read
 the `pi-task-router` input; and the claim channel its runtime guard shares with
 the three copies here (`runtime-guard-copies`).
 
@@ -370,10 +374,10 @@ points into `src`.
 | `cache-lifecycle`, `experiments` | each package's own tests (`node --test`), run when it builds |
 | `typecheck-cache-lifecycle`, `typecheck-experiments` | `tsc --strict` over each package |
 | `iface-subagents-cache-lifecycle`, `iface-subagents-experiments` | their copies of `__subagentsApi_v1` are satisfied by the provider's `SubagentsApiV1` |
-| `iface-experiments-token-meter`, `iface-experiments-cache-lifecycle` | their copies of `__piExperimentsApi_v1` are satisfied by the provider's `ExperimentsApiV1` |
+| `internal-channel` | the internal channel `pi-economics:levers:v1`: the experiments engine's payload (`Levers`), query and lever states against the copies token-meter (`core/channel.ts`) and cache-lifecycle (`core/api.ts`) keep, both ways (every key a copy reads is one the engine sends), and the event names |
 | `infinite-context` | the patched pi-infinite-context's tests: upstream's suite without its three `fast-check` tests, with the patch's additions to `settings.test.ts` and `index.test.ts`, on the shared lock; `overlay-foreign.test.ts` and `integration.test.ts` (`index.ts` driven through its event handlers with stand-ins for pi's packages, reading the settings the module renders); the greps on `index.ts` (no fold hint, no `__piExperimentsApi_v1`) |
 | `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's three `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
-| `iface-experiments-task-router` | the router's copy of `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`, read from the `pi-task-router` input) is satisfied by this flake's `ExperimentsApiV1` |
+| `dependency-direction` | no patched upstream (`patches/`) mentions a `pi-economics:` channel or the removed `__piExperimentsApi_v1`: extensions never depend on pi-economics |
 | `log-contract` | every log writer through `pi-analyse --check` and a full report; the router's writer and vocabularies are the `pi-task-router` input's |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths (`/home/<name>`), `git+ssh` URLs, private (RFC 1918) or Tailscale addresses, LAN host URLs (`http://<one-label host>`, not `localhost`) or names under `.local`, `.lan`, `.home.arpa`, `.ts.net` in tracked files (a worktree's `.git` file is skipped) |
 | `license` | `LICENSE` is MIT, every package declares MIT, `NOTICE` has a section per patched upstream and none for another, and each licence text it names (`Licence text: <path>`, `checks/npm/LICENSE` among them) carries the MIT permission notice |

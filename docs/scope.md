@@ -63,7 +63,8 @@ How the two relate:
 - **Dependencies.** pi-economics may depend on extensions; extensions never on
   pi-economics. Today pi-economics takes the router and pi-setup as flake
   inputs for its checks only. The router's optional read of
-  `__piExperimentsApi_v1` predates this rule; the redesign removes it. The
+  `__piExperimentsApi_v1` predates this rule; the redesign removed the global
+  (M5b.2), so the read finds nothing and the router drops it on its side. The
   experiments factors `freshOnCold` and `delegationRule` are gone (design
   v4), so the read already finds the router's own settings.
 - **The outcome log.** The router owns the schema (its `docs/outcome-log.md`).

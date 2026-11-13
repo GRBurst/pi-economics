@@ -30,9 +30,8 @@
       inputs.home-manager.follows = "home-manager";
     };
     # Checks only (router-extraction design §7.3, §8.4, §8.5): the task router
-    # whose outcome log token-meter reads (`log-contract`), whose copy of
-    # __piExperimentsApi_v1 experiments provides and whose claim channel the
-    # runtime guards share (`runtime-guard-copies`). Not locked until it is
+    # whose outcome log token-meter reads (`log-contract`) and whose claim
+    # channel the runtime guards share (`runtime-guard-copies`). Not locked until it is
     # published: evaluate with `--override-input pi-task-router <checkout>`.
     pi-task-router = {
       url = "github:GRBurst/pi-task-router";
