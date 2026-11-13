@@ -14,10 +14,22 @@ export type LeverState = { v: Level; s: Source; a?: Level; rb?: ReadBack; tier?:
 /** What an observer saw: the effective value and who decided it; undefined = nothing to see yet. */
 export type Observed<L extends Level = Level> = { v: L; s: Source } | undefined;
 
-/** What a lever's feasibility may depend on: the runtime it is assigned in. */
-export type TargetEnv = { child: boolean };
-/** The session an add-on acts in; `event` is the hook's event at read-back (message_end: `{ message }`). */
-export type SessionCtx = { sessionId: string; event?: unknown };
+/** A provider and model id, as pi's `ctx.model` carries them. */
+export type ModelRef = { provider?: string; id?: string };
+/** What a lever's feasibility may depend on: the runtime it is assigned in and the session's current model. */
+export type TargetEnv = { child: boolean; model?: ModelRef };
+/**
+ * The session an add-on acts in; `event` is the hook's event at read-back (message_end: `{ message }`). `model` is the
+ * session's current model; `branch` reads the session's branch (custom entries included) and `appendEntry` adds a custom
+ * entry to it, for the seed tier, which writes the target's own durable input (§7.4). Absent where the host has none.
+ */
+export type SessionCtx = {
+  sessionId: string;
+  event?: unknown;
+  model?: ModelRef;
+  branch?(): readonly unknown[];
+  appendEntry?(customType: string, data: unknown): void;
+};
 
 export interface Lever<L extends Level = Level> {
   id: LeverId;
@@ -29,6 +41,14 @@ export interface Lever<L extends Level = Level> {
   feasible(env: TargetEnv, levels: readonly L[]): readonly L[];
   /** Sets the level, in the engine's runtime, before the target reads it. */
   apply(ctx: SessionCtx, level: L): void;
+  /**
+   * The lever's own value a level stands for here, which `observe` reports and the lever state records as `a` (a range
+   * lever's level is a fraction of the range the target's rule gives: the tokens it adopts). Absent: the level itself;
+   * where the level has no value (nothing feasible), the level.
+   */
+  valueFor?(ctx: SessionCtx, level: L): Level;
+  /** "model": feasibility and value depend on the session's model, so a model switch re-evaluates and re-applies the level. */
+  follow?: "model";
   /** Absent: no observer (the state stays unverified). */
   observe?(ctx: SessionCtx): Observed<L>;
   readBackAt: "before_agent_start" | "message_end";
