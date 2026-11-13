@@ -1,5 +1,7 @@
 // Per-arm analysis of the meter log for the experiments package. Pure; bin/meter-report.ts does the I/O.
 // Unit of analysis = one root session (a main session with all its children), the random effect of the design.
+import { apiUsd } from "./analyse/units.ts";
+
 export type Ev = { n: number; meanCost: number };
 export type ArmStat = { arm: string; units: number; costUsd: number; activeHours: number; costPerHour: number;
   ci: [number, number]; sd: number; coldResume: Ev; fold: Ev;
@@ -72,7 +74,7 @@ export function attributeQuota(all: any[], key: QuotaKey): QuotaAttribution {
       while (hi + 1 < reqs.length && t(reqs[hi + 1]) <= t(l)) hi++; // and those at this instant belong to it
       if (lo > hi) for (lo = i; lo > 0 && t(reqs[lo - 1]) >= t(l); lo--); // both readings at one instant: that instant
       const cost = new Map<string, number>();
-      for (const x of reqs.slice(lo, hi + 1)) cost.set(rootOf(x), (cost.get(rootOf(x)) ?? 0) + Math.max(0, num(x.costUsd)));
+      for (const x of reqs.slice(lo, hi + 1)) cost.set(rootOf(x), (cost.get(rootOf(x)) ?? 0) + Math.max(0, apiUsd(x)));
       const paid = [...cost.values()].reduce((s, c) => s + c, 0);
       for (const [root, c] of cost) perRoot.set(root, (perRoot.get(root) ?? 0) + step * (paid > 0 ? c / paid : 1 / cost.size));
       total += step;
@@ -108,7 +110,7 @@ export function rootUnits(all: any[], quota: Record<QuotaKey, QuotaAttribution> 
       turns.some((l) => typeof l[key] === "number") || quota[key].perRoot.has(root) ? quota[key].perRoot.get(root) ?? 0 : undefined;
     const turns = us.filter((l) => l.kind !== "warming" && !isError(l)); // activity = successful requests
     const hours = turns.reduce((s, l, i) => s + (i && t(l) - t(turns[i - 1]) < IDLE_MS ? t(l) - t(turns[i - 1]) : 0), 0) / (60 * MIN);
-    return { root, arm: typeof us[0].arm === "string" ? us[0].arm : "", cost: us.reduce((s, l) => s + num(l.costUsd), 0), hours, q5h: share(turns, "q5h"), q7d: share(turns, "q7d") };
+    return { root, arm: typeof us[0].arm === "string" ? us[0].arm : "", cost: us.reduce((s, l) => s + apiUsd(l), 0), hours, q5h: share(turns, "q5h"), q7d: share(turns, "q7d") };
   });
 }
 
@@ -146,7 +148,7 @@ export function armStats(all: any[], opt: { flags?: Record<string, Record<string
       const prev = reqs[at - 1];
       const window = turns.slice(i, i + N_AFTER);
       if (!prev || window.length < N_AFTER) return;
-      const cost = window.reduce((s, x) => s + num(x.costUsd), 0);
+      const cost = window.reduce((s, x) => s + apiUsd(x), 0);
       if (t(l) - t(prev) >= ttl) slot(l.arm).cold.push(cost);
       else if (i && ctx(l) < FOLD_SHRINK * ctx(turns[i - 1])) slot(l.arm).fold.push(cost);
     });

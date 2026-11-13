@@ -1,6 +1,6 @@
 // units.ts is the one place the core/analyse/* modules turn a meter line into dollars (redesign M0.S, T0.5): every $
-// they read goes through apiUsd(line), so a later price rule (M2a: 1 h cache writes) changes one function. arms.ts,
-// tasks.ts and ledger.ts, which analyse/* calls, still read costUsd themselves until M2a routes them through here.
+// they read goes through apiUsd(line), so a price rule (M2a: 1 h cache writes) changes one function; so do the three core modules
+// analyse/* calls (arms.ts, tasks.ts, ledger.ts), checked at the end of this file.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { world } from "./world.ts";
 
 const lines = (): any[] => world().meter;
 
-test("apiUsd: every line of the world fixture is worth its costUsd (until M2a prices 1h writes)", () => {
+test("apiUsd: every line of the world fixture is worth its costUsd (pi prices 1 h writes itself, PI_PRICES_1H)", () => {
   const ls = lines().filter((l) => typeof l.costUsd === "number");
   assert.ok(ls.length >= 30, "the fixture has lines with a cost");
   for (const l of ls) assert.equal(apiUsd(l), l.costUsd);
@@ -46,4 +46,24 @@ test("seam: no analyse/* module but units.ts mentions costUsd (a read as num(), 
     assert.ok(!rest.includes("costUsd"), `${f} reads a line's costUsd directly: ${rest.split("\n").find((l) => l.includes("costUsd"))?.trim().slice(0, 100)}`);
   }
   for (const ok of NOT_A_LINE) assert.ok(texts.some(([, text]) => text.includes(ok)), `the allowance ${JSON.stringify(ok)} matches nothing: drop it`);
+});
+
+// M2a carries the seam to the three core modules the analyser calls (decisions "M0.S review carry-over"): the per-arm $/h and cold-resume
+// and fold windows (arms.ts), the quota attribution (arms.ts attributeQuota) and $/accepted (tasks.ts) must reprice with apiUsd, and the
+// ledger's prices (ledger.ts) too. What stays are names, not reads of a line: result fields, a column header, prose.
+const CORE_NOT_A_LINE: Record<string, string[]> = {
+  "arms.ts": ["export type ArmStat = { arm: string; units: number; costUsd: number;", "proportional to their costUsd there", "costUsd: a.cost,", "[\"costUsd\", (s) => f2(s.costUsd)]"],
+  "tasks.ts": ["export type TaskCost = { accepted: number; judged: number; costUsd: number; perAccepted: number };", "{ accepted: 0, judged: 0, costUsd: 0, perAccepted: NaN }", "o.costUsd += t.cost;", "o.costUsd / o.accepted"],
+  "ledger.ts": [],
+};
+
+test("seam: arms.ts, tasks.ts and ledger.ts read no line's costUsd but through apiUsd", () => {
+  const dir = new URL("../core/", import.meta.url);
+  for (const [f, allowed] of Object.entries(CORE_NOT_A_LINE)) {
+    const text = readFileSync(new URL(f, dir), "utf8");
+    const rest = allowed.reduce((t, ok) => t.split(ok).join(""), text);
+    assert.ok(!rest.includes("costUsd"), `core/${f} reads a line's costUsd directly: ${rest.split("\n").find((l) => l.includes("costUsd"))?.trim().slice(0, 100)}`);
+    assert.ok(text.includes("apiUsd"), `core/${f} does not use apiUsd`);
+    for (const ok of allowed) assert.ok(text.includes(ok), `the allowance ${JSON.stringify(ok)} matches nothing in core/${f}: drop it`);
+  }
 });

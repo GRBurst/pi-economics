@@ -6,6 +6,8 @@
 //   net = n·R·r − K·(w − r)        (savings − rewrite, exactly)
 // Pure bookkeeping on the meter lines: nothing here asserts that the fold was the cause of anything else.
 
+import { apiUsd } from "./analyse/units.ts";
+
 const MIN = 60_000;
 const FOLD_SHRINK = 0.8; // same rule as arms.ts: a turn whose prompt fell below this share of the previous turn's is a fold
 /** Relative prices (Anthropic): read 0.1, 5-minute write 1.25, output 5 × input (the weights core/analyse/units.ts splits costs with). */
@@ -25,14 +27,14 @@ const isClaude = (l: any): boolean => /claude/i.test(String(l.model)) || l.provi
 export type Price = { r: number; w: number };
 
 /**
- * Per model: input price p = Σ costUsd ÷ Σ (input + 0.1·cacheRead + 1.25·cacheWrite + 5·output) over its lines with a cost and tokens
+ * Per model: input price p = Σ the lines' cost ÷ Σ (input + 0.1·cacheRead + 1.25·cacheWrite + 5·output) over its lines with a cost and tokens
  * (the line's own cost and token fields; no price table), then r = 0.1·p and w = 1.25·p. A model without such a line has no price.
  * 1 h writes cost 2·p on Anthropic's list but pi's cost field uses the 1.25 table, which this follows.
  */
 export function prices(lines: any[]): Map<string, Price> {
   const acc = new Map<string, { usd: number; weighted: number }>();
   for (const l of lines) {
-    const usd = num(l.costUsd);
+    const usd = apiUsd(l);
     const weighted = (Object.keys(WEIGHT) as Array<keyof typeof WEIGHT>).reduce((s, k) => s + WEIGHT[k] * num(l[k]), 0);
     if (usd <= 0 || weighted <= 0) continue;
     const a = acc.get(String(l.model)) ?? acc.set(String(l.model), { usd: 0, weighted: 0 }).get(String(l.model))!;

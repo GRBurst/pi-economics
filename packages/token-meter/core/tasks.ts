@@ -1,4 +1,6 @@
 // $ per accepted task (routing metric). Pure; reads the meter log and the task-router outcome log as plain events.
+import { apiUsd } from "./analyse/units.ts";
+
 export type TaskCost = { accepted: number; judged: number; costUsd: number; perAccepted: number };
 
 const MAX_DEPTH = 64;
@@ -21,11 +23,13 @@ export function taskRecords(meter: any[], outcomes: any[]): Map<string, TaskReco
   const cost = new Map<string, number>(); // child session → subtree cost
   const roots = new Set([...task.values()].map((t) => t.session));
   for (const l of meter) {
-    if (typeof l?.sessionId !== "string" || typeof l.costUsd !== "number") continue;
+    if (typeof l?.sessionId !== "string") continue;
+    const usd = apiUsd(l);
+    if (usd === 0) continue; // a line without a cost adds nothing
     const seen = new Set<string>(); // each ancestor once, whatever the chain looks like
     for (let i = 0, s: string | undefined = l.sessionId; s !== undefined && i < MAX_DEPTH && !seen.has(s); i++, s = parent.get(s)) {
       seen.add(s);
-      if (roots.has(s)) cost.set(s, (cost.get(s) ?? 0) + l.costUsd);
+      if (roots.has(s)) cost.set(s, (cost.get(s) ?? 0) + usd);
     }
   }
   return new Map([...task].map(([id, t]) => [id, { ...t, verdict: last.get(id), cost: cost.get(t.session) ?? 0 }]));
