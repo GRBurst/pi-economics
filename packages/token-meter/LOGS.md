@@ -24,14 +24,15 @@ message text, strings clipped to 256 characters. Timestamps are ISO-8601 UTC.
 | --- | --- | --- | --- |
 | `meter/YYYY-MM.jsonl` | token-meter extension (every session, children too) | provider request | UTC month |
 | `task-router/outcomes/YYYY-MM.jsonl` | task-router extension (main session) | routing event of a delegated task | UTC month |
-| `experiments/assignments.jsonl` | experiments extension (main session) | root session's arm assignment | none |
+| `experiments/assignments.jsonl` | experiments extension (main session) | root session's assignment (v2: eligible or not) | none |
+| `experiments/blocks.json` | experiments extension | — (one JSON object: the explore queues) | rewritten atomically |
 | `guards/events.jsonl` | experiments (correction, rating), cache-lifecycle (peek-after-mask) | guard event | none |
 | `experiments/state.json` | `pi-analyse --apply`, `meter-report --arms --posterior` | — (one JSON object) | rewritten atomically |
 | `reports/YYYY-MM-DD-HHMM-analysis.{md,json}` | `pi-analyse` | — | one pair per run (UTC; a rerun in the same minute replaces it) |
 
 Settings read by the analysis: `token-meter/settings.json` (`dir`: meter directory,
 relative to the agent dir unless absolute; default `meter`),
-`experiments/settings.json` (`baseline`, `factors`, `guards` thresholds),
+`experiments/settings.json` (`baseline` of the v1 engine's designs, `strata` objectives, `guards` thresholds),
 `task-router/settings.json` (`runaway.requests`, `runaway.usd`; default 150 / $10).
 
 ## Schema versions
@@ -47,6 +48,9 @@ field does not bump it). `pi-analyse` reports the versions per log under *Data q
 | assignments | design v1 rows (5-character arms, no `design`) | `v`, `design` (`"v2"`: 6 factors; `"v3"` since 2026-10-04; `"v4"`: 3 factors) |
 | guards | lines before 2026-10-03 | `v` added (2026-10-03) |
 
+assignments **v2** (redesign M5b.1): the experiments engine v2 — a stratum and design id per main session,
+eligible or not; see *experiments/assignments.jsonl*. Readers keep reading v0 and v1 rows.
+
 ## Join keys
 
 - **Session tree.** `meter.sessionId` is the pi session id. A child (subagent) session
@@ -59,7 +63,7 @@ field does not bump it). `pi-analyse` reports the versions per log under *Data q
   (`= meter.sessionId` of the child's lines), `parentSessionId` the spawner's. Every other
   outcome event joins the spawn by `taskId` (the subagent's name).
 - **Arm.** `assignments.sessionId` is a root session; its `arm` holds for that session
-  and every descendant from the assignment's `ts` on. `meter.arm`, `outcomes.arm` (on
+  and every descendant from the assignment's `ts` on (v2: only an eligible row has one). `meter.arm`, `outcomes.arm` (on
   spawn: the parent session's arm) and `guards.arm` are copies of it at write time.
 - **Quota.** `q5h`/`q7d` are the whole Anthropic account's utilisation (pi and every other
   client) in 1 % steps; pi's share = the rise seen in pi's own lines over the rise of the
@@ -286,6 +290,8 @@ unknown. `startEffort`: `workerEffort`, except `qwen chain → Sonnet: …` → 
 
 ## experiments/assignments.jsonl
 
+Rows of the v1 engine (v0, v1):
+
 | field | type | required | meaning |
 | --- | --- | --- | --- |
 | `v` | int | yes (v ≥ 1) | schema version |
@@ -312,9 +318,41 @@ separate guard/kill-switch figures) and never pools them.
 **v4** — 3 factors `warmPolicy`, `mainCacheTtl`, `maskOnCold` (the full 2^3, 8 arms,
 3-character ids, baseline `---`). `foldHint` went with infinite-context's fold hint;
 `freshOnCold` and `delegationRule` are the task router's levers and no factors any more.
-New assignments carry `design: "v4"`; resumed v1, v2 and v3 sessions keep their rows, arms
-and flags, and the experiments extension balances arms over v4 rows only. A row without
+The v1 engine's last assignments carried `design: "v4"`; resumed v1–v4 sessions keep their rows, arms
+and flags (the v2 engine never counts them in its blocks). A row without
 `design` whose arm has 3 characters counts as v4.
+
+### Assignments v2
+
+The experiments engine v2 (redesign M5b.1, §5.4, §7.3) writes one `v: 2` row per main
+session at its first `session_start`, eligible or not; children get none (they inherit their
+parent's assignment). A resumed or reloaded session reuses its row (the session's custom entry
+`pi-economics:assignment`); a forked one is a new session with a row of its own. A model switch
+later in the session changes nothing (intention to treat).
+
+| field | type | required | meaning |
+| --- | --- | --- | --- |
+| `v` | `2` | yes | schema version |
+| `ts` | ISO time | yes | assignment time (session start) |
+| `sessionId` | string | yes | main session |
+| `design` | string | eligible; with `stratum` | the stratum's design id: 12 hex of the design's content (levers, levels, generators) |
+| `mode` | `off` \| `explore` \| `exploit` | yes | selection mode |
+| `eligible` | boolean | yes | the session takes part: a main whose model at session start matched a stratum, `mode` not `off`, an arm left enabled |
+| `stratum` | string | eligible | the first stratum (setting `strata`, default: one per billing class) the model matched |
+| `arm` | string | eligible only | one bit per factor in factor order, `1` = the high level (`""` for a stratum without factors) |
+| `factors` | object | eligible only | factor name → `{ "lever": "<target>.<name>", "assigned": <level> }` |
+| `parentSessionId` | string | no | not written by the engine (children have no row) |
+
+Every row with an `arm` names its `design`: a design id never looks like `"v4"`, so a
+3-character arm is never taken for design v4. Explore draws permuted blocks per design and
+stratum (`experiments/blocks.json`); exploit samples the design's posterior in its stratum.
+
+```jsonl
+{"v":2,"ts":"2026-11-13T09:00:00.000Z","sessionId":"s-main","design":"b4d458675108","mode":"explore","eligible":true,"stratum":"api","arm":"010","factors":{"warmPolicy":{"lever":"cache-lifecycle.warmPolicy","assigned":"native"},"mainCacheTtl":{"lever":"cache-lifecycle.mainCacheTtl","assigned":"1h"},"maskOnCold":{"lever":"cache-lifecycle.maskOnCold","assigned":"off"}}}
+{"v":2,"ts":"2026-11-13T09:30:00.000Z","sessionId":"s-local","design":"0613569db02a","mode":"explore","eligible":true,"stratum":"local","arm":"","factors":{}}
+{"v":2,"ts":"2026-11-13T10:00:00.000Z","sessionId":"s-off","design":"b4d458675108","mode":"off","eligible":false,"stratum":"api"}
+{"v":2,"ts":"2026-11-13T11:00:00.000Z","sessionId":"s-other","mode":"explore","eligible":false}
+```
 
 ## guards/events.jsonl
 
@@ -324,14 +362,21 @@ and flags, and the experiments extension balances arms over v4 rows only. A row 
 | `ts` | ISO time | yes | event time |
 | `sessionId` | string | yes | session |
 | `arm` | string | when the root has an assignment | the session's arm |
+| `design` | string | with an arm of the v2 engine | the arm's design id (experiments' corrections and ratings) |
 | `event` | `correction` \| `rating` \| `peek-after-mask` | yes | user correction right after an assistant turn (regex), `/rate N`, `context_peek` after cache-lifecycle masked tool output |
 | `value` | int 1–5 | `rating` | the rating |
 
 ## experiments/state.json
 
 `{ "disabled": string[], "posterior": { <arm>: { "mean": −$/active h, "sd": number } }, "reasons": { <arm>: string } }`.
-Disabled arms stay disabled until the file is edited. The experiments extension reads
-it at session start (exploit mode samples from `posterior`, never assigns `disabled`).
+Disabled arms stay disabled until the file is edited. These keys belong to the v1
+engine's designs (arm ids like `-+-`). The v2 engine reads `designs.<design id>.<stratum>`
+= `{ "posterior": { <arm>: { "mean", "sd" } }, "disabled": [<arm>] }` at session start
+(exploit samples from `posterior`; no arm in `disabled` is assigned; with every arm disabled
+the session is ineligible); nothing writes that key yet (M5c).
+
+`experiments/blocks.json`: `{ "<design id>/<stratum>": { "queue": [<arm>] } }`, the arms
+left in each explore block (refilled with a shuffle of the enabled arms when empty).
 
 ## Analysis (`pi-analyse`)
 

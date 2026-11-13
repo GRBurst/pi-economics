@@ -4,7 +4,7 @@ import { armStats, isError, MIN_HOURS, quotaAttribution, rootUnits, type ArmStat
 import { bootstrapRatio, mulberry32, normal, ratio } from "../stats.ts";
 import { billingOf, plansAbsent, type Billing, type Plans } from "../plans.ts";
 import { byTs, isLine } from "./logs.ts";
-import { armInfo, DESIGNS, designOf, rowsBySession } from "./designs.ts";
+import { armInfo, DESIGNS, designOf, designOfLine, rowsBySession, v2Levels } from "./designs.ts";
 
 /**
  * What a stratum's effects are measured in, per active hour. token-meter keeps its own copy of experiments' `Objective` literal set (core/settings.ts, M5a):
@@ -52,8 +52,8 @@ export function pBest(post: Array<{ arm: string; mean: number; sd: number }>): n
   return wins.map((w) => w / DRAWS);
 }
 
-/** The design of a meter line: its root session's assignment row names it, else the arm id's length (v1/v2/v4). v2 and v3 share arm ids, so the session decides. */
-const designOfLine = (by: Map<string, any>) => (l: any): string => designOf(String(l.arm ?? ""), by.get(l.parentSessionId ?? l.sessionId) ?? by.get(l.sessionId));
+/** The design of a meter line: its own (v2 engine), else its root session's assignment row's, else the arm id's length (v1/v2/v4). v2 and v3 share arm ids, so the session decides. */
+const lineDesignOf = (by: Map<string, any>) => (l: any): string => designOfLine(l, by.get(l.parentSessionId ?? l.sessionId) ?? by.get(l.sessionId));
 
 const plainObject = (v: unknown): v is Record<string, any> => v !== null && typeof v === "object" && !Array.isArray(v);
 
@@ -106,14 +106,18 @@ function strataOf(ls: any[], plans: Plans): string {
   return main ? billingOfLine(main, plans) : "api";
 }
 
-/** Every root session of the design's lines as a Unit (all hours; the estimate excludes short ones, the balance table counts them). */
-function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<string, string> }>, plans: Plans, quota: ReturnType<typeof quotaAttribution>, expSettings: any): { units: Unit[]; objectives: Map<string, Objective> } {
+/**
+ * Every root session of the design's lines as a Unit (all hours; the estimate excludes short ones, the balance table counts them). Its stratum is
+ * the one its assignment row records (v2 engine: a named stratum), else the billing class of its main's first request (strataOf).
+ */
+function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<string, string> }>, plans: Plans, quota: ReturnType<typeof quotaAttribution>, expSettings: any, rows: Map<string, any>): { units: Unit[]; objectives: Map<string, Objective> } {
   const byRoot = new Map<string, any[]>();
   for (const l of [...dl].sort(byTs)) { const r = l.parentSessionId ?? l.sessionId; (byRoot.get(r) ?? byRoot.set(r, []).get(r)!).push(l); }
   const objectives = new Map<string, Objective>();
   const units = rootUnits(dl, quota).map((r): Unit => {
     const ls = byRoot.get(r.root) ?? [];
-    const stratum = strataOf(ls, plans);
+    const recorded = rows.get(r.root)?.stratum;
+    const stratum = typeof recorded === "string" && recorded ? recorded : strataOf(ls, plans);
     if (!objectives.has(stratum)) objectives.set(stratum, objectiveFor(stratum, plans, expSettings));
     return { sessionId: r.root, design, stratum, arm: r.arm, levels: info.get(r.arm)?.flags ?? {}, hours: r.hours, ...objectiveOf(objectives.get(stratum)!, r, ls, plans) };
   });
@@ -146,24 +150,28 @@ function stratumResult(design: string, stratum: string, objective: Objective, un
 
 export function experiment(meter: any[], rows: any[], expSettings: any, plans?: Plans): DesignResult[] {
   const armed = meter.filter((l) => isLine(l) && typeof l.sessionId === "string" && typeof l.arm === "string" && l.arm);
-  const info = armInfo([...new Set(armed.map((l) => l.arm as string))], rows);
-  const flags = Object.fromEntries([...info].map(([a, i]) => [a, i.flags]));
   const quota = quotaAttribution(meter.filter((l) => isLine(l) && typeof l.sessionId === "string")); // account-wide: over every root, armed or not
-  const lineDesign = designOfLine(rowsBySession(rows));
+  const by = rowsBySession(rows);
+  const lineDesign = lineDesignOf(by);
   const rowArms = (design: string): string[] => rows.filter((r) => typeof r?.arm === "string" && designOf(r.arm, r) === design).map((r) => r.arm as string);
   return [...new Set([...armed.map(lineDesign), ...rows.filter((r) => typeof r?.arm === "string").map((r) => designOf(r.arm, r))])].sort().map((design) => {
     const dl = armed.filter((l) => lineDesign(l) === design);
     const arms = [...new Set([...dl.map((l) => l.arm as string), ...rowArms(design)])];
+    // Per design: arm names repeat across designs (v2 and v3; every v2-engine design names its arms by bits).
+    const info = armInfo(arms, rows.filter((r) => typeof r?.arm === "string" && designOf(r.arm, r) === design));
+    const flags = Object.fromEntries([...info].map(([a, i]) => [a, i.flags]));
     const known = DESIGNS[design];
+    const v2 = v2Levels(rows, design); // a v2-engine design: the levels its rows assigned, low first
+    const isV2 = v2.size > 0;
     const factors = known ? known.map(([n]) => n) : [...new Set(arms.flatMap((a) => Object.keys(info.get(a)!.flags)))];
-    const levels = (f: string): [string, string] => known?.find(([n]) => n === f)?.[1] ?? ([...new Set(arms.map((a) => info.get(a)!.flags[f]))].sort().concat(["", ""]).slice(0, 2) as [string, string]);
-    const { units, objectives } = unitsOf(dl, design, info, plans ?? {}, quota, expSettings);
+    const levels = (f: string): [string, string] => known?.find(([n]) => n === f)?.[1] ?? v2.get(f) ?? ([...new Set(arms.map((a) => info.get(a)!.flags[f]))].sort().concat(["", ""]).slice(0, 2) as [string, string]);
+    const { units, objectives } = unitsOf(dl, design, info, plans ?? {}, quota, expSettings, by);
     const names = [...objectives.keys()].sort((x, y) => (STRATA_ORDER.indexOf(x) + 1 || 99) - (STRATA_ORDER.indexOf(y) + 1 || 99) || (x < y ? -1 : 1));
     const strata = names.map((s) => stratumResult(design, s, objectives.get(s)!, units.filter((u) => u.stratum === s), factors, levels));
     const stats = armStats(dl, { flags, quota });
     const post = stats.filter((s) => s.units >= 2).map((s) => ({ arm: s.arm, mean: -s.costPerHour, sd: s.sd }));
     const pb = pBest(post);
     const wanted = typeof expSettings?.baseline === "string" && expSettings.baseline.length === factors.length ? expSettings.baseline : undefined;
-    return { design, factors, baseline: wanted ?? "-".repeat(factors.length), units: units.filter((u) => u.hours >= MIN_HOURS).length, arms: stats, strata, plansAbsent: plansAbsent(plans), posterior: post.map((p, i) => ({ ...p, pBest: pb[i] })) };
+    return { design, factors, baseline: isV2 ? "0".repeat(factors.length) : wanted ?? "-".repeat(factors.length), units: units.filter((u) => u.hours >= MIN_HOURS).length, arms: stats, strata, plansAbsent: plansAbsent(plans), posterior: post.map((p, i) => ({ ...p, pBest: pb[i] })) };
   });
 }

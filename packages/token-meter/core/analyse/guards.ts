@@ -1,6 +1,6 @@
 // (d) guards: signals per arm and the kill switch.
 import { acceptance, killSwitch, signals, type Limits } from "../guards.ts";
-import { designOf } from "./designs.ts";
+import { designOfLine } from "./designs.ts";
 import { type DesignResult } from "./experiment.ts";
 
 export type GuardsSection = { limits: Limits; baselines: Record<string, string>; kill: Record<string, string>;
@@ -11,7 +11,7 @@ export function guards(designs: DesignResult[], outcomes: any[], events: any[], 
   // Own defaults for experiments' `guards` (a package cannot import another's settings).
   const limits: Limits = { minSessions: g.minSessions ?? 10, threshold: g.threshold ?? 0.2, peekThreshold: g.peekThreshold ?? 1, correctionThreshold: g.correctionThreshold ?? 1, ratingThreshold: g.ratingThreshold ?? 0.5 };
   // v2 and v3 share arm ids: every event and verdict goes to the design of its session (spawn events: the parent's) before it is keyed by arm.
-  const designOfEvent = (e: any): string => designOf(String(e?.arm ?? ""), rows.get(e?.sessionId) ?? rows.get(e?.parentSessionId));
+  const designOfEvent = (e: any): string => designOfLine(e, rows.get(e?.sessionId) ?? rows.get(e?.parentSessionId));
   const spawnDesign = new Map(outcomes.filter((e) => e?.event === "spawn" && typeof e.taskId === "string").map((e) => [e.taskId as string, designOfEvent({ ...e, sessionId: undefined })]));
   const per = designs.map((d) => {
     const sig = signals(events.filter((e) => designOfEvent(e) === d.design));

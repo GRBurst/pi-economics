@@ -96,10 +96,20 @@ const OUTCOMES: Rule[] = [
   ...every({ action: oneOf("skeleton", "approve", "trigger", "amend", "reject") }, "plan", (l) => l.event === "plan"),
   ...optional({ trigger: oneOf(...TRIGGERS), nTasks: int1, reviewId: str, full: bool }, "plan", (l) => l.event === "plan"),
 ];
+/** assignments v2 (the experiments engine of M5b.1, design §5.4); before it the v1 engine's rows (no v, or v 1). */
+const isV2 = (l: any): boolean => Number.isInteger(l.v) && l.v >= 2;
+/** A row whose session has an arm: every v1-engine row, an eligible v2 row. */
+const armed = (l: any): boolean => !isV2(l) || l.eligible === true;
 const ASSIGNMENTS: Rule[] = [
   versioned,
-  ...every({ ts: time, sessionId: str, arm: str, mode: str, flags: obj }, "every assignment"),
-  ...every({ design: str }, "design of a v ≥ 1 assignment (v1 vs v2 arms)", (l) => Number.isInteger(l.v) && l.v >= 1),
+  ...every({ ts: time, sessionId: str, mode: str }, "every assignment"),
+  ...every({ arm: str, flags: obj }, "a v1 engine's assignment (v < 2)", (l) => !isV2(l)),
+  ...every({ design: str }, "design of a v1 assignment (v1 vs v2 arms)", (l) => Number.isInteger(l.v) && l.v === 1),
+  ...every({ mode: oneOf("off", "explore", "exploit"), eligible: bool }, "assignments v2", isV2),
+  // A stratum without factors has one arm, named "" (no bits).
+  ...every({ design: str, stratum: str, arm: (v) => typeof v === "string", factors: obj }, "an eligible v2 assignment", (l) => isV2(l) && l.eligible === true),
+  ...every({ arm: (v) => v === undefined, factors: (v) => v === undefined }, "an ineligible v2 assignment has neither arm nor factors", (l) => isV2(l) && l.eligible === false),
+  ...optional({ design: str, stratum: str, parentSessionId: str }, "assignments v2", isV2),
 ];
 const GUARDS: Rule[] = [
   versioned,
@@ -115,7 +125,7 @@ export function check(logs: Logs, all: Logs = logs): Problem[] {
   for (const e of all.outcomes) if (e?.event === "spawn" && str(e.sessionId) && str(e.parentSessionId)) parent.set(e.sessionId, e.parentSessionId);
   for (const l of all.meter) if (str(l?.sessionId) && str(l.parentSessionId)) parent.set(l.sessionId, l.parentSessionId);
   const assigned = new Map<string, number>();
-  for (const r of all.assignments) if (str(r?.sessionId) && time(r.ts) && !assigned.has(r.sessionId)) assigned.set(r.sessionId, Date.parse(r.ts));
+  for (const r of all.assignments) if (str(r?.sessionId) && time(r.ts) && armed(r) && !assigned.has(r.sessionId)) assigned.set(r.sessionId, Date.parse(r.ts));
   /** An arm is due when the session or an ancestor was assigned one at or before `ts`. */
   const armDue = (sid: unknown, ts: unknown): boolean => {
     if (!str(sid) || !time(ts)) return false;
@@ -128,7 +138,7 @@ export function check(logs: Logs, all: Logs = logs): Problem[] {
     return false;
   };
   const children = new Set(all.outcomes.filter((e) => e?.event === "spawn" && str(e.sessionId)).map((e) => e.sessionId));
-  const arm: Rule = { field: "arm", why: "the session's root has an experiment assignment", ok: str };
+  const arm: Rule = { field: "arm", why: "the session's root has an experiment assignment", ok: (v) => typeof v === "string" }; // "" = the one arm of a design without factors
   const rules: Record<LogName, Rule[]> = {
     meter: [...METER, { field: "parentSessionId", why: "a spawn event names this session as a child", when: (l) => children.has(l.sessionId), ok: str },
       { ...arm, when: (l) => armDue(l.parentSessionId ?? l.sessionId, l.ts) || armDue(l.sessionId, l.ts) }],

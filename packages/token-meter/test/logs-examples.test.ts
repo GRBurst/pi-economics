@@ -144,3 +144,19 @@ test("LOGS.md: the budget example lines pass the contract and give the window th
   assert.deepEqual([w.peak, w.timeToCapMs, w.lockoutMs, w.r429, w.requests], [100, 3.5 * 3_600_000, 1.5 * 3_600_000, 1, 2]);
   for (const term of ["cash $", "API-eq $", "est. points", "R²", "$/point", "not observable", "NNLS", "in whole percent"]) assert.ok(md.includes(term), `LOGS.md does not explain ${term}`);
 });
+
+// M5b.1 T5b1.9: the experiments engine's assignments v2 (design §5.4), one example per kind of row, each passing the contract.
+test("LOGS.md: assignments v2 examples (eligible, ineligible with and without a stratum), each passing the contract", () => {
+  const rows = parsed("### Assignments v2");
+  for (const [i, r] of rows.entries()) assert.equal(r.v, 2, `example row ${i + 1}: v`);
+  const eligible = rows.filter((r) => r.eligible === true);
+  assert.ok(eligible.length > 0, "no eligible row");
+  assert.ok(rows.some((r) => r.eligible === false && typeof r.stratum === "string"), "no ineligible row with a stratum (mode off)");
+  assert.ok(rows.some((r) => r.eligible === false && !("stratum" in r)), "no ineligible row without a stratum (no stratum matched)");
+  for (const r of eligible) {
+    assert.equal(Object.keys(r.factors).length, r.arm.length, `${r.sessionId}: one bit of the arm per factor`);
+    assert.match(r.design, /^[0-9a-f]{12}$/, `${r.sessionId}: a design id`);
+  }
+  const ps = check({ meter: [], outcomes: [], assignments: rows, guards: [] } as Parameters<typeof check>[0]);
+  assert.deepEqual(ps, [], renderProblems(ps));
+});
