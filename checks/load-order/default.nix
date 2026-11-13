@@ -3,13 +3,16 @@
 # agent directory Home Manager renders with every component on, pi-setup's
 # actor and a probe (./probe) as registry entries, each home.file under it
 # linked as Home Manager links it; besides, the probe as an extension
-# auto-discovered in <agentDir>/extensions (named to sort first), as an
-# installed package, and as an entry the owner listed in settings.json's
+# auto-discovered in <agentDir>/extensions (named to sort first), as two
+# installed packages, and as an entry the owner listed in settings.json's
 # `extensions` before the activation entry ran (after `-builtin:mcp`). Then
 # the settings script, as the activation entry runs it, and `pi -p x`.
 # Asserted from pi's PI_TIMING=1 factory lines (pi 1.4's startup timings, as
 # checks/pi-package reads them: the extensions in load order) and from the
 # probes, each of which records which guarded component had started before it.
+# The packages load in the order of `packages` (README's "Load order"):
+# pkg-ext2, installed first, before pkg-ext; after the list is reversed, a
+# further `pi -p x` loads pkg-ext first.
 # Then a child: the actor's settings file lists the module's childExtensions,
 # as pi-setup's actor module writes it from its economics bridge; a second
 # `pi -p x`, against a fake model, spawns one child through the actor, and
@@ -60,12 +63,15 @@ in
       exit 1
     }
     ${links}
-    mkdir -p "$agent/extensions/aa-disc" mine pkg-ext/extensions
+    mkdir -p "$agent/extensions/aa-disc" mine
     cp ${./probe/index.ts} "$agent/extensions/aa-disc/index.ts"
     cp ${./probe/index.ts} mine/index.ts
-    cp ${./probe/index.ts} pkg-ext/extensions/index.ts
-    printf '{"name":"pkg-ext","version":"0.0.0","pi":{"extensions":["./extensions/index.ts"]}}\n' >pkg-ext/package.json
-    pi install ./pkg-ext >install.log 2>&1 || { cat install.log >&2; fail "pi install failed"; }
+    for p in pkg-ext2 pkg-ext; do
+      mkdir -p $p/extensions
+      cp ${./probe/index.ts} $p/extensions/index.ts
+      printf '{"name":"%s","version":"0.0.0","pi":{"extensions":["./extensions/index.ts"]}}\n' $p >$p/package.json
+      pi install ./$p >install.log 2>&1 || { cat install.log >&2; fail "pi install $p failed"; }
+    done
     jq --arg mine "$PWD/mine" '.extensions = ["-builtin:mcp", $mine]' "$agent/settings.json" >s.json
     mv s.json "$agent/settings.json"
     ${lib.getExe pe.piSettings.package} "$agent/settings.json"
@@ -91,22 +97,34 @@ in
       [ "$p" -gt "$last" ] || fail "the component $n loaded out of the order ${toString components}"
       last=$p
     done
-    for o in "$agent/pi-economics/extensions/actor-subagents/" "$agent/pi-economics/extensions/a-reg/" "$agent/extensions/aa-disc/" "$PWD/mine/" "$PWD/pkg-ext/"; do
+    for o in "$agent/pi-economics/extensions/actor-subagents/" "$agent/pi-economics/extensions/a-reg/" "$agent/extensions/aa-disc/" "$PWD/mine/" "$PWD/pkg-ext/" "$PWD/pkg-ext2/"; do
       p=$(pos "$o") || true
       [ -n "$p" ] || fail "$o did not load"
     done
     others=$(grep -vcF "$agent/pi-economics/extensions/" order.txt || true)
-    [ "$others" -ge 3 ] || fail "expected the auto-discovered, the owner's and the package's probe besides the registry"
+    [ "$others" -ge 4 ] || fail "expected the auto-discovered, the owner's and the packages' probes besides the registry"
+    [ "$(pos "$PWD/pkg-ext2/")" -lt "$(pos "$PWD/pkg-ext/")" ] \
+      || fail "the packages did not load in the order of packages: $(jq -c .packages "$agent/settings.json")"
     first=$(grep -nvF -e "$agent/pi-economics/extensions/experiments/" -e "$agent/pi-economics/extensions/token-meter/" \
       -e "$agent/pi-economics/extensions/cache-lifecycle/" -e "$agent/pi-economics/extensions/infinite-context/" order.txt | head -1 | cut -d: -f1)
     [ "$first" -gt "$last" ] || fail "$(sed -n "''${first}p" order.txt) loaded before a pi-economics component"
 
     # Every probe's session_start ran after the guarded components'.
-    [ "$(wc -l <probe.jsonl)" = 4 ] || fail "expected four probe records"
+    [ "$(wc -l <probe.jsonl)" = 5 ] || fail "expected five probe records"
     jq -se 'all(.claimed == ["experiments", "token-meter", "cache-lifecycle"])' probe.jsonl >/dev/null \
       || fail "a probe started before a guarded component: $(cat probe.jsonl)"
     echo "load order:"
     cat order.txt
+
+    # The packages reversed.
+    jq '.packages |= reverse' "$agent/settings.json" >s.json
+    mv s.json "$agent/settings.json"
+    pi -p x --no-session </dev/null >run.out 2>run.err || true
+    cat run.out run.err >run.all
+    grep -F ' factory: ' run.all | sed 's/^ *//; s/ factory: .*//' | grep -v '^builtin:' >order.txt
+    a=$(pos "$PWD/pkg-ext/") && b=$(pos "$PWD/pkg-ext2/") && [ -n "$a" ] && [ -n "$b" ] \
+      || fail "reversed packages: a package did not load"
+    [ "$a" -lt "$b" ] || fail "reversed packages: pkg-ext2 still loaded first: $(jq -c .packages "$agent/settings.json")"
 
     # The child.
     mkdir -p "$agent/actor-subagents"
