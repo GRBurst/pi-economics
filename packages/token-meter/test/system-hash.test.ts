@@ -19,7 +19,7 @@ test("systemHash: 16 hex digits, a function of the system state only (user and a
   assert.equal(systemHash(undefined), undefined);
 });
 
-test("systemHash: changes with the prompt, a section, the tool list or a tool's declaration", () => {
+test("systemHash: changes with the prompt, a section, the tool list or a tool's declaration (description, parameters)", () => {
   const h = systemHash([S0, user]);
   const changed = [
     [sys({ content: "You are pi!", sections: { a: "A", b: "B" }, toolsAdded: [tool("read"), tool("bash")] })],
@@ -30,6 +30,7 @@ test("systemHash: changes with the prompt, a section, the tool list or a tool's 
     [S0, user, sys({ content: "", toolsAdded: [tool("grep")] })],
     [S0, user, sys({ content: "", toolsRemoved: [{ name: "bash" }] })],
     [S0, user, sys({ content: "", toolsAdded: [tool("read", "new text")] })],
+    [S0, user, sys({ content: "", toolsAdded: [{ ...tool("read"), parameters: { type: "object", properties: { path: { type: "string" } } } }] })],
   ];
   const hashes = changed.map((ms) => systemHash(ms));
   for (const [i, x] of hashes.entries()) assert.notEqual(x, h, String(i));
