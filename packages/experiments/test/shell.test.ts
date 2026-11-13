@@ -303,3 +303,17 @@ test("T5b1.6 a fork (the branch's entry names another session) is a new unit; a 
   assert.deepEqual(h.rows().map((r) => [r.sessionId, r.eligible]), [["s1", true], ["s2", true], ["s3", true]]);
   assert.deepEqual(h.entries.map((e) => (e.data as Assigned).sessionId), ["s1", "s2", "s3"]);
 });
+
+test("T5b1.8 model_select keeps the unit (ITT, §7.3): no new draw, row, entry or Assigned; a reload after the switch keeps the start stratum", () => {
+  const h = harness({}, { plans: { anthropic: { billing: "subscription", windows: ["5h"] } } });
+  h.start("s1"); // openai: the api stratum
+  const before = { rows: h.rows(), entries: [...h.entries], published: [...h.published], arm: h.api().armFor("s1") };
+  const claude = { provider: "anthropic", id: "claude-opus-4" };
+  h.fire("model_select", { type: "model_select", model: claude, previousModel: { provider: "openai", id: "gpt-5" }, source: "set" }, h.ctxOf("s1", { model: claude }));
+  h.start("s1", { reason: "reload", model: claude, branch: before.entries });
+  assert.deepEqual(h.rows(), before.rows);
+  assert.deepEqual(h.entries, before.entries);
+  assert.deepEqual(h.published, [...before.published, before.published[0]], "the reload republishes the same Assigned");
+  assert.deepEqual(h.api().armFor("s1"), before.arm);
+  assert.equal(before.rows[0].stratum, "api");
+});
