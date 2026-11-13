@@ -369,6 +369,7 @@ points into `src`.
 | `bins-smoke` | `npm install -g <dir>` offline, both CLIs run through an explicit node, the shipped shebang, the `node_modules` failure the README states (AC9) |
 | `runtime-guard-copies`, `iface-subagents-runtime-guard` | the three `runtime-guard.ts` copies equal token-meter's (AC8), whose claim channel line stands verbatim in the `pi-task-router` input's copy too; `SubagentsApiV1` satisfies their `SubagentsApiShape` |
 | `nix-route-smoke` | the Home Manager route's agent directory under real pi: every extension loads, no duplicate or missing-actor warning, `task_verdict` active (pi-setup's actor and the router as registry entries from the `pi-setup` and `pi-task-router` inputs' packages; the router's claim and the three copies' share one channel), experiments' settings file (AC15) |
+| `identity-shim-probe` | the pinned pi still needs cache-lifecycle's `identityShim`: one offline session (pi-ai's faux provider) without the shim loses its warming run with "conversation context changed" once pi rebuilds a context that held a custom message, one with the shim keeps it; fails when a pi update fixes that (the shim may then go) |
 
 How to run them: `AGENTS.md`, "Commands".
 

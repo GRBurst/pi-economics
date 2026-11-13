@@ -1,4 +1,5 @@
-// Identity shim: workaround for a pi bug (seen in pi 1.0.0; drop once fixed upstream).
+// Identity shim: workaround for a pi bug (seen in pi 1.0.0, still in pi 1.4.0 by the check
+// identity-shim-probe; drop once fixed upstream).
 //
 // pi's CacheWarmer keeps a warm run only while every object in
 // agent.state.messages is identical (===) to the one sent with the request.

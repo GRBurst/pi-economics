@@ -178,10 +178,11 @@ of the meter yourself. Afterwards: `pi-bench judge --all`, then
   left with that tier. The bench runs use pi's native retry (100 × 2 s) via a
   per-run `.pi/settings.json`.
 - **Patches are local and version-locked**: all third-party changes ride on the
-  pinned input revs; an input bump re-applies the patches and the patch checks fail loudly on drift. Two
-  upstream issue drafts are written, not filed: pi 1.0.0's `CacheWarmer`
-  identity check dies on custom messages, and `sendCustomMessage(triggerTurn)`
-  skips the prompt/loadout path.
+  pinned input revs; an input bump re-applies the patches and the patch
+  checks fail loudly on drift. Two upstream issue drafts are written, not
+  filed: pi 1.0.0's `CacheWarmer` identity check dies on custom messages (still
+  so in pi 1.4.0, check `identity-shim-probe`), and
+  `sendCustomMessage(triggerTurn)` skips the prompt/loadout path.
 - **Bench**: quality evidence comes from two blind judges (Opus 5.5 high,
   GPT-5.6-sol high) against a reference diff, plus the user calibration set;
   the orchestrator is Opus-only, and the per-run agent dirs do not share
