@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { allocate, apiUsd } from "../core/analyse/units.ts";
+import { allocate, apiUsd, PI_PRICES_1H } from "../core/analyse/units.ts";
 import { world } from "./world.ts";
 
 const lines = (): any[] => world().meter;
@@ -18,6 +18,12 @@ test("apiUsd: every line of the world fixture is worth its costUsd (until M2a pr
 test("apiUsd: a line without a finite costUsd is worth 0", () => {
   for (const costUsd of [undefined, null, "1", NaN, Infinity]) assert.equal(apiUsd({ costUsd }), 0);
   assert.equal(apiUsd({}), 0);
+});
+
+test("PI_PRICES_1H (T2a.0): pi's costUsd already charges 1 h cache writes at 2 × input, so a line with cacheWrite1h is worth its costUsd, not more", () => {
+  assert.equal(PI_PRICES_1H, true);
+  const l = { input: 2, cacheRead: 1000, cacheWrite: 500, cacheWrite1h: 500, output: 10, costUsd: 0.123 };
+  assert.equal(apiUsd(l), 0.123);
 });
 
 test("allocate: the token components of a line add up to apiUsd(line)", () => {
