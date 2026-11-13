@@ -14,17 +14,18 @@ export type ProfileTier = { kind: string; tier: string; tasks: number; accepted:
   usd: number; perAccepted: number; escalations: number; checks: { n: number; passed: number }; passRate: number };
 /** A group of tasks: acceptance and $ per accepted task (child subtree), each with a bootstrap CI when there are enough judged tasks. */
 export type Row = { tasks: number; judged: number; accepted: number; acceptance: CI; perAccepted: CI };
-/** The randomized tasks that ran on one model (per protocol: not a randomized comparison). */
+/** The tasks of a group that ran on one model (descriptive: which model ran a task is not random, so no row of this kind is a randomized comparison). */
 export type RandomRow = Row & { tier: string };
 /**
- * The router's randomization (B14), over the pool of its randomized profiles (`kinds`) and base tier qwen. `randomizedControl` = the router-assigned
- * tasks that ran as planned, on the `reference` model; `preRandomization` = lines from before the randomization (no `assigned`); `fallback` =
- * router-assigned tasks that ran on another model; `itt` = every task it randomized (`assigned: "random"`), by assignment, whatever ran.
+ * The router's randomization (B14), over the pool of its randomized profiles (`kinds`) and base tier qwen. `routerAssigned` = every task the router
+ * assigned itself (`assigned: "router"`, not randomized), whatever model ran it: the comparator of the ITT row, because which member runs a task
+ * (a busy Qwen, an outage) is not random; `routerAssignedBy` = the same tasks by the model that ran them, descriptive; `preRandomization` = lines
+ * from before the randomization (no `assigned`); `itt` = every task it randomized (`assigned: "random"`), by assignment, whatever ran.
  */
-export type ControlRows = { randomizedControl: Row; preRandomization: Row; fallback: Row; itt?: Row };
+export type ControlRows = { routerAssigned: Row; routerAssignedBy: RandomRow[]; preRandomization: Row; itt?: Row };
 /** A lever the router randomizes itself (Q4), one level of it: the routed tasks that carry that level on their spawn line (`factors`). */
 export type RouterFactor = { factor: string; level: string; row: Row };
-export type Randomized = { kinds: string[]; reference?: string; rows: RandomRow[]; otherBase: number; control: ControlRows;
+export type Randomized = { kinds: string[]; rows: RandomRow[]; otherBase: number; control: ControlRows;
   /** Why the ITT row is not measurable: no spawn carries `assigned`. */
   ittNote?: string };
 /**
@@ -217,9 +218,10 @@ function agreementOf(pairs: Array<[boolean, boolean]>, withField: number): Agree
 }
 
 /**
- * The router's randomization of qwen-based spawns (B14). The reference model is the one most router-assigned base-qwen tasks of the randomized
- * profiles ran on (a tie goes to the smaller name); one that ran on another is a fallback run, not a control. A task counts under its profile
- * only if the router randomized some task of that profile.
+ * The router's randomization of qwen-based spawns (B14). The control is every router-assigned base-qwen task of the randomized profiles, pooled:
+ * an ITT contrast does not split it by what ran (a fallback member runs a task when the Qwen is busy, which is not random: that is the router's
+ * own assignment, and `workerMember`/`waitMs` on its spawn line would say so). A task counts under its profile only if the router randomized some
+ * task of that profile.
  */
 function randomization(routed: readonly TaskRow[], order: (a: string, b: string) => number): Randomized {
   const task = (r: TaskRow) => ({ verdict: r.verdict, cost: r.cost });
@@ -227,16 +229,15 @@ function randomization(routed: readonly TaskRow[], order: (a: string, b: string)
   const kinds = [...new Set(random.map((r) => r.kind))].sort();
   const pool = routed.filter((r) => r.planned === "qwen" && kinds.includes(r.kind));
   const assigned = pool.filter((r) => r.spawn.assigned === "router" && r.spawn.routeBase === "qwen");
-  const ran = countBy(assigned, (r) => r.executed);
-  const reference = Object.entries(ran).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0];
+  const byModel = (rs: readonly TaskRow[]): RandomRow[] => [...new Set(rs.map((r) => r.executed))].sort(order).map((tier) => ({ tier, ...groupRow(rs.filter((r) => r.executed === tier).map(task)) }));
   const hasAssigned = routed.some((r) => r.spawn.assigned !== undefined);
   return {
-    kinds, reference, otherBase: routed.filter((r) => r.spawn.assigned === "random" && r.spawn.routeBase !== "qwen").length,
-    rows: [...new Set(random.map((r) => r.executed))].sort(order).map((tier) => ({ tier, ...groupRow(random.filter((r) => r.executed === tier).map(task)) })),
+    kinds, otherBase: routed.filter((r) => r.spawn.assigned === "random" && r.spawn.routeBase !== "qwen").length,
+    rows: byModel(random),
     control: {
-      randomizedControl: groupRow(assigned.filter((r) => r.executed === reference).map(task)),
+      routerAssigned: groupRow(assigned.map(task)),
+      routerAssignedBy: byModel(assigned),
       preRandomization: groupRow(pool.filter((r) => r.spawn.assigned === undefined).map(task)),
-      fallback: groupRow(assigned.filter((r) => r.executed !== reference).map(task)),
       ...(random.length ? { itt: groupRow(random.map(task)) } : {}),
     },
     ...(hasAssigned ? {} : { ittNote: "no spawn carries `assigned`: the log has no record of the router's randomization" }),

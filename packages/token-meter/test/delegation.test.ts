@@ -276,24 +276,70 @@ function randomLogs(): Logs {
 }
 const rnd = (d: ReturnType<typeof analyse>["delegation"], tier: string) => d.randomized.rows.find((r) => r.tier === tier)!;
 
-// B14: the router randomizes a share of the spawns it would send to qwen (`assigned: "random"`, `routeBase` the tier it computed). Its remainder, the
-// router-assigned base-qwen tasks that ran as planned, is the randomization's control; lines from before the randomization (no `assigned`) and
-// router-assigned tasks that ran on another model (a fallback member) are not, and are separate rows. The ITT row is every task it randomized.
-test("B14: the control, the pre-randomization runs and the fallback runs are three rows, not one pool; the ITT row is the randomized tasks only", () => {
+// B14: the router randomizes a share of the spawns it would send to qwen (`assigned: "random"`, `routeBase` the tier it computed). Its remainder, every
+// router-assigned base-qwen task of those profiles, is the randomization's control, whatever model it ran on: which member a task ran on is not
+// random (a busy pool, an outage), so the ITT comparator is the pooled row, and the split by the model that ran is descriptive. Lines from
+// before the randomization (no `assigned`) are another row. The ITT row is every task it randomized.
+test("B14: the ITT comparator pools every router-assigned task, whatever ran; the split by model and the pre-randomization runs are other rows", () => {
   const d = analyse(randomLogs()).delegation;
   const c = d.randomized.control;
   assert.deepEqual(d.randomized.kinds, ["mechanical"]);
-  assert.equal(d.randomized.reference, EXEC.qwen); // the model most of the router-assigned base-qwen tasks ran on
-  assert.deepEqual([c.randomizedControl.tasks, c.randomizedControl.judged, c.randomizedControl.accepted], [3, 3, 2]); // rt: router-assigned, ran on the reference ("debug" is another profile)
-  close(c.randomizedControl.perAccepted.mean, 3 / 2);
+  assert.deepEqual([c.routerAssigned.tasks, c.routerAssigned.judged, c.routerAssigned.accepted], [5, 5, 3]); // rt 3 (2 accepted) + rf 2 (1 accepted); "debug" is another profile
+  close(c.routerAssigned.perAccepted.mean, (3 + 4) / 3);
+  assert.deepEqual(c.routerAssignedBy.map((r) => [r.tier, r.tasks, r.accepted]), [[EXEC.qwen, 3, 2], [EXEC.haiku, 2, 1]]); // descriptive: by the model each ran on
+  close(c.routerAssignedBy[1].perAccepted.mean, 4);
   assert.deepEqual([c.preRandomization.tasks, c.preRandomization.accepted], [2, 2]); // old lines: no assigned
-  assert.deepEqual([c.fallback.tasks, c.fallback.accepted], [2, 1]); // rf: router-assigned, ran on p-api/haiku
-  close(c.fallback.perAccepted.mean, 4);
   const itt = c.itt!;
-  assert.deepEqual([itt.tasks, itt.judged, itt.accepted], [13, 13, 9]); // rq 6 + r1 5 + r2 2; the other-base spawn, the control and the old lines are not in it
+  assert.deepEqual([itt.tasks, itt.judged, itt.accepted], [13, 13, 9]); // rq 6 + r1 5 + r2 2; the other-base spawn, the router-assigned and the old lines are not in it
   close(itt.acceptance.mean, 9 / 13);
   close(itt.perAccepted.mean, (6 + 15 + 8) / 9);
   assert.equal(d.randomized.ittNote, undefined);
+  assert.ok(!("reference" in d.randomized), "no model is the reference: nothing in the log says which one is the planned member");
+});
+
+// Live shape: the router's fallback member (waitMs ≈ 5 s on a busy Qwen) ran most of its assigned tasks, the local Qwen the rest. A modal "reference
+// model" would make the fallback the control and the planned member the exception; the pooled row is the same whichever model ran the majority.
+function liveShaped(majority: "haiku" | "qwen"): Logs {
+  const assigned = (id: string, ran: "haiku" | "qwen", verdict: string, cost: number) => ({ id, kind: "mechanical", tier: "qwen", cost, verdict, ran: RAN[ran], spawn: { assigned: "router", routeBase: "qwen", workerMember: ran, waitMs: ran === "haiku" ? 5003 : 9 } });
+  const minority = majority === "haiku" ? "qwen" : "haiku";
+  const random = (id: string, verdict: string, cost: number) => ({ id, kind: "mechanical", tier: "T1", cost, verdict, spawn: { assigned: "random", routeBase: "qwen" } });
+  return logsOf([
+    ...[0, 1, 2, 3, 4, 5].map((i) => assigned(`m${i}`, majority, i < 5 ? "accepted" : "rejected", 1)), // 5/6 accepted, $6
+    ...[0, 1].map((i) => assigned(`n${i}`, minority, i < 1 ? "accepted" : "rejected", 3)), // 1/2 accepted, $6
+    ...[0, 1, 2, 3].map((i) => random(`r${i}`, i < 3 ? "accepted" : "rejected", 2)), // 3/4 accepted, $8
+  ]);
+}
+
+test("B14: the pooled router-assigned row is the ITT comparator: with the fallback member running the majority it is the same as with the planned member running it", () => {
+  for (const majority of ["haiku", "qwen"] as const) {
+    const c = analyse(liveShaped(majority)).delegation.randomized.control;
+    assert.deepEqual([c.routerAssigned.tasks, c.routerAssigned.judged, c.routerAssigned.accepted], [8, 8, 6], majority);
+    close(c.routerAssigned.perAccepted.mean, 12 / 6);
+    assert.deepEqual(c.routerAssignedBy.map((r) => r.tasks).sort(), [2, 6], majority);
+    assert.deepEqual([c.itt!.tasks, c.itt!.accepted], [4, 3]);
+  }
+  const sec = renderAnalysis(analyse(liveShaped("haiku")), new Date("2026-10-06T00:00:00Z")).split("\n### Randomized routing")[1].split("\n### ")[0];
+  assert.match(sec, /\| router-assigned, ITT comparator \(every task the router did not randomize\) \| 8 \| 6\/8 \|/);
+  assert.ok(!sec.includes("ran as planned"), "the report does not say which model was planned");
+  assert.ok(!sec.includes("fallback"), "nor which one was a fallback: the log does not say");
+});
+
+test("B14 property: the pooled row does not depend on which models ran the router-assigned tasks; the by-model rows partition it", () => {
+  const rand = rng(14);
+  const pick = <T>(xs: T[]): T => xs[Math.floor(rand() * xs.length)];
+  for (let i = 0; i < 40; i++) {
+    const n = 4 + Math.floor(rand() * 12);
+    const specs = Array.from({ length: n }, (_, j) => ({ id: `a${j}`, verdict: pick(["accepted", "accepted", "rejected", "partial", undefined as unknown as string]), cost: 1 + Math.floor(rand() * 4) }));
+    const logs = (ran: () => "qwen" | "haiku" | "T1") => logsOf([
+      ...specs.map((t) => ({ ...t, kind: "mechanical", tier: "qwen", ran: RAN[ran()], spawn: { assigned: "router", routeBase: "qwen" } })),
+      { id: "z", kind: "mechanical", tier: "T1", verdict: "accepted", spawn: { assigned: "random", routeBase: "qwen" } },
+    ]);
+    const a = analyse(logs(() => "qwen")).delegation.randomized.control;
+    const b = analyse(logs(() => pick(["qwen", "haiku", "T1"]))).delegation.randomized.control;
+    assert.deepEqual(a.routerAssigned, b.routerAssigned, `seed ${i}`);
+    assert.equal(b.routerAssignedBy.reduce((s, r) => s + r.tasks, 0), b.routerAssigned.tasks);
+    assert.equal(b.routerAssignedBy.reduce((s, r) => s + r.accepted, 0), b.routerAssigned.accepted);
+  }
 });
 
 test("B14: acceptance and $/accepted by the model the randomized tasks ran on (per protocol, not causal)", () => {
@@ -313,7 +359,7 @@ test("B14: acceptance and $/accepted by the model the randomized tasks ran on (p
 test("B14: bootstrap CI only when n allows (≥ 5 judged), and it contains the point estimate", () => {
   const d = analyse(randomLogs()).delegation;
   const c = d.randomized.control;
-  for (const [name, r] of [...d.randomized.rows.map((x) => [x.tier, x] as const), ["control", c.randomizedControl], ["pre", c.preRandomization], ["fallback", c.fallback], ["itt", c.itt!]] as const) {
+  for (const [name, r] of [...d.randomized.rows.map((x) => [x.tier, x] as const), ...c.routerAssignedBy.map((x) => [`assigned ${x.tier}`, x] as const), ["pooled", c.routerAssigned], ["pre", c.preRandomization], ["itt", c.itt!]] as const) {
     if (r.judged >= 5) {
       assert.ok(Number.isFinite(r.acceptance.lo) && r.acceptance.lo - 1e-9 <= r.acceptance.mean && r.acceptance.mean <= r.acceptance.hi + 1e-9, `${name} acceptance CI`);
       if (r.accepted >= 2) assert.ok(r.perAccepted.lo - 1e-9 <= r.perAccepted.mean && r.perAccepted.mean <= r.perAccepted.hi + 1e-9, `${name} $/accepted CI`);
@@ -333,7 +379,8 @@ test("B14: unresolved and review spawns are left out of every row; no randomized
 test("B14: the classes are disjoint: every routed task of the pool is in one row, and the ITT row has exactly the randomized ones", () => {
   const d = analyse(randomLogs()).delegation;
   const c = d.randomized.control;
-  assert.equal(c.randomizedControl.tasks + c.fallback.tasks + c.preRandomization.tasks, 3 + 2 + 2); // rt, rf, old — not rd (another profile), not any randomized one
+  assert.equal(c.routerAssigned.tasks + c.preRandomization.tasks, 3 + 2 + 2); // rt, rf, old — not rd (another profile), not any randomized one
+  assert.equal(c.routerAssignedBy.reduce((n, r) => n + r.tasks, 0), c.routerAssigned.tasks);
   assert.equal(d.randomized.rows.reduce((n, r) => n + r.tasks, 0), c.itt!.tasks); // per protocol, the randomized tasks split by the model they ran on
 });
 
@@ -345,9 +392,8 @@ test("B14: no spawn carries assigned → the ITT row is not measurable, said so;
   assert.match(md, /ITT: not measurable/);
   const sec = renderAnalysis(analyse(randomLogs()), new Date("2026-10-06T00:00:00Z")).split("\n### Randomized routing")[1].split("\n### ")[0];
   assert.match(sec, /randomized by the router \(ext\)/);
-  assert.match(sec, /randomized control/);
+  assert.match(sec, /router-assigned, ITT comparator/);
   assert.match(sec, /pre-randomization/);
-  assert.match(sec, /fallback/);
   assert.match(sec, /ITT/);
 });
 

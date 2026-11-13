@@ -60,9 +60,11 @@ without the user's explicit approval.
   a single number means there is none); the *all* row is the headline of the Cost section. Per profile
   (card kind) × tier: tasks, accepted/partial/rejected/unjudged, $/accepted task (judged tasks only),
   escalations, check pass rate. *Randomized routing* ("randomized by the router (ext)": spawns the router
-  sent to Qwen or drew to another tier): the randomized control, the ITT row (every task it
-  randomized), the randomized tasks by the model they ran on, and the pre-randomization and fallback
-  runs as rows of their own; **only ITT against the randomized control is a randomized comparison**;
+  sent to Qwen or drew to another tier): the pooled router-assigned row (every task the router did
+  not randomize, whatever model ran it), the ITT row (every task it randomized), the pre-randomization
+  runs, and the two groups by the model that ran them (descriptive: which member runs a task depends on a
+  busy pool or an outage, not on a draw); **only ITT against the pooled router-assigned row is a
+  randomized comparison**;
   "not measurable" without `assigned` in the log. *Router factors*: acceptance and $/accepted per level
   of the levers the router randomizes itself (when its spawn lines record them; else "not recorded").
   *Spot checks*: how often the reviewer's own verdict on a spot-checked task agrees with the original

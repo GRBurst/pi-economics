@@ -1,15 +1,16 @@
 
 ### Randomized routing (randomized by the router (ext); spawns it sent to qwen)
 
-Spawns whose router base was qwen, in the profiles the router randomized (implement); 95% bootstrap CIs from 5 judged tasks on. The router draws a share of them to another tier (`assigned: "random"`); the rest, router-assigned and run as planned (on openrouter/qwen, the model most of them ran on), is its **randomized control**. **Causal only for the intention-to-treat comparison**: the ITT row (every task the router randomized, by assignment, whatever ran) against the control; a fallback run is still a control task by assignment, so the ITT contrast is the ITT row against control and fallback together. The rows by the model a randomized task ran on split it after the fact; the pre-randomization and fallback rows were chosen, not randomized, so they can differ in task difficulty.
+Spawns whose router base was qwen, in the profiles the router randomized (implement); 95% bootstrap CIs from 5 judged tasks on. The router draws a share of them to another tier (`assigned: "random"`); the rest, every task it assigned itself (`assigned: "router"`), whatever model ran it, is its **control**. **Causal only for the intention-to-treat comparison**: the ITT row (every task the router randomized, by assignment, whatever ran) against the pooled router-assigned row. The rows by the model that ran a task split their group after the fact (which model runs a task depends on the pool being busy or down, not on a draw): descriptive, no comparison. The pre-randomization row was chosen, not randomized, so it can differ in task difficulty.
 
 | group | tasks | accepted/judged | acceptance (95% CI) | $/accepted (95% CI) |
 | --- | --- | --- | --- | --- |
-| randomized control (router-assigned, ran as planned) | 5 | 4/5 | 80% (40% – 100%) | 0.29 (0.15 – 0.70) |
+| router-assigned, ITT comparator (every task the router did not randomize) | 6 | 4/6 | 67% (33% – 100%) | 0.34 (0.18 – 0.83) |
 | randomized by the router (ext), ITT: every randomized task | 8 | 5/8 | 63% (25% – 88%) | 0.56 (0.24 – 1.07) |
 | randomized by the router (ext), ran on openrouter/qwen | 6 | 3/6 | 50% (17% – 83%) | 0.33 (0.15 – 1.20) |
 | randomized by the router (ext), ran on anthropic/claude-sonnet-5-5 | 2 | 2/2 | 100% | 0.90 |
+| router-assigned, ran on openrouter/qwen | 5 | 4/5 | 80% (40% – 100%) | 0.29 (0.15 – 0.70) |
+| router-assigned, ran on anthropic/claude-sonnet-5-5 | 1 | 0/1 | 0% | – |
 | not randomized: pre-randomization (no `assigned`, before the router randomized) | 3 | 2/3 | 67% | 0.53 |
-| not randomized: fallback (router-assigned, ran on another model) | 1 | 0/1 | 0% | – |
 
 1 randomized spawn(s) with another router base are not compared.

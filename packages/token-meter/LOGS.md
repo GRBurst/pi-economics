@@ -405,12 +405,14 @@ as "not measurable", never as a number.
   accepted tasks: **lower** leaves the unresolved $ out, **upper** counts it. One number means no unresolved $.
 - **Randomized comparison** (B14; "randomized by the router (ext)", the router's own experiment). The router sends a share of the spawns it
   would put on qwen to another tier: `assigned: "random"` with `routeBase` = the tier it computed. The pool is the profiles (`kind`) that
-  have such a spawn, with `routeBase` qwen. Rows: **randomized control** = the pool's router-assigned tasks (`assigned: "router"`) that ran
-  as planned, on the *reference* model (the model most of them ran on; a tie goes to the smaller name); **pre-randomization** = the pool's
-  planned-qwen tasks without `assigned` (lines from before 2026-10-04); **fallback** = router-assigned tasks that ran on another model (a
-  fallback member, a reroute); **ITT** = every task the router randomized, by assignment, whatever ran on; and the randomized tasks by the model
-  they ran on (per protocol). Only ITT against the randomized control is a randomized comparison (a fallback run is a control task by assignment: the full ITT contrast is
-  ITT against control and fallback together); the others were chosen. The control
+  have such a spawn, with `routeBase` qwen. Rows: the pool's **router-assigned** tasks (`assigned: "router"`), every one, whatever model
+  ran it: the comparator of the ITT contrast; **ITT** = every task the router randomized, by assignment, whatever ran on; **pre-randomization**
+  = the pool's planned-qwen tasks without `assigned` (lines from before 2026-10-04); and, descriptive only, the router-assigned and the
+  randomized tasks by the model that ran them. Only ITT against the pooled router-assigned row is a randomized comparison; the other rows were
+  chosen. The report names no model the reference or a fallback: which member runs a task (the first member when its slot is free,
+  the next one after `waitMs`, an outage) depends on the pool, not on the draw, so splitting the control by it would compare
+  unlike periods (on the author's log the fallback member, waiting ≈ 5 s, ran about half of them). A task that fell
+  back is told by `workerMember`/`waitMs` on its spawn line, not by the model alone. The control
   still holds the tasks the router never drew (a pinned profile, a re-spawn): a marker on the spawn line that a task was in the draw (a router
   backlog item) would let the analyser drop them. A log in which no spawn carries `assigned` reads "ITT: not measurable". Acceptance
   and $/accepted of a row are over its judged tasks (bootstrap CI from 5 judged tasks on); unresolved cards and spot-check reviews are in no row.

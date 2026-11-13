@@ -116,13 +116,13 @@ export function renderRandomized(r: Randomized): string {
   const row = (group: string, x: Row): string[] => [group, String(x.tasks), `${x.accepted}/${x.judged}`, withCI(x.acceptance, pc), withCI(x.perAccepted, f2)];
   return [
     "\n### Randomized routing (randomized by the router (ext); spawns it sent to qwen)\n",
-    `Spawns whose router base was qwen, in the profiles the router randomized (${r.kinds.join(", ")}); 95% bootstrap CIs from ${MIN_CI_N} judged tasks on. The router draws a share of them to another tier (\`assigned: "random"\`); the rest, router-assigned and run as planned (on ${r.reference ?? "–"}, the model most of them ran on), is its **randomized control**. **Causal only for the intention-to-treat comparison**: the ITT row (every task the router randomized, by assignment, whatever ran) against the control; a fallback run is still a control task by assignment, so the ITT contrast is the ITT row against control and fallback together. The rows by the model a randomized task ran on split it after the fact; the pre-randomization and fallback rows were chosen, not randomized, so they can differ in task difficulty.\n`,
+    `Spawns whose router base was qwen, in the profiles the router randomized (${r.kinds.join(", ")}); 95% bootstrap CIs from ${MIN_CI_N} judged tasks on. The router draws a share of them to another tier (\`assigned: "random"\`); the rest, every task it assigned itself (\`assigned: "router"\`), whatever model ran it, is its **control**. **Causal only for the intention-to-treat comparison**: the ITT row (every task the router randomized, by assignment, whatever ran) against the pooled router-assigned row. The rows by the model that ran a task split their group after the fact (which model runs a task depends on the pool being busy or down, not on a draw): descriptive, no comparison. The pre-randomization row was chosen, not randomized, so it can differ in task difficulty.\n`,
     table(["group", "tasks", "accepted/judged", "acceptance (95% CI)", "$/accepted (95% CI)"], [
-      row("randomized control (router-assigned, ran as planned)", c.randomizedControl),
+      row("router-assigned, ITT comparator (every task the router did not randomize)", c.routerAssigned),
       ...(c.itt ? [row("randomized by the router (ext), ITT: every randomized task", c.itt)] : []),
       ...r.rows.map((x) => row(`randomized by the router (ext), ran on ${x.tier}`, x)),
+      ...c.routerAssignedBy.map((x) => row(`router-assigned, ran on ${x.tier}`, x)),
       row("not randomized: pre-randomization (no `assigned`, before the router randomized)", c.preRandomization),
-      row("not randomized: fallback (router-assigned, ran on another model)", c.fallback),
     ]),
     r.otherBase ? `\n${r.otherBase} randomized spawn(s) with another router base are not compared.` : "",
   ].join("\n");
