@@ -23,7 +23,7 @@ test("sessionMetrics: tokens, cost, peak context, retried 429s as errors, folds,
 		asst({}, [{ type: "toolCall", name: "edit" }, { type: "toolCall", name: "context_fold" }, { type: "toolCall", name: "bash" }]),
 		asst({ stopReason: "error", usage: { input: 10, cacheRead: 0, cacheWrite: 0, output: 0, cost: { total: 0 } } }),
 		asst({ usage: { input: 50, cacheRead: 2000, cacheWrite: 450, output: 10, cost: { total: 0.02 } } }),
-		{ type: "custom", customType: "pi-retry:started" },
+		{ type: "custom", customType: "x-retry:started" },
 		{ type: "message", message: { role: "user", content: [] } },
 	]);
 	jl(join(dir, "subagents/abc/1_child.jsonl"), [asst({}, [{ type: "toolCall", name: "write" }])]);

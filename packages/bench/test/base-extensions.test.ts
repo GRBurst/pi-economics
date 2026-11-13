@@ -18,7 +18,7 @@ import { fakePrintPi, fakeRpcPi, script, sourceRepo, tmp } from "./helpers.ts";
 import { cand, cliRun, judgeBench, OLD_QWEN } from "./q-fixtures.ts";
 
 /** The extensions the bench names itself (modules/bench.nix, the default of `bench.extensions`: the flake's own and the registry's `actor-subagents`, `task-router`). */
-const OWN = ["actor-subagents", "infinite-context", "pi-retry", "task-router", "token-meter"];
+const OWN = ["actor-subagents", "infinite-context", "task-router", "token-meter"];
 
 const env = (base?: string, orch?: string): Record<string, string> => ({
 	...(base === undefined ? {} : { PI_BENCH_BASE_EXTENSIONS: base }),
@@ -46,8 +46,8 @@ test("extensionsOf: the base names first, then the list's own, then the extras; 
 
 test("the arms, the orchestrator's and the children's lists name only the flake's own extensions", () => {
 	for (const [name, arm] of Object.entries(defaultArms())) assert.deepEqual(arm.extensions.filter((e) => !OWN.includes(e)), [], name);
-	assert.deepEqual(ORCH_EXTENSIONS, ["actor-subagents", "infinite-context", "pi-retry", "token-meter", "task-router"]);
-	assert.deepEqual(CHILD_EXTENSIONS, ["infinite-context", "pi-retry", "token-meter"]);
+	assert.deepEqual(ORCH_EXTENSIONS, ["actor-subagents", "infinite-context", "token-meter", "task-router"]);
+	assert.deepEqual(CHILD_EXTENSIONS, ["infinite-context", "token-meter"]);
 	assert.deepEqual(defaultArms().sonnet.extensions, ["infinite-context"]);
 	assert.deepEqual(defaultArms().orch.extensions, ["infinite-context", "actor-subagents"]);
 });

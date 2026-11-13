@@ -34,7 +34,7 @@ test("orchArms: four rpc arms orch-<signs>, Opus 5.5 high, the bench extension l
 		assert.equal(a.thinking, "high");
 		assert.deepEqual(a.extensions, ORCH_EXTENSIONS);
 	}
-	assert.deepEqual(ORCH_EXTENSIONS, ["actor-subagents", "infinite-context", "pi-retry", "token-meter", "task-router"]);
+	assert.deepEqual(ORCH_EXTENSIONS, ["actor-subagents", "infinite-context", "token-meter", "task-router"]);
 	assert.deepEqual(arms["orch----"].factors, { routing: "off", delegation: "off", t0Widened: "off" });
 	assert.deepEqual(arms["orch-++-"].factors, { routing: "on", delegation: "on", t0Widened: "off" });
 	assert.deepEqual(arms["orch--++"].factors, { routing: "off", delegation: "on", t0Widened: "on" });
@@ -47,7 +47,7 @@ test("defaultArms and loadArms include the factor arms next to the existing ones
 });
 
 test("children never load task-router or the probe (main only); the base extensions are added at run time", () => {
-	assert.deepEqual(CHILD_EXTENSIONS, ["infinite-context", "pi-retry", "token-meter"]);
+	assert.deepEqual(CHILD_EXTENSIONS, ["infinite-context", "token-meter"]);
 });
 
 test("paths: agent source, AGENTS.md on/off sources, overridable", () => {
@@ -100,14 +100,13 @@ test("materializeAgentDir: AGENTS.md — routing on → the new file, routing of
 	assert.equal(readFileSync(join(off, "AGENTS.md"), "utf8"), "OLD manual rules\n");
 });
 
-test("materializeAgentDir: child extensions, pi-retry incl. the subagent regex, infinite-context settings", () => {
+test("materializeAgentDir: child extensions, no retry extension's keys (native retry), infinite-context settings", () => {
 	const { paths } = fakeHome();
 	const dir = join(tmp(), "agent");
 	materializeAgentDir({ dir, arm: orchArms()["orch-++-"], paths });
 	assert.deepEqual(json(join(dir, "actor-subagents/settings.json")), { childExtensions: CHILD_EXTENSIONS.map((n) => `/ext/${n}`) });
 	const s = json(join(dir, "settings.json"));
-	assert.deepEqual(s.piRetry.subagents.match.systemPromptRegex, [{ flags: "m", pattern: '^You were spawned by "' }]);
-	assert.deepEqual([s.piRetry.baseDelayMs, s.piRetry.maxDelayMs, s.piRetry.multiplier, s.piRetry.maxRetriesAtMaxDelay], [2000, 2000, 1, 100]);
+	assert.deepEqual(Object.keys(s).filter((k) => /retry/i.test(k)), [], "no retry keys: native retry comes from the checkout's .pi/settings.json (RETRY_SETTINGS)");
 	assert.equal(s.packages, undefined, "no packages: extensions come from -e only");
 	assert.equal(readFileSync(join(dir, "infinite-context/settings.json"), "utf8"), '{"reminders":{}}');
 });

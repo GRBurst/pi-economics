@@ -19,9 +19,9 @@ export const T0_LIMITS = { off: { files: 3, tokens: 100000 }, on: { files: 10, t
  * Main session: the flake's extensions a full setup loads (cache-lifecycle/experiments are not part of the bench).
  * The probe is added by the driver; the base extensions come first and the orchestrator's extras (PI_BENCH_ORCH_EXTENSIONS) last.
  */
-export const ORCH_EXTENSIONS = ["actor-subagents", "infinite-context", "pi-retry", "token-meter", "task-router"];
+export const ORCH_EXTENSIONS = ["actor-subagents", "infinite-context", "token-meter", "task-router"];
 /** Children (actor-subagents `childExtensions`): the base extensions, the flake's child extensions, the orchestrator's extras; task-router is main only. */
-export const CHILD_EXTENSIONS = ["infinite-context", "pi-retry", "token-meter"];
+export const CHILD_EXTENSIONS = ["infinite-context", "token-meter"];
 
 /** The 4 arms of the half fraction, `orch-<signs>` (factor order routing, delegation, t0Widened). */
 export function orchArms(): Record<string, Arm> {
@@ -33,15 +33,11 @@ export function orchArms(): Record<string, Arm> {
 	);
 }
 
-/** pi settings of a run: pi-retry as in the live setup (fixed 2 s, 100 retries, children matched by their system prompt). */
+/** pi settings of a run; retries are pi's native ones, from the checkout's project settings (RETRY_SETTINGS, workdir.ts). */
 const piSettings = () => ({
 	defaultThinkingLevel: "high",
 	enableInstallTelemetry: false,
 	warnings: { anthropicExtraUsage: false },
-	piRetry: {
-		baseDelayMs: 2000, maxDelayMs: 2000, multiplier: 1, maxRetriesAtMaxDelay: 100,
-		subagents: { match: { systemPromptRegex: [{ flags: "m", pattern: '^You were spawned by "' }] } },
-	},
 });
 
 const on = (v: string | undefined) => v !== "off";

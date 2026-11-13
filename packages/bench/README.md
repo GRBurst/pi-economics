@@ -53,13 +53,13 @@ an arm). Arm id = `orch-` + one sign per factor in that order (`+` = on):
 | `orch-++-` | on | on | off |
 
 All: `--mode rpc`, `anthropic/claude-opus-5-5` at `high`, extensions: the base ones, actor-subagents,
-infinite-context, pi-retry, token-meter, task-router, the orchestrator's extras (+ the probe). Routing off = task-router still
+infinite-context, token-meter, task-router, the orchestrator's extras (+ the probe). Routing off = task-router still
 loaded with `routing: false`, so spawns, verdicts and `unjudged` are still written to the outcome log.
 
 Every run of a factor arm gets its own **agent dir** `runs/<run>/agent/` (`PI_CODING_AGENT_DIR`), written by
-`materializeAgentDir` (`src/orch.ts`): `settings.json` (pi-retry as live, incl. the subagent regex),
+`materializeAgentDir` (`src/orch.ts`): `settings.json` (thinking level, no telemetry; retries are pi's native ones from the checkout's `.pi/settings.json`),
 `task-router/settings.json` (the router base, then `routing`, `delegation.nudge`, `t0Limits`), `actor-subagents/settings.json`
-(`childExtensions`: the base extensions, infinite-context, pi-retry, token-meter, the orchestrator's extras; task-router is main only),
+(`childExtensions`: the base extensions, infinite-context, token-meter, the orchestrator's extras; task-router is main only),
 `AGENTS.md` (routing on → `~/.pi/agent/AGENTS.md`, off → `~/.pi/agent/notes/2026-10-03-AGENTS.md.before`),
 `infinite-context/settings.json` (copy), and symlinks `auth.json`, `models.json`, `models-store.json` to the live
 agent dir (no secrets are copied; a login extension that seeds `auth.json` writes through the link). Meter (`agent/meter/`) and outcome (`agent/task-router/outcomes/`) logs of the run land there.
@@ -90,8 +90,7 @@ reports/              bench-report output
 ## Drivers
 
 * print (`src/driver-print.ts`): `pi -p -ne --approve -e <ext>… --session-dir …`; native retry
-  (100 × 2 s) via an untracked `.pi/settings.json` (excluded in `.git/info/exclude`); pi-retry is not loaded in these runs
-  (`-ne`).
+  (100 × 2 s) via an untracked `.pi/settings.json` (excluded in `.git/info/exclude`), as in every run of the checkout.
 * rpc (`src/driver-rpc.ts`, `probe/index.ts`): `pi --mode rpc` plus the probe extension. A run is **done** when
   the orchestrator settled (the next `agent_settled` after the prompt), the probe reports no running child
   (`__subagentsApi_v1.list()`), and the RPC stream has been quiet for 30 s. A child's reply that wakes the

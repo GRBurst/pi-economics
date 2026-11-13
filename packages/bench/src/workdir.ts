@@ -5,8 +5,8 @@ import { dirname, isAbsolute, join } from "node:path";
 import type { Task } from "./types.ts";
 
 /**
- * pi-retry cannot retry in -p mode (its loop is detached after agent_end); native retry with the
- * same policy (fixed 2 s delay, 100 retries) via an untracked project settings file.
+ * pi's native retry for every run in the checkout: fixed 2 s delay, 100 retries, via an untracked
+ * project settings file.
  */
 export const RETRY_SETTINGS = { retry: { enabled: true, maxRetries: 100, baseDelayMs: 2000, maxAgentDelayMs: 2000 } };
 
