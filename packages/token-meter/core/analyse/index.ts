@@ -19,7 +19,7 @@ export { type CostSection, type Split } from "./cost.ts";
 export { type CacheSection, type CauseRow, type MissCause } from "./cache.ts";
 export { type BalanceRow, type DesignResult, type Effect, type Objective, type OverflowRow, type PerProtocol, type RefusalRow, type Sensitivity, type StratumResult, type Unit } from "./experiment.ts";
 export { type Agreement, type DelegationSection, type MatrixCell, type ProfileTier, type ControlRows, type RandomRow, type Randomized, type Row, type RouterFactor, type Runaway, type SpotChecks } from "./delegation.ts";
-export { type GuardsSection } from "./guards.ts";
+export { type GuardsSection, type StratumGuard } from "./guards.ts";
 export { type QualitySection } from "./quality.ts";
 export { type LeverRow, type LeversSection } from "./levers.ts";
 export { budget, windowsOf, type BudgetSection, type LocalRow, type SpendRow, type Window } from "./budget.ts";
@@ -47,4 +47,9 @@ export function analyse(all: Logs, period: Period = {}): Analysis {
 
 /** experiments/state.json after `--apply`: the kill-switch arms added to the disabled ones, a fresh posterior over every design's arms. */
 // Arm ids repeat across designs (v2, v3): the newest design's stats shadow an older one's, so the posterior is the current experiment's.
-export const applyKill = (old: any, a: Analysis) => nextState(old, [...new Map(a.experiment.designs.flatMap((d) => d.arms).map((s) => [s.arm, s])).values()], a.guards.kill);
+// The v2 engine's designs are written per (design, stratum) under `designs` (T5c.9), never flat.
+export const applyKill = (old: any, a: Analysis) => {
+  const v2 = new Set(a.guards.perStratum.map((s) => s.design));
+  const flat = [...new Map(a.experiment.designs.filter((d) => !v2.has(d.design)).flatMap((d) => d.arms).map((s) => [s.arm, s])).values()];
+  return nextState(old, flat, a.guards.kill, a.guards.perStratum);
+};

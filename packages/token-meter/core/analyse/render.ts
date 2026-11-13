@@ -262,7 +262,8 @@ export function renderGuards(g: GuardsSection): string {
   return [
     table(["design", "arm", "units", "peeks after mask /unit", "corrections /unit", "rating (n)", "accepted/judged"], g.perArm.map((a) => [a.design, `\`${a.arm}\``, String(a.units), per(a.peeks, a.units), per(a.corrections, a.units), rating(a.ratings), `${a.accepted}/${a.judged}`])),
     `\nKill switch (baseline per design: ${Object.entries(g.baselines).map(([d, b]) => `${d} \`${b}\``).join(", ")}; ≥ ${l.minSessions} units; acceptance worse by > ${pc(l.threshold)}, peeks/corrections more by > ${l.peekThreshold}/${l.correctionThreshold} per unit, rating lower by > ${l.ratingThreshold}). Written to experiments/state.json only with \`pi-analyse --apply\`.\n`,
-    Object.keys(g.kill).length ? Object.entries(g.kill).map(([a, r]) => `- disable \`${a}\`: ${r}`).join("\n") : "- no arm would be disabled",
+    Object.keys(g.kill).length || !g.perStratum.length ? (Object.keys(g.kill).length ? Object.entries(g.kill).map(([a, r]) => `- disable \`${a}\`: ${r}`).join("\n") : "- no arm would be disabled") : "",
+    ...g.perStratum.map((x) => Object.keys(x.kill).length ? Object.entries(x.kill).map(([a, r]) => `- design ${x.design} stratum ${x.stratum}: disable \`${a}\`: ${r}`).join("\n") : `- design ${x.design} stratum ${x.stratum}: no arm would be disabled`),
   ].join("\n");
 }
 

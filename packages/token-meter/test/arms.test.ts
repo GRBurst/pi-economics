@@ -341,7 +341,7 @@ test("a long session is analysed in linear time", () => {
 
 // Review M2 (M5b.1): the kill switch and the posterior are the v1 engine's (flat `disabled`, `posterior`); the v2 engine
 // reads `designs.<id>.<stratum>`, which these tools neither write nor drop, and they say so.
-test("review M2: meter-report --arms/--posterior say the v2 designs are not affected and keep state.json's designs", () => {
+test("review M2 (M5c): meter-report --arms/--posterior say where the v2 designs' state is written and keep the designs they do not rewrite", () => {
   const a = agentDirWith();
   const designs = { b4d458675108: { api: { posterior: { "010": { mean: -1, sd: 1 } }, disabled: ["111"] } } };
   writeFileSync(join(a.agentDir, "experiments", "state.json"), JSON.stringify({ disabled: [], posterior: {}, designs }));
@@ -349,5 +349,28 @@ test("review M2: meter-report --arms/--posterior say the v2 designs are not affe
   assert.ok(out.includes(V2_SCOPE), out);
   assert.deepEqual(a.state().designs, designs);
   assert.ok(a.run("--posterior").includes(V2_SCOPE));
-  assert.equal(V2_SCOPE, "kill switch and posterior: the v1 engine's designs (v1–v4; state.json `disabled`, `posterior`) only; the v2 engine's designs (state.json `designs`) are not affected");
+  assert.equal(V2_SCOPE, "kill switch and posterior: per design and stratum for the v2 engine's designs (state.json `designs.<id>.<stratum>`: `disabled`, `posterior`, `reasons`), flat for the v1–v4 designs (`disabled`, `posterior`)");
+});
+
+// T5c.9: the v2 engine's designs get their kill switch and posterior per (design, stratum) under state.json `designs`.
+test("T5c.9: meter-report --arms --posterior writes designs.<id>.<stratum>, prints one table per design and stratum, and leaves the flat keys to the v1–v4 designs", () => {
+  const a = agentDirWith();
+  const D = "a1b2c3d4e5f6";
+  const row = (id: string, arm: string) => ({ v: 2, ts: "2026-10-01T00:00:00.000Z", sessionId: id, design: D, mode: "explore", eligible: true, stratum: "api", arm,
+    factors: { warmPolicy: { lever: "cache-lifecycle.warmPolicy", assigned: arm === "1" ? "orchestrator-aware" : "native" } } });
+  const ids: Array<[string, string]> = ["a", "b", "c", "d", "e"].flatMap((x): Array<[string, string]> => [[`v0-${x}`, "0"], [`v1-${x}`, "1"]]);
+  const meter = ids.flatMap(([id, arm], i) => Array.from({ length: 3 }, (_, k) => L(arm, id, k * 10 + i, 1 + i / 10, { design: D })));
+  const outcomes = ids.flatMap(([id, arm], i) => [{ event: "spawn", ts: "2026-10-05T00:00:00.000Z", taskId: `x${i}`, parentSessionId: id }, { event: "verdict", taskId: `x${i}`, verdict: arm === "1" ? "rejected" : "accepted" }]);
+  jsonl(join(a.agentDir, "meter"), "2026-11.jsonl", meter);
+  jsonl(join(a.agentDir, "experiments"), "assignments.jsonl", ids.map(([id, arm]) => row(id, arm)));
+  jsonl(join(a.agentDir, "task-router", "outcomes"), "2026-11.jsonl", outcomes);
+  writeFileSync(join(a.agentDir, "experiments", "settings.json"), JSON.stringify({ baseline: "-", guards: { minSessions: 5, threshold: 0.2 } }));
+  const out = a.run("--arms", "--posterior");
+  assert.ok(out.includes(`design ${D} stratum api`), out);
+  const s = a.state();
+  assert.deepEqual(s.designs[D].api.disabled, ["1"]);
+  assert.deepEqual(Object.keys(s.designs[D].api.posterior).sort(), ["0", "1"]);
+  assert.ok(s.designs[D].api.posterior["0"].mean < 0);
+  assert.ok(!s.disabled.includes("1") && !("1" in s.posterior) && !("0" in s.posterior), "no v2 arm is written flat");
+  assert.equal(out.split(V2_SCOPE).length - 1, 1, "the scope line is printed once");
 });

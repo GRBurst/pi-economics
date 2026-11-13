@@ -29,7 +29,7 @@ const str = (x: unknown): x is string => typeof x === "string";
  * (M5b.2) Spawn events with the experiment arm of the spawning session. Routers no longer copy it (the process-global experiments
  * API is gone), so an arm-less spawn takes the arm of its parent session's root assignment: the first session up the parent chain
  * (spawn events, meter lines) with an assignment row that has an arm and was assigned at or before the spawn (the arm holds from the
- * row's ts on, as `armDue` in contract.ts), and a v2 row's design with it. A carried copy (routers before M5b.2) stays; a spawn
+ * row's ts on, as `armDue` in contract.ts), and a v2 row's design and stratum with it. A carried copy (routers before M5b.2) stays; a spawn
  * without such a root (or without a ts) stays as it is (unassigned: no arm, still a task). The input is not changed.
  */
 export function withSpawnArms(outcomes: any[], meter: any[], assignments: any[]): any[] {
@@ -53,7 +53,7 @@ export function withSpawnArms(outcomes: any[], meter: any[], assignments: any[])
     if (e?.event !== "spawn" || str(e.arm)) return e;
     const r = rootRow(e.parentSessionId, e.ts);
     if (r === undefined) return e;
-    return { ...e, arm: r.arm, ...(r.v === 2 && str(r.design) && !str(e.design) ? { design: r.design } : {}) };
+    return { ...e, arm: r.arm, ...(r.v === 2 && str(r.design) && !str(e.design) ? { design: r.design } : {}), ...(r.v === 2 && str(r.stratum) && !str(e.stratum) ? { stratum: r.stratum } : {}) };
   });
 }
 

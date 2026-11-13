@@ -419,12 +419,15 @@ assignment is ignored with a warning. Pi process levers named in `factors` are r
 ## experiments/state.json
 
 `{ "disabled": string[], "posterior": { <arm>: { "mean": −$/active h, "sd": number } }, "reasons": { <arm>: string } }`.
-Disabled arms stay disabled until the file is edited. These keys belong to the v1
-engine's designs (arm ids like `-+-`). The v2 engine reads `designs.<design id>.<stratum>`
-= `{ "posterior": { <arm>: { "mean", "sd" } }, "disabled": [<arm>] }` at session start
-(exploit samples from `posterior`; no arm in `disabled` is assigned; with every arm disabled
-the session is ineligible); nothing writes that key yet (M5c): `meter-report --posterior` and
-`pi-analyse --apply` write the v1 engine's keys only, keep `designs` as it is and say so.
+Disabled arms stay disabled until the file is edited. These flat keys belong to the v1–v4
+designs (arm ids like `-+-`). The v2 engine reads, and `meter-report --posterior` and
+`pi-analyse --apply` write, `designs.<design id>.<stratum>`
+= `{ "posterior": { <arm>: { "mean", "sd" } }, "disabled": [<arm>], "reasons": { <arm>: string } }`
+(one entry per design and stratum, never pooled: the kill switch and the posterior use that stratum's
+units alone; `disabled` only grows, `posterior` is rewritten, `reasons` is merged; other designs, strata
+and keys stay). The engine reads it at session start (exploit samples from `posterior`; no arm in
+`disabled` is assigned; with every arm disabled the session is ineligible). A v2 arm is never
+written to the flat keys.
 
 `experiments/blocks.json`: `{ "<design id>/<stratum>": { "queue": [<arm>] } }`, the arms
 left in each explore block (refilled with a shuffle of the enabled arms when empty). A block whose `queue` is no list of
@@ -594,6 +597,12 @@ How the Experiment section (and `meter-report --arms`) turns meter lines into ef
   minimum detectable effect is 2.80 × the sd of the bootstrap effects (α .05 two-sided, power .8). With fewer than 2 units at a level there is
   no CI and no MDE; an MDE of 0 (zero variance) reads "n/a"; bootstrap draws with a non-finite ratio are dropped and counted.
 - **Balance table**: per stratum and arm, units over `MIN_HOURS`, their active hours, the units excluded, units without an objective.
+- **Per-protocol** (v2 engine's strata): the units whose every factor lever has `rb = "confirmed"` in the root main's last
+  levers line, labelled a non-randomized comparison (units that kept the assignment are self-selected). **Refusal rate** per factor =
+  units whose lever state is `refused` ÷ the stratum's units; above 0.20 the factor's add-on is flagged "broken add-on".
+  **Context overflows** = count of lines with `errorKind = "context_overflow"` of the root ÷ its active hours, per arm.
+  **Sensitivity (model switch)**: the effect again with each unit's objective over the requests whose billing class equals the class of
+  the root's first main request; the report counts the units that used another class. A v1-engine design gets none of these.
 - **Per arm** (kill switch, posterior; `meter-report --arms`): pooled over the design's strata, $ per active hour; its fold and cold-resume columns are
   the premium above (*Analysis: cache misses*), per event.
 

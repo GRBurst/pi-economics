@@ -2,7 +2,7 @@
 // Usage: node --experimental-strip-types meter-report.ts [--dir <meterDir>] [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 //        meter-report.ts --arms [--posterior] [--agent-dir <dir>]   per-arm experiment analysis; --posterior also
 //        writes <agentDir>/experiments/state.json (posterior rewards, kill-switch arms) atomically: the v1
-//        engine's designs only (the v2 engine's `designs` key is kept as it is).
+//        engine's designs flat, the v2 engine's per design and stratum under `designs.<id>.<stratum>` (T5c.9).
 import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,9 @@ import { acceptance, killSwitch, signals, withSpawnArms } from "../core/guards.t
 import { aggregate, render } from "../core/report.ts";
 import { taskCosts } from "../core/tasks.ts";
 import { isRequestLine } from "../core/analyse/logs.ts";
+import { rowsBySession } from "../core/analyse/designs.ts";
+import { experiment } from "../core/analyse/experiment.ts";
+import { guards } from "../core/analyse/guards.ts";
 
 const args = process.argv.slice(2);
 const opt = (name: string): string | undefined => {
@@ -40,8 +43,12 @@ if (args.includes("--arms") || args.includes("--posterior")) {
   const settings = readJson(join(exp, "settings.json"));
   const flags: Record<string, Record<string, string>> = {};
   for (const r of readLines(exp)) if (typeof r?.arm === "string" && r.flags) flags[r.arm] = r.flags;
-  const meter = readLines(dir).filter(isRequestLine); // levers lines record settings, no request
-  const outcomes = withSpawnArms(readLines(join(agentDir, "task-router", "outcomes")), meter, readLines(exp)); // spawn arms joined (M5b.2)
+  const all = readLines(dir).filter(isRequestLine); // levers lines record settings, no request
+  const rows = readLines(exp);
+  const outcomes = withSpawnArms(readLines(join(agentDir, "task-router", "outcomes")), all, rows); // spawn arms joined (M5b.2)
+  // The v2 engine's roots are analysed per design and stratum (below); the flat tables are the v1–v4 designs'.
+  const v2Roots = new Set(rows.filter((r) => r?.v === 2 && typeof r.sessionId === "string").map((r) => r.sessionId as string));
+  const meter = all.filter((l) => !v2Roots.has(l.parentSessionId ?? l.sessionId));
   const stats = armStats(meter, { flags });
   const acc = acceptance(outcomes);
   // Own defaults for experiments' `guards` (a package cannot import another's settings).
@@ -50,14 +57,19 @@ if (args.includes("--arms") || args.includes("--posterior")) {
   const sig = signals(readLines(join(agentDir, "guards")));
   const baseline = settings?.baseline ?? stats.find((s) => /^-+$/.test(s.arm))?.arm ?? "";
   const reasons = killSwitch(stats, acc, limits, baseline, sig);
-  if (args.includes("--arms")) process.stdout.write(renderArms(stats, acc, reasons, sig, taskCosts(meter, outcomes)));
+  const v2 = guards(experiment(all, rows, settings), outcomes, readLines(join(agentDir, "guards")), settings, rowsBySession(rows)).perStratum;
+  if (args.includes("--arms")) {
+    process.stdout.write(renderArms(stats, acc, reasons, sig, taskCosts(meter, outcomes), !v2.length));
+    for (const x of v2) process.stdout.write(`\n### design ${x.design} stratum ${x.stratum} (baseline \`${x.baseline}\`)\n\n${renderArms(x.arms, x.acc, x.kill, x.sig, {}, false)}`);
+    if (v2.length) process.stdout.write(`\n${V2_SCOPE}\n`);
+  }
   if (args.includes("--posterior")) {
     const file = join(exp, "state.json");
     mkdirSync(exp, { recursive: true });
     const tmp = `${file}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify(nextState(readJson(file), stats, reasons), null, 2) + "\n");
+    writeFileSync(tmp, JSON.stringify(nextState(readJson(file), stats, reasons, v2), null, 2) + "\n");
     renameSync(tmp, file);
-    if (!args.includes("--arms")) process.stdout.write(`state.json: ${stats.length} arms, ${Object.keys(reasons).length} newly disabled\n${V2_SCOPE}\n`);
+    if (!args.includes("--arms")) process.stdout.write(`state.json: ${stats.length} arms, ${Object.keys(reasons).length} newly disabled; ${v2.length} design/stratum pair(s) of the v2 engine, ${v2.reduce((n, x) => n + Object.keys(x.kill).length, 0)} newly disabled\n${V2_SCOPE}\n`);
   }
 } else {
   process.stdout.write(render(aggregate(readLines(dir), { from: opt("--from"), to: opt("--to") })));

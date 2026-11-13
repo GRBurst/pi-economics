@@ -2,7 +2,7 @@
 // refusal rates, overflow per active hour, the model-switch sensitivity row, design ids never pooled.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { analyse, renderExperiment, type Logs, type Effect } from "../core/analyse.ts";
+import { analyse, applyKill, renderAnalysis, renderExperiment, type Logs, type Effect } from "../core/analyse.ts";
 import { mulberry32 } from "../core/stats.ts";
 import { iso, MIN, T0, turns } from "./world.ts";
 
@@ -144,4 +144,50 @@ test("T5c.7 property: two designs with equal factor names (distinct ids) are nev
     assert.deepEqual(all.map((x) => x.design).sort(), [...new Set(rows.map((r) => r.design as string))].sort(), `seed ${seed}`);
     assert.deepEqual(all.find((x) => x.design === D)?.strata, d.find((x) => x.design === D)?.strata, `seed ${seed}: design D's strata do not depend on E`);
   }
+});
+
+// ---- T5c.9: kill switch and posterior per (design, stratum), written where the v2 engine reads them ---------------------
+
+/** Units a1..a3 (arm "00") and b1..b3 (arm "10") in each stratum; in "api" every task of an "10" unit is rejected, in "opus" all are accepted. */
+function killWorld(): Logs {
+  const meter: Record<string, unknown>[] = [], rows: Record<string, unknown>[] = [], outcomes: Record<string, unknown>[] = [];
+  for (const stratum of ["api", "opus"]) for (const [prefix, arm] of [["a", "00"], ["b", "10"]]) for (let i = 1; i <= 3; i++) {
+    const id = `${stratum}-${prefix}${i}`;
+    meter.push(...cloud(id, arm, 10 + i));
+    rows.push(row(id, arm, stratum));
+    outcomes.push({ v: 1, ts: iso(T0 + 30 * MIN), event: "spawn", taskId: `t-${id}`, sessionId: `c-${id}`, parentSessionId: id },
+      { v: 1, ts: iso(T0 + 40 * MIN), event: "verdict", taskId: `t-${id}`, verdict: stratum === "api" && arm === "10" ? "rejected" : "accepted" });
+  }
+  return { meter, outcomes, guards: [], assignments: rows, expSettings: { guards: { minSessions: 3, threshold: 0.2 } } };
+}
+
+test("T5c.9: the kill switch runs per (design, stratum): an arm bad in one stratum is disabled there only; the flat kill list holds no v2 arm", () => {
+  const g = analyse(killWorld()).guards;
+  assert.deepEqual(g.perStratum.map((s) => [s.design, s.stratum, Object.keys(s.kill)]), [[D, "api", ["10"]], [D, "opus", []]]);
+  assert.match(g.perStratum[0].kill["10"], /acceptance 0% \(0\/3\) vs baseline 100% \(3\/3\)/);
+  assert.deepEqual(g.kill, {});
+});
+
+test("T5c.9: applyKill writes designs.<id>.<stratum> = { disabled, posterior (reward by arm), reasons }, keeps the flat keys and other designs, and writes no v2 arm flat", () => {
+  const a = analyse(killWorld());
+  const old = { disabled: ["-+-"], posterior: { "-+-": { mean: -1, sd: 1 } }, reasons: { "-+-": "old" },
+    designs: { [D]: { api: { disabled: ["11"], reasons: { "11": "earlier" }, extra: true } }, "ffffffffffff": { api: { disabled: ["1"] } } } };
+  const s = applyKill(old, a) as any;
+  assert.deepEqual(s.disabled, ["-+-"]);
+  assert.deepEqual(Object.keys(s.posterior), []);
+  assert.deepEqual(s.designs[D].api.disabled, ["11", "10"]);
+  assert.deepEqual(s.designs[D].api.reasons["11"], "earlier");
+  assert.ok(String(s.designs[D].api.reasons["10"]).startsWith("acceptance"));
+  assert.equal(s.designs[D].api.extra, true);
+  assert.deepEqual(s.designs[D].opus.disabled, []);
+  assert.deepEqual(Object.keys(s.designs[D].opus.posterior).sort(), ["00", "10"]);
+  const p = s.designs[D].api.posterior["00"];
+  assert.ok(p.mean < 0 && p.sd >= 0, "a reward: minus dollars per active hour");
+  assert.deepEqual(s.designs.ffffffffffff, { api: { disabled: ["1"] } });
+});
+
+test("T5c.9: the guards section lists the v2 engine's kill switch per design and stratum", () => {
+  const text = renderAnalysis(analyse(killWorld()), new Date(T0));
+  assert.ok(text.includes(`- design ${D} stratum api: disable \`10\`: acceptance`), text);
+  assert.ok(text.includes(`- design ${D} stratum opus: no arm would be disabled`), text);
 });

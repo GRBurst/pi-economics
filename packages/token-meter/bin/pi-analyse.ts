@@ -3,7 +3,7 @@
 // On-demand analysis of pi's own logs (fields in <agentDir>/LOGS.md). Writes <out>/<YYYY-MM-DD>-<HHMM>-analysis.md
 // and .json (UTC time of the run; default out: <agentDir>/reports). --check only checks the data contract for the period and
 // exits 1 when a required field is missing. --apply also writes the kill-switch arms and the posterior to
-// <agentDir>/experiments/state.json (atomically; the v1 engine's designs only, its `designs` key is kept); without it
+// <agentDir>/experiments/state.json (atomically; the v1–v4 designs flat, the v2 engine's per design and stratum under `designs.<id>.<stratum>`); without it
 // nothing outside <out> is written.
 import { mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -85,7 +85,7 @@ mkdirSync(out, { recursive: true });
 const base = join(out, reportName(now));
 writeAtomic(`${base}.md`, renderAnalysis(a, now));
 writeAtomic(`${base}.json`, JSON.stringify({ generated: now.toISOString(), ...a }, null, 2) + "\n");
-process.stdout.write(`${base}.md\n${base}.json\n$${a.cost.totalUsd.toFixed(2)} over ${a.cost.activeHours.toFixed(1)} active h; ${a.quality.problems.length} contract problem(s); kill switch: ${Object.keys(a.guards.kill).join(", ") || "none"}\n${V2_SCOPE}\n`);
+process.stdout.write(`${base}.md\n${base}.json\n$${a.cost.totalUsd.toFixed(2)} over ${a.cost.activeHours.toFixed(1)} active h; ${a.quality.problems.length} contract problem(s); kill switch: ${[...Object.keys(a.guards.kill), ...a.guards.perStratum.flatMap((s) => Object.keys(s.kill).map((k) => `${s.design}/${s.stratum}:${k}`))].join(", ") || "none"}\n${V2_SCOPE}\n`);
 if (args.includes("--apply")) {
   const exp = join(agentDir, "experiments");
   mkdirSync(exp, { recursive: true });

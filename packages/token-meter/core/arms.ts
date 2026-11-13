@@ -150,7 +150,7 @@ type Acc = Record<string, { accepted: number; judged: number }>;
 type Sig = Record<string, { peeks: number; corrections: number; ratings: number[] }>;
 
 /** One column per entry; quota is the account's, in 1 % steps (coarse for short units); the guards columns come from guards/events.jsonl (per unit; rating = mean). */
-export function renderArms(stats: ArmStat[], acc: Acc, reasons: Record<string, string>, sig: Sig = {}, perTask: Record<string, { perAccepted: number }> = {}): string {
+export function renderArms(stats: ArmStat[], acc: Acc, reasons: Record<string, string>, sig: Sig = {}, perTask: Record<string, { perAccepted: number }> = {}, scope = true): string {
   const per = (s: ArmStat, k: "peeks" | "corrections") => (s.units ? f2((sig[s.arm]?.[k] ?? 0) / s.units) : "–");
   const rating = (s: ArmStat) => { const r = sig[s.arm]?.ratings ?? []; return r.length ? (r.reduce((x, y) => x + y, 0) / r.length).toFixed(1) : "–"; };
   const cols: Array<[string, (s: ArmStat) => string]> = [
@@ -161,15 +161,35 @@ export function renderArms(stats: ArmStat[], acc: Acc, reasons: Record<string, s
     ["peeks/s", (s) => per(s, "peeks")], ["corr/s", (s) => per(s, "corrections")], ["rating", rating],
   ];
   const rows = stats.map((s) => `| ${cols.map(([, f]) => f(s)).join(" | ")} |`);
-  return [`| ${cols.map(([h]) => h).join(" | ")} |`, "|" + " --- |".repeat(cols.length), ...rows, ...Object.entries(reasons).map(([a, r]) => `\ndisabled ${a}: ${r}`), `\n${V2_SCOPE}`].join("\n") + "\n";
+  return [`| ${cols.map(([h]) => h).join(" | ")} |`, "|" + " --- |".repeat(cols.length), ...rows, ...Object.entries(reasons).map(([a, r]) => `\ndisabled ${a}: ${r}`), ...(scope ? [`\n${V2_SCOPE}`] : [])].join("\n") + "\n";
 }
 
-/** What the kill switch and the posterior cover (review M2, M5b.1): the v2 engine reads `designs.<id>.<stratum>`, which nothing writes yet. */
-export const V2_SCOPE = "kill switch and posterior: the v1 engine's designs (v1–v4; state.json `disabled`, `posterior`) only; the v2 engine's designs (state.json `designs`) are not affected";
+/** Where the kill switch and the posterior are written (M5c, T5c.9; the engine reads the same places). */
+export const V2_SCOPE = "kill switch and posterior: per design and stratum for the v2 engine's designs (state.json `designs.<id>.<stratum>`: `disabled`, `posterior`, `reasons`), flat for the v1–v4 designs (`disabled`, `posterior`)";
 
-/** The experiments package's state.json: fresh posterior; disabled arms stay disabled (re-enable by editing the file); the v2 engine's `designs` are kept as they are. */
-export function nextState(old: any, stats: ArmStat[], reasons: Record<string, string>): { disabled: string[]; posterior: ReturnType<typeof posterior>; reasons: Record<string, string>; designs?: unknown } {
+/** The arms of one (design, stratum) of the v2 engine and the arms its kill switch disables. */
+export type StratumState = { design: string; stratum: string; arms: ArmStat[]; kill: Record<string, string> };
+
+const isRecord = (v: unknown): v is Record<string, any> => v !== null && typeof v === "object" && !Array.isArray(v);
+
+/**
+ * The experiments package's state.json: the flat keys (v1–v4 designs) get a fresh posterior and keep their disabled arms (re-enable by editing
+ * the file); each v2 (design, stratum) is written under `designs.<design id>.<stratum>` the same way (disabled kept and extended, posterior
+ * fresh, reasons merged); every other design, stratum and key stays as it is.
+ */
+export function nextState(old: any, stats: ArmStat[], reasons: Record<string, string>, v2: StratumState[] = []): { disabled: string[]; posterior: ReturnType<typeof posterior>; reasons: Record<string, string>; designs?: unknown } {
   const kept = Array.isArray(old?.disabled) ? old.disabled.filter((x: unknown) => typeof x === "string") : [];
-  const designs = old !== null && typeof old === "object" && "designs" in old ? { designs: old.designs } : {};
-  return { disabled: [...new Set([...kept, ...Object.keys(reasons)])], posterior: posterior(stats), reasons: { ...(old?.reasons ?? {}), ...reasons }, ...designs };
+  const designs = new Map<string, Map<string, unknown>>();
+  const oldDesigns = isRecord(old) && isRecord(old.designs) ? old.designs : {};
+  for (const [id, strata] of Object.entries(oldDesigns)) designs.set(id, new Map(isRecord(strata) ? Object.entries(strata) : []));
+  for (const x of v2) {
+    const prev = designs.get(x.design)?.get(x.stratum);
+    const was = isRecord(prev) ? prev : {};
+    const disabled = Array.isArray(was.disabled) ? was.disabled.filter((a: unknown) => typeof a === "string") : [];
+    const entry = { ...was, disabled: [...new Set([...disabled, ...Object.keys(x.kill)])], posterior: posterior(x.arms), reasons: { ...(isRecord(was.reasons) ? was.reasons : {}), ...x.kill } };
+    designs.set(x.design, (designs.get(x.design) ?? new Map()).set(x.stratum, entry));
+  }
+  const out = Object.fromEntries([...designs].map(([id, strata]) => [id, Object.fromEntries(strata)]));
+  const keep = isRecord(old) && "designs" in old || v2.length ? { designs: out } : {};
+  return { disabled: [...new Set([...kept, ...Object.keys(reasons)])], posterior: posterior(stats), reasons: { ...(old?.reasons ?? {}), ...reasons }, ...keep };
 }
