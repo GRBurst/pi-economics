@@ -124,6 +124,38 @@ in {
     eq "seven factors" (failed "pi-economics:" (withFactors 7)) ["pi-economics: experiments stratum cloud has more than 6 factors"]
     ++ eq "six factors" (failed "pi-economics:" (withFactors 6)) [];
 
+  # (redesign M5a T5a.7) Two-level factors only (redesign §7.2).
+  experiments-strata-three-levels = let
+    withLevels = levels:
+      eval ".pi/agent" {
+        settings.strata.cloud.factors = [
+          {
+            name = "ttl";
+            lever = "cache-lifecycle.mainCacheTtl";
+            inherit levels;
+          }
+          {
+            name = "one";
+            lever = "t.lever";
+            levels = lib.take 1 levels;
+          }
+          {
+            name = "two";
+            lever = "t.other";
+            levels = ["a" "b"];
+          }
+        ];
+      }
+      withActor;
+  in
+    eq "three levels and one level" (failed "pi-economics:" (withLevels ["5m" "1h" "2h"])) [
+      "pi-economics: experiments factor one in stratum cloud needs exactly two levels"
+      "pi-economics: experiments factor ttl in stratum cloud needs exactly two levels"
+    ]
+    ++ eq "only the one-level factor" (failed "pi-economics:" (withLevels ["5m" "1h"])) [
+      "pi-economics: experiments factor one in stratum cloud needs exactly two levels"
+    ];
+
   # (M4.16) The host's combination from W3 on (spec §9.1): M2–M4's extension
   # components, piSettings off (the host's own script runs until W6). Children
   # load cache-lifecycle and token-meter, not experiments: the list pi-setup's

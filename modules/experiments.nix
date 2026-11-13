@@ -86,13 +86,21 @@ in {
     );
 
     # (redesign M5a) A stratum's design is the full 2^k factorial or a
-    # fraction from the generator table of core/design.ts, which ends at six.
-    assertions =
-      lib.mapAttrsToList (name: fs: {
-        assertion = lib.length fs <= 6;
-        message = "pi-economics: experiments stratum ${name} has more than 6 factors";
+    # fraction from the generator table of core/design.ts, which ends at six;
+    # its factors have two levels each (redesign §7.2).
+    assertions = lib.concatLists (lib.mapAttrsToList (name: fs:
+      [
+        {
+          assertion = lib.length fs <= 6;
+          message = "pi-economics: experiments stratum ${name} has more than 6 factors";
+        }
+      ]
+      ++ map (f: {
+        assertion = lib.isList (f.levels or null) && lib.length f.levels == 2;
+        message = "pi-economics: experiments factor ${toString (f.name or "?")} in stratum ${name} needs exactly two levels";
       })
-      strata;
+      fs)
+    strata);
 
     # (M4.15) A soft dependency (spec §4.1): shell.ts tolerates a missing API.
     warnings = lib.optional (!hasActor) "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
