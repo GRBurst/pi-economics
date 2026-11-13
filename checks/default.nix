@@ -252,4 +252,6 @@ in {
       src = pi-task-router;
     };
   };
+  # redesign M10
+  identity-shim-probe = import ./identity-shim-probe {inherit pkgs;};
 }
