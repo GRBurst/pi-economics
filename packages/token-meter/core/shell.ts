@@ -28,11 +28,12 @@ export type ExperimentsApi = { armFor?(s: string): { id?: string } | undefined }
 const experimentArm = (sid: string): string | undefined =>
   (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1?.armFor?.(sid)?.id;
 
-/** pi usage → meter usage (cost.total → costUsd). */
+/** pi usage → meter usage (cost.total → costUsd; pi 1.4's `cacheWrite1h` only where the provider reports it). */
 function mapUsage(u: any): Usage | undefined {
   if (!u || typeof u !== "object") return undefined;
   const out: Usage = { input: u.input ?? 0, cacheRead: u.cacheRead ?? 0, cacheWrite: u.cacheWrite ?? 0, output: u.output ?? 0 };
   if (typeof u.reasoning === "number") out.reasoning = u.reasoning;
+  if (typeof u.cacheWrite1h === "number") out.cacheWrite1h = u.cacheWrite1h;
   if (typeof u.cost?.total === "number") out.costUsd = u.cost.total;
   return out;
 }

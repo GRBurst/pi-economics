@@ -132,6 +132,20 @@ test("ttftMs: the session's send → its first provider_stream_event; absent wit
   assert.equal(lines()[2].durationMs, 400);
 });
 
+// pi 1.4 normalises Anthropic's cache_creation.ephemeral_1h_input_tokens into usage.cacheWrite1h (pi-ai types.d.ts Usage).
+test("cacheWrite1h: from pi's usage when the provider reports the 1 h split (0 included); absent otherwise", () => {
+  const { f, lines } = setup();
+  const ctx = fakeCtx("s1", { entries: [{ type: "usage", kind: "cache_warm", provider: "anthropic", model: "opus", timestamp: T0,
+    usage: { ...usage, cacheWrite1h: 7 } }] });
+  f.fire("message_end", assistant({ usage: { ...usage, cacheWrite1h: 20 } }), ctx);
+  f.fire("message_end", assistant({ usage: { ...usage, cacheWrite1h: 0 } }), ctx);
+  f.fire("message_end", assistant(), ctx);
+  f.fire("after_provider_response", resp, ctx);
+  f.fire("agent_settled", {}, ctx);
+  assert.deepEqual(lines().map((l) => [l.kind, l.cacheWrite, l.cacheWrite1h]), [["turn", 20, 20], ["turn", 20, 0], ["turn", 20, undefined], ["warming", 20, 7]]);
+  assert.equal("cacheWrite1h" in lines()[2], false);
+});
+
 test("user message_end → no line", () => {
   const { f, lines } = setup();
   const ctx = fakeCtx("s1");
