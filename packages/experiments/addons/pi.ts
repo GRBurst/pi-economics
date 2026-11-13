@@ -65,8 +65,8 @@ function activeTool(pi: PiControl, tool: string): Lever<boolean> {
   };
 }
 
-/** `pi.activeTool(<name>)`: a tool name has no parentheses, commas or whitespace (a levers line key stays one token). */
-const ACTIVE_TOOL = /^pi\.activeTool\(([^()\s,]+)\)$/;
+/** `pi.activeTool(<name>)`: a tool name has no parentheses, commas, space, tab or line break (a levers line key stays one token; modules/experiments.nix says the same). */
+const ACTIVE_TOOL = /^pi\.activeTool\(([^(), \t\r\n]+)\)$/;
 
 /** The levers and the lever kinds that set pi through its session control. */
 export function piAddons(pi: PiControl): { levers: readonly Lever[]; kinds: readonly Kind[] } {

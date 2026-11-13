@@ -11,10 +11,9 @@ import { randomUUID } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { designState, draw, eligibleFor, parseBlocks, stratumOf, type AssignmentV2, type BlockState } from "./assign.ts";
-import { CACHE_LIFECYCLE } from "../addons/cache-lifecycle.ts";
-import { piProcessLevers } from "../addons/pi-process.ts";
-import { IC_TARGET, IC_TOOL, infiniteContext, parseIcRules, type IcRules } from "../addons/infinite-context.ts";
-import { piAddons, type PiControl } from "../addons/pi.ts";
+import { IC_TARGET, IC_TOOL, parseIcRules, type IcRules } from "../addons/infinite-context.ts";
+import { allAddons } from "../addons/index.ts";
+import type { PiControl } from "../addons/pi.ts";
 import { createRegistry, sessionLevers } from "../addons/registry.ts";
 import type { Lever, ModelRef, SessionCtx } from "../addons/types.ts";
 import { publish, serve, type Assigned, type Bus, type Levers } from "./channel.ts";
@@ -134,12 +133,15 @@ export function install(pi: PiLike, deps: Deps): void {
     const m = safe(() => ctx.model as { provider?: unknown; id?: unknown } | undefined);
     model = typeof m?.provider === "string" && typeof m?.id === "string" ? `${m.provider}/${m.id}` : undefined;
   };
-  const pia = piAddons(pi);
-  const registry = createRegistry([...CACHE_LIFECYCLE, ...pia.levers, ...infiniteContext(readIcRules), ...piProcessLevers(() => ({
-    global: readJson(join(deps.agentDir, "settings.json")),
-    project: trusted ? readJson(join(cwd, ".pi", "settings.json")) : undefined,
-    model,
-  }))], pia.kinds);
+  const addons = allAddons(pi, {
+    icRules: readIcRules,
+    settings: () => ({
+      global: readJson(join(deps.agentDir, "settings.json")),
+      project: trusted ? readJson(join(cwd, ".pi", "settings.json")) : undefined,
+      model,
+    }),
+  });
+  const registry = createRegistry(addons.levers, addons.kinds);
   const tracked = new Map<string, ReturnType<typeof sessionLevers>>();
   /** What a session offers its add-ons now: its current model, its branch and its entry writer (seed tier, §7.4). */
   const live = new Map<string, { model?: ModelRef; branch: () => readonly unknown[] }>();

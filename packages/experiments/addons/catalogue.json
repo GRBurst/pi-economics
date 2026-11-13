@@ -1,0 +1,10 @@
+{
+  "levers": [
+    "cache-lifecycle.warmPolicy",
+    "cache-lifecycle.mainCacheTtl",
+    "cache-lifecycle.maskOnCold",
+    "pi.thinkingLevel",
+    "infinite-context.nudgeAtTokens"
+  ],
+  "thinkingLevels": ["off", "minimal", "low", "medium", "high", "xhigh"]
+}
