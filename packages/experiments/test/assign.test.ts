@@ -177,3 +177,26 @@ test("review m1: parseBlocks keeps well-formed queues, drops malformed blocks (b
   const mixed = { ok: { queue: ["1"] }, s: { queue: "011" }, o: { queue: { a: 1 } }, n: { queue: [1] }, x: "q", m: {} };
   assert.deepEqual(parseBlocks(mixed), { blocks: { ok: { queue: ["1"] } }, bad: true });
 });
+
+// Review m2: balance alone holds for any block order; the order within a block must be a uniform random permutation
+// (a fixed order confounds arm with position, i.e. time; a naive shuffle with j ∈ [0, n) is biased).
+test("review m2: each block is a uniform random permutation of the arms (all 3! orders within 5σ, seeded)", () => {
+  const d = { ...designFor("api", { factors: [] }), arms: ["a", "b", "c"].map((name) => ({ name, levels: {} })) };
+  const rand = mulberry32(2024);
+  const n = 60_000;
+  const counts = new Map<string, number>();
+  let state: BlockState = {};
+  for (let b = 0; b < n; b++) {
+    let order = "";
+    for (let i = 0; i < 3; i++) {
+      const r = nextArm(state, d, rand);
+      order += r.arm;
+      state = r.state;
+    }
+    counts.set(order, (counts.get(order) ?? 0) + 1);
+  }
+  assert.equal(counts.size, 6, `orders seen: ${[...counts.keys()].join(" ")}`);
+  const p = 1 / 6;
+  const sigma = Math.sqrt(n * p * (1 - p));
+  for (const [order, c] of counts) assert.ok(Math.abs(c - n * p) < 5 * sigma, `${order}: ${c} of ${n}, expected ${Math.round(n * p)} ± ${Math.round(5 * sigma)}`);
+});
