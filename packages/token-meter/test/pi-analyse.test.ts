@@ -25,7 +25,7 @@ function agentDir(edit: (w: ReturnType<typeof world>) => void = () => {}): strin
   return dir;
 }
 
-test("pi-analyse writes <out>/<date>-<HHMM>-analysis.md and .json (UTC time of the run) with all five sections", () => {
+test("pi-analyse writes <out>/<date>-<HHMM>-analysis.md and .json (UTC time of the run) with all seven sections", () => {
   const dir = agentDir();
   const out = join(dir, "reports");
   const before = new Date().toISOString().slice(0, 16);
@@ -39,7 +39,7 @@ test("pi-analyse writes <out>/<date>-<HHMM>-analysis.md and .json (UTC time of t
   const stamp = (f: string) => f.slice(0, 15).replace(/^(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})$/, "$1T$2:$3");
   assert.ok(stamp(files[1]) >= before && stamp(files[1]) <= after, `${files[1]} is not the UTC minute of the run (${before} – ${after})`);
   const md = readFileSync(join(out, files[1]), "utf8");
-  for (const h of ["## Cost", "## Levers", "## Experiment", "## Delegation & routing", "## Guards", "## Data quality"]) assert.ok(md.includes(h), h);
+  for (const h of ["## Budget", "## Fleet", "## Cache", "## Levers", "## Experiments", "## Router", "## Guards", "## Data quality"]) assert.ok(md.includes(h), h);
   assert.match(md, /2026-10\.jsonl 1/); // the torn line is reported
   const tables = JSON.parse(readFileSync(join(out, files[0]), "utf8"));
   assert.ok(Math.abs(tables.cost.totalUsd - 47.7) < 1e-9);
@@ -101,4 +101,25 @@ test("pi-analyse reads `plans` from token-meter/settings.json: the experiment st
   mkdirSync(join(dir, "token-meter"), { recursive: true });
   writeFileSync(join(dir, "token-meter", "settings.json"), JSON.stringify({ plans: { anthropic: { billing: "subscription", windows: ["5h"] } } }));
   assert.deepEqual(strata(dir), ["subscription"]);
+});
+
+test("pi-analyse without a plans setting (the CLI passes {}): Budget says plans absent, JSON budget.plansAbsent is true and the cash cells of guessed api rows are upper bounds; with a plan neither (M4 review M3)", () => {
+  const read = (dir: string) => {
+    const out = join(dir, "reports");
+    assert.equal(run(["--agent-dir", dir, "--out", out]).status, 0);
+    return { md: readFileSync(join(out, readdirSync(out).find((f) => f.endsWith(".md"))!), "utf8"), json: JSON.parse(readFileSync(join(out, readdirSync(out).find((f) => f.endsWith(".json"))!), "utf8")) };
+  };
+  const bare = read(agentDir());
+  assert.equal(bare.json.budget.plansAbsent, true);
+  const budgetText = bare.md.split("\n## Budget\n")[1].split(/\n## /)[0];
+  assert.ok(budgetText.includes("plans absent"));
+  assert.match(budgetText, /\| api \| \d+ \| [\d.]+ \| ≤ [\d.]+ \(billing class guessed: no plan\) \|/);
+  assert.match(bare.md.split("\n## Fleet\n")[1], /\| cash \$ \| ≤ [\d.]+ \(billing class guessed: no plan\) \|/);
+  const dir = agentDir();
+  mkdirSync(join(dir, "token-meter"), { recursive: true });
+  writeFileSync(join(dir, "token-meter", "settings.json"), JSON.stringify({ plans: { anthropic: { billing: "subscription", windows: ["5h"] }, openrouter: { billing: "api" } } }));
+  const told = read(dir);
+  assert.equal(told.json.budget.plansAbsent, false);
+  assert.ok(!told.md.includes("billing class guessed"));
+  assert.ok(!told.md.split("\n## Budget\n")[1].split(/\n## /)[0].includes("plans absent"));
 });

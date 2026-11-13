@@ -1,6 +1,7 @@
 // (a) cache: what a request wrote because the context grew and what it had to rewrite because the cache lost the prefix (redesign M2a, B3).
 import { byTs, FOLD_SHRINK, isError, isLine, num, push } from "./logs.ts";
-import { cacheWrite1hOf, isClaude, pIn, WEIGHT, writeWeight } from "./units.ts";
+import { cacheWrite1hOf, isClaude, pIn, writeWeight } from "./units.ts";
+import { weightsOf } from "./prices.ts";
 
 type Flags = Record<string, Record<string, string>>;
 
@@ -88,7 +89,9 @@ export function branchesOf(lines: readonly any[]): Map<string, any[]> {
   return branches;
 }
 
-export type CauseRow = { cause: MissCause; n: number; tokens: number; usd: number };
+/** A premium as the two prices it is the difference of: the $ the missed tokens cost to write (tokens × w × p) and the $ they would have cost to read (tokens × r × p); premium = write − read. M4: a calibrated β prices each in quota points. */
+export type Parts = { write: number; read: number };
+export type CauseRow = { cause: MissCause; n: number; tokens: number; usd: number; parts: Parts };
 export type CacheSection = {
   /** Claude turn requests in the branches, and the branches. */ requests: number; branches: number;
   /** Their cacheWrite tokens. */ writeTokens: number;
@@ -101,11 +104,11 @@ const CAUSES: MissCause[] = ["ttl", "fold", "model", "prefix", "other"];
 
 /**
  * The Cache section: cacheSteps (fold = shrinkFold) over every branch of `lines`, summed. $ is at each line's input price p (pIn): a write
- * costs 1.25 p (2.0 p for 1 h writes, cacheWrite1hOf), a read 0.1 p; a miss costs the premium of writing over reading.
+ * costs 1.25 p (2.0 p for 1 h writes, cacheWrite1hOf), a read the model's read ratio × p (0.1 by default, 0.05 for Opus 5.5 and Sonnet 5.5: prices.ts); a miss costs the premium of writing over reading.
  */
 export function cacheSection(lines: readonly any[], flags: Flags = {}): CacheSection {
   const ttl = ttlMsOf(flags);
-  const misses = CAUSES.map((cause): CauseRow => ({ cause, n: 0, tokens: 0, usd: 0 }));
+  const misses = CAUSES.map((cause): CauseRow => ({ cause, n: 0, tokens: 0, usd: 0, parts: { write: 0, read: 0 } }));
   const branches = branchesOf(lines);
   const out: CacheSection = { requests: 0, branches: 0, writeTokens: 0, newContext: { tokens: 0, usd: 0 }, misses, missShare: 0, events: foldPremiums(branches.values(), ttl, shrinkFold, flags) };
   for (const branch of branches.values()) {
@@ -121,7 +124,10 @@ export function cacheSection(lines: readonly any[], flags: Flags = {}): CacheSec
         const row = misses[CAUSES.indexOf(step.cause)];
         row.n += 1;
         row.tokens += step.miss;
-        row.usd += step.miss * (w - WEIGHT.cacheRead) * p;
+        const r = weightsOf(l.model, l.provider).cacheRead;
+        row.usd += step.miss * (w - r) * p;
+        row.parts.write += step.miss * w * p;
+        row.parts.read += step.miss * r * p;
       }
     }
   }
@@ -132,7 +138,9 @@ export function cacheSection(lines: readonly any[], flags: Flags = {}): CacheSec
 // ---- B4: what a fold or a cold resume costs over reading the same tokens ----
 
 /** `events` of one kind and their premium API-eq $ (misses in the event's window × (write − read price)); `baselineUsd` and `netUsd` = premium − baseline. */
-export type FoldPremium = { events: number; premiumUsd: number; baselineUsd: number; netUsd: number };
+export type FoldPremium = { events: number; premiumUsd: number; baselineUsd: number; netUsd: number; premiumParts: Parts; baselineParts: Parts };
+const noParts = (): Parts => ({ write: 0, read: 0 });
+export const newPremium = (): FoldPremium => ({ events: 0, premiumUsd: 0, baselineUsd: 0, netUsd: 0, premiumParts: noParts(), baselineParts: noParts() });
 export type EventKind = "fold" | "coldResume";
 const N_AFTER = 3; // requests an event is charged with: its own and the next two
 
@@ -146,13 +154,13 @@ const N_AFTER = 3; // requests an event is charged with: its own and the next tw
  * charged one request's worth of it (net = Σ premium_e − events × baseline, the design's B4).
  */
 export function foldPremiums(branches: Iterable<readonly any[]>, ttlMs: (l: any) => number, eventBetween: (a: any, b: any) => boolean, flags: Flags = {}): Record<EventKind, FoldPremium> {
-  const out: Record<EventKind, FoldPremium> = { fold: { events: 0, premiumUsd: 0, baselineUsd: 0, netUsd: 0 }, coldResume: { events: 0, premiumUsd: 0, baselineUsd: 0, netUsd: 0 } };
-  const pool: Record<EventKind, { usd: number; n: number }> = { fold: { usd: 0, n: 0 }, coldResume: { usd: 0, n: 0 } };
+  const out: Record<EventKind, FoldPremium> = { fold: newPremium(), coldResume: newPremium() };
+  const pool: Record<EventKind, { parts: Parts; n: number }> = { fold: { parts: noParts(), n: 0 }, coldResume: { parts: noParts(), n: 0 } };
   for (const branch of branches) {
     const steps = cacheSteps(branch, ttlMs, eventBetween);
-    const premium = steps.map((s) => {
+    const premium = steps.map((s): Parts => {
       const { p, w } = pricing(branch[s.i], flags);
-      return s.miss * (w - WEIGHT.cacheRead) * p;
+      return { write: s.miss * w * p, read: s.miss * weightsOf(branch[s.i].model, branch[s.i].provider).cacheRead * p };
     });
     const events: Array<{ at: number; kind: EventKind }> = [];
     const idle = idleMs(branch);
@@ -166,15 +174,18 @@ export function foldPremiums(branches: Iterable<readonly any[]>, ttlMs: (l: any)
     events.forEach((e, n) => {
       const end = Math.min(e.at + N_AFTER, events[n + 1]?.at ?? Infinity, steps.length);
       out[e.kind].events += 1;
-      for (let k = e.at; k < end; k++) { out[e.kind].premiumUsd += premium[k]; inWindow[k] = true; }
+      for (let k = e.at; k < end; k++) { out[e.kind].premiumParts.write += premium[k].write; out[e.kind].premiumParts.read += premium[k].read; inWindow[k] = true; }
     });
-    let usd = 0, n = 0;
-    steps.forEach((s, k) => { if (s.i > 0 && !inWindow[k]) { usd += premium[k]; n += 1; } });
-    for (const kind of new Set(events.map((e) => e.kind))) { pool[kind].usd += usd; pool[kind].n += n; }
+    const rest = noParts();
+    let n = 0;
+    steps.forEach((s, k) => { if (s.i > 0 && !inWindow[k]) { rest.write += premium[k].write; rest.read += premium[k].read; n += 1; } });
+    for (const kind of new Set(events.map((e) => e.kind))) { pool[kind].parts.write += rest.write; pool[kind].parts.read += rest.read; pool[kind].n += n; }
   }
   for (const kind of ["fold", "coldResume"] as const) {
-    const e = out[kind];
-    e.baselineUsd = pool[kind].n ? (e.events * pool[kind].usd) / pool[kind].n : 0;
+    const e = out[kind], each = pool[kind].n ? e.events / pool[kind].n : 0;
+    e.premiumUsd = e.premiumParts.write - e.premiumParts.read;
+    e.baselineParts = { write: each * pool[kind].parts.write, read: each * pool[kind].parts.read };
+    e.baselineUsd = e.baselineParts.write - e.baselineParts.read;
     e.netUsd = e.premiumUsd - e.baselineUsd;
   }
   return out;

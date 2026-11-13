@@ -2,39 +2,81 @@
 
 Generated 2026-10-06T08:30:00.000Z by pi-analyse; field meanings in <agentDir>/LOGS.md. Caveats: quota is the whole account's, in 1% steps; units are root sessions (small samples, task mix varies between them); $ per active hour counts gaps < 30 min as active.
 
-## Cost
+## Budget
+
+The quota is the budget, not an experiment's comparison metric: it arrives in whole percent (about 460–560 requests per 1% step in 2026-11) and is shared by every session, subagent and other client of the account, so no session or arm is charged quota points. A window is one provider's `q5h` or `q7d` reset period; its peak is the highest reading, its lockout the time from the cap (a reading of 100, or a rate-limit error after a reading of 99) to the reset, its time to cap the time from the window's start to the cap. Complete = the window is over and the log reaches back to its start. Retry wait is the sum of the `retryWaitMs` of the window's lines (pi-retry's totals on v1 lines, pi's native retries on v2 lines), whatever failed.
+
+plans absent (token-meter's `plans` setting is missing or has no usable entry): windows come from the lines' own readings, and a v1 line's billing class is guessed (api for a provider without a plan), so cash $ is an upper bound.
+
+### Quota windows
+
+| provider | window | windows (complete) | peak median / max | capped | lockout | time to cap (median) | 429 requests | retry wait |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| anthropic | 5h | 1 (0) | 13.00 / 13 | 0 | 0.0 min | – | 0 | 0.0 min |
+| anthropic | 7d | 1 (0) | 27.00 / 27 | 0 | 0.0 min | – | 0 | 0.0 min |
+
+### Quota calibration
+
+Per complete window, peak quota ≈ Σ β_c × API-eq $ of component c (a non-negative least-squares fit; no intercept: a window starts at 0). β = quota points per API-eq $ of the component: 1 would mean the quota weighs a token as its list price does. A flag says the quota now weighs tokens differently from the API prices — the signal to revisit the objective, never an automatic change.
+
+#### anthropic 5h
+
+not enough complete windows to fit: 0 of 8 needed
+
+#### anthropic 7d
+
+not enough complete windows to fit: 0 of 8 needed
+
+### Spend by billing class
+
+API-eq $ = the tokens at the provider's list price (what a pay-per-token account would be charged); cash $ = what is actually charged: the API-eq $ of billing class api, 0 for subscription, free and local.
+
+| billing class | requests | API-eq $ | cash $ |
+| --- | --- | --- | --- |
+| api | 123 | 145.20 | ≤ 145.20 (billing class guessed: no plan) |
+| local | 2 | 0.00 | 0.00 |
+
+### Local cost
+
+Σ request time (`durationMs`, summed over requests: concurrent requests add up) × the provider's hourly rate in its currency. A request without `durationMs` adds no time: untimed requests make the cost an undercount. A provider without a rate has no cost.
+
+| provider | requests (timed / untimed) | active hours | rate | cost |
+| --- | --- | --- | --- | --- |
+| llama | 2 (2 / 0) | 0.05 | no rate | – |
+
+## Fleet
 
 | metric | value |
 | --- | --- |
-| total $ | 145.20 |
-| requests (warming) | 123 (1) |
+| total API-eq $ | 145.20 |
+| cash $ | ≤ 145.20 (billing class guessed: no plan) |
+| requests (warming) | 125 (1) |
 | errors | 1 |
-| root sessions | 20 |
-| active hours | 9.50 |
-| $/active hour (95% CI) | 15.25 (11.96 – 18.27) |
-| q5h %/active hour | 0.32 |
-| q7d %/active hour | 0.00 |
-| $/accepted task, all routed tasks, excl. – incl. unresolved cards' $ (accepted/tasks) | 1.59 (13/21) |
+| root sessions | 21 |
+| active hours | 9.53 |
+| API-eq $/active hour (95% CI) | 15.25 (11.96 – 18.27) |
+| API-eq $/accepted task, all routed tasks, excl. – incl. unresolved cards' $ (accepted/tasks) | 1.59 (13/21) |
 
 ### By model
 
-| model | requests | $ | share | $/active h |
+| model | requests | API-eq $ | share | API-eq $/active h |
 | --- | --- | --- | --- | --- |
-| claude-opus | 86 | 99.70 | 69% | 10.49 |
-| claude-sonnet | 15 | 27.00 | 19% | 2.84 |
-| qwen | 22 | 18.50 | 13% | 1.95 |
+| claude-opus | 86 | 99.70 | 69% | 10.46 |
+| claude-sonnet | 15 | 27.00 | 19% | 2.83 |
+| qwen | 22 | 18.50 | 13% | 1.94 |
+| qwen3.8 | 2 | 0.00 | 0% | 0.00 |
 
 ### Splits
 
-Warming = the cache-warming requests (kind warming). Folds and cold resumes are in the Cache section.
+Warming = the cache-warming requests (kind warming). Folds and cold resumes are in the Cache section; list-price $ is API-eq $, money actually charged is cash $ (Budget).
 
-| split | n | $ | share | $/active h |
+| split | n | API-eq $ | share | API-eq $/active h |
 | --- | --- | --- | --- | --- |
 | warming | 1 | 0.50 | 0% | 0.05 |
 
-### Token components (≈, by Anthropic price ratios)
+### Token components (≈, by each model's price ratios)
 
-| component | $ |
+| component | API-eq $ |
 | --- | --- |
 | input | 2.63 |
 | cacheRead | 32.03 |
@@ -43,9 +85,12 @@ Warming = the cache-warming requests (kind warming). Folds and cold resumes are 
 | output | 65.65 |
 | unallocated | 0.00 |
 
+## Cache
+
+
 ### Cache (Claude models)
 
-Per session branch (warming requests refresh the cache but are no row): a request's cache write is **new context** (growth: the context added since the previous request, written once whatever happens) plus a **rewrite**, the **miss**: tokens of the prefix the previous request left in the cache (cacheRead + cacheWrite) that this one did not read. Only a miss is avoidable. Cause of a miss, the first that holds: ttl (the gap outlived the TTL in force; a gap runs from the latest send before the request to its send, ts − durationMs: a long response does not age the prefix it read; TTL: 5 min, 1 h for a main session in a mainCacheTtl 1h arm or after a 1 h write), fold (the prompt fell below 80% of the previous request's), model (the model changed), prefix (the system prompt, a prompt section or the tool list changed: the line's systemHash differs from the last one before it in the branch), other (a change of the prefix inside the TTL that the meter lines do not show: a small fold or mask, an injected agent message, a system change on lines without a systemHash; it is a real cost, not a bookkeeping residue, but its reason is not in the log). $ = API-eq at each line's input price p: a write is 1.25 p (2.0 p for a 1 h write), a read 0.1 p; a miss costs the premium of writing over reading.
+Per session branch (warming requests refresh the cache but are no row): a request's cache write is **new context** (growth: the context added since the previous request, written once whatever happens) plus a **rewrite**, the **miss**: tokens of the prefix the previous request left in the cache (cacheRead + cacheWrite) that this one did not read. Only a miss is avoidable. Cause of a miss, the first that holds: ttl (the gap outlived the TTL in force; a gap runs from the latest send before the request to its send, ts − durationMs: a long response does not age the prefix it read; TTL: 5 min, 1 h for a main session in a mainCacheTtl 1h arm or after a 1 h write), fold (the prompt fell below 80% of the previous request's), model (the model changed), prefix (the system prompt, a prompt section or the tool list changed: the line's systemHash differs from the last one before it in the branch), other (a change of the prefix inside the TTL that the meter lines do not show: a small fold or mask, an injected agent message, a system change on lines without a systemHash; it is a real cost, not a bookkeeping residue, but its reason is not in the log). $ = API-eq at each line's input price p: a write is 1.25 p (2.0 p for a 1 h write), a read the model's read ratio × p (0.1 by default, 0.05 for Opus 5.5 and Sonnet 5.5); a miss costs the premium of writing over reading. est. points = the calibrated quota weights (Budget) applied to the two prices a premium is the difference of: β(cacheWrite) × the $ of writing the missed tokens − β(cacheRead) × the $ of reading them; a dash without a calibration (it needs 8 complete 5-hour windows).
 
 | metric | value |
 | --- | --- |
@@ -56,59 +101,60 @@ Per session branch (warming requests refresh the cache but are no row): a reques
 
 Misses by cause:
 
-| cause | requests | missed tokens | premium API-eq $ |
-| --- | --- | --- | --- |
-| ttl | 28 | 7800 | 9.17 |
-| fold | 2 | 6020 | 1.37 |
-| model | 0 | 0 | 0.00 |
-| prefix | 1 | 200 | 0.07 |
-| other | 43 | 10200 | 18.09 |
+| cause | requests | missed tokens | premium API-eq $ | est. points |
+| --- | --- | --- | --- | --- |
+| ttl | 28 | 7800 | 9.17 | – |
+| fold | 2 | 6020 | 1.37 | – |
+| model | 0 | 0 | 0.00 | – |
+| prefix | 1 | 200 | 0.07 | – |
+| other | 43 | 10200 | 18.09 | – |
 
 Folds and cold resumes (a cold resume = a request after a gap (as for ttl) beyond the TTL in force; a fold as in the cause table, unless the gap came first). Window = the event's request and the next two turn requests (cut short by the next event): premium = their misses × (write − read price). Baseline = what an ordinary request costs the same way (the mean premium of the requests outside every window, in the sessions that have such an event) once per event; net = premium − baseline.
 
-| event | n | premium API-eq $ | baseline $ | net $ |
-| --- | --- | --- | --- | --- |
-| after folds | 2 | 1.43 | 0.20 | 1.23 |
-| after cold resumes | 28 | 9.19 | 1.02 | 8.17 |
+| event | n | premium API-eq $ | baseline API-eq $ | net API-eq $ | net est. points |
+| --- | --- | --- | --- | --- | --- |
+| after folds | 2 | 1.43 | 0.20 | 1.23 | – |
+| after cold resumes | 28 | 9.19 | 1.02 | 8.17 | – |
 
 ### Fold ledger (Claude models)
 
-Per detected fold (a non-warming request whose prompt, input + cacheRead + cacheWrite, fell below 80% of the previous one's): R = tokens removed; K ≈ the first request's cacheWrite minus the session's typical write (median of its non-first, non-fold, non-cold turns), 0 for a fold after a cold gap; n = requests after the fold until the session ends or the next cold gap (≥ 5 min, ≥ 60 min in a mainCacheTtl 1h arm; warming counts); r and w = the model's cache read and write price per token: 0.1 × the input price recovered from the lines' cost for a read, 1.25 × for a 5-minute write and 2.0 × for a 1 h write (a write is a 1 h one in a mainCacheTtl 1h arm's main session, or by the line's own cacheWrite1h). **Net = n·R·r − K·(w − r)** = cache-read $ saved − rewrite $ paid. Counterfactual only: it assumes the fold changed nothing else (output, later tool use, task path) and that an unfolded prompt would have kept being read at r; folds overlap in time but each is valued alone.
+Per detected fold (a non-warming request whose prompt, input + cacheRead + cacheWrite, fell below 80% of the previous one's): R = tokens removed; K ≈ the first request's cacheWrite minus the session's typical write (median of its non-first, non-fold, non-cold turns), 0 for a fold after a cold gap; n = requests after the fold until the session ends or the next cold gap (≥ 5 min, ≥ 60 min in a mainCacheTtl 1h arm; warming counts); r and w = the model's cache read and write price per token: the model's read ratio (0.1 by default, 0.05 for Opus 5.5 and Sonnet 5.5) × the input price recovered from the lines' cost for a read, 1.25 × for a 5-minute write and 2.0 × for a 1 h write (a write is a 1 h one in a mainCacheTtl 1h arm's main session, or by the line's own cacheWrite1h). **Net = n·R·r − K·(w − r)** = cache-read $ saved − rewrite $ paid. Counterfactual only: it assumes the fold changed nothing else (output, later tool use, task path) and that an unfolded prompt would have kept being read at r; folds overlap in time but each is valued alone.
 
 | metric | value |
 | --- | --- |
 | folds (after a cold gap) | 2 (0) |
-| cache-read $ saved | 13.8109 |
-| rewrite $ paid | 8.6798 |
-| net $ | 5.1311 |
+| cache-read API-eq $ saved | 13.8109 |
+| rewrite API-eq $ paid | 8.6798 |
+| net API-eq $ | 5.1311 |
+| net est. points (β(cacheRead) × saved − the rewrite priced as in Cache) | – |
 | share with net < 0 | 0% (0/2) |
 
 By fold depth K/R (rewritten tokens per token removed; break-even ≈ n/11.5):
 
-| K/R | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
-| --- | --- | --- | --- | --- | --- |
-| < 0.25 | 2 | 13.8109 | 8.6798 | 5.1311 | 0% |
-| 0.25 – 0.5 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
-| 0.5 – 1 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
-| 1 – 2 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
-| ≥ 2 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
+| K/R | folds | cache-read API-eq $ saved | rewrite API-eq $ paid | net API-eq $ | net est. points | share net < 0 |
+| --- | --- | --- | --- | --- | --- | --- |
+| < 0.25 | 2 | 13.8109 | 8.6798 | 5.1311 | – | 0% |
+| 0.25 – 0.5 | 0 | 0.0000 | 0.0000 | 0.0000 | – | – |
+| 0.5 – 1 | 0 | 0.0000 | 0.0000 | 0.0000 | – | – |
+| 1 – 2 | 0 | 0.0000 | 0.0000 | 0.0000 | – | – |
+| ≥ 2 | 0 | 0.0000 | 0.0000 | 0.0000 | – | – |
 
 By design and foldHint level (v2 and v3 differ in what cache-aware means: never pooled):
 
-| group | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
-| --- | --- | --- | --- | --- | --- |
-| v2 cache-aware | 1 | 9.2073 | 5.3709 | 3.8364 | 0% |
-| v4 – | 1 | 4.6036 | 3.3089 | 1.2948 | 0% |
+| group | folds | cache-read API-eq $ saved | rewrite API-eq $ paid | net API-eq $ | net est. points | share net < 0 |
+| --- | --- | --- | --- | --- | --- | --- |
+| v2 cache-aware | 1 | 9.2073 | 5.3709 | 3.8364 | – | 0% |
+| v4 – | 1 | 4.6036 | 3.3089 | 1.2948 | – | 0% |
 
 By model:
 
-| model | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
-| --- | --- | --- | --- | --- | --- |
-| claude-opus | 2 | 13.8109 | 8.6798 | 5.1311 | 0% |
+| model | folds | cache-read API-eq $ saved | rewrite API-eq $ paid | net API-eq $ | net est. points | share net < 0 |
+| --- | --- | --- | --- | --- | --- | --- |
+| claude-opus | 2 | 13.8109 | 8.6798 | 5.1311 | – | 0% |
 
 ## Levers
 
-43 sessions in the period, 11 with a levers line (eligible 10, children 1), 32 without one; per session its last levers line up to the period's end. Sources: pe = pi-economics assigned it, ext = an extension chose it, fixed = configuration or pi default. Infinite-context disables compaction (`pi.compaction.enabled` false, ext) in 1 of them: their other `pi.compaction.*` levers are inert, left out.
+44 sessions in the period, 11 with a levers line (eligible 10, children 1), 33 without one; per session its last levers line up to the period's end. Sources: pe = pi-economics assigned it, ext = an extension chose it, fixed = configuration or pi default. Infinite-context disables compaction (`pi.compaction.enabled` false, ext) in 1 of them: their other `pi.compaction.*` levers are inert, left out.
 
 | lever | sessions | values (sessions) | sources | assigned | refused | unverified | refusal rate |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -119,7 +165,7 @@ By model:
 
 Refusal rate = refused ÷ assigned (read-back, design §7.4); a factor refused in > 20% of its sessions points at a broken add-on.
 
-## Experiment
+## Experiments
 
 Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware means something else in v3 (a system-prompt paragraph): they are analysed in separate tables and never pooled; guard signals and the kill switch are per design too.
 
@@ -127,7 +173,7 @@ Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware 
 
 Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
-plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
+plans absent (token-meter's `plans` setting is missing or has no usable entry): every unit is counted in stratum api.
 
 #### stratum api (objective apiUsd per active hour)
 
@@ -160,7 +206,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
-plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
+plans absent (token-meter's `plans` setting is missing or has no usable entry): every unit is counted in stratum api.
 
 #### stratum api (objective apiUsd per active hour)
 
@@ -194,7 +240,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
-plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
+plans absent (token-meter's `plans` setting is missing or has no usable entry): every unit is counted in stratum api.
 
 #### stratum api (objective apiUsd per active hour)
 
@@ -226,7 +272,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
-plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
+plans absent (token-meter's `plans` setting is missing or has no usable entry): every unit is counted in stratum api.
 
 #### stratum api (objective apiUsd per active hour)
 
@@ -257,7 +303,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 | `-+-` | 2 | 1.00 | 8.80 | 8.00 – 9.60 | -8.80 | 0.56 | 94% |
 | `---` | 3 | 1.37 | 11.49 | 8.00 – 15.55 | -11.49 | 1.74 | 6% |
 
-## Delegation & routing
+## Router
 
 | metric | value |
 | --- | --- |
@@ -399,14 +445,14 @@ Period: 2026-10-05 – 2026-10-05; lines from 2026-10-05T10:00:00.000Z to 2026-1
 
 | log | lines | first | last | schema versions (v: lines) |
 | --- | --- | --- | --- | --- |
-| meter | 137 | 2026-10-05T10:00:00.000Z | 2026-10-05T23:50:00.000Z | v0: 8, v1: 117, v2: 12 |
+| meter | 139 | 2026-10-05T10:00:00.000Z | 2026-10-05T23:50:00.000Z | v0: 8, v1: 117, v2: 14 |
 | outcomes | 56 | 2026-10-05T11:01:00.000Z | 2026-10-05T12:34:00.000Z | v1: 56 |
 | assignments | 19 | 2026-10-05T09:59:00.000Z | 2026-10-05T23:39:00.000Z | v0: 2, v1: 17 |
 | guards | 6 | 2026-10-05T11:00:00.000Z | 2026-10-05T12:10:00.000Z | v1: 6 |
 
 Unparsable lines: meter/2026-10.jsonl 2
 
-Root sessions without an arm: 2 (1.40 $, 1% of cost; 1 of them have an assignment row), e.g. bare1, bare2.
+Root sessions without an arm: 3 (1.40 $, 1% of cost; 1 of them have an assignment row), e.g. loc1, bare1, bare2.
 
 | unjoinable | n | examples |
 | --- | --- | --- |
@@ -417,13 +463,6 @@ Root sessions without an arm: 2 (1.40 $, 1% of cost; 1 of them have an assignmen
 | task events without a spawn | 2 | gone-task, nospawn |
 | guard events of sessions without meter lines | 1 | ghost |
 | assignments of sessions without meter lines | 1 | ghost2 |
-
-Pi share of the account quota (rises between pi requests < 30 min apart ÷ all rises seen per window; other use during pi activity counts as pi):
-
-| window | pi points | account points | pi share |
-| --- | --- | --- | --- |
-| 5 h | 3 | 3 | 100% |
-| 7 d | 0 | 7 | 0% |
 
 Contract (`pi-analyse --check`): 
 

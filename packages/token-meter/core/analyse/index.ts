@@ -10,6 +10,7 @@ import { delegation, type DelegationSection } from "./delegation.ts";
 import { guards, type GuardsSection } from "./guards.ts";
 import { quality, type QualitySection } from "./quality.ts";
 import { levers, type LeversSection } from "./levers.ts";
+import { budget, type BudgetSection } from "./budget.ts";
 
 export { LOGS, inPeriod, versionOf, type FileInfo, type LogName, type Logs, type Period } from "./logs.ts";
 export { DESIGNS, designOf } from "./designs.ts";
@@ -20,9 +21,11 @@ export { type Agreement, type DelegationSection, type MatrixCell, type ProfileTi
 export { type GuardsSection } from "./guards.ts";
 export { type QualitySection } from "./quality.ts";
 export { type LeverRow, type LeversSection } from "./levers.ts";
-export { renderAnalysis, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderLevers, renderQuality, renderRandomized, renderRouterFactors, renderSpotChecks, reportName } from "./render.ts";
+export { budget, windowsOf, type BudgetSection, type LocalRow, type SpendRow, type Window } from "./budget.ts";
+export { betaOf, calibrate, estPoints, nnls, type Beta, type Fit, type Flag } from "./calibration.ts";
+export { renderAnalysis, renderBudget, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderLevers, renderQuality, renderRandomized, renderRouterFactors, renderSpotChecks, reportName } from "./render.ts";
 
-export type Analysis = { period: Period; cost: CostSection; levers: LeversSection; experiment: { designs: DesignResult[] }; delegation: DelegationSection; guards: GuardsSection; quality: QualitySection };
+export type Analysis = { period: Period; budget: BudgetSection; cost: CostSection; levers: LeversSection; experiment: { designs: DesignResult[] }; delegation: DelegationSection; guards: GuardsSection; quality: QualitySection };
 
 export function analyse(all: Logs, period: Period = {}): Analysis {
   const logs = inPeriod(all, period);
@@ -31,7 +34,8 @@ export function analyse(all: Logs, period: Period = {}): Analysis {
   const flags = Object.fromEntries([...armInfo([...new Set(meter.filter((l) => typeof l?.arm === "string").map((l) => l.arm))], all.assignments)].map(([a, i]) => [a, i.flags]));
   return {
     period,
-    cost: cost(meter, logs.outcomes, flags, rowsBySession(all.assignments)),
+    budget: budget(meter, all.plans),
+    cost: cost(meter, logs.outcomes, flags, rowsBySession(all.assignments), all.plans),
     levers: levers(all.meter, logs.meter, period),
     experiment: { designs },
     delegation: delegation(meter, logs.outcomes, all.routerSettings),

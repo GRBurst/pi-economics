@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { analyse, applyKill, renderAnalysis, reportName, type Logs } from "../core/analyse.ts";
+import { attributeQuota } from "../core/arms.ts";
 import { mulberry32 } from "../core/stats.ts";
 import { leversLine } from "../core/levers.ts";
 import { assignment, iso, MIN, T0, turn, turns, world } from "./world.ts";
@@ -16,7 +17,6 @@ test("cost: total, active hours, $/active hour with a CI containing it, quota pe
   close(c.activeHours, 3);
   close(c.usdPerHour.mean, 15.9);
   contains(c.usdPerHour, c.usdPerHour.mean);
-  close(c.q5hPerHour, 1); // 10 → 13 inside m3, 3 active hours
   assert.equal(c.units, 6);
 });
 
@@ -127,12 +127,16 @@ test("cost (B3): the Cache section: growth is new context, only the prefix a req
   assert.deepEqual([warm.missShare, warm.misses.reduce((s, m) => s + m.tokens, 0)], [0, 0]);
 });
 
-test("cost: a long log is analysed in linear time; a huge quota window does not overflow Math.max", () => {
-  const n = 200_000;
-  const meter = Array.from({ length: n }, (_, i) => turn("big", T0 + i * 1000, { arm: "-----", q5h: 10 + (i % 7), q5hReset: 1, costUsd: 0.001 }));
-  const t = Date.now();
-  assert.equal(analyse(none(meter)).cost.requests, n);
-  assert.ok(Date.now() - t < 10_000, `${Date.now() - t} ms`);
+test("cost: a long log is analysed in linear time (scaling, not wall clock); a huge quota window does not overflow Math.max", () => {
+  // ISO resets so that the Budget builds its windows (a non-ISO reset is no window), a 429 storm before the reading of 99
+  const build = (n: number) => Array.from({ length: n }, (_, i) => i % 5 === 0 && i < n - 10
+    ? { ...turn("big", T0 + i * 1000, { arm: "-----", costUsd: 0 }), status: "error", errorClass: "429", errorKind: "rate_limit" }
+    : turn("big", T0 + i * 1000, { arm: "-----", q5h: i < n - 10 ? 10 + (i % 7) : 99, q5hReset: iso(T0 + 40 * 3_600_000), costUsd: 0.001 }));
+  const run = (n: number) => { const m = build(n); const t = process.hrtime.bigint(); const r = analyse(none(m)); return { ms: Number(process.hrtime.bigint() - t) / 1e6, r }; };
+  const small = Math.min(run(20_000).ms, run(20_000).ms), big = run(80_000);
+  assert.equal(big.r.cost.requests, 80_000 - Math.ceil((80_000 - 10) / 5));
+  assert.ok(big.r.budget.groups.length > 0);
+  assert.ok(big.ms < 8 * small + 200, `4× the lines took ${(big.ms / small).toFixed(1)}× the time (${small.toFixed(0)} → ${big.ms.toFixed(0)} ms): not linear`);
 });
 
 // ---- period ------------------------------------------------------------------------------------
@@ -186,7 +190,6 @@ test("experiment: quota per active hour is the root's share of the account's ris
   const d = analyse({ meter, outcomes: [], assignments: [], guards: [] }).experiment.designs[0];
   const lo = d.arms.find((a) => a.arm === "------")!;
   close(lo.q5hPerHour, 1 / 0.5); // 3 points over 3 roots = 1 point each, in 30 min; per-root summing gave 3 / 0.5
-  close(analyse({ meter, outcomes: [], assignments: [], guards: [] }).cost.q5hPerHour, 3 / 1.5);
 });
 
 test("experiment: posterior per arm (reward −$/h) with P(best) summing to 1, cheaper arm best", () => {
@@ -292,23 +295,16 @@ test("quality: sessions without arm and unjoinable lines are counted", () => {
   assert.equal(u["child sessions without a spawn event (their $ is in no tier)"], 1); // orphan (real data: children before the outcome log)
 });
 
-test("quality: pi share of account quota = rises between pi requests ÷ all rises of the window", () => {
-  const meter = [
-    turn("a", T0, { q5h: 10, q5hReset: 1 }), turn("a", T0 + 10 * MIN, { q5h: 12, q5hReset: 1 }),
-    turn("a", T0 + 120 * MIN, { q5h: 20, q5hReset: 1 }), // +8 while pi was idle: someone else
-    turn("a", T0 + 130 * MIN, { q5h: 22, q5hReset: 1 }),
-    turn("a", T0 + 140 * MIN, { q5h: 1, q5hReset: 2 }), turn("a", T0 + 150 * MIN, { q5h: 3, q5hReset: 2 }),
-  ];
-  const q = analyse({ meter, outcomes: [], assignments: [], guards: [] }).quality;
-  assert.equal(q.piQuota.q5h.pi, 6);
-  assert.equal(q.piQuota.q5h.total, 14);
-  close(q.piQuota.q5h.share, 6 / 14);
+test("B11: quality has no 'pi share of the account quota' (the denominator was only seen through pi's own requests); the Budget section replaces it", () => {
+  const meter = [turn("a", T0, { q5h: 10, q5hReset: iso(T0 + 3 * 3_600_000) }), turn("a", T0 + 10 * MIN, { q5h: 12, q5hReset: iso(T0 + 3 * 3_600_000) })];
+  const a = analyse({ meter, outcomes: [], assignments: [], guards: [] });
+  assert.ok(!("piQuota" in a.quality));
+  assert.ok(a.budget.groups.length > 0, "the window is in Budget");
 });
 
-test("quality: interleaved readings of parallel sessions (4, 5, 4, 5, 6) count each point once", () => {
+test("cost: interleaved readings of parallel sessions (4, 5, 4, 5, 6) count each point once (the per-arm q5h %/h column)", () => {
   const meter = [4, 5, 4, 5, 6].map((q, i) => turn(`s${i % 2}`, T0 + i * MIN, { q5h: q, q5hReset: 1 }));
-  const q = analyse({ meter, outcomes: [], assignments: [], guards: [] }).quality;
-  assert.deepEqual([q.piQuota.q5h.pi, q.piQuota.q5h.total], [2, 2]);
+  assert.equal(attributeQuota(meter, "q5h").total, 2);
 });
 
 test("cost: a root session without active time does not break the $/active hour CI", () => {
@@ -327,7 +323,7 @@ test("render: every section is present and non-empty; tables are JSON-safe", () 
   const a = analyse({ ...w, expSettings: limits });
   const md = renderAnalysis(a);
   const sections = md.split(/^## /m).slice(1);
-  assert.deepEqual(sections.map((s) => s.split("\n")[0]), ["Cost", "Levers", "Experiment", "Delegation & routing", "Guards", "Data quality"]);
+  assert.deepEqual(sections.map((s) => s.split("\n")[0]), ["Budget", "Fleet", "Cache", "Levers", "Experiments", "Router", "Guards", "Data quality"]);
   for (const s of sections) assert.ok(s.split("\n").filter((l) => l.startsWith("| ")).length >= 3, s);
   assert.match(md, /disable `\+\+\+\+\+\+`/);
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(a)));
@@ -335,7 +331,7 @@ test("render: every section is present and non-empty; tables are JSON-safe", () 
 
 test("render: empty logs still render every section with a 'no data' note", () => {
   const md = renderAnalysis(analyse({ meter: [], outcomes: [], assignments: [], guards: [] } as Logs));
-  assert.equal(md.split(/^## /m).length - 1, 6);
+  assert.equal(md.split(/^## /m).length - 1, 8);
   assert.match(md, /no data/);
 });
 

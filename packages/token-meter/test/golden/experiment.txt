@@ -4,7 +4,7 @@ Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware 
 
 Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
-plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
+plans absent (token-meter's `plans` setting is missing or has no usable entry): every unit is counted in stratum api.
 
 #### stratum api (objective apiUsd per active hour)
 
@@ -37,7 +37,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
-plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
+plans absent (token-meter's `plans` setting is missing or has no usable entry): every unit is counted in stratum api.
 
 #### stratum api (objective apiUsd per active hour)
 
@@ -71,7 +71,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
-plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
+plans absent (token-meter's `plans` setting is missing or has no usable entry): every unit is counted in stratum api.
 
 #### stratum api (objective apiUsd per active hour)
 
@@ -103,7 +103,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
-plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
+plans absent (token-meter's `plans` setting is missing or has no usable entry): every unit is counted in stratum api.
 
 #### stratum api (objective apiUsd per active hour)
 

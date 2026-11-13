@@ -1,34 +1,34 @@
 | metric | value |
 | --- | --- |
-| total $ | 145.20 |
-| requests (warming) | 123 (1) |
+| total API-eq $ | 145.20 |
+| cash $ | ≤ 145.20 (billing class guessed: no plan) |
+| requests (warming) | 125 (1) |
 | errors | 1 |
-| root sessions | 20 |
-| active hours | 9.50 |
-| $/active hour (95% CI) | 15.25 (11.96 – 18.27) |
-| q5h %/active hour | 0.32 |
-| q7d %/active hour | 0.00 |
-| $/accepted task, all routed tasks, excl. – incl. unresolved cards' $ (accepted/tasks) | 1.59 (13/21) |
+| root sessions | 21 |
+| active hours | 9.53 |
+| API-eq $/active hour (95% CI) | 15.25 (11.96 – 18.27) |
+| API-eq $/accepted task, all routed tasks, excl. – incl. unresolved cards' $ (accepted/tasks) | 1.59 (13/21) |
 
 ### By model
 
-| model | requests | $ | share | $/active h |
+| model | requests | API-eq $ | share | API-eq $/active h |
 | --- | --- | --- | --- | --- |
-| claude-opus | 86 | 99.70 | 69% | 10.49 |
-| claude-sonnet | 15 | 27.00 | 19% | 2.84 |
-| qwen | 22 | 18.50 | 13% | 1.95 |
+| claude-opus | 86 | 99.70 | 69% | 10.46 |
+| claude-sonnet | 15 | 27.00 | 19% | 2.83 |
+| qwen | 22 | 18.50 | 13% | 1.94 |
+| qwen3.8 | 2 | 0.00 | 0% | 0.00 |
 
 ### Splits
 
-Warming = the cache-warming requests (kind warming). Folds and cold resumes are in the Cache section.
+Warming = the cache-warming requests (kind warming). Folds and cold resumes are in the Cache section; list-price $ is API-eq $, money actually charged is cash $ (Budget).
 
-| split | n | $ | share | $/active h |
+| split | n | API-eq $ | share | API-eq $/active h |
 | --- | --- | --- | --- | --- |
 | warming | 1 | 0.50 | 0% | 0.05 |
 
-### Token components (≈, by Anthropic price ratios)
+### Token components (≈, by each model's price ratios)
 
-| component | $ |
+| component | API-eq $ |
 | --- | --- |
 | input | 2.63 |
 | cacheRead | 32.03 |
@@ -36,66 +36,3 @@ Warming = the cache-warming requests (kind warming). Folds and cold resumes are 
 | cacheWrite1h | 24.71 |
 | output | 65.65 |
 | unallocated | 0.00 |
-
-### Cache (Claude models)
-
-Per session branch (warming requests refresh the cache but are no row): a request's cache write is **new context** (growth: the context added since the previous request, written once whatever happens) plus a **rewrite**, the **miss**: tokens of the prefix the previous request left in the cache (cacheRead + cacheWrite) that this one did not read. Only a miss is avoidable. Cause of a miss, the first that holds: ttl (the gap outlived the TTL in force; a gap runs from the latest send before the request to its send, ts − durationMs: a long response does not age the prefix it read; TTL: 5 min, 1 h for a main session in a mainCacheTtl 1h arm or after a 1 h write), fold (the prompt fell below 80% of the previous request's), model (the model changed), prefix (the system prompt, a prompt section or the tool list changed: the line's systemHash differs from the last one before it in the branch), other (a change of the prefix inside the TTL that the meter lines do not show: a small fold or mask, an injected agent message, a system change on lines without a systemHash; it is a real cost, not a bookkeeping residue, but its reason is not in the log). $ = API-eq at each line's input price p: a write is 1.25 p (2.0 p for a 1 h write), a read 0.1 p; a miss costs the premium of writing over reading.
-
-| metric | value |
-| --- | --- |
-| requests (branches) | 101 (22) |
-| new context | 2900 tokens, 9.56 $ |
-| missed prefix | 24220 tokens, 28.70 $ premium |
-| miss share (missed ÷ cache-write tokens) | 89% |
-
-Misses by cause:
-
-| cause | requests | missed tokens | premium API-eq $ |
-| --- | --- | --- | --- |
-| ttl | 28 | 7800 | 9.17 |
-| fold | 2 | 6020 | 1.37 |
-| model | 0 | 0 | 0.00 |
-| prefix | 1 | 200 | 0.07 |
-| other | 43 | 10200 | 18.09 |
-
-Folds and cold resumes (a cold resume = a request after a gap (as for ttl) beyond the TTL in force; a fold as in the cause table, unless the gap came first). Window = the event's request and the next two turn requests (cut short by the next event): premium = their misses × (write − read price). Baseline = what an ordinary request costs the same way (the mean premium of the requests outside every window, in the sessions that have such an event) once per event; net = premium − baseline.
-
-| event | n | premium API-eq $ | baseline $ | net $ |
-| --- | --- | --- | --- | --- |
-| after folds | 2 | 1.43 | 0.20 | 1.23 |
-| after cold resumes | 28 | 9.19 | 1.02 | 8.17 |
-
-### Fold ledger (Claude models)
-
-Per detected fold (a non-warming request whose prompt, input + cacheRead + cacheWrite, fell below 80% of the previous one's): R = tokens removed; K ≈ the first request's cacheWrite minus the session's typical write (median of its non-first, non-fold, non-cold turns), 0 for a fold after a cold gap; n = requests after the fold until the session ends or the next cold gap (≥ 5 min, ≥ 60 min in a mainCacheTtl 1h arm; warming counts); r and w = the model's cache read and write price per token: 0.1 × the input price recovered from the lines' cost for a read, 1.25 × for a 5-minute write and 2.0 × for a 1 h write (a write is a 1 h one in a mainCacheTtl 1h arm's main session, or by the line's own cacheWrite1h). **Net = n·R·r − K·(w − r)** = cache-read $ saved − rewrite $ paid. Counterfactual only: it assumes the fold changed nothing else (output, later tool use, task path) and that an unfolded prompt would have kept being read at r; folds overlap in time but each is valued alone.
-
-| metric | value |
-| --- | --- |
-| folds (after a cold gap) | 2 (0) |
-| cache-read $ saved | 13.8109 |
-| rewrite $ paid | 8.6798 |
-| net $ | 5.1311 |
-| share with net < 0 | 0% (0/2) |
-
-By fold depth K/R (rewritten tokens per token removed; break-even ≈ n/11.5):
-
-| K/R | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
-| --- | --- | --- | --- | --- | --- |
-| < 0.25 | 2 | 13.8109 | 8.6798 | 5.1311 | 0% |
-| 0.25 – 0.5 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
-| 0.5 – 1 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
-| 1 – 2 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
-| ≥ 2 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
-
-By design and foldHint level (v2 and v3 differ in what cache-aware means: never pooled):
-
-| group | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
-| --- | --- | --- | --- | --- | --- |
-| v2 cache-aware | 1 | 9.2073 | 5.3709 | 3.8364 | 0% |
-| v4 – | 1 | 4.6036 | 3.3089 | 1.2948 | 0% |
-
-By model:
-
-| model | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
-| --- | --- | --- | --- | --- | --- |
-| claude-opus | 2 | 13.8109 | 8.6798 | 5.1311 | 0% |

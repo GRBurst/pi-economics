@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { leversLine, type LeverState } from "../core/levers.ts";
-import { analyse, renderAnalysis, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderLevers, renderQuality, renderRandomized, renderSpotChecks, type Logs } from "../core/analyse.ts";
+import { analyse, renderAnalysis, renderBudget, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderLevers, renderQuality, renderRandomized, renderSpotChecks, type Logs } from "../core/analyse.ts";
 import { assignment, iso, MIN, T0, turn, turns, world } from "./world.ts";
 
 const at = (minutes: number): number => T0 + minutes * MIN;
@@ -45,7 +45,7 @@ function goldenLogs(): Logs {
   assignments.push({ ...assignment("m7", "------", at(239)), design: "v3" });
   const v4: Array<[string, string, number]> = [["n1", "---", 1], ["n2", "---", 1.5], ["n3", "+++", 3], ["n4", "+++", 2.5], ["n5", "+--", 2], ["n6", "+--", 2], ["n7", "-+-", 1], ["n8", "-+-", 1.2]];
   v4.forEach(([id, arm, usd], i) => {
-    meter.push(...turns(id, at(260 + 70 * i), 4, { arm, costUsd: usd, q7d: 20 + i, q7dReset: 2 }));
+    meter.push(...turns(id, at(260 + 70 * i), 4, { arm, costUsd: usd, q7d: 20 + i, q7dReset: "2026-10-12T00:00:00.000Z" }));
     assignments.push(assignment(id, arm, at(259 + 70 * i)));
   });
 
@@ -58,6 +58,9 @@ function goldenLogs(): Logs {
   meter.push(turn("old", at(-24 * 60), { arm: "-----", costUsd: 9 }));
   meter.push({ ...turn("m1", at(40)), provider: undefined });
   meter.push(...turns("orphan", at(80), 2, { arm: "------", parentSessionId: "gone", costUsd: 0.3 }, 1));
+
+  // a local provider (meter v2, billing local, no plan rate: the Budget's local row says "no rate")
+  meter.push(...turns("loc1", at(90), 2, { v: 2, provider: "llama", model: "qwen3.8", billing: "local", costUsd: 0, durationMs: 90_000, input: 100, cacheRead: 0, cacheWrite: 0, output: 50 }, 2));
 
   // delegation: spawns with a child session of one request each, under m3
   const spawn = (taskId: string, sessionId: string, workerTier: string, extra: Record<string, unknown> = {}, when = 100): Record<string, unknown> =>
@@ -141,15 +144,50 @@ function strataLogs(): Logs {
   return { meter, outcomes: [], guards: [], plans, assignments: [...new Set(meter.map((l) => String(l.sessionId)))].map((id) => assignment(id, String(meter.find((l) => l.sessionId === id)!.arm), at(0))) };
 }
 
+/**
+ * The Budget section (redesign M4): fourteen complete 5-hour windows of an Anthropic subscription (Opus 5.5 lines, v2), seven in the last 28
+ * days that took 30% more quota points per API-eq $ than the seven 30–36 days before (the drift flag), one window that hit its cap (a reading of
+ * 100, then a 429), v1 pi-retry and v2 native retry fields, a 7-day window still running, an api provider (cash $) and a local one with a rate.
+ */
+function budgetLogs(): Logs {
+  const P = 1e-6, DAYMS = 86_400_000, end = Date.parse("2026-11-12T15:00:00Z");
+  const meter: Record<string, unknown>[] = [];
+  const BETA = { input: 1, cacheRead: 0.6, cacheWrite: 1.4, output: 1.3 };
+  for (let i = 0; i < 14; i++) {
+    const reset = end - (i < 7 ? 6 - i : 36 - (i - 7)) * DAYMS; // i < 7: 6..0 days before; i ≥ 7: 36..30 days before, in time order below
+    const tok = { input: 50_000, cacheRead: 3_000_000 * (1 + (i % 3)), cacheWrite: 1_000_000 * (1 + ((i * 2) % 4)), output: 100_000 * (1 + ((i * 5) % 3)), cacheWrite1h: 0 };
+    const usd = { input: 4 * P * tok.input, cacheRead: 0.2 * P * tok.cacheRead, cacheWrite: 5 * P * tok.cacheWrite, output: 20 * P * tok.output };
+    const points = (BETA.input * usd.input + BETA.cacheRead * usd.cacheRead + BETA.cacheWrite * usd.cacheWrite + BETA.output * usd.output) * (i < 7 ? 1.3 : 1);
+    const peak = Math.min(100, Math.round(points * 2)); // two identical lines per window
+    for (let j = 0; j < 2; j++) {
+      meter.push({ v: 2, ts: iso(reset - (j ? 3 : 4) * 3_600_000), sessionId: `w${i}`, provider: "anthropic", model: "claude-opus-5-5", kind: "turn", billing: "subscription", status: 200, ...tok,
+        costUsd: usd.input + usd.cacheRead + usd.cacheWrite + usd.output, retries: i === 3 && j ? 1 : 0, retryWaitMs: i === 3 && j ? 2_000 : 0, durationMs: 4_000,
+        q5h: j ? peak : Math.round(peak / 2), q5hReset: iso(reset), q7d: 20, q7dReset: "2026-11-19T00:00:00.000Z" });
+    }
+    if (i === 6) { // the running window hits its cap: a reading of 100, then a 429
+      meter.push({ v: 2, ts: iso(reset - 2 * 3_600_000), sessionId: "w6", provider: "anthropic", model: "claude-opus-5-5", kind: "turn", billing: "subscription", status: "error", errorClass: "429", errorKind: "rate_limit", retries: 0, retryWaitMs: 0, durationMs: 300 });
+      meter.find((l) => l.sessionId === "w6" && l.q5h === peak)!.q5h = 100;
+    }
+  }
+  meter.push({ v: 1, ts: "2026-11-12T11:00:00.000Z", sessionId: "old", provider: "anthropic", model: "claude-opus-5-5", kind: "turn", status: "error", errorClass: "429", retries: 4, retryWaitMs: 30_000 }); // v1: pi-retry's totals
+  meter.push({ v: 2, ts: "2026-11-12T12:00:00.000Z", sessionId: "or", provider: "openrouter", model: "gpt-6-luna", kind: "turn", billing: "api", status: 200, input: 1000, output: 1000, costUsd: 0.05, durationMs: 2_000 });
+  for (const [k, ms] of [[0, 600_000], [1, 1_200_000], [2, undefined]] as const) meter.push({ v: 2, ts: iso(end - 3_600_000 + k * 60_000), sessionId: "ll", provider: "llama", model: "qwen3.8", kind: "turn", billing: "local", status: 200, input: 5000, output: 500, costUsd: 0, ...(ms ? { durationMs: ms } : {}) });
+  const plans = { anthropic: { billing: "subscription" as const, windows: ["5h" as const, "7d" as const] }, llama: { billing: "local" as const, windows: [], rate: { amount: 0.13, currency: "EUR", per: "hour" as const } }, openrouter: { billing: "api" as const, windows: [] } };
+  return { meter, outcomes: [], assignments: [], guards: [], plans };
+}
+
 const PERIOD = { since: "2026-10-05", until: "2026-10-05" };
 const GENERATED = new Date("2026-10-06T08:30:00Z");
 const a = analyse(goldenLogs(), PERIOD);
+/** A calibrated β (points per API-eq $) for the est. points columns of Cache and the fold ledger. */
+const BETA = { input: 1, cacheRead: 0.6, cacheWrite: 1.4, output: 1.3 };
 
 const sections: Record<string, () => string> = {
   cost: () => renderCost(a.cost),
-  cache: () => renderCache(a.cost.cache),
+  budget: () => renderBudget(analyse(budgetLogs()).budget),
+  cache: () => renderCache(a.cost.cache, BETA),
   levers: () => renderLevers(a.levers),
-  folds: () => renderFolds(a.cost.folds),
+  folds: () => renderFolds(a.cost.folds, BETA),
   experiment: () => renderExperiment(a.experiment.designs),
   "experiment-strata": () => renderExperiment(analyse(strataLogs()).experiment.designs),
   randomized: () => renderRandomized(a.delegation.randomized),
@@ -178,4 +216,32 @@ test("the goldens cover real data: no section is the empty-state line", () => {
     assert.ok(text.length > 0, `${name} renders nothing`);
     assert.ok(!text.startsWith("_no data in the period_") && !text.includes("\n_no "), `${name} renders an empty state: ${text.slice(0, 80)}`);
   }
+});
+
+test("M4 (B11): the report no longer claims a pi share of the account quota; its sections run Budget, Fleet, Cache, Levers, Experiments, Router, Guards, Data quality", () => {
+  for (const text of [renderAnalysis(a, GENERATED), renderQuality(a.quality)]) {
+    assert.ok(!/share of the account quota/i.test(text) && !/pi share/i.test(text), "a tautological share row is back");
+    assert.ok(!/%\/active hour/.test(text), "a per-session quota row is back (quota is the budget, never charged to a session: Q2)");
+  }
+  assert.ok(!("q5hPerHour" in a.cost) && !("q7dPerHour" in a.cost));
+  const heads = renderAnalysis(a, GENERATED).split("\n").filter((l) => l.startsWith("## "));
+  assert.deepEqual(heads, ["## Budget", "## Fleet", "## Cache", "## Levers", "## Experiments", "## Router", "## Guards", "## Data quality"]);
+});
+
+test("M4: money carries its label — API-eq $ for list prices, cash $ for what is charged, est. points for the calibrated quota", () => {
+  const text = renderAnalysis(a, GENERATED);
+  assert.ok(text.includes("API-eq $") && text.includes("cash $") && text.includes("est. points"));
+  const budgetText = renderBudget(analyse(budgetLogs()).budget);
+  assert.ok(budgetText.includes("EUR"), "a local cost names its currency");
+  assert.ok(budgetText.includes("not observable") === false, "the fixture observes its retry waits");
+});
+
+test("M4: a component under 1 % of the windows' $ is shown as not identifiable, not with its noisy β", () => {
+  const b = analyse(budgetLogs()).budget;
+  const g = b.groups.find((x) => x.kind === "5h")!;
+  assert.ok(!("notEnough" in g.fit));
+  if ("notEnough" in g.fit) return;
+  g.fit.share.input = 0.0001; g.fit.beta.input = 550;
+  const text = renderBudget(b);
+  assert.ok(text.includes("| input | not identifiable (fit 550.00, under 1% of the $) | 0% |"), text.slice(text.indexOf("#### anthropic 5h"), 1200 + text.indexOf("#### anthropic 5h")));
 });

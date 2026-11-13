@@ -6,7 +6,8 @@
 //   net = n·R·r − K·(w − r)        (savings − rewrite, exactly)
 // Pure bookkeeping on the meter lines: nothing here asserts that the fold was the cause of anything else.
 
-import { apiUsd, cacheWrite1hOf, isClaude, weightedTokens, WEIGHT } from "./analyse/units.ts";
+import { apiUsd, cacheWrite1hOf, isClaude, weightedTokens } from "./analyse/units.ts";
+import { weightsOf } from "./analyse/prices.ts";
 
 const MIN = 60_000;
 const FOLD_SHRINK = 0.8; // same rule as arms.ts: a turn whose prompt fell below this share of the previous turn's is a fold
@@ -24,24 +25,24 @@ const median = (xs: number[]): number => {
 export type Price = { r: number; w: number; w1h: number };
 
 /**
- * Per model: input price p = Σ the lines' cost ÷ Σ their tokens weighted by units.ts WEIGHT (read 0.1, 5-minute write 1.25, 1 h write 2.0,
- * output 5) over its lines with a cost and tokens (the lines' own cost and token fields; no price table), then r = 0.1·p, w = 1.25·p and
- * w1h = 2.0·p (B13: pi charges 1 h writes 2.0, so a 1h-arm main's lines must weigh them so). A line's 1 h writes are cacheWrite1hOf:
+ * Per model: input price p = Σ the lines' cost ÷ Σ their tokens weighted by the model's weights (prices.ts weightsOf: the registry's ratios,
+ * else read 0.1, 5-minute write 1.25, 1 h write 2.0, output 5) over its lines with a cost and tokens, then r, w and w1h = the weights × p (M4:
+ * Opus 5.5 reads at 0.05 × p; B13: pi charges 1 h writes 2.0, so a 1h-arm main's lines must weigh them so). A line's 1 h writes are cacheWrite1hOf:
  * its own `cacheWrite1h`, else all writes of a main session whose arm has `mainCacheTtl` 1h in `opt.flags`. A model without such a line
  * has no price.
  */
 export function prices(lines: any[], opt: LedgerOpts = {}): Map<string, Price> {
-  const acc = new Map<string, { usd: number; weighted: number }>();
+  const acc = new Map<string, { usd: number; weighted: number; w: ReturnType<typeof weightsOf> }>(); // w: the weights of the model's first line (a model id of two providers is priced as the first one)
   for (const l of lines) {
     const long = cacheWrite1hOf(l, l.parentSessionId === undefined, opt.flags?.[l.arm]);
     const usd = apiUsd(l, { cacheWrite1h: long });
-    const weighted = weightedTokens(l, long, WEIGHT.cacheWrite1h);
+    const weighted = weightedTokens(l, long, weightsOf(l.model, l.provider).cacheWrite1h);
     if (usd <= 0 || weighted <= 0) continue;
-    const a = acc.get(String(l.model)) ?? acc.set(String(l.model), { usd: 0, weighted: 0 }).get(String(l.model))!;
+    const a = acc.get(String(l.model)) ?? acc.set(String(l.model), { usd: 0, weighted: 0, w: weightsOf(l.model, l.provider) }).get(String(l.model))!;
     a.usd += usd;
     a.weighted += weighted;
   }
-  return new Map([...acc].map(([m, a]) => [m, { r: (WEIGHT.cacheRead * a.usd) / a.weighted, w: (WEIGHT.cacheWrite5m * a.usd) / a.weighted, w1h: (WEIGHT.cacheWrite1h * a.usd) / a.weighted }]));
+  return new Map([...acc].map(([m, a]) => { const w = a.w; return [m, { r: (w.cacheRead * a.usd) / a.weighted, w: (w.cacheWrite5m * a.usd) / a.weighted, w1h: (w.cacheWrite1h * a.usd) / a.weighted }]; }));
 }
 
 export type FoldEntry = {
@@ -52,6 +53,7 @@ export type FoldEntry = {
   /** The fold request came after a cold gap (cache already expired). */ cold: boolean;
   /** n·R·r, $. */ savings: number;
   /** K·(w − r), $. */ rewrite: number;
+  /** The rewrite as the two prices it is the difference of: K·w (what the tokens cost to write) and K·r (what they would have cost to read); a calibrated β prices each in quota points. */ parts: { write: number; read: number };
   /** savings − rewrite, $. */ net: number;
 };
 
@@ -61,10 +63,10 @@ export type LedgerOpts = {
 };
 
 /** The entry of a fold with these numbers (the one formula; savings − rewrite is the net by construction). */
-export function value(R: number, K: number, n: number, p: Pick<Price, "r" | "w">): Pick<FoldEntry, "savings" | "rewrite" | "net"> {
+export function value(R: number, K: number, n: number, p: Pick<Price, "r" | "w">): Pick<FoldEntry, "savings" | "rewrite" | "net" | "parts"> {
   const savings = n * R * p.r;
   const rewrite = K * (p.w - p.r);
-  return { savings, rewrite, net: savings - rewrite };
+  return { savings, rewrite, net: savings - rewrite, parts: { write: K * p.w, read: K * p.r } };
 }
 
 /**
@@ -121,14 +123,14 @@ export const bucketOf = (depth: number): string => {
 };
 export const BUCKET_NAMES: string[] = [...DEPTH_BUCKETS.map((hi) => bucketOf(hi - 1e-9)), bucketOf(Infinity)];
 
-export type LedgerRow = { name: string; n: number; netUsd: number; savingsUsd: number; rewriteUsd: number; negative: number; negativeShare: number };
+export type LedgerRow = { name: string; n: number; netUsd: number; savingsUsd: number; rewriteUsd: number; rewriteParts: { write: number; read: number }; negative: number; negativeShare: number };
 export type LedgerSection = { n: number; cold: number } & Omit<LedgerRow, "name" | "n"> & {
   byDepth: LedgerRow[]; byGroup: LedgerRow[]; byModel: LedgerRow[] };
 
 const sum = (xs: number[]): number => xs.reduce((s, x) => s + x, 0);
 function row(name: string, es: FoldEntry[]): LedgerRow {
   const negative = es.filter((e) => e.net < 0).length;
-  return { name, n: es.length, netUsd: sum(es.map((e) => e.net)), savingsUsd: sum(es.map((e) => e.savings)), rewriteUsd: sum(es.map((e) => e.rewrite)), negative, negativeShare: es.length ? negative / es.length : NaN };
+  return { name, n: es.length, netUsd: sum(es.map((e) => e.net)), savingsUsd: sum(es.map((e) => e.savings)), rewriteUsd: sum(es.map((e) => e.rewrite)), rewriteParts: { write: sum(es.map((e) => e.parts.write)), read: sum(es.map((e) => e.parts.read)) }, negative, negativeShare: es.length ? negative / es.length : NaN };
 }
 const groups = (es: FoldEntry[], key: (e: FoldEntry) => string): LedgerRow[] => {
   const m = new Map<string, FoldEntry[]>();

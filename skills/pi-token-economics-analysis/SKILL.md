@@ -39,29 +39,35 @@ without the user's explicit approval.
 
 ## Reading the report
 
-- **Cost**: total $, active hours (gaps < 30 min), $/active hour with a bootstrap 95% CI,
-  quota %/active hour (the account's rise split between the roots active at the time, never
-  double-counted across parallel sessions), $/accepted task (over all routed tasks: what a task cost, judged or not, paid for by the accepted ones); splits by model and warming; token components (a 1 h cache write
-  weighs 2.0 × input, a 5-minute one 1.25). **Cache** (Claude models): new context (growth) apart from misses (the cached prefix a
+- **Budget** (first): the quota windows of subscription providers (peak, lockouts, time to cap, 429 requests and retry wait; "not
+  observable" when no line carries the field), the **calibration** (non-negative least-squares fit of the windows' peak on the API-eq $ of
+  input, cacheRead, cacheWrite and output: β, R², $/point, and the flags r2, residual, drift, beta — a flag means the quota now weighs
+  tokens differently from API prices, a reason to revisit the objective, never an automatic change; it needs 8 complete windows), the
+  spend by billing class (API-eq $ vs cash $) and the local cost (active time × the plan's rate, with its currency). The quota is the
+  budget, not the comparison metric of experiments.
+- **Fleet**: total API-eq $ and cash $, active hours (gaps < 30 min), API-eq $/active hour with a bootstrap 95% CI,
+  API-eq $/accepted task (over all routed tasks: what a task cost, judged or not, paid for by the accepted ones); splits by model and warming; token components (each model's own
+  price ratios; a 1 h cache write weighs 2.0 × input, a 5-minute one 1.25). **Cache** (Claude models; premiums also in est. points once calibrated): new context (growth) apart from misses (the cached prefix a
   request had to write again) by cause (ttl, fold, model, prefix, other) — prefix: the system prompt, a prompt section or the
-  tool list changed — and the premium of folds and cold resumes over a baseline (net of what an ordinary request misses).
+  tool list changed — and the premium of folds and cold resumes over a baseline
+  (net of what an ordinary request misses).
 - **Levers**: per lever (a pi setting, an extension's or pi-economics' control) the values the period's sessions ran with,
   their sources (pe = pi-economics assigned it, ext = an extension, fixed = configuration or pi default) and the refusal rate
   of assigned values (a factor refused in > 20% of its sessions points at a broken add-on). Sessions from before levers lines
   existed count as without one.
-- **Experiment** (per design: v1 = 5 factors / 5-character arms, v2 and v3 = 6 factors incl.
+- **Experiments** (per design: v1 = 5 factors / 5-character arms, v2 and v3 = 6 factors incl.
   `delegationRule`, v4 = 3 factors `warmPolicy`, `mainCacheTtl`, `maskOnCold`): per **stratum** (billing class of the main's provider, never pooled) the marginal per-factor effect
   ratio(high) ÷ ratio(low) − 1 of the objective per active hour (a ratio of sums), with a bootstrap CI and minimum detectable effect, a balance table
   (units, hours, excluded) and a power line; no interaction model. Per-arm $/h, posterior and P(best) pool the strata.
   An effect counts only when its CI excludes 0 *and* each level has several units.
-- **Delegation & routing**: share of tasks and $ in child sessions, Qwen share (of the
+- **Router**: share of tasks and $ in child sessions, Qwen share (of the
   planned tiers; the report states no target: the router's targets are the owner's), escalations,
   reroutes, runaway alerts. The **tier of a task is the model it ran on** (the router's own account,
   else the child's last request), not the tier the router planned; a planned → executed matrix shows
   the difference. *By tier*: tasks, acceptance, $ (every request of the tasks' child sessions, judged
   or not) and **$/accepted as lower – upper**: the two differ by the $ of unresolved cards (card
   files that did not resolve: their children cost real money, but nothing says their tasks were routed;
-  a single number means there is none); the *all* row is the headline of the Cost section. Per profile
+  a single number means there is none); the *all* row is the headline of the Fleet section. Per profile
   (card kind) × tier: tasks, accepted/partial/rejected/unjudged, $/accepted task (judged tasks only),
   escalations, check pass rate. *Randomized routing* ("randomized by the router (ext)": spawns the router
   sent to Qwen or drew to another tier): the pooled router-assigned row (every task the router did
@@ -80,7 +86,7 @@ without the user's explicit approval.
 - **Guards**: per arm peeks-after-mask, corrections, `/rate` mean, acceptance; the arms the
   kill switch would disable.
 - **Data quality**: period covered, schema versions, sessions without arm, unjoinable lines,
-  pi's share of the account quota, contract problems.
+  contract problems. (The old "pi's share of the account quota" row is gone: its denominator was only seen through pi's own requests.)
 
 ## Caveats (state the ones that apply)
 

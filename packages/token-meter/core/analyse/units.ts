@@ -1,5 +1,8 @@
 // Dollars of a line, the price rules behind them (1 h cache writes, redesign M2a B13) and their split by token component.
 import { num, sum } from "./logs.ts";
+import { WEIGHT, weightsOf } from "./prices.ts";
+
+export { WEIGHT };
 
 /**
  * Does the `costUsd` pi logs already charge 1 h cache writes at 2 × input (Anthropic's list)? Yes (redesign M2a, T2a.0).
@@ -13,8 +16,7 @@ import { num, sum } from "./logs.ts";
  */
 export const PI_PRICES_1H = true;
 
-/** Relative token prices (Anthropic list): read 0.1, 5-minute write 1.25, 1 h write 2.0, output 5 × input. */
-export const WEIGHT = { input: 1, cacheRead: 0.1, cacheWrite5m: 1.25, cacheWrite1h: 2.0, output: 5 } as const;
+/** WEIGHT (prices.ts) is the ratio set of a model without a table entry; a line's own ratios are `weightsOf(l.model, l.provider)` (M4). */
 export type Component = keyof typeof WEIGHT | "unallocated";
 
 /** The cache rules (misses, the ledger) hold for Anthropic's explicit prompt caching: a Claude model or the anthropic provider. */
@@ -31,23 +33,25 @@ export function cacheWrite1hOf(l: any, main: boolean, armFlags?: Record<string, 
   return Math.min(Math.max(long, 0), written);
 }
 
-/** The line's tokens weighted by WEIGHT (cost = p × this, p the input price), `long` of its writes being 1 h writes of weight `longWeight`. */
-export const weightedTokens = (l: any, long: number, longWeight: number): number =>
-  WEIGHT.input * num(l.input) + WEIGHT.cacheRead * num(l.cacheRead) + WEIGHT.cacheWrite5m * (num(l.cacheWrite) - long) + longWeight * long + WEIGHT.output * num(l.output);
+/** The line's tokens weighted by its model's weights (cost = p × this, p the input price), `long` of its writes being 1 h writes of weight `longWeight`. */
+export const weightedTokens = (l: any, long: number, longWeight: number): number => {
+  const w = weightsOf(l.model, l.provider);
+  return w.input * num(l.input) + w.cacheRead * num(l.cacheRead) + w.cacheWrite5m * (num(l.cacheWrite) - long) + longWeight * long + w.output * num(l.output);
+};
 
 /**
- * The input price p ($ per input token) of a line: its cost ÷ its tokens weighted by WEIGHT, `long` of the writes being 1 h writes
+ * The input price p ($ per input token) of a line: its cost ÷ its tokens weighted by its model's weights, `long` of the writes being 1 h writes
  * (weight 2.0 when pi priced them: `priced1h`, else 1.25). 0 for a line without a cost or tokens.
  */
 export function pIn(l: any, long: number = num(l.cacheWrite1h), priced1h: boolean = PI_PRICES_1H): number {
-  const w = weightedTokens(l, long, priced1h ? WEIGHT.cacheWrite1h : WEIGHT.cacheWrite5m);
+  const m = weightsOf(l.model, l.provider), w = weightedTokens(l, long, priced1h ? m.cacheWrite1h : m.cacheWrite5m);
   return w > 0 ? num(l.costUsd) / w : 0;
 }
 
 /** What a token the line wrote to the cache costs, in input prices: 1.25 for a 5-minute write, 2.0 for a 1 h one (`long` of the line's cacheWrite), the mix of the two otherwise. */
 export function writeWeight(l: any, long: number): number {
-  const written = num(l.cacheWrite);
-  return written > 0 ? (WEIGHT.cacheWrite5m * (written - long) + WEIGHT.cacheWrite1h * long) / written : WEIGHT.cacheWrite5m;
+  const written = num(l.cacheWrite), w = weightsOf(l.model, l.provider);
+  return written > 0 ? (w.cacheWrite5m * (written - long) + w.cacheWrite1h * long) / written : w.cacheWrite5m;
 }
 
 export type PriceOpt = {
@@ -66,18 +70,20 @@ export function apiUsd(l: any, opt: PriceOpt = {}): number {
   const base = num(l.costUsd);
   if (opt.pricesLongWrite ?? PI_PRICES_1H) return base;
   const long = opt.cacheWrite1h ?? num(l.cacheWrite1h);
-  return base + (WEIGHT.cacheWrite1h - WEIGHT.cacheWrite5m) * pIn(l, long, false) * long;
+  const w = weightsOf(l.model, l.provider);
+  return base + (w.cacheWrite1h - w.cacheWrite5m) * pIn(l, long, false) * long;
 }
 
 /**
- * A line's apiUsd split by token component with the WEIGHT ratios (`long` = its 1 h-written tokens, cacheWrite1hOf; the rest of
+ * A line's apiUsd split by token component with its model's weight ratios (prices.ts) (`long` = its 1 h-written tokens, cacheWrite1hOf; the rest of
  * cacheWrite is 5-minute); a line without tokens keeps its $ unallocated. The parts add up to apiUsd(l, { cacheWrite1h: long }).
  */
 export function allocate(l: any, long: number = num(l.cacheWrite1h)): Record<Component, number> {
   const c = apiUsd(l, { cacheWrite1h: long });
   const h = Math.min(Math.max(long, 0), num(l.cacheWrite));
   const tokens = { input: num(l.input), cacheRead: num(l.cacheRead), cacheWrite5m: num(l.cacheWrite) - h, cacheWrite1h: h, output: num(l.output) };
-  const w = (Object.keys(WEIGHT) as Array<keyof typeof WEIGHT>).map((k) => [k, WEIGHT[k] * tokens[k]] as const);
+  const ratio = weightsOf(l.model, l.provider);
+  const w = (Object.keys(WEIGHT) as Array<keyof typeof WEIGHT>).map((k) => [k, ratio[k] * tokens[k]] as const);
   const total = sum(w.map(([, x]) => x));
   const out: Record<Component, number> = { input: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 0, unallocated: total ? 0 : c };
   if (total) for (const [k, x] of w) out[k] = (c * x) / total;

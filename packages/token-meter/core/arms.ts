@@ -1,6 +1,6 @@
 // Per-arm analysis of the meter log for the experiments package. Pure; bin/meter-report.ts does the I/O.
 // Unit of analysis = one root session (a main session with all its children), the random effect of the design.
-import { armEvents, type FoldPremium } from "./analyse/cache.ts";
+import { armEvents, newPremium, type FoldPremium } from "./analyse/cache.ts";
 import { FOLD_SHRINK, isError, push } from "./analyse/logs.ts";
 import { apiUsd } from "./analyse/units.ts";
 
@@ -114,7 +114,7 @@ export function rootUnits(all: any[], quota: Record<QuotaKey, QuotaAttribution> 
   });
 }
 
-const NO_EVENTS: FoldPremium = { events: 0, premiumUsd: 0, baselineUsd: 0, netUsd: 0 };
+const NO_EVENTS: FoldPremium = newPremium();
 
 /** `flags`: arm id → factor values (assignments.jsonl); only `mainCacheTtl` is read, for the cold-resume TTL of main sessions. `quota`: attribution over all lines, when `all` is a subset (an arm, a design). */
 export function armStats(all: any[], opt: { flags?: Record<string, Record<string, string>>; quota?: Record<QuotaKey, QuotaAttribution> } = {}): ArmStat[] {

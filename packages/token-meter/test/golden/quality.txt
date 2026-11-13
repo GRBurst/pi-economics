@@ -2,14 +2,14 @@ Period: 2026-10-05 – 2026-10-05; lines from 2026-10-05T10:00:00.000Z to 2026-1
 
 | log | lines | first | last | schema versions (v: lines) |
 | --- | --- | --- | --- | --- |
-| meter | 137 | 2026-10-05T10:00:00.000Z | 2026-10-05T23:50:00.000Z | v0: 8, v1: 117, v2: 12 |
+| meter | 139 | 2026-10-05T10:00:00.000Z | 2026-10-05T23:50:00.000Z | v0: 8, v1: 117, v2: 14 |
 | outcomes | 56 | 2026-10-05T11:01:00.000Z | 2026-10-05T12:34:00.000Z | v1: 56 |
 | assignments | 19 | 2026-10-05T09:59:00.000Z | 2026-10-05T23:39:00.000Z | v0: 2, v1: 17 |
 | guards | 6 | 2026-10-05T11:00:00.000Z | 2026-10-05T12:10:00.000Z | v1: 6 |
 
 Unparsable lines: meter/2026-10.jsonl 2
 
-Root sessions without an arm: 2 (1.40 $, 1% of cost; 1 of them have an assignment row), e.g. bare1, bare2.
+Root sessions without an arm: 3 (1.40 $, 1% of cost; 1 of them have an assignment row), e.g. loc1, bare1, bare2.
 
 | unjoinable | n | examples |
 | --- | --- | --- |
@@ -20,13 +20,6 @@ Root sessions without an arm: 2 (1.40 $, 1% of cost; 1 of them have an assignmen
 | task events without a spawn | 2 | gone-task, nospawn |
 | guard events of sessions without meter lines | 1 | ghost |
 | assignments of sessions without meter lines | 1 | ghost2 |
-
-Pi share of the account quota (rises between pi requests < 30 min apart ÷ all rises seen per window; other use during pi activity counts as pi):
-
-| window | pi points | account points | pi share |
-| --- | --- | --- | --- |
-| 5 h | 3 | 3 | 100% |
-| 7 d | 0 | 7 | 0% |
 
 Contract (`pi-analyse --check`): 
 

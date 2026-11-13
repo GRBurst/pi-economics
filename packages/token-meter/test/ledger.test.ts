@@ -126,7 +126,7 @@ test("property: net = savings − rewrite exactly, over random sessions", () => 
       assert.ok(f.R > 0 && f.K >= 0 && f.n >= 0);
       assert.equal(f.net, f.savings - f.rewrite);
       approx(f.net, f.n * f.R * p.r - f.K * (p.w - p.r));
-      assert.deepEqual(value(f.R, f.K, f.n, p), { savings: f.savings, rewrite: f.rewrite, net: f.net });
+      assert.deepEqual(value(f.R, f.K, f.n, p), { savings: f.savings, rewrite: f.rewrite, net: f.net, parts: f.parts });
       if (f.cold) assert.equal(f.rewrite, 0);
     }
   }
@@ -165,4 +165,16 @@ test("a long session with many folds is ledgered in linear time", () => {
   const t = Date.now();
   assert.ok(foldLedger(lines).length >= n / 10 - 1);
   assert.ok(Date.now() - t < 5_000, `${Date.now() - t} ms`);
+});
+
+// M4 T4.8: a fold's rewrite is a write premium: K·w written instead of K·r read. The two parts let a calibrated β price it in quota points.
+test("M4: an entry keeps its rewrite as K·w (write) and K·r (read); a summary row sums them", () => {
+  const es = foldLedger(withFold(50_000, 3_000, 10));
+  const [f] = es;
+  approx(f.parts.write, 2_000 * W_); approx(f.parts.read, 2_000 * R_);
+  approx(f.parts.write - f.parts.read, f.rewrite);
+  const sum = summarise([...es, ...foldLedger(withFold(75_000, 75_000, 1, 1, "t"))], () => "g");
+  approx(sum.rewriteParts.write - sum.rewriteParts.read, sum.rewriteUsd);
+  approx(sum.byDepth.reduce((s, r) => s + r.rewriteParts.write, 0), sum.rewriteParts.write);
+  assert.deepEqual(summarise([], () => "g").rewriteParts, { write: 0, read: 0 });
 });

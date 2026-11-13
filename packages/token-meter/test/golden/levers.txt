@@ -1,4 +1,4 @@
-43 sessions in the period, 11 with a levers line (eligible 10, children 1), 32 without one; per session its last levers line up to the period's end. Sources: pe = pi-economics assigned it, ext = an extension chose it, fixed = configuration or pi default. Infinite-context disables compaction (`pi.compaction.enabled` false, ext) in 1 of them: their other `pi.compaction.*` levers are inert, left out.
+44 sessions in the period, 11 with a levers line (eligible 10, children 1), 33 without one; per session its last levers line up to the period's end. Sources: pe = pi-economics assigned it, ext = an extension chose it, fixed = configuration or pi default. Infinite-context disables compaction (`pi.compaction.enabled` false, ext) in 1 of them: their other `pi.compaction.*` levers are inert, left out.
 
 | lever | sessions | values (sessions) | sources | assigned | refused | unverified | refusal rate |
 | --- | --- | --- | --- | --- | --- | --- | --- |

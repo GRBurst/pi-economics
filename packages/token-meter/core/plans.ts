@@ -10,6 +10,9 @@ const WINDOWS: readonly string[] = ["5h", "7d"];
 
 const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
 
+/** No usable plan entry: the setting is missing or empty, or every entry was dropped. The one meaning of "plans absent" (Budget, Experiments). */
+export const plansAbsent = (plans: Plans | undefined): boolean => plans === undefined || Object.keys(plans).length === 0;
+
 /** The provider's billing class; a provider without a plan counts as "api". */
 export function billingOf(plans: Plans, provider: string): Billing {
   return Object.hasOwn(plans, provider) ? plans[provider]!.billing : "api";

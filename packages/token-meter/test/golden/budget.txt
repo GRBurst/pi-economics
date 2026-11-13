@@ -1,0 +1,54 @@
+The quota is the budget, not an experiment's comparison metric: it arrives in whole percent (about 460–560 requests per 1% step in 2026-11) and is shared by every session, subagent and other client of the account, so no session or arm is charged quota points. A window is one provider's `q5h` or `q7d` reset period; its peak is the highest reading, its lockout the time from the cap (a reading of 100, or a rate-limit error after a reading of 99) to the reset, its time to cap the time from the window's start to the cap. Complete = the window is over and the log reaches back to its start. Retry wait is the sum of the `retryWaitMs` of the window's lines (pi-retry's totals on v1 lines, pi's native retries on v2 lines), whatever failed.
+
+### Quota windows
+
+| provider | window | windows (complete) | peak median / max | capped | lockout | time to cap (median) | 429 requests | retry wait |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| anthropic | 5h | 14 (12) | 51.50 / 100 | 1 | 3.0 h | 2.0 h | 2 | 0.5 min |
+| anthropic | 7d | 1 (0) | 20.00 / 20 | 0 | 0.0 min | – | 0 | 0.0 min |
+
+Windows that hit the cap (latest 10):
+
+| provider | window | reset | peak | time to cap | lockout | 429 requests | retry wait |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| anthropic | 5h | 2026-11-12T15:00:00.000Z | 100 | 2.0 h | 3.0 h | 2 | 0.5 min |
+
+### Quota calibration
+
+Per complete window, peak quota ≈ Σ β_c × API-eq $ of component c (a non-negative least-squares fit; no intercept: a window starts at 0). β = quota points per API-eq $ of the component: 1 would mean the quota weighs a token as its list price does. A flag says the quota now weighs tokens differently from the API prices — the signal to revisit the objective, never an automatic change.
+
+#### anthropic 5h
+
+| component | β (points per API-eq $) | share of the windows' $ |
+| --- | --- | --- |
+| input | 0.62 | 1% |
+| cacheRead | 0.76 | 8% |
+| cacheWrite | 1.61 | 65% |
+| output | 1.48 | 26% |
+
+12 complete windows; R² 0.87; σ 7.93 points; API-eq $ per point: median 0.69 (0.57 – 0.81).
+
+- drift: $/point 0.59 over the last 28 days vs 0.77 over the 28 before (-23 %)
+- beta input: β 0.62 outside [0.75, 2.99] (2× around the $-weighted mean 1.50)
+
+#### anthropic 7d
+
+not enough complete windows to fit: 0 of 8 needed
+
+### Spend by billing class
+
+API-eq $ = the tokens at the provider's list price (what a pay-per-token account would be charged); cash $ = what is actually charged: the API-eq $ of billing class api, 0 for subscription, free and local.
+
+| billing class | requests | API-eq $ | cash $ |
+| --- | --- | --- | --- |
+| subscription | 28 | 430.00 | 0.00 |
+| api | 1 | 0.05 | 0.05 |
+| local | 3 | 0.00 | 0.00 |
+
+### Local cost
+
+Σ request time (`durationMs`, summed over requests: concurrent requests add up) × the provider's hourly rate in its currency. A request without `durationMs` adds no time: untimed requests make the cost an undercount. A provider without a rate has no cost.
+
+| provider | requests (timed / untimed) | active hours | rate | cost |
+| --- | --- | --- | --- | --- |
+| llama | 3 (2 / 1) | 0.50 | 0.13 EUR/h | 0.07 EUR |

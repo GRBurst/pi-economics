@@ -46,9 +46,9 @@ const variants = (): Record<string, Logs> => {
   };
 };
 
-/** The analysis without the per-version line counts of the meter (the one table that must differ). */
+/** The analysis without the per-version line counts of the meter (the one table that must differ), without the windows' 429 counts (a v2 line names a rate limit by errorKind, a v1 error line does not) and without cash $, which follows the billing class: a v2 line carries its own, a v1 line takes its provider's plan (M4). */
 const sansVersions = (a: ReturnType<typeof analyse>) =>
-  ({ ...a, quality: { ...a.quality, logs: a.quality.logs.map((x) => (x.log === "meter" ? { ...x, versions: {} } : x)) } });
+  ({ ...a, budget: { ...a.budget, spend: [], local: [], groups: a.budget.groups.map((g) => ({ ...g, windows: g.windows.map((w) => ({ ...w, r429: 0 })) })) }, cost: { ...a.cost, cashUsd: 0, cashGuessed: false }, quality: { ...a.quality, logs: a.quality.logs.map((x) => (x.log === "meter" ? { ...x, versions: {} } : x)) } });
 
 test("analyse: v2 and mixed v1/v2 meter lines give the analysis of the same lines in v1, but for the version counts", () => {
   const base = analyse(v1World());
@@ -94,7 +94,7 @@ test("meter-report (report and --arms) and pi-analyse (tables, --check) read v2 
   const tables = (dir: string) => {
     ok(node("pi-analyse.ts", ["--agent-dir", dir, "--out", join(dir, "r")]));
     const { cost, experiment, delegation, guards } = JSON.parse(readFileSync(join(dir, "r", readdirSync(join(dir, "r")).find((f) => f.endsWith(".json"))!), "utf8"));
-    return { cost, experiment, delegation, guards };
+    return { cost: { ...cost, cashUsd: 0, cashGuessed: false }, experiment, delegation, guards }; // cash $ follows the billing class, which v2 lines carry themselves (M4)
   };
   const v1 = agentDir(v1World());
   const [text, arms, t] = [report(v1, []), report(v1, ["--arms"]), tables(v1)];

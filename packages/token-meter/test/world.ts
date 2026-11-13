@@ -42,7 +42,7 @@ export function world(): Logs {
   const meter = [
     ...legacy(turns("m1", T0, 4, { arm: "-----", costUsd: 1 })),
     ...legacy(turns("m2", T0, 4, { arm: "+++++", costUsd: 2 })),
-    ...turns("m3", T0 + 60 * MIN, 4, { arm: "------", costUsd: 1 }).map((l, i) => ({ ...l, q5h: 10 + i, q5hReset: 1 })),
+    ...turns("m3", T0 + 60 * MIN, 4, { arm: "------", costUsd: 1 }).map((l, i) => ({ ...l, q5h: 10 + i, q5hReset: iso(T0 + 4 * 60 * MIN) })),
     turn("m3", T0 + 65 * MIN, { arm: "------", kind: "warming", costUsd: 0.5, cacheWrite: 0, input: 0, output: 1 }),
     ...turns("m4", T0 + 60 * MIN, 4, { arm: "++++++", costUsd: 3, model: "claude-sonnet" }),
     ...turns("m5", T0 + 120 * MIN, 4, { arm: "------", costUsd: 1 }),

@@ -127,3 +127,20 @@ test("LOGS.md: the limits of systemHash, pi.defaultThinkingLevel and the infinit
   for (const s of ["configured default", "`effort`", "resumed in a pi\nwithout infinite-context"]) assert.ok(levers.includes(s), `Levers lines: ${s}`);
   assert.ok(md.slice(md.indexOf("### Compaction lines"), md.indexOf("### Levers lines")).includes("virtual model"), "Compaction lines: virtual model");
 });
+
+// M4: the "Analysis: budget" section shows a capped quota window as lines; they pass the contract and give the numbers the section states.
+const BUDGET_HEADING = "### Analysis: budget";
+
+test("LOGS.md: the budget example lines pass the contract and give the window the section describes (peak 100, 3.5 h to cap, 1.5 h lockout, one 429)", async () => {
+  const block = exampleBlock(md, BUDGET_HEADING);
+  assert.ok(block, `LOGS.md: no \`\`\`jsonl block under "${BUDGET_HEADING}"`);
+  const lines = block.map((l, i) => {
+    try { return JSON.parse(l); } catch { assert.fail(`example line ${i + 1} is no JSON: ${l}`); }
+  });
+  const ps = check({ meter: lines, outcomes: [], assignments: [], guards: [] } as Parameters<typeof check>[0]);
+  assert.deepEqual(ps, [], renderProblems(ps));
+  const { windowsOf } = await import("../core/analyse/budget.ts");
+  const w = windowsOf(lines, {}).find((x) => x.kind === "5h")!;
+  assert.deepEqual([w.peak, w.timeToCapMs, w.lockoutMs, w.r429, w.requests], [100, 3.5 * 3_600_000, 1.5 * 3_600_000, 1, 2]);
+  for (const term of ["cash $", "API-eq $", "est. points", "R²", "$/point", "not observable", "NNLS", "in whole percent"]) assert.ok(md.includes(term), `LOGS.md does not explain ${term}`);
+});

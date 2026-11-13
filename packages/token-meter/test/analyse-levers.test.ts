@@ -52,7 +52,7 @@ test("levers: with infinite-context loaded (pi.compaction.enabled false, source 
   assert.ok(Number.isNaN(s.levers[0].refusalRate), "no assignment: no refusal rate");
 });
 
-test("levers: render a row per lever, values by count; the report places the section after Cost", () => {
+test("levers: render a row per lever, values by count; the report places the section after Cache", () => {
   const a = analyse(world(), PERIOD);
   const text = renderLevers(a.levers);
   const lines = text.split("\n");
@@ -60,7 +60,7 @@ test("levers: render a row per lever, values by count; the report places the sec
   assert.ok(lines.includes("| `pi.defaultThinkingLevel` | 4 | `medium` 3, `high` 1 | pe 1, ext 1, fixed 2 | 2 | 1 | 0 | 50% |"), text);
   const report = renderAnalysis(a, new Date(T0)).split("\n");
   const at = (h: string) => report.indexOf(h);
-  assert.ok(at("## Cost") < at("## Levers") && at("## Levers") < at("## Experiment"), "Levers between Cost and Experiment (design §6.1 order)");
+  assert.ok(at("## Cache") < at("## Levers") && at("## Levers") < at("## Experiments"), "Levers between Cache and Experiments (design §6.1 order)");
 });
 
 test("levers: no levers line in the period renders the empty state", () => {

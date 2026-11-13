@@ -254,7 +254,7 @@ else {
   const text = readFileSync(join(reports, md), "utf8");
   const json = readdirSync(reports).some((f) => REPORT.test(f) && f.endsWith(".json"));
   if (!json) failures.push("pi-analyse wrote no <YYYY-MM-DD>-<HHMM>-analysis.json");
-  for (const h of ["## Cost", "## Levers", "## Experiment", "## Delegation & routing", "## Guards", "## Data quality"]) {
+  for (const h of ["## Budget", "## Fleet", "## Cache", "## Levers", "## Experiments", "## Router", "## Guards", "## Data quality"]) {
     const at = text.indexOf(`\n${h}\n`);
     if (at < 0) { failures.push(`report: section "${h}" missing`); continue; }
     const body = text.slice(at + h.length + 2).split(/\n## /)[0];

@@ -1,16 +1,14 @@
-// (e) data quality: the span of each log, schema versions, unjoinable lines, the pi share of the quota, the data contract.
+// (e) data quality: the span of each log, schema versions, unjoinable lines, the data contract. (B11: the "pi share of the account quota" is gone; Budget replaces it.)
 import { rootUnits } from "../arms.ts";
 import { check, type Problem } from "../contract.ts";
 import { countBy, inPeriod, isLine, isRequestLine, LOGS, sum, versionOf, type FileInfo, type LogName, type Logs, type Period } from "./logs.ts";
 import { apiUsd } from "./units.ts";
 import { rowsBySession } from "./designs.ts";
-import { quotaShare } from "./cost.ts";
 
 export type QualitySection = { period: Period & { first?: string; last?: string };
   logs: Array<{ log: LogName; lines: number; first?: string; last?: string; versions: Record<string, number> }>;
   files: FileInfo[]; withoutArm: { roots: number; usd: number; share: number; assigned: number; examples: string[] };
   unjoinable: Array<{ what: string; n: number; examples: string[] }>;
-  piQuota: { q5h: { pi: number; total: number; share: number }; q7d: { pi: number; total: number; share: number } };
   problems: Problem[] };
 
 /** The outcome events of a delegated task, which join its spawn by `taskId`; session-level lines (task-router's `force`,
@@ -49,7 +47,6 @@ export function quality(all: Logs, logs: Logs, period: Period): QualitySection {
       item("guard events of sessions without meter lines", logs.guards.filter((e) => !meterSessions.has(e?.sessionId)), (e) => String(e?.sessionId)),
       item("assignments of sessions without meter lines", inPer.filter((r) => !meterSessions.has(r?.sessionId)), (r) => String(r?.sessionId)),
     ],
-    piQuota: { q5h: quotaShare(meter, "q5h"), q7d: quotaShare(meter, "q7d") },
     problems: check({ ...logs, assignments: inPer }, all),
   };
 }

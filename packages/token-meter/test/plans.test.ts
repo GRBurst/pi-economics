@@ -43,3 +43,12 @@ test("parsePlans: tolerant — a plan without a known billing class is dropped, 
   });
   for (const raw of [undefined, null, 1, "x", [], [{ billing: "api" }]]) assert.deepEqual(parsePlans(raw), {});
 });
+
+// M4 review M3: one meaning of "plans absent" for the Budget and the Experiments sections.
+test("plansAbsent: no usable plan entry — undefined, {} and a parse that dropped every entry are absent; one entry is not", async () => {
+  const { plansAbsent } = await import("../core/plans.ts");
+  assert.equal(plansAbsent(undefined), true);
+  assert.equal(plansAbsent({}), true);
+  assert.equal(plansAbsent(parsePlans({ x: { windows: ["5h"] } })), true);
+  assert.equal(plansAbsent(parsePlans({ x: { billing: "api" } })), false);
+});

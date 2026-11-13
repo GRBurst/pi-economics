@@ -158,7 +158,7 @@ test("B5: the headline is not the judged-only ratio: a task killed without a ver
   close(a.cost.perAccepted.upper, 6);
   close(a.delegation.byTier[0].cost.upper, 6);
   const md = renderAnalysis(a, new Date("2026-10-06T00:00:00Z"));
-  assert.match(md, /\| \$\/accepted task, all routed tasks, excl\. – incl\. unresolved cards' \$ \(accepted\/tasks\) \| 6\.00 \(1\/2\) \|/);
+  assert.match(md, /\| API-eq \$\/accepted task, all routed tasks, excl\. – incl\. unresolved cards' \$ \(accepted\/tasks\) \| 6\.00 \(1\/2\) \|/);
   assert.match(md, /\| all \| 2 \| 100% \| 1\/1 \| 100% \| 6\.00 \| 0\.00 \| 6\.00 \|/);
 });
 
@@ -184,7 +184,7 @@ test("B15: the unresolved $ shows in the tier table's $ column, in its own colum
   const md = renderAnalysis(a, new Date("2026-10-06T00:00:00Z"));
   assert.match(md, /\| tier \| tasks \| share \| accepted\/judged \| acceptance \| \$ \| of which unresolved \$ \| \$\/accepted \(excl\. – incl\. unresolved \$\) \|/);
   assert.match(md, /\| all \| 1 \| 100% \| 1\/1 \| 100% \| 6\.00 \| 5\.00 \| 1\.00 – 6\.00 \|/);
-  assert.match(md, /\| \$\/accepted task, all routed tasks, excl\. – incl\. unresolved cards' \$ \(accepted\/tasks\) \| 1\.00 – 6\.00 \(1\/1\) \|/);
+  assert.match(md, /\| API-eq \$\/accepted task, all routed tasks, excl\. – incl\. unresolved cards' \$ \(accepted\/tasks\) \| 1\.00 – 6\.00 \(1\/1\) \|/);
   // m1: what the range is, and that a task nobody judged is cost with no yield in both ends
   assert.match(md, /the first number leaves it out \(excl\.\), the second counts it \(incl\.\), over the same accepted tasks/);
   assert.match(md, /a task nobody judged is cost with no yield \(zero yield\): in the \$, never accepted, in both numbers/);
@@ -527,7 +527,7 @@ test("old outcome lines (no assigned/routeBase/unresolved/reviewOf/spotcheck/cwd
 
 test("render: the delegation section shows the profile × tier table, the randomized comparison (labelled) and the spot-check agreement", () => {
   const md = renderAnalysis(analyse({ ...randomLogs(), outcomes: [...randomLogs().outcomes, ...spotLogs().outcomes], meter: [...randomLogs().meter, ...spotLogs().meter] }), new Date("2026-10-06T00:00:00Z"));
-  const sec = md.split("\n## Delegation & routing\n")[1].split(/\n## /)[0];
+  const sec = md.split("\n## Router\n")[1].split(/\n## /)[0];
   assert.match(sec, /### By profile and tier/);
   assert.match(sec, /escalations = re-spawns one level up \(D7\)/);
   assert.match(sec, /\| profile \| tier \| tasks \| accepted \| partial \| rejected \| unjudged \| acceptance \| \$\/accepted \| escalations \| checks passed \|/);
@@ -540,7 +540,7 @@ test("render: the delegation section shows the profile × tier table, the random
   assert.match(sec, /agreement/);
   assert.ok(!sec.includes("SC3"), "D9: the report names no target of the router's (SC3)");
   assert.match(sec, /\| Qwen share of tasks \(planned\) \|/);
-  const empty = renderAnalysis(analyse(logsOf([{ id: "a", verdict: "accepted" }])), new Date("2026-10-06T00:00:00Z")).split("\n## Delegation & routing\n")[1];
+  const empty = renderAnalysis(analyse(logsOf([{ id: "a", verdict: "accepted" }])), new Date("2026-10-06T00:00:00Z")).split("\n## Router\n")[1];
   assert.match(empty, /no randomized spawns/);
   assert.match(empty, /no spot checks/);
 });

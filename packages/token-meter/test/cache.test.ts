@@ -376,3 +376,19 @@ test("D7: cold resumes (B4) use the same send-to-send idle time", () => {
   const sentLate = [D(0, 0, 10_000, 0), D(7, 10_000, 400, 6.5), D(8, 0, 10_400, 0.5), D(9, 10_400, 100, 0)];
   assert.equal(premiums(sentLate).coldResume.events, 1);
 });
+
+// ---- M4 T4.8: the premium split into the write and the read it replaces, so that a calibrated β prices it in est. points ----
+
+test("M4: every cause row and event keeps its premium as write $ − read $ (misses × w × p and × r × p), the baseline likewise", () => {
+  const meter = [C("a", 0, 0, 1000), C("a", 1, 1000, 200), C("a", 8, 0, 1200), C("a", 9, 1200, 100), C("b", 0, 0, 500, { arm: "+" }, 2.0), C("b", 20, 0, 500, { arm: "+" }, 2.0)];
+  const c = cacheSection(meter, H);
+  for (const m of c.misses) close(m.parts.write - m.parts.read, m.usd);
+  const total = (k: "write" | "read") => c.misses.reduce((x, m) => x + m.parts[k], 0); // whatever the causes: a 5-minute main's 1200 and a 1h main's 500 missed tokens
+  close(total("write"), 1200 * 1.25 * P + 500 * 2.0 * P); close(total("read"), 1700 * 0.1 * P);
+  const f = premiums(folding());
+  close(f.fold.premiumParts.write, 2000 * 1.25 * P); close(f.fold.premiumParts.read, 2000 * 0.1 * P);
+  for (const k of ["fold", "coldResume"] as const) {
+    close(f[k].premiumParts.write - f[k].premiumParts.read, f[k].premiumUsd);
+    close(f[k].baselineParts.write - f[k].baselineParts.read, f[k].baselineUsd);
+  }
+});

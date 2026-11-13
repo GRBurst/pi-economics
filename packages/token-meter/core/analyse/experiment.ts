@@ -2,7 +2,7 @@
 // per-arm stats and the posterior (redesign M2c, B8).
 import { armStats, isError, MIN_HOURS, quotaAttribution, rootUnits, type ArmStat, type RootUnit } from "../arms.ts";
 import { bootstrapRatio, mulberry32, normal, ratio } from "../stats.ts";
-import { billingOf, type Billing, type Plans } from "../plans.ts";
+import { billingOf, plansAbsent, type Billing, type Plans } from "../plans.ts";
 import { byTs, isLine } from "./logs.ts";
 import { armInfo, DESIGNS, designOf, rowsBySession } from "./designs.ts";
 
@@ -164,6 +164,6 @@ export function experiment(meter: any[], rows: any[], expSettings: any, plans?: 
     const post = stats.filter((s) => s.units >= 2).map((s) => ({ arm: s.arm, mean: -s.costPerHour, sd: s.sd }));
     const pb = pBest(post);
     const wanted = typeof expSettings?.baseline === "string" && expSettings.baseline.length === factors.length ? expSettings.baseline : undefined;
-    return { design, factors, baseline: wanted ?? "-".repeat(factors.length), units: units.filter((u) => u.hours >= MIN_HOURS).length, arms: stats, strata, plansAbsent: Object.keys(plans ?? {}).length === 0, posterior: post.map((p, i) => ({ ...p, pBest: pb[i] })) };
+    return { design, factors, baseline: wanted ?? "-".repeat(factors.length), units: units.filter((u) => u.hours >= MIN_HOURS).length, arms: stats, strata, plansAbsent: plansAbsent(plans), posterior: post.map((p, i) => ({ ...p, pBest: pb[i] })) };
   });
 }

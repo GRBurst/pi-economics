@@ -346,7 +346,7 @@ table is; this is what a reader of the raw files needs to reproduce them).
   measured against the window's running maximum so stale interleaved readings count once)
   is split between the roots that made requests in (previous reading, this reading],
   proportional to their `costUsd` there (equally when all cost 0). Σ over roots = the
-  account's rise seen between pi requests ("pi share" in *Data quality*); a lone root gets
+  account's rise seen between pi requests (the `q5h`/`q7d` %/active hour rows of *Fleet*; the report no longer shows it as a share of the account's quota: its denominator was only seen through pi's own requests); a lone root gets
   the full rise, two identical parallel roots half each. A root without any reading has no
   quota figure. 1 % steps make per-root figures coarse; they are fair only over many steps.
 - **Designs v2 and v3** are analysed alike (same factors) but as separate tables, v4 (its own
@@ -355,7 +355,7 @@ table is; this is what a reader of the raw files needs to reproduce them).
   when there is none); guard events and verdicts are attributed the same way (spawn events by
   their `parentSessionId`) before they are keyed by arm. `--apply` writes one posterior per arm id,
   from the newest design.
-- **Fold ledger** (*Cost*, Claude models only). A **fold** = a turn request whose prompt
+- **Fold ledger** (*Cache*, Claude models only). A **fold** = a turn request whose prompt
   (`input + cacheRead + cacheWrite`) is below 80 % of the previous turn request's in the
   same session (compaction lines are no part of it, *Compaction lines*) (the rule of the *after folds* split). For each fold:
   - **R** = prompt before − prompt after (tokens removed);
@@ -370,7 +370,7 @@ table is; this is what a reader of the raw files needs to reproduce them).
   - **r, w** = the model's cache read and write price per token, derived from the lines: input price
     `p = Σ costUsd ÷ Σ (input + 0.1·cacheRead + 1.25·(cacheWrite − cw1h) + 2.0·cw1h + 5·output)` over the model's lines
     with a cost (the same Anthropic ratios the *Token components* table uses; `cw1h` = the line's 1 h writes, see *Analysis: cache misses*),
-    `r = 0.1·p`, `w = 1.25·p` (5-minute write), `w1h = 2.0·p` (the fold request's 1 h share of its writes is paid at `w1h`).
+    `r` = the model's read ratio × `p` (0.1 by default, 0.05 for Opus 5.5 and Sonnet 5.5), `w = 1.25·p` (5-minute write), `w1h = 2.0·p` (the fold request's 1 h share of its writes is paid at `w1h`).
     A model without a priced line contributes no folds.
   - **savings** = n·R·r (cache-read $ the shrunken prompt saved); **rewrite** = K·(w − r) (the K
     tokens are written at w where they would have been read at r);
@@ -427,7 +427,7 @@ request is no row of its own (it only refreshes the prefix).
   (the extra cost over reading what the cache lost). **Baseline** = the mean premium of the turn requests outside every window
   (not the first one) in the sessions that have an event of that kind, once per event; **net** = premium − baseline. The old
   rows charged the whole cost of the next three requests, with no baseline (about 1.6–2× too much on the author's log).
-- **$** at the line's input price *p* (`costUsd` ÷ its tokens weighted read 0.1, 5-minute write 1.25, 1 h write 2.0, output 5): a miss costs
+- **$** at the line's input price *p* (`costUsd` ÷ its tokens weighted by the model's ratios: read 0.1 (0.05 for Opus 5.5 and Sonnet 5.5), 5-minute write 1.25, 1 h write 2.0, output 5): a miss costs
   its tokens × (write − read) × *p*, new context its tokens × write × *p*. A 1 h write is a line's `cacheWrite1h` tokens (meter v2), or for a
   v1 line all of `cacheWrite` when the line is a Claude main session's (an Anthropic model or provider) in a `mainCacheTtl` 1h arm (an approximation: children and 5m arms write 5
   minutes).
@@ -435,6 +435,46 @@ request is no row of its own (it only refreshes the prefix).
   cost. Only the split of a cost by token component and the fold ledger's prices weigh 1 h writes 2.0 (they weighed every write 1.25).
 - **miss share** (`meter-report`) = missed tokens ÷ `cacheWrite` tokens of the same requests; the old "rewrite share" counted every
   non-first write as a rewrite (94.7 % on the author's log, mostly ordinary growth).
+
+### Analysis: budget
+
+The *Budget* section comes first in the report: the quota is the budget, not the comparison metric of experiments (those compare API-eq $
+for cloud setups and the local cost for local ones). Quota arrives **in whole percent** (`q5h`, `q7d`; about 460–560 requests per 1 % step
+in 2026-11) and is shared by every session, subagent and other client of the account, so no session or arm is charged quota points.
+
+- **Window** = one provider's `q5h`/`q7d` reset period, identified by (provider, kind, `<key>Reset`); it starts 5 h or 7 d before its
+  reset. Lines carry the readings; only a subscription provider has windows (`plans.<provider>.windows` names the kinds; without a plan
+  whatever the lines carry). **Peak** = the highest reading. The **cap** was hit at the first reading of 100, else at the first
+  rate-limit error after a reading of 99; **time to cap** = cap − window start, **lockout** = reset − cap (the quota stays at the cap
+  until the reset). **Complete** = the window is over (a later line exists) and the log reaches back to its start.
+- **$ of a window** = the API-eq $ of every line of the provider with `ts` in [start, reset) (all sessions, children and warming
+  lines), split by token component (`input`, `cacheRead`, `cacheWrite` = 5-minute and 1 h writes together, `output`) with the model's
+  price ratios (`core/analyse/prices.ts`: pi 1.4's registry, the `anthropic` provider's entries, the registry's price depends on the provider: Opus 5.5 and Sonnet 5.5 read at 0.05 × input; another provider's line, or a model without an
+  entry uses read 0.1, write 1.25, 1 h write 2.0, output 5). **API-eq $** is the list price of the tokens, **cash $** what is charged
+  (the API-eq $ of billing class `api`, else 0), **est. points** a calibrated β applied to a premium (*Analysis: cache misses*).
+- **429 requests** = error lines that are rate limits (v1 `errorClass` `429`, v2 `errorKind` `rate_limit`); **retry wait** = Σ
+  `retryWaitMs` of the window's lines (v1: pi-retry's totals, v2: pi's native retries), whatever failed. Both belong to the limit that was capped: the one whose highest reading of the current window (not yet reset) is at 99 or more at that line (both when both are; the 5-hour one when neither is: a short limit that is no cap), so a 7-day lockout is not counted in 5-hour windows. A window none of whose lines
+  carries `retryWaitMs` shows **not observable**, never 0.
+- **Calibration** (per provider and kind, complete windows only, at least 8): peak ≈ Σ β_c × $_c, a non-negative least-squares fit
+  (NNLS, Lawson–Hanson; no intercept). Reported: β (points per API-eq $ of the component; 1 = the quota weighs a token as its list price
+  does), centred R², σ, and **$/point** per window (window $ ÷ peak). Flags, never an automatic change: `r2` (R² < 0.8), `residual`
+  (a window's residual > 3σ, σ = √(SSE ÷ (n − 4)); a single outlier can reach 3σ only from 14 windows on), `drift` (Σ$ ÷ Σpoints over the
+  windows ending in the last 28 days against the 28 before differs by more than 15 %), `beta` (a component with ≥ 1 % of the $ whose β
+  is outside [0.5, 2] × the $-weighted mean β). Below 8 complete windows the report says how many it has.
+- **Spend** by billing class (a line's own `billing`, else its provider's plan, else `api`) and **local cost** = Σ `durationMs` of
+  the local requests × the plan's hourly rate, in the rate's currency; requests without `durationMs` are counted apart and add no
+  time; a provider without a rate has no cost. A guessed class (a v1 line, no plan for its provider: counted as `api`) makes its **cash $** cell an
+  upper bound (`≤ …`), and without any usable plan entry the report says *plans absent*.
+
+A capped window as lines (the 5-hour window of reset 14:00 reached 97 %, then 100 % at 12:30; a request at 12:40 was rate-limited):
+
+```jsonl
+{"v":2,"ts":"2026-11-03T12:00:04.200Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":12,"cacheRead":48000,"cacheWrite":1500,"cacheWrite1h":1500,"output":420,"costUsd":0.06,"status":200,"retries":0,"retryWaitMs":0,"durationMs":4200,"ttftMs":900,"q5h":97,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
+{"v":2,"ts":"2026-11-03T12:30:00.000Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":30,"cacheRead":49500,"cacheWrite":800,"cacheWrite1h":800,"output":510,"costUsd":0.05,"status":200,"retries":0,"retryWaitMs":0,"durationMs":5100,"ttftMs":1100,"q5h":100,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
+{"v":2,"ts":"2026-11-03T12:40:00.800Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"429","errorKind":"rate_limit","durationMs":300}
+```
+
+Window start 09:00, cap at 12:30: time to cap 3.5 h, lockout 1.5 h, peak 100, one 429 request, two requests.
 
 ### Analysis: experiments
 
