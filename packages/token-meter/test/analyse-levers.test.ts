@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { analyse, renderAnalysis, renderLevers, type Logs } from "../core/analyse.ts";
 import { levers } from "../core/analyse/levers.ts";
 import { leversLine, type LeverState } from "../core/levers.ts";
+import { effectiveSettings } from "../core/effective-settings.ts";
 import { iso, MIN, T0, turn } from "./world.ts";
 
 const DAY = 24 * 60 * MIN;
@@ -66,4 +67,14 @@ test("levers: no levers line in the period renders the empty state", () => {
   const s = levers([turn("d", T0)], [turn("d", T0)], PERIOD);
   assert.deepEqual([s.sessions, s.withLevers, s.levers], [1, 0, []]);
   assert.ok(renderLevers(s).startsWith("_no data in the period_"));
+});
+
+test("levers: many sessions are summarised in linear time (M3b review F4)", () => {
+  const n = 20_000;
+  const all = effectiveSettings({}, {});
+  const meter = Array.from({ length: n }, (_, i) => lv(`s${i}`, T0 + (i % 600) * MIN, all));
+  const t = Date.now();
+  const s = levers(meter, meter, PERIOD);
+  assert.equal(s.levers.find((r) => r.lever === "pi.transport")?.sessions, n);
+  assert.ok(Date.now() - t < 5_000, `${Date.now() - t} ms`);
 });

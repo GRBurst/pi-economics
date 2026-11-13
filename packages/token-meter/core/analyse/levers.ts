@@ -2,7 +2,7 @@
 // Unit = a session of the period (a meter line in it); its state = its last levers line up to the period's end, so a
 // session that began before the period keeps the line written at its start (levers lines are written on change only).
 import { type LeverState } from "../levers.ts";
-import { byTs, countBy, isLine, type Period } from "./logs.ts";
+import { byTs, countBy, isLine, push, type Period } from "./logs.ts";
 
 export type LeverRow = { lever: string; sessions: number; values: Record<string, number>; sources: Record<string, number>;
   assigned: number; refused: number; unverified: number; refusalRate: number };
@@ -22,7 +22,7 @@ export function levers(all: any[], period: any[], p: Period = {}): LeversSection
   const states = new Map<string, LeverState[]>();
   for (const l of lines) {
     const off = icOff(l.levers);
-    for (const [id, s] of Object.entries(l.levers as Record<string, LeverState>)) if (!(off && inert(id))) states.set(id, [...(states.get(id) ?? []), s]);
+    for (const [id, s] of Object.entries(l.levers as Record<string, LeverState>)) if (!(off && inert(id))) push(states, id, s); // linear: never copy the list
   }
   const SOURCE_ORDER = ["pe", "ext", "fixed"];
   return {
