@@ -41,8 +41,10 @@ without the user's explicit approval.
 
 - **Cost**: total $, active hours (gaps < 30 min), $/active hour with a bootstrap 95% CI,
   quota %/active hour (the account's rise split between the roots active at the time, never
-  double-counted across parallel sessions), $/accepted task; splits by model, cache rewrite, warming, after
-  folds and after cold resumes. Splits overlap; they are not additive.
+  double-counted across parallel sessions), $/accepted task; splits by model and warming; token components (a 1 h cache write
+  weighs 2.0 × input, a 5-minute one 1.25). **Cache** (Claude models): new context (growth) apart from misses (the cached prefix a
+  request had to write again) by cause (ttl, fold, model, other), and the premium of folds and cold resumes over a baseline
+  (net of what an ordinary request misses).
 - **Experiment** (per design: v1 = 5 factors / 5-character arms, v2 and v3 = 6 factors incl.
   `delegationRule`, v4 = 3 factors `warmPolicy`, `mainCacheTtl`, `maskOnCold`): per-factor effect on $/active hour with a bootstrap CI, OLS with
   two-way interactions (aliased terms listed), per-arm $/h, posterior and P(best).

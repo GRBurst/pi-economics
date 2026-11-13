@@ -43,6 +43,12 @@ export function cacheSteps(branch: readonly any[], ttlMs: (l: any) => number, ev
   return steps;
 }
 
+/** A line's prices in input prices: its input price p, and the weight w of a token it wrote (1.25, 2.0 for 1 h writes: cacheWrite1hOf). */
+function pricing(l: any, flags: Flags): { p: number; w: number } {
+  const long = cacheWrite1hOf(l, l.parentSessionId === undefined, flags[l.arm]);
+  return { p: pIn(l, long), w: writeWeight(l, long) };
+}
+
 const TTL_5M = 5 * 60_000;
 const TTL_1H = 60 * 60_000;
 
@@ -82,8 +88,7 @@ export function cacheSection(lines: readonly any[], flags: Flags = {}): CacheSec
     out.branches += 1;
     for (const step of cacheSteps(branch, ttl, shrinkFold)) {
       const l = branch[step.i];
-      const long = cacheWrite1hOf(l, l.parentSessionId === undefined, flags[l.arm]);
-      const p = pIn(l, long), w = writeWeight(l, long);
+      const { p, w } = pricing(l, flags);
       out.requests += 1;
       out.writeTokens += num(l.cacheWrite);
       out.newContext.tokens += step.growth;
@@ -108,8 +113,8 @@ export type EventKind = "fold" | "coldResume";
 const N_AFTER = 3; // requests an event is charged with: its own and the next two
 
 /**
- * Per event kind over the session branches: a **cold resume** is a turn request after a gap beyond the TTL in force (\`ttlMs\` of the
- * previous request, warming included); a **fold** is a turn request after which \`eventBetween(previous, this)\` holds (not itself cold: P8,
+ * Per event kind over the session branches: a **cold resume** is a turn request after a gap beyond the TTL in force (`ttlMs` of the
+ * previous request, warming included); a **fold** is a turn request after which `eventBetween(previous, this)` holds (not itself cold: P8,
  * the gap wins). An event's window is its request and the next two turn requests of the branch, cut short by the next event: every request
  * is in at most one window. premium_e = Σ over the window of miss_j × (w_j − r) × p_j (the line's write weight w, read weight r, input
  * price p): the extra cost over reading the tokens the cache lost. The baseline is what an ordinary request costs the same way: the mean
@@ -122,9 +127,8 @@ export function foldPremiums(branches: Iterable<readonly any[]>, ttlMs: (l: any)
   for (const branch of branches) {
     const steps = cacheSteps(branch, ttlMs, eventBetween);
     const premium = steps.map((s) => {
-      const l = branch[s.i];
-      const long = cacheWrite1hOf(l, l.parentSessionId === undefined, flags[l.arm]);
-      return s.miss * (writeWeight(l, long) - WEIGHT.cacheRead) * pIn(l, long);
+      const { p, w } = pricing(branch[s.i], flags);
+      return s.miss * (w - WEIGHT.cacheRead) * p;
     });
     const events: Array<{ at: number; kind: EventKind }> = [];
     steps.forEach((s, k) => {

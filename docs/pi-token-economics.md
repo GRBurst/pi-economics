@@ -126,7 +126,7 @@ pi-analyse --apply   # as the full run + write the kill switch's disabled arms t
 **meter-report** (installed by Home Manager from the token-meter package):
 
 ```sh
-meter-report [--from YYYY-MM-DD] [--to YYYY-MM-DD]   # spend per day/session/model, cache-rewrite share, quota regression
+meter-report [--from YYYY-MM-DD] [--to YYYY-MM-DD]   # spend per day/session/model, cache miss share, quota regression
 meter-report --arms                                  # per-arm table: $/active hour (bootstrap CI), cold resumes, folds, acceptance, $/accepted task, q5h/q7d %/h, peeks/s, corr/s, rating, kill-switch reasons
 meter-report --arms --posterior [--agent-dir DIR]    # as above + write experiments/state.json (posterior, disabled) atomically
 ```

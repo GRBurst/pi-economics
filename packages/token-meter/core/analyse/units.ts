@@ -8,7 +8,8 @@ import { num, sum } from "./logs.ts";
  * `costUsd` on the tokens of the author's main-session claude-opus-5-5 lines agrees: cache-write ÷ input price = 2.000 in arms with
  * `mainCacheTtl` 1h (2750 lines), 1.250 in 5m arms (4314). So a total is not repriced; only the split of a cost by token component
  * and the ledger's prices (the analyser's own 1.25 for every write) were wrong. Set this to false for a pi that charges 1 h writes
- * as 5-minute ones: `apiUsd` then adds the missing 0.75 × input price per 1 h-written token.
+ * as 5-minute ones: `apiUsd` then adds the missing 0.75 × input price per 1 h-written token of a line that carries `cacheWrite1h`
+ * (a v1 line's arm-flag approximation reaches the split and the ledger, not the totals: a switch no current pi needs).
  */
 export const PI_PRICES_1H = true;
 
