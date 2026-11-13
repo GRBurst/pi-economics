@@ -16,20 +16,18 @@ export function bus() {
 
 export type Entry = { type: "custom"; customType: string; data?: unknown };
 
-/** A fake ExtensionAPI: `entries` collects pi.appendEntry calls (the session's custom entries); `tools` are the names pi.getAllTools reports. */
+/** A fake ExtensionAPI: `entries` collects pi.appendEntry calls (the session's custom entries). */
 export function fakePi() {
   const handlers = new Map<string, Array<(e: any, ctx: any) => unknown>>();
   const commands: string[] = [];
   const entries: Entry[] = [];
-  const tools: string[] = [];
   const events = bus();
   const pi = {
     on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]),
     registerCommand: (n: string) => void commands.push(n),
     appendEntry: (customType: string, data?: unknown) => void entries.push({ type: "custom", customType, data }),
-    getAllTools: () => tools.map((name) => ({ name })),
     events,
   };
   const fire = (name: string, e: unknown, ctx: unknown) => (handlers.get(name) ?? []).forEach((h) => h(e, ctx));
-  return { pi, handlers, commands, entries, tools, events, fire };
+  return { pi, handlers, commands, entries, events, fire };
 }

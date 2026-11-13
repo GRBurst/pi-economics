@@ -59,12 +59,14 @@ function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string
   mkdirSync(join(agentDir, "infinite-context"), { recursive: true });
   writeFileSync(join(agentDir, "infinite-context", "settings.json"), JSON.stringify(FILE));
   const f = fakePi();
+  const tools: string[] = []; // the names pi's getAllTools reports
+  Object.assign(f.pi, { getAllTools: () => tools.map((name) => ({ name })) });
   f.entries.push(...(o.entries ?? []));
   const heard: Levers[] = [];
   onAssigned(f.events, (l) => void heard.push(l));
   install(f.pi, { agentDir, settings: { ...defaults(), strata: { any: { match: {}, factors: [NUDGE] } } }, rng: () => o.rng ?? 0.5, api: () => undefined });
   const table = o.table ?? RULES;
-  if (o.loaded !== false) f.tools.push("context_fold");
+  if (o.loaded !== false) tools.push("context_fold");
   const follow = (model: Model) => {
     const { rule, nudge } = table[key(model)] ?? { nudge: 150_000 };
     const named = rule === undefined ? {} : { rule };
