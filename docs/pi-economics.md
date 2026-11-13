@@ -234,7 +234,8 @@ whose min is not below its max, a share of 0) and the `home-files` check runs
 the package's own parser on the rendered file. The session follows its
 current model: a switch to a model whose rule has another range draws a new
 limit and records it (`infinite-context:settings` with the rule's key in
-`rule`). Changes apply to sessions and subagents started after the switch.
+`rule`, the rule that set `nudgeAtTokens` only). A record that an earlier
+`model_select` handler appended is kept when it fits. Changes apply to sessions and subagents started after the switch.
 
 Soft dependency, which does not warn: `cacheLifecycle`'s `context_peek` guard
 reads infinite-context's tools.

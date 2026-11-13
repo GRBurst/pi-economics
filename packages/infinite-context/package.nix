@@ -10,10 +10,11 @@
 #   stays fail-open per field. The branch's settings follow its current model
 #   (session_start, model_select, turn_end): upstream's record
 #   `infinite-context:settings` keeps its shape and gains `rule` (the
-#   override that set nudgeAtTokens); a rule's range is drawn and kept like
+#   override that set nudgeAtTokens only); a rule's range is drawn and kept like
 #   upstream's (same range and within it: kept), so a switch to a rule with
 #   another range draws anew and appends a record, and a record appended
-#   before session_start (pi-economics' seed) holds the draw. The reminder
+#   before session_start, or by an earlier model_select handler (pi-economics'
+#   seed), holds the draw when it fits the rule's range. The reminder
 #   step stays upstream's. Tests: the patch's settings.test.ts and
 #   index.test.ts (checks/infinite-context).
 #

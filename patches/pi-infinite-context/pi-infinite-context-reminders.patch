@@ -12,7 +12,7 @@ index b3a9487..a5f46c8 100644
  - `e2e/`: end-to-end test driving the real `pi` binary with a scripted fake provider.
  
 diff --git a/README.md b/README.md
-index ae225b3..f640b76 100644
+index ae225b3..5ce0462 100644
 --- a/README.md
 +++ b/README.md
 @@ -43,6 +43,20 @@ Change the limits in `~/.pi/agent/infinite-context/settings.json` and restart Pi
@@ -31,7 +31,7 @@ index ae225b3..f640b76 100644
 +}
 +```
 +
-+A rule's range is drawn like the top level's, and the record names the rule that set the limit (`rule`). A switch to a model whose rule differs records the new settings; a different range draws a new limit.
++A rule's range is drawn like the top level's, and the record names the rule that set `nudgeAtTokens` (`rule`; `nudgeAtPercent` may come from another rule). A switch back to a rule draws anew, so a branch can hold several draws. A switch to a model whose rule differs records the new settings; a different range draws a new limit. A record that another extension's `model_select` handler appended before this one is kept when it fits the new rule.
 +
  Pi's own compaction, including `/compact`, is blocked. If the agent does not fold enough, the context can still overflow.
  
@@ -157,7 +157,7 @@ index 5e8d9c4..a0f65ab 100644
    const h = harness([entry("u1", "user", "one", 1)]);
    await h.emit("session_start");
 diff --git a/extensions/infinite-context/index.ts b/extensions/infinite-context/index.ts
-index 0e552c5..0f9fd2d 100644
+index 0e552c5..3302399 100644
 --- a/extensions/infinite-context/index.ts
 +++ b/extensions/infinite-context/index.ts
 @@ -32,6 +32,7 @@ import { FOLD_MIN_SHARE, nudgeSchedule, planNudge } from "./nudge.ts";
@@ -168,7 +168,7 @@ index 0e552c5..0f9fd2d 100644
    SETTINGS_ENTRY,
    type Settings,
    parseSettings,
-@@ -157,11 +158,22 @@ export default function infiniteContext(pi: ExtensionAPI) {
+@@ -157,11 +158,27 @@ export default function infiniteContext(pi: ExtensionAPI) {
      let recorded: unknown;
      for (const entry of branch(ctx))
        if (entry.type === "custom" && entry.customType === SETTINGS_ENTRY) recorded = entry.data;
@@ -180,30 +180,35 @@ index 0e552c5..0f9fd2d 100644
  
 +  // The settings follow the current model's rule (selectRule). A switch to a model whose rule
 +  // resolves differently is recorded like a changed file: another range draws anew, the same
-+  // range keeps the branch's limit. The branch's latest record is `settings` itself.
-+  const followModel = (model: ModelRef | undefined) => {
-+    const next = resolveSettings(fileSettings, settings, Math.random, model);
-+    if (!settingsChanged(settings, next)) return;
++  // range keeps the limit. The branch's latest record (`recorded`) is read afresh: another
++  // extension's model_select handler, running before this one, may have appended a seed, which
++  // is kept when it fits the new rule. A record is appended only when it differs from that
++  // latest one; the reminder band restarts only when the settings differ from `settings`.
++  const followModel = (ctx: ExtensionContext, model: ModelRef | undefined) => {
++    let recorded: unknown;
++    for (const entry of branch(ctx))
++      if (entry.type === "custom" && entry.customType === SETTINGS_ENTRY) recorded = entry.data;
++    const next = resolveSettings(fileSettings, recorded, Math.random, model);
++    if (settingsChanged(recorded, next)) pi.appendEntry(SETTINGS_ENTRY, next);
++    if (settingsChanged(settings, next)) lastNudgedBand = 0;
 +    settings = next;
-+    lastNudgedBand = 0;
-+    pi.appendEntry(SETTINGS_ENTRY, settings);
 +  };
 +
    const current = (ctx: ExtensionContext) => {
      // Some headless SDK hosts do not emit session_start on programmatic reload.
      // Lazy loading keeps snapshot restoration correct without host-specific hooks.
-@@ -188,6 +200,10 @@ export default function infiniteContext(pi: ExtensionAPI) {
+@@ -188,6 +205,10 @@ export default function infiniteContext(pi: ExtensionAPI) {
  
    pi.on("session_start", async (_event, ctx) => load(ctx));
    pi.on("session_tree", async (_event, ctx) => load(ctx));
 +  pi.on("model_select", async (event, ctx) => {
 +    if (!loaded) load(ctx);
-+    followModel(event.model);
++    followModel(ctx, event.model);
 +  });
  
    pi.on("context", async (event, ctx) => {
      try {
-@@ -227,8 +243,10 @@ export default function infiniteContext(pi: ExtensionAPI) {
+@@ -227,8 +248,10 @@ export default function infiniteContext(pi: ExtensionAPI) {
    });
  
    pi.on("turn_end", async (event, ctx) => {
@@ -211,7 +216,7 @@ index 0e552c5..0f9fd2d 100644
 +    // Same lazy load as current(): the branch's settings must be resolved before planning, for
 +    // the model that ran this turn (a host may switch models without model_select).
      if (!loaded) load(ctx);
-+    followModel(ctx.model);
++    followModel(ctx, ctx.model);
      const usage = ctx.getContextUsage();
      const window = usage?.contextWindow ?? 0;
      const tokens = usage?.tokens ?? null;
@@ -330,7 +335,7 @@ index 5925b8c..f003686 100644
 +  );
 +});
 diff --git a/extensions/infinite-context/settings.ts b/extensions/infinite-context/settings.ts
-index 7d58d54..cc61fdd 100644
+index 7d58d54..e8761e3 100644
 --- a/extensions/infinite-context/settings.ts
 +++ b/extensions/infinite-context/settings.ts
 @@ -17,10 +17,27 @@ export const SETTINGS_ENTRY = "infinite-context:settings";
@@ -361,16 +366,19 @@ index 7d58d54..cc61fdd 100644
  }
  
  /** The settings one branch runs under; recorded as the SETTINGS_ENTRY data. */
-@@ -35,6 +52,8 @@ export interface Settings {
+@@ -35,6 +52,11 @@ export interface Settings {
     * chosen ones.
     */
    readonly nudgeAtTokensRange?: TokenRange;
-+  /** The override whose nudgeAtTokens applies (selectRule); absent when it is the top level's. */
++  /**
++   * The override that supplied nudgeAtTokens (selectRule); absent when the top level did. It says
++   * nothing about nudgeAtPercent, which may come from another rule.
++   */
 +  readonly rule?: string;
  }
  
  /**
-@@ -65,6 +84,29 @@ function percent(value: unknown, fallback: number): number {
+@@ -65,6 +87,29 @@ function percent(value: unknown, fallback: number): number {
      : fallback;
  }
  
@@ -400,7 +408,7 @@ index 7d58d54..cc61fdd 100644
  /** Parses the settings file's contents; unparseable text is treated as an empty file. */
  export function parseSettings(json: string): FileSettings {
    let value: Record<string, unknown> | undefined;
-@@ -74,11 +116,41 @@ export function parseSettings(json: string): FileSettings {
+@@ -74,11 +119,41 @@ export function parseSettings(json: string): FileSettings {
    } catch {
      // Fall through to defaults; the file is the user's, not a contract we can repair.
    }
@@ -442,8 +450,13 @@ index 7d58d54..cc61fdd 100644
    };
  }
  
-@@ -90,15 +162,19 @@ const sameRange = (a: unknown, b: TokenRange | undefined): boolean =>
-  * one limit drawn uniformly from it (a randomized experiment, unit = branch): the branch keeps
+@@ -87,18 +162,23 @@ const sameRange = (a: unknown, b: TokenRange | undefined): boolean =>
+ 
+ /**
+  * The settings a branch runs under. A fixed limit is used as is. A range assigns the branch
+- * one limit drawn uniformly from it (a randomized experiment, unit = branch): the branch keeps
++ * one limit drawn uniformly from it (a randomized experiment; unit = a stretch of the branch
++ * between settings records, as a switch to another rule or back draws anew): the branch keeps
   * the limit its latest record (`recorded`, untrusted session data) holds for the same range,
   * so resuming, reloading and forking stay in the same arm; otherwise `random` (in [0, 1))
 - * draws a new one. A changed range starts a new draw, so edited settings still apply.
@@ -465,7 +478,7 @@ index 7d58d54..cc61fdd 100644
    const [min, max] = nudgeAtTokens;
    const data = (typeof recorded === "object" && recorded !== null ? recorded : {}) as Record<
      string,
-@@ -110,7 +186,7 @@ export function resolveSettings(
+@@ -110,7 +190,7 @@ export function resolveSettings(
      typeof kept === "number" && Number.isInteger(kept) && kept >= min && kept <= max
        ? kept
        : min + Math.floor(random() * (max - min + 1));
@@ -474,7 +487,7 @@ index 7d58d54..cc61fdd 100644
  }
  
  /**
-@@ -123,6 +199,7 @@ export function settingsChanged(recorded: unknown, current: Settings): boolean {
+@@ -123,6 +203,7 @@ export function settingsChanged(recorded: unknown, current: Settings): boolean {
    return (
      data.nudgeAtTokens !== current.nudgeAtTokens ||
      data.nudgeAtPercent !== current.nudgeAtPercent ||

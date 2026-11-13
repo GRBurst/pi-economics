@@ -25,7 +25,7 @@ const owner = {
 };
 
 /** The extension on a fresh agent dir holding `settings` (undefined: no file). */
-function harness(settings: unknown, initial: Entry[] = []) {
+function harness(settings: unknown, initial: Entry[] = [], early: Handler[] = []) {
   const dir = mkdtempSync(path.join(tmpdir(), "ic-integration-"));
   process.env.PI_CODING_AGENT_DIR = dir;
   const file = path.join(dir, "infinite-context", "settings.json");
@@ -34,12 +34,16 @@ function harness(settings: unknown, initial: Entry[] = []) {
     writeFileSync(file, JSON.stringify(settings));
   }
   const entries: Entry[] = [...initial];
-  const handlers = new Map<string, Handler[]>();
+  const handlers = new Map<string, Handler[]>([["model_select", early]]);
   const sent: any[] = [];
   const notifications: Array<[string, string]> = [];
   const state = { model: opus as unknown, usage: { contextWindow: MILLION, tokens: 0 } };
   const pi = {
-    on: (name: string, handler: Handler) => handlers.set(name, [...(handlers.get(name) ?? []), handler]),
+    on(name: string, handler: Handler) {
+      const list = handlers.get(name) ?? [];
+      list.push(handler);
+      handlers.set(name, list);
+    },
     registerTool() {},
     appendEntry(customType: string, data: unknown) {
       entries.push({ type: "custom", id: `state-${entries.length}`, customType, data });
@@ -153,4 +157,60 @@ test("pi-economics' seed: a record with the rule's range, appended before sessio
     nudgeAtTokensRange: [100_000, 200_000],
     rule: "anthropic",
   });
+});
+
+/** The seed pi-economics appends from its own model_select handler, which runs before IC's. */
+function seedAtModelSelect(data: Record<string, unknown>, initial: Entry[]) {
+  let h: ReturnType<typeof harness> | undefined;
+  const early: Handler[] = [
+    async () => {
+      h?.entries.push({ type: "custom", id: "model-seed", customType: "infinite-context:settings", data });
+    },
+  ];
+  h = harness(owner, initial, early);
+  return h;
+}
+
+test("pi-economics' seed appended at model_select, for another range, replaces IC's own draw", async () => {
+  const seed = {
+    nudgeAtTokens: 123_456,
+    nudgeAtPercent: 50,
+    nudgeAtTokensRange: [100_000, 200_000],
+    rule: "anthropic",
+  };
+  const h = seedAtModelSelect(seed, [user("u1", "one")]);
+  await h.emit("session_start");
+  assert.equal(h.records().length, 1);
+  h.state.model = haiku;
+  await h.emit("model_select", { model: haiku, previousModel: opus, source: "set" });
+  // The seed is the branch's latest record and complete: IC appends nothing after it.
+  assert.deepEqual(h.records(), [{ nudgeAtTokens: 400_000, nudgeAtPercent: 50, rule: "anthropic/claude-opus-5-5" }, seed]);
+  await h.turn(123_455);
+  assert.equal(h.sent.length, 0);
+  await h.turn(123_456);
+  assert.equal(h.sent[0].details.threshold, 123_456);
+  assert.equal(h.records().length, 2);
+});
+
+test("pi-economics' seed appended at model_select, for the same range, replaces IC's own limit", async () => {
+  const seed = {
+    nudgeAtTokens: 111_111,
+    nudgeAtPercent: 50,
+    nudgeAtTokensRange: [100_000, 200_000],
+    rule: "anthropic",
+  };
+  const h = seedAtModelSelect(seed, [user("u1", "one")]);
+  h.state.model = haiku;
+  await h.emit("session_start");
+  const own = h.records().at(-1) as Record<string, unknown>;
+  assert.equal(own.rule, "anthropic");
+  const sonnet = { provider: "anthropic", id: "claude-sonnet-5" };
+  h.state.model = sonnet;
+  await h.emit("model_select", { model: sonnet, previousModel: haiku, source: "set" });
+  assert.deepEqual(h.records().at(-1), seed);
+  assert.equal(h.records().length, 2);
+  await h.turn(111_110);
+  assert.equal(h.sent.length, 0);
+  await h.turn(111_111);
+  assert.equal(h.sent[0].details.threshold, 111_111);
 });
