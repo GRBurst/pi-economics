@@ -195,7 +195,7 @@ Without `infiniteContext` the `context_peek` guard has nothing to log; without
 The online experiment (`packages/experiments`): one fractional-factorial arm
 per main session, recorded in `<agentDir>/experiments/assignments.jsonl` and
 published as `globalThis.__piExperimentsApi_v1`, whose factor flags
-`cacheLifecycle`, `tokenMeter`, the task router and `infiniteContext` read.
+`cacheLifecycle`, `tokenMeter` and the task router read.
 Corrections and `/rate` ratings go to `<agentDir>/guards/events.jsonl`. There
 is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 
@@ -210,36 +210,32 @@ children do not inherit an arm.
 
 ### `infiniteContext` (`modules/infinite-context.nix`)
 
-pi-infinite-context (upstream input `pi-infinite-context`) with two patches
-from `patches/pi-infinite-context`: reminders (absolute fold-reminder
-thresholds per provider or model) and cache (a cost-aware fold hint, a
-`fold_timing` prompt section, a re-sync of a snapshot that no longer matches
-the branch, a handoff notice instead of the raw transcript). It folds ranges
-of the agent's own conversation by message id and unfolds them on demand.
-Main sessions and children load it (`forChildren = true`).
+pi-infinite-context (upstream input `pi-infinite-context`) with one patch
+from `patches/pi-infinite-context`, reminders: the settings file gains
+`overrides`, fold-reminder rules per provider or model. It folds ranges of the
+agent's own conversation by message id and unfolds them on demand. Main
+sessions and children load it (`forChildren = true`).
 
 | Option | Default | Effect |
 |---|---|---|
 | `enable` | `false` | registry entry `infinite-context` (link `<agentDir>/extensions/infinite-context` → the package's `extensions/infinite-context`) and the settings file |
 | `package` | the flake's `packages/infinite-context` | the patched source |
-| `reminders.default`, `reminders.overrides` | `{}` | `{ startTokens; everyTokens; }` (both `null` or a positive integer): `default` for every model, `overrides` keyed by pi provider or exact `provider/modelId`. Each field resolves on its own: exact model, then provider, then `default`, then the extension's 75 % / 5 % of the model window. Nulls are left out of the file |
-| `reminders.prices` | `{}` | `{ w; r; }` per provider or exact model: with a price the reminder says after how many turns a fold pays off |
-| `reminders.cacheTtlMinutes`, `reminders.foldHint` | `null` | the cache TTL the hint uses (extension default 5 minutes); `"fixed"` or `"cache-aware"` (extension default) |
-| `settings` | `{}` | merged into the file with `lib.recursiveUpdate`, on the right of what `reminders` renders (`nudgeAtTokens`, `nudgeAtPercent`, `reminders`, `prices`, `cacheTtlMinutes`, `foldHint`) |
+| `reminders.default`, `reminders.overrides` | `{}` | `{ nudgeAtTokens; nudgeAtPercent; }` (each `null` = inherit): `nudgeAtTokens` a positive integer or a range `[min, max]` with min < max, `nudgeAtPercent` a share of the model window in (0, 100]. `default` is the file's top level, `overrides` keyed by pi provider or exact `provider/modelId`. Each field resolves on its own: exact model, then provider, then `default`, then the extension's 150000 tokens / 75 %. Nulls and empty rules are left out of the file |
+| `settings` | `{}` | merged into the file with `lib.recursiveUpdate`, on the right of what `reminders` renders (`nudgeAtTokens`, `nudgeAtPercent`, `overrides`) |
 | `src` (internal) | set by `homeModules.default` from the input | the unpatched source the existence assertion probes |
 
 The file `<agentDir>/infinite-context/settings.json` is always written, as
-literal text; with every option at its default it is
-`{"reminders":{"default":{},"overrides":{}}}`. The extension's parser is
-strict: an unknown key or an invalid value rejects the whole file with a
-warning at session start, so a key typed wrongly in `settings` is not a Nix
-error; the `home-files` check runs the package's own parser on the rendered
-file. Changes apply to sessions and subagents started after the switch.
+literal text; with every option at its default it is `{}`. The extension's
+parser is fail-open like upstream's: it ignores an unknown key and drops an
+invalid value, so the module asserts what its types let through (a range
+whose min is not below its max, a share of 0) and the `home-files` check runs
+the package's own parser on the rendered file. The session follows its
+current model: a switch to a model whose rule has another range draws a new
+limit and records it (`infinite-context:settings` with the rule's key in
+`rule`). Changes apply to sessions and subagents started after the switch.
 
-Soft dependencies, none of which warns: the `foldHint` flag of `experiments`
-overrides the setting per session (through `__piExperimentsApi_v1`, which the
-patch casts inline, so no check compares it); `cacheLifecycle`'s
-`context_peek` guard reads infinite-context's tools.
+Soft dependency, which does not warn: `cacheLifecycle`'s `context_peek` guard
+reads infinite-context's tools.
 
 ### `retry` (`modules/retry.nix`)
 
@@ -362,8 +358,8 @@ points into `src`.
 | `typecheck-cache-lifecycle`, `typecheck-experiments` | `tsc --strict` over each package |
 | `iface-subagents-cache-lifecycle`, `iface-subagents-experiments` | their copies of `__subagentsApi_v1` are satisfied by the provider's `SubagentsApiV1` |
 | `iface-experiments-token-meter`, `iface-experiments-cache-lifecycle` | their copies of `__piExperimentsApi_v1` are satisfied by the provider's `ExperimentsApiV1` |
-| `infinite-context` | the patched pi-infinite-context's tests: upstream's `settings.test.ts`, the patches' own, `overlay-foreign.test.ts` and `integration.test.ts` (`index.ts` driven through its event handlers with stand-ins for pi's packages), and the greps on `index.ts` |
-| `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's two `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
+| `infinite-context` | the patched pi-infinite-context's tests: upstream's suite without its three `fast-check` tests, with the patch's additions to `settings.test.ts` and `index.test.ts`, on the shared lock; `overlay-foreign.test.ts` and `integration.test.ts` (`index.ts` driven through its event handlers with stand-ins for pi's packages, reading the settings the module renders); the greps on `index.ts` (no fold hint, no `__piExperimentsApi_v1`) |
+| `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's three `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
 | `retry` | the patched pi-retry's vitest suite (300 tests) on the shared npm lock, and the greps that pin the free-cap patch and the inline print/json route |
 | `typecheck-retry` | `tsc --strict` over `retry.ts` and `src/`; the tests stay out (one upstream test and the free-cap patch's own test do not type-check; vitest runs them) |
 | `iface-experiments-task-router` | the router's copy of `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`, read from the `pi-task-router` input) is satisfied by this flake's `ExperimentsApiV1` |

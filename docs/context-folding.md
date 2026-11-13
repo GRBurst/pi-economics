@@ -80,8 +80,9 @@ recoverable only through ids. Keep it a pointer plus payload:
 
 A fold rewrites the cached prompt prefix from the fold point on. Folding the
 current tail right after a phase completes is cheap; folding an old range
-while the cache is warm is expensive. The component's cost-aware fold hint
-states the trade ("cache is cold: folding is free now").
+while the cache is warm is expensive. Upstream's reminder asks for a fold that
+frees about 30 % of the context, the share from which a fold pays off on
+average.
 
 - Fold at phase boundaries: finished exploration, finished debugging,
   implemented-and-verified work, and large tool results once you have

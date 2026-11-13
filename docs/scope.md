@@ -18,7 +18,7 @@ drive work. Everything below stays:
 | `experiments` | one fractional-factorial arm per main session |
 | `bench` | `pi-bench`, blind judges, bootstrap reports |
 | `cacheLifecycle` | stale-result elision, cache warming (a cost mechanism) |
-| `infiniteContext` | context folding: reminders and the cost-aware fold hint |
+| `infiniteContext` | context folding: reminders, their limits per provider or model |
 | `retry` | OpenRouter free-cap handling |
 | `piSettings` | the settings.json migration |
 

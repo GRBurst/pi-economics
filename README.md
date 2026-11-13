@@ -25,7 +25,7 @@ see Requirements).
 | `analysisSkill` | an agent skill that runs `pi-analyse` and proposes decisions from the logs |
 | `cacheLifecycle` | elides stale tool results and thinking after the prompt cache expired; cache warming |
 | `experiments` | one fractional-factorial arm per main session, recorded for the reports |
-| `infiniteContext` | pi-infinite-context with two patches: absolute fold-reminder thresholds, a cost-aware fold hint |
+| `infiniteContext` | pi-infinite-context with one patch: fold-reminder limits per provider or model |
 | `retry` | pi-retry with a patch for OpenRouter's daily free-tier cap |
 | `bench` | `pi-bench` and `bench-report`: arms, blind judges, bootstrap reports |
 | `piSettings` | idempotent edits of pi's mutable `settings.json` that the components contribute |
@@ -109,7 +109,7 @@ it misses the API and switches off only what needs it.
 | Package | Used by | Without it |
 |---|---|---|
 | pi-actor-subagents | used by `cache-lifecycle`, `experiments` | cache lifecycle does not keep sessions waiting on children warm; experiments children do not inherit an arm. Patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending. |
-| pi-infinite-context | optional | the upstream's fold reminders work as they are; the per-model reminder thresholds and the cost-aware fold hint come only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
+| pi-infinite-context | optional | the upstream's fold reminders work as they are; the reminder limits per provider or model come only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
 | pi-retry | optional | the meter's retry accounting works with the upstream (it reads its `pi-retry:*` events); the handling of OpenRouter's daily free cap (that 429 is not retried) comes only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
 
 ### Experiments are opt-in
