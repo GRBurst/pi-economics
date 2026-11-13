@@ -41,7 +41,7 @@ without the user's explicit approval.
 
 - **Cost**: total $, active hours (gaps < 30 min), $/active hour with a bootstrap 95% CI,
   quota %/active hour (the account's rise split between the roots active at the time, never
-  double-counted across parallel sessions), $/accepted task; splits by model and warming; token components (a 1 h cache write
+  double-counted across parallel sessions), $/accepted task (over all routed tasks: what a task cost, judged or not, paid for by the accepted ones); splits by model and warming; token components (a 1 h cache write
   weighs 2.0 × input, a 5-minute one 1.25). **Cache** (Claude models): new context (growth) apart from misses (the cached prefix a
   request had to write again) by cause (ttl, fold, model, other), and the premium of folds and cold resumes over a baseline
   (net of what an ordinary request misses).
@@ -50,21 +50,26 @@ without the user's explicit approval.
   ratio(high) ÷ ratio(low) − 1 of the objective per active hour (a ratio of sums), with a bootstrap CI and minimum detectable effect, a balance table
   (units, hours, excluded) and a power line; no interaction model. Per-arm $/h, posterior and P(best) pool the strata.
   An effect counts only when its CI excludes 0 *and* each level has several units.
-- **Delegation & routing**: share of tasks and $ in child sessions, tier mix, Qwen share
-  (of the planned tiers; the report states no target: the router's targets are the owner's),
-  acceptance per tier, escalations, reroutes, runaway alerts. Per profile (card kind) × tier:
-  tasks, accepted/partial/rejected/unjudged, $/accepted task (child subtree), escalations,
-  check pass rate. *Randomized routing* ("randomized by the router (ext)": spawns the router sent to Qwen
-  or drew to another tier): the randomized control, the ITT row (every task it randomized), the
-  randomized tasks by the model they ran on, and the pre-randomization and fallback runs as rows of
-  their own; **only ITT against the randomized control is a randomized comparison**; "not measurable"
-  without `assigned` in the log. *Router factors*: acceptance and $/accepted per level of
-  the levers the router randomizes itself (when its spawn lines record them; else "not recorded"). *Spot checks*: how often the reviewer's own verdict on a spot-checked task agrees with
-  the original verdict, with Cohen's κ (a low rate = the parent's acceptance is too lenient); "not
-  measurable" while the router logs no reviewer verdict (never read the parent's verdict of the review
-  child as agreement: it is always `accepted`). Spawns whose
-  card files did not resolve (`unresolved`) and review children are counted but left out of
-  the routing-quality figures.
+- **Delegation & routing**: share of tasks and $ in child sessions, Qwen share (of the
+  planned tiers; the report states no target: the router's targets are the owner's), escalations,
+  reroutes, runaway alerts. The **tier of a task is the model it ran on** (the router's own account,
+  else the child's last request), not the tier the router planned; a planned → executed matrix shows
+  the difference. *By tier*: tasks, acceptance, $ (every request of the tasks' child sessions, judged
+  or not) and **$/accepted as lower – upper**: the two differ by the $ of unresolved cards (card
+  files that did not resolve: their children cost real money, but nothing says their tasks were routed;
+  a single number means there is none); the *all* row is the headline of the Cost section. Per profile
+  (card kind) × tier: tasks, accepted/partial/rejected/unjudged, $/accepted task (judged tasks only),
+  escalations, check pass rate. *Randomized routing* ("randomized by the router (ext)": spawns the router
+  sent to Qwen or drew to another tier): the randomized control, the ITT row (every task it
+  randomized), the randomized tasks by the model they ran on, and the pre-randomization and fallback
+  runs as rows of their own; **only ITT against the randomized control is a randomized comparison**;
+  "not measurable" without `assigned` in the log. *Router factors*: acceptance and $/accepted per level
+  of the levers the router randomizes itself (when its spawn lines record them; else "not recorded").
+  *Spot checks*: how often the reviewer's own verdict on a spot-checked task agrees with the original
+  verdict, with Cohen's κ (a low rate = the parent's acceptance is too lenient); "not measurable" while
+  the router logs no reviewer verdict (never read the parent's verdict of the review child as
+  agreement: it is always `accepted`). Review children are counted but left out of every routing
+  figure; unresolved cards are in the $ only.
 - **Guards**: per arm peeks-after-mask, corrections, `/rate` mean, acceptance; the arms the
   kill switch would disable.
 - **Data quality**: period covered, schema versions, sessions without arm, unjoinable lines,

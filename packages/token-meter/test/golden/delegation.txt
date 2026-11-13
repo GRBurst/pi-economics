@@ -50,7 +50,7 @@ Profile = the card kind; acceptance = accepted ÷ judged; $/accepted = subtree c
 
 ### Randomized routing (randomized by the router (ext); spawns it sent to qwen)
 
-Spawns whose router base was qwen, in the profiles the router randomized (implement); 95% bootstrap CIs from 5 judged tasks on. The router draws a share of them to another tier (`assigned: "random"`); the rest, router-assigned and run as planned (on openrouter/qwen, the model most of them ran on), is its **randomized control**. **Causal only for the intention-to-treat comparison**: the ITT row (every task the router randomized, by assignment, whatever ran) against the control. The rows by the model a randomized task ran on split it after the fact; the pre-randomization and fallback rows were chosen, not randomized, so they can differ in task difficulty.
+Spawns whose router base was qwen, in the profiles the router randomized (implement); 95% bootstrap CIs from 5 judged tasks on. The router draws a share of them to another tier (`assigned: "random"`); the rest, router-assigned and run as planned (on openrouter/qwen, the model most of them ran on), is its **randomized control**. **Causal only for the intention-to-treat comparison**: the ITT row (every task the router randomized, by assignment, whatever ran) against the control; a fallback run is still a control task by assignment, so the ITT contrast is the ITT row against control and fallback together. The rows by the model a randomized task ran on split it after the fact; the pre-randomization and fallback rows were chosen, not randomized, so they can differ in task difficulty.
 
 | group | tasks | accepted/judged | acceptance (95% CI) | $/accepted (95% CI) |
 | --- | --- | --- | --- | --- |

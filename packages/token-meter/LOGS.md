@@ -409,7 +409,8 @@ as "not measurable", never as a number.
   as planned, on the *reference* model (the model most of them ran on; a tie goes to the smaller name); **pre-randomization** = the pool's
   planned-qwen tasks without `assigned` (lines from before 2026-10-04); **fallback** = router-assigned tasks that ran on another model (a
   fallback member, a reroute); **ITT** = every task the router randomized, by assignment, whatever ran on; and the randomized tasks by the model
-  they ran on (per protocol). Only ITT against the randomized control is a randomized comparison; the others were chosen. The control
+  they ran on (per protocol). Only ITT against the randomized control is a randomized comparison (a fallback run is a control task by assignment: the full ITT contrast is
+  ITT against control and fallback together); the others were chosen. The control
   still holds the tasks the router never drew (a pinned profile, a re-spawn): a marker on the spawn line that a task was in the draw (a router
   backlog item) would let the analyser drop them. A log in which no spawn carries `assigned` reads "ITT: not measurable". Acceptance
   and $/accepted of a row are over its judged tasks (bootstrap CI from 5 judged tasks on); unresolved cards and spot-check reviews are in no row.
