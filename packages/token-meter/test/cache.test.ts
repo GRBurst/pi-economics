@@ -2,7 +2,7 @@
 // because the cache lost the prefix (miss), and why. From synthetic request sequences.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cacheSteps } from "../core/analyse/cache.ts";
+import { cacheSteps, shrinkFold } from "../core/analyse/cache.ts";
 import { mulberry32 } from "../core/stats.ts";
 
 const MIN = 60_000;
@@ -97,4 +97,41 @@ test("B3: a warming request refreshes the prefix and takes part in the gap", () 
   assert.deepEqual(warmed.map((s) => [s.i, s.miss, s.cause]), [[0, 0, undefined], [2, 0, undefined]]);
   const cold = cacheSteps([R(0, 0, 1000), R(8, 0, 1050)], ttl5m, noEvent);
   assert.deepEqual([cold[1].miss, cold[1].cause], [1000, "ttl"], "the same request without the warm in between");
+});
+
+// ---- causes (T2a.3: fold, model, other; precedence P8) ----
+
+test("B3: cause fold when an event (a fold or compaction) lies between the two requests; asked of the consecutive pair, and only for a miss", () => {
+  const branch = [R(0, 0, 1000), R(1, 1000, 0), R(2, 400, 100)];
+  const asked: Array<[number, number]> = [];
+  const steps = cacheSteps(branch, ttl5m, (a, b) => (asked.push([branch.indexOf(a), branch.indexOf(b)]), b === branch[2]));
+  assert.equal(steps[2].cause, "fold");
+  assert.deepEqual(asked, [[1, 2]], "the pair of consecutive lines; the request that read its prefix and the first one need no cause");
+});
+
+test("B3: cause model when the model changed since the previous request (another model has its own cache)", () => {
+  const steps = cacheSteps([R(0, 0, 1000), R(1, 0, 1000, { model: "claude-y" })], ttl5m, noEvent);
+  assert.deepEqual([steps[1].miss, steps[1].cause], [1000, "model"]);
+});
+
+test("B3: cause other when nothing the analyser can see explains the miss", () => {
+  const steps = cacheSteps([R(0, 0, 1000), R(1, 200, 800)], ttl5m, noEvent);
+  assert.deepEqual([steps[1].miss, steps[1].cause], [800, "other"]);
+});
+
+test("B3 precedence (P8): ttl > fold > model > other, whatever else holds", () => {
+  const at = (gapMin: number, model: string) => [R(0, 0, 1000), R(gapMin, 0, 1000, { model })];
+  const cause = (gapMin: number, model: string, event: boolean) => cacheSteps(at(gapMin, model), ttl5m, () => event)[1].cause;
+  assert.equal(cause(9, "claude-y", true), "ttl", "a gap beyond the TTL loses the prefix whatever happened since");
+  assert.equal(cause(1, "claude-y", true), "fold");
+  assert.equal(cause(1, "claude-y", false), "model");
+  assert.equal(cause(1, "claude-x", false), "other");
+});
+
+test("shrinkFold: the 80% rule of arms.ts and the ledger, on whole prompts (strictly below)", () => {
+  const p = (n: number) => ({ input: 0, cacheRead: n, cacheWrite: 0 });
+  assert.equal(shrinkFold(p(1000), p(799)), true);
+  assert.equal(shrinkFold(p(1000), p(800)), false);
+  assert.equal(shrinkFold(p(1000), p(1500)), false);
+  assert.equal(shrinkFold({ input: 10, cacheRead: 600, cacheWrite: 390 }, { input: 5, cacheRead: 500, cacheWrite: 100 }), true, "prompt = input + cacheRead + cacheWrite");
 });

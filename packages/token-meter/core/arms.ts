@@ -12,7 +12,7 @@ const MIN = 60_000;
 const IDLE_MS = 30 * MIN; // a gap longer than this is idle, not activity
 export const MIN_HOURS = 0.05; // units with less activity make $/h meaningless
 const N_AFTER = 3; // requests whose cost an event is charged with
-const FOLD_SHRINK = 0.8; // a warm turn whose context fell below this share of the previous one is a fold
+export const FOLD_SHRINK = 0.8; // a warm turn whose context fell below this share of the previous one is a fold
 const BOOT = 1000;
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
