@@ -1,7 +1,7 @@
 {
   "name": "pi-experiments",
   "version": "0.2.0",
-  "description": "One fractional-factorial arm per pi main session (explore/exploit assignment); children inherit the arm, other extensions read the factor flags.",
+  "description": "One fractional-factorial arm per pi main session (explore/exploit assignment); children run their root's arm; pi-economics' add-ons read and read back its levers on the internal channel.",
   "type": "module",
   "keywords": ["pi-package"],
   "license": "MIT",

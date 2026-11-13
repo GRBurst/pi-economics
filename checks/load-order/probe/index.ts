@@ -5,8 +5,9 @@
 // claims at its own session_start (runtime-guard.ts), and its listener fills
 // `owner` of a later claim from another path without side effects. A
 // component that has claimed started before the probe. It appends
-// {"name": <this file's path>, "claimed": [...], "sid": <session id>} to
-// $PROBE_OUT.
+// {"name": <this file's path>, "claimed": [...], "sid": <session id>,
+// "levers": <the answer to a query for the session on pi-economics' internal
+// channel, or null>} to $PROBE_OUT.
 // With SPAWN_CHILD=1, the first copy that sees the main session's input
 // spawns one child through the actor's __subagentsApi_v1 (the child loads
 // its registry list, childExtensions, the probe's registry entry among them)
@@ -25,7 +26,10 @@ export default function probe(pi: any): void {
 			pi.events.emit("pi-economics:claim:v1", claim);
 			return claim.owner !== undefined;
 		});
-		out({ name: NAME, claimed, sid: ctx.sessionManager.getSessionId() });
+		const sid = ctx.sessionManager.getSessionId();
+		let levers: unknown = null;
+		pi.events.emit("pi-economics:levers-query:v1", { sessionId: sid, reply: (a: unknown) => void (levers ??= a) });
+		out({ name: NAME, claimed, sid, levers });
 	});
 	pi.on("input", async () => {
 		const g = globalThis as any;

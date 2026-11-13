@@ -17,8 +17,12 @@
 # as pi-setup's actor module writes it from its economics bridge; a second
 # `pi -p x`, against a fake model, spawns one child through the actor, and
 # the probe in the child (the registry's a-reg, sorted first by name) records
-# the guarded components the child loads (token-meter, cache-lifecycle) as
-# started before it. pi prints no startup timings for a child.
+# the guarded components the child loads (experiments, token-meter,
+# cache-lifecycle) as started before it, and what the child's own bus answers
+# for its session on pi-economics' internal channel: the main's assignment
+# (its row in assignments.jsonl), with the main as parent; the child writes no
+# row (redesign M5b.2: child mode, an in-memory child of a --no-session main).
+# pi prints no startup timings for a child.
 {
   lib,
   pkgs,
@@ -147,7 +151,17 @@ in
     areg=$(readlink -f "$agent/pi-economics/extensions/a-reg")/index.ts
     jq -se --arg sid "$sid" --arg areg "$areg" '[.[] | select(.sid == $sid)] | length == 1 and .[0].name == $areg' child.jsonl >/dev/null \
       || fail "expected one probe record in the child, the registry's a-reg"
-    jq -se --arg sid "$sid" '.[] | select(.sid == $sid) | .claimed == ["token-meter", "cache-lifecycle"]' child.jsonl >/dev/null \
+    jq -se --arg sid "$sid" '.[] | select(.sid == $sid) | .claimed == ["experiments", "token-meter", "cache-lifecycle"]' child.jsonl >/dev/null \
       || fail "in the child, the probe started before a guarded component"
+    # Child mode: the main's assignment on the child's bus, no row of the child's.
+    main=$(jq -sr --arg sid "$sid" '[.[] | select(.sid != null and .sid != $sid) | .sid] | unique | if length == 1 then .[0] else empty end' child.jsonl) \
+      || fail "expected the probes of one main session"
+    rows=$agent/experiments/assignments.jsonl
+    row=$(jq -c --arg m "$main" 'select(.sessionId == $m) | {arm, eligible, design}' "$rows") || fail "no assignments row"
+    [ "$(wc -l <<<"$row")" = 1 ] && [ -n "$row" ] || fail "expected one assignments row of the main $main: $(cat "$rows")"
+    jq -e --arg sid "$sid" 'select(.sessionId == $sid)' "$rows" >/dev/null && fail "the child wrote an assignments row"
+    jq -se --arg sid "$sid" --arg m "$main" --argjson row "$row" \
+      '.[] | select(.sid == $sid) | .levers | .sessionId == $sid and .parentSessionId == $m and ({arm, eligible, design} == $row)' child.jsonl >/dev/null \
+      || fail "the child's bus does not answer the main's assignment: $(jq -c --arg sid "$sid" 'select(.sid == $sid)' child.jsonl), row $row"
     touch $out
   ''

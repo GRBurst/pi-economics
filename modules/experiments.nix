@@ -1,12 +1,13 @@
 # The online experiment (spec §2, §4): one fractional-factorial arm per main
 # session (explore/exploit assignment), recorded in
-# <agentDir>/experiments/assignments.jsonl and published as
-# globalThis.__piExperimentsApi_v1. Design v4's factors (warmPolicy,
-# mainCacheTtl, maskOnCold) are cache-lifecycle's; token-meter records the arm
-# ids; the task router's levers are no factors any more: its reads find its
-# own settings. Main session only:
-# children inherit their parent's arm from actor-subagents' spawn events. No
-# timer: the posterior update and the kill switch (token-meter's
+# <agentDir>/experiments/assignments.jsonl and handed to pi-economics' own
+# add-ons on its internal channel (pi.events; redesign §7.7, M5b.2: no
+# globalThis API). Design v4's factors (warmPolicy, mainCacheTtl, maskOnCold)
+# are cache-lifecycle's levers; token-meter records the arm and the levers'
+# read-back; the task router's levers are no factors any more: it randomizes
+# itself. Children load it too (child mode): a child never draws, it runs its
+# root's arm, derived from the root's row and served on the child's own bus.
+# No timer: the posterior update and the kill switch (token-meter's
 # `meter-report --arms --posterior`) run on demand.
 {
   config,
@@ -72,13 +73,15 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    # (M4.13) Main session only: one arm per main session; children inherit
-    # the parent's arm instead of drawing their own.
+    # (M4.13) One arm per main session. (redesign M5b.2) Children load it too:
+    # pi.events is per runtime and the actor builds a child without the
+    # parent's bus, so the child's own copy derives the root's arm (child
+    # mode, no draw) and serves it to the add-ons in the child.
     programs.piEconomics.extensions.experiments = {
       path = "${cfg.package}";
       checkPath = ../packages/experiments/index.ts;
-      forChildren = false;
-      description = "One fractional-factorial arm per main session (explore/exploit assignment); children inherit the parent's arm, other extensions read the factor flags.";
+      forChildren = true;
+      description = "One fractional-factorial arm per main session (explore/exploit assignment); children run their root's arm; pi-economics' add-ons read and read back its levers on the internal channel.";
     };
 
     # (M4.14) Literal text (spec §4). N4: always written, the extension's

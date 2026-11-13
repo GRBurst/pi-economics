@@ -45,7 +45,9 @@ in {
     eq "registry entry (${dir})" {inherit (e) path input forChildren;} {
       path = "${(pe c).experiments.package}";
       input = null;
-      forChildren = false;
+      # (redesign M5b.2) Children load it too: in child mode it derives the
+      # child's assignment from the root's row and serves it on the child's bus.
+      forChildren = true;
     }
     ++ holds "checkPath is the source's index.ts (${dir})" (lib.hasSuffix "/packages/experiments/index.ts" (toString e.checkPath))
     ++ eq "derivations behind checkPath (${dir})"
@@ -216,7 +218,7 @@ in {
         piSettings.enable = false;
       };
     };
-    kids = ["/home/u/.pi/agent/pi-economics/extensions/token-meter" "/home/u/.pi/agent/pi-economics/extensions/cache-lifecycle"];
+    kids = map (n: "/home/u/.pi/agent/pi-economics/extensions/${n}") ["experiments" "token-meter" "cache-lifecycle"];
   in
     eq "childExtensions" (pe c).childExtensions kids
     ++ eq "no actor-subagents/settings.json here" (fileAt ".pi/agent/actor-subagents/settings.json" c) null
