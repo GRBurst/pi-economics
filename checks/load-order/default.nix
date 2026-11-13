@@ -10,6 +10,12 @@
 # Asserted from pi's PI_TIMING=1 factory lines (pi 1.4's startup timings, as
 # checks/pi-package reads them: the extensions in load order) and from the
 # probes, each of which records which guarded component had started before it.
+# Then a child: the actor's settings file lists the module's childExtensions,
+# as pi-setup's actor module writes it from its economics bridge; a second
+# `pi -p x`, against a fake model, spawns one child through the actor, and
+# the probe in the child (the registry's a-reg, sorted first by name) records
+# the guarded components the child loads (token-meter, cache-lifecycle) as
+# started before it. pi prints no startup timings for a child.
 {
   lib,
   pkgs,
@@ -101,5 +107,29 @@ in
       || fail "a probe started before a guarded component: $(cat probe.jsonl)"
     echo "load order:"
     cat order.txt
+
+    # The child.
+    mkdir -p "$agent/actor-subagents"
+    jq -n --argjson ce ${lib.escapeShellArg (builtins.toJSON pe.childExtensions)} \
+      --arg from ${lib.escapeShellArg c.home.homeDirectory} --arg to "$HOME" \
+      '{childExtensions: ($ce | map($to + ltrimstr($from)))}' >"$agent/actor-subagents/settings.json"
+    echo "childExtensions: $(jq -c .childExtensions "$agent/actor-subagents/settings.json")"
+    # A model the actor can name; nothing listens on port 9.
+    printf '%s\n' '{"providers":{"fake":{"baseUrl":"http://localhost:9/v1","api":"openai-completions","apiKey":"x","models":[{"id":"m"}]}}}' >"$agent/models.json"
+    export PROBE_OUT=$PWD/child.jsonl SPAWN_CHILD=1
+    rm -f run.all probe.jsonl
+    timeout 120 pi -p x --no-session </dev/null >child.out 2>child.err || true
+    cat child.out child.err child.jsonl >run.all 2>/dev/null || true
+    if grep -qF 'Failed to load extension' run.all; then fail "an extension failed to load"; fi
+    if grep -qF 'Extension error' run.all; then fail "an extension's session_start threw"; fi
+    sid=$(jq -sr '[.[] | select(.spawn.ok) | .spawn.sessionId] | if length == 1 then .[0] else empty end' child.jsonl) \
+      || fail "no record in the probe's output"
+    [ -n "$sid" ] || fail "the actor spawned no child"
+    # The child loads the link's target.
+    areg=$(readlink -f "$agent/pi-economics/extensions/a-reg")/index.ts
+    jq -se --arg sid "$sid" --arg areg "$areg" '[.[] | select(.sid == $sid)] | length == 1 and .[0].name == $areg' child.jsonl >/dev/null \
+      || fail "expected one probe record in the child, the registry's a-reg"
+    jq -se --arg sid "$sid" '.[] | select(.sid == $sid) | .claimed == ["token-meter", "cache-lifecycle"]' child.jsonl >/dev/null \
+      || fail "in the child, the probe started before a guarded component"
     touch $out
   ''
