@@ -66,7 +66,7 @@ test("profile × tier: tasks, accepted/partial/rejected/unjudged, $ per accepted
 
 // ---- B6: the tier of a task is the model it ran on ---------------------------------------------------
 
-const AFTER_ROUTER_MODELS = "2026-10-20T10:00:00.000Z"; // lines from 2026-10-17 on carry their models (D9)
+const AFTER_ROUTER_MODELS = "2026-10-20T10:00:00.000Z"; // a line written after the router began to write its models (D9: a line has them or not, whatever its date says)
 
 test("executedTier: the model the router says the child ran on; else the model of the child's last request (provider/model); else unknown", () => {
   const l = (at: number, extra: Record<string, unknown>) => turn("k", T0 + at * MIN, { provider: "p-a", model: "m1", ...extra });

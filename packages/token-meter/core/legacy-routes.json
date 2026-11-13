@@ -1,6 +1,5 @@
 {
-  "description": "The router's route labels and tiers as the outcome lines named them before 2026-10-17 (spec D9): the models behind the labels, the levels on each ability's scale, and the reasons of a qwen chain. core/levels.ts reads this for a line older than `before` and for no other: since then the router writes the models and levels itself (workerModel, fromModel, toModel, workerLevel, fromLevel, toLevel). Old lines cannot change, so neither can this file.",
-  "before": "2026-10-17",
+  "description": "The router's route labels and tiers as its outcome lines named them before it wrote its models and levels itself (spec D9; the router's change is dated 2026-10-17, a log's first line with the fields may be later): the models behind the labels, the levels on each ability's scale, and the reasons of a qwen chain. core/levels.ts reads this for a line without those fields (a spawn without ability and workerModel, an escalate without ability, fromModel and toModel, a reroute without the model it names) and for no other. Old lines cannot change, so neither can this file.",
   "models": {
     "local": "llama/qwen3.8",
     "cloud": "openrouter/qwen/qwen3.8-27b:free",

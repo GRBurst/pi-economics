@@ -188,11 +188,13 @@ rejected `request_merge`, a main branch moved outside the gate, and a plan appro
 
 ### Older lines: the old → new mapping
 
-Lines from before 2026-10-17 carry tiers and route labels only. Readers map them with `levelsOfLine`
-(`core/levels.ts`), which returns a line with the fields of the router's outcome log as written. The tables below are
-data, `core/legacy-routes.json` (`before`, `models`, `levels`, `chain`), read for a line whose `ts` is older than 2026-10-17
-and for no other: a line from that day on yields the models and levels it carries (`workerModel`, `fromModel`, `toModel`,
-`workerLevel`, `fromLevel`, `toLevel`), or none, and is never mapped from a label.
+Lines written before the router named its models and levels carry tiers and route labels only (the router's change is dated
+2026-10-17; a log's first line with the new fields can be days later, and the lines between are label-only). Readers map them with
+`levelsOfLine` (`core/levels.ts`), which returns a line with the fields of the router's outcome log as written. The tables below are
+data, `core/legacy-routes.json` (`models`, `levels`, `chain`), read for a line **without those fields**, whatever its `ts`: a spawn
+with neither `ability` nor `workerModel`, an escalate with none of `ability`, `fromModel`, `toModel`, a reroute for the model it
+does not name (per field: `fromModel`/`toModel` as written, else the label mapped). A line that has them yields the models and levels
+it carries (`workerModel`, `fromModel`, `toModel`, `workerLevel`, `fromLevel`, `toLevel`), or none, and is never mapped from a label.
 
 | old `spawn` | `ability` | `level` (from `base`) | `workerLevel` | `workerModel` |
 | --- | --- | --- | --- | --- |
