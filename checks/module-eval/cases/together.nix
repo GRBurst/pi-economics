@@ -8,7 +8,7 @@
   expect,
 }: let
   inherit (expect) eq holds failed;
-  components = ["bench" "tokenMeter" "analysisSkill" "cacheLifecycle" "experiments" "infiniteContext" "retry"];
+  components = ["bench" "tokenMeter" "analysisSkill" "cacheLifecycle" "experiments" "infiniteContext"];
   # Each evaluation has the actor in the registry, as pi-setup's bridge puts it there.
   with' = cs: hm.eval {programs.piEconomics = lib.genAttrs cs (_: {enable = true;}) // {extensions.actor-subagents = actor;};};
   set = l: lib.sort lib.lessThan (lib.unique l);
@@ -18,17 +18,16 @@
   union = f: set (lib.concatMap (c: f (with' [c])) components);
   all = with' components;
   # Whether the actor is there is read from the registry (router-extraction
-  # design §7.3): the warnings of cacheLifecycle and experiments, retry's child rule.
+  # design §7.3): the warnings of cacheLifecycle and experiments.
   actor = import ../fixtures/actor-entry.nix;
   warnCl = "pi-economics: cacheLifecycle without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses warming while a session waits on its children (the warm policy reads __subagentsApi_v1)";
   warnEx = "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
   users = registry:
     hm.eval {
       programs.piEconomics =
-        lib.genAttrs ["cacheLifecycle" "experiments" "retry"] (_: {enable = true;})
+        lib.genAttrs ["cacheLifecycle" "experiments"] (_: {enable = true;})
         // {extensions = registry;};
     };
-  childRule = cfg: lib.any (o: o.op == "ensureContains") cfg.programs.piEconomics.piSettings.ops.retry;
 in {
   actor-presence = let
     present = users {actor-subagents = actor;};
@@ -36,11 +35,31 @@ in {
     bare = hm.evalBare {};
   in
     eq "registry entry: no new warning" present.warnings bare.warnings
-    ++ holds "registry entry: retry's child rule" (childRule present)
     ++ eq "registry entry: failed assertions" (failed "" present) []
     ++ eq "no entry: one warning each" (lib.sort lib.lessThan (lib.subtractLists bare.warnings absent.warnings)) [warnCl warnEx]
-    ++ holds "no entry: no child rule" (!childRule absent)
     ++ eq "no entry: failed assertions" (failed "" absent) [];
+
+  # (M6.15, from cases/retry.nix) The host's combination of M2-M6 from W5 on
+  # (spec §9.1): the flake's children (the list pi-setup's bridge writes into
+  # the actor's settings file), no activation entry while the host's script
+  # runs.
+  m6-host-like = let
+    c = hm.eval {
+      programs.piEconomics = {
+        extensions.actor-subagents = actor;
+        tokenMeter.enable = true;
+        cacheLifecycle.enable = true;
+        experiments.enable = true;
+        infiniteContext.enable = true;
+        piSettings.enable = false;
+      };
+    };
+    childNames = map baseNameOf c.programs.piEconomics.childExtensions;
+  in
+    eq "children" childNames ["cache-lifecycle" "infinite-context" "token-meter"]
+    ++ holds "no activation entry" (!(c.home.activation ? piSettingsMigrate))
+    ++ eq "failed assertions" (failed "" c) []
+    ++ eq "warnings" c.warnings (hm.evalBare {}).warnings;
 
   components-together =
     eq "home.file targets" (set (targets all)) (union targets)

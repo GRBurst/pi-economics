@@ -121,26 +121,4 @@ in {
       "pi-economics: retry.settings.subagents is an empty attribute set; it sets nothing (give it a leaf or remove it)"
     ]
     ++ eq "no failure without an empty set" (failed "pi-economics: retry.settings" ok) [];
-
-  # (M6.15) The host's combination of M2-M6 from W5 on (spec §9.1): the
-  # flake's children (the list pi-setup's bridge writes into the actor's
-  # settings file), no activation entry while the host's script runs.
-  m6-host-like = let
-    c = hm.eval {
-      programs.piEconomics = {
-        inherit (asOn) extensions;
-        tokenMeter.enable = true;
-        cacheLifecycle.enable = true;
-        experiments.enable = true;
-        infiniteContext.enable = true;
-        retry.enable = true;
-        piSettings.enable = false;
-      };
-    };
-    childNames = map baseNameOf c.programs.piEconomics.childExtensions;
-  in
-    eq "children" childNames ["cache-lifecycle" "infinite-context" "pi-retry" "token-meter"]
-    ++ holds "no activation entry" (!(c.home.activation ? piSettingsMigrate))
-    ++ eq "failed assertions" (failed "" c) []
-    ++ eq "warnings" c.warnings bare.warnings;
 }

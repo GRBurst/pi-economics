@@ -30,7 +30,6 @@
       cacheLifecycle.enable = true;
       experiments.enable = true;
       infiniteContext.enable = true;
-      retry.enable = true;
     };
   };
   pe = fp.programs.piEconomics;
@@ -39,7 +38,7 @@
   failed = map (a: a.message) (lib.filter (a: !a.assertion) fp.assertions);
 
   # Spec D2: installed by the user, never shipped (the patched upstreams).
-  prereq = ["infinite-context" "pi-retry"];
+  prereq = ["infinite-context"];
   names = lib.attrNames pe.extensions;
   own = lib.filter (n: !lib.elem n prereq) names;
   entry = n:

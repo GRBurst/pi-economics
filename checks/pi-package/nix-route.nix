@@ -40,7 +40,6 @@
           };
         };
       };
-      retry.enable = true;
       extensions.actor-subagents = actorEntry;
       extensions.task-router = {
         path = "${router.package}";
