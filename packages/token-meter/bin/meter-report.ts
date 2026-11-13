@@ -11,6 +11,7 @@ import { acceptance, killSwitch, signals, withSpawnArms } from "../core/guards.t
 import { aggregate, render } from "../core/report.ts";
 import { taskCosts } from "../core/tasks.ts";
 import { isRequestLine } from "../core/analyse/logs.ts";
+import { readState } from "../core/state-file.ts";
 import { rowsBySession } from "../core/analyse/designs.ts";
 import { experiment } from "../core/analyse/experiment.ts";
 import { guards } from "../core/analyse/guards.ts";
@@ -65,9 +66,11 @@ if (args.includes("--arms") || args.includes("--posterior")) {
   }
   if (args.includes("--posterior")) {
     const file = join(exp, "state.json");
+    let old: any;
+    try { old = readState(file); } catch (e: any) { process.stderr.write(`meter-report: ${e.message}\n`); process.exit(1); }
     mkdirSync(exp, { recursive: true });
     const tmp = `${file}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify(nextState(readJson(file), stats, reasons, v2), null, 2) + "\n");
+    writeFileSync(tmp, JSON.stringify(nextState(old, stats, reasons, v2), null, 2) + "\n");
     renameSync(tmp, file);
     if (!args.includes("--arms")) process.stdout.write(`state.json: ${stats.length} arms, ${Object.keys(reasons).length} newly disabled; ${v2.length} design/stratum pair(s) of the v2 engine, ${v2.reduce((n, x) => n + Object.keys(x.kill).length, 0)} newly disabled\n${V2_SCOPE}\n`);
   }

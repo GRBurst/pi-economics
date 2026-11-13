@@ -374,3 +374,11 @@ test("T5c.9: meter-report --arms --posterior writes designs.<id>.<stratum>, prin
   assert.ok(!s.disabled.includes("1") && !("1" in s.posterior) && !("0" in s.posterior), "no v2 arm is written flat");
   assert.equal(out.split(V2_SCOPE).length - 1, 1, "the scope line is printed once");
 });
+
+test("review L1: meter-report --posterior refuses to overwrite an unparsable state.json", () => {
+  const a = agentDirWith();
+  const file = join(a.agentDir, "experiments", "state.json");
+  writeFileSync(file, '{"designs": {');
+  assert.throws(() => execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", bin, "--agent-dir", a.agentDir, "--posterior"], { encoding: "utf8", stdio: "pipe" }), /not valid JSON/);
+  assert.equal(readFileSync(file, "utf8"), '{"designs": {');
+});

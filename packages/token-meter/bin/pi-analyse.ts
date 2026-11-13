@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { analyse, applyKill, inPeriod, renderAnalysis, reportName, type FileInfo, type LogName, type Logs } from "../core/analyse.ts";
 import { V2_SCOPE } from "../core/arms.ts";
+import { readState } from "../core/state-file.ts";
 import { check, renderProblems } from "../core/contract.ts";
 import { loadSettings } from "../core/settings.ts";
 
@@ -90,7 +91,9 @@ if (args.includes("--apply")) {
   const exp = join(agentDir, "experiments");
   mkdirSync(exp, { recursive: true });
   const file = join(exp, "state.json");
-  const next = applyKill(readJson(file), a);
+  let old: any;
+  try { old = readState(file); } catch (e: any) { process.stderr.write(`pi-analyse: ${e.message}\n`); process.exit(1); }
+  const next = applyKill(old, a);
   writeAtomic(file, JSON.stringify(next, null, 2) + "\n");
   process.stdout.write(`${file}: disabled: ${next.disabled.join(", ") || "none"}\n`);
 }

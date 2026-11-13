@@ -134,3 +134,16 @@ test("review M2 (M5c): --apply says where the v2 designs' state is written and k
   const lines = r.stdout.split("\n");
   assert.ok(lines.some((l) => l.startsWith("kill switch and posterior: per design and stratum for the v2 engine's designs (state.json `designs.<id>.<stratum>`")), r.stdout);
 });
+
+test("review L1: --apply refuses to overwrite a state.json that exists but does not parse (the other designs' kills would be lost): notice, non-zero exit, file untouched", () => {
+  const dir = agentDir();
+  const file = join(dir, "experiments", "state.json");
+  const torn = '{"designs": {"zzzzzzzzzzzz": {"api": {"disabled": ["1"]}}';
+  writeFileSync(file, torn);
+  const r = run(["--agent-dir", dir, "--out", join(dir, "r"), "--apply"]);
+  assert.notEqual(r.status, 0);
+  assert.ok(r.stderr.includes("state.json") && r.stderr.includes("not valid JSON"), r.stderr);
+  assert.equal(readFileSync(file, "utf8"), torn);
+  writeFileSync(file, "[]"); // valid JSON but no object
+  assert.notEqual(run(["--agent-dir", dir, "--out", join(dir, "r"), "--apply"]).status, 0);
+});
