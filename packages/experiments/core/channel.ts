@@ -1,0 +1,33 @@
+// The internal channel (redesign §7.7): how the engine hands a session's assignment to pi-economics' own add-ons, on
+// pi.events, never a globalThis API (the process-global __piExperimentsApi_v1 stays until M5b.2 moves its readers).
+// pi's bus runs a synchronous handler inside emit, so a query is answered before `query` returns.
+import type { AssignmentV2 } from "./assign.ts";
+
+/** Every new or derived Assigned (a main's at session_start, a child's at its spawn). */
+export const LEVERS = "pi-economics:levers:v1";
+/** Payload LeversQuery: an add-on that started after the publish asks for a session's Assigned. */
+export const LEVERS_QUERY = "pi-economics:levers-query:v1";
+
+/** A session's assignment as the add-ons see it; a child's equals its parent's but for sessionId/parentSessionId. Read-only. */
+export type Assigned = Pick<AssignmentV2, "sessionId" | "parentSessionId" | "design" | "stratum" | "arm" | "eligible" | "factors">;
+export type LeversQuery = { sessionId: string; reply(a: Assigned | undefined): void };
+/** pi.events (EventBus): emit is synchronous; `on` returns the unsubscribe. */
+export type Bus = { emit(channel: string, data: unknown): void; on(channel: string, handler: (data: any) => unknown): () => void };
+
+export const publish = (bus: Bus, a: Assigned): void => bus.emit(LEVERS, a);
+
+export const onAssigned = (bus: Bus, l: (a: Assigned) => void): (() => void) => bus.on(LEVERS, l);
+
+/** The engine's side: answers every query from `lookup`; returns the unsubscribe. */
+export const serve = (bus: Bus, lookup: (sessionId: string) => Assigned | undefined): (() => void) =>
+  bus.on(LEVERS_QUERY, (q: LeversQuery) => {
+    const a = lookup(q.sessionId);
+    if (a !== undefined) q.reply(a);
+  });
+
+/** An add-on's side: the first answer to a query for `sessionId`; undefined when no engine knows the session (or none is loaded). */
+export function query(bus: Bus, sessionId: string): Assigned | undefined {
+  let answer: Assigned | undefined;
+  bus.emit(LEVERS_QUERY, { sessionId, reply: (a: Assigned | undefined) => void (answer ??= a) } satisfies LeversQuery);
+  return answer;
+}

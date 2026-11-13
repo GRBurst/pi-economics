@@ -1,11 +1,20 @@
 // Arm assignment (properties P-off, P-balance, P-floor).
 // Pure: all randomness comes in as `rng`, so tests seed it deterministically.
-import type { Arm, Design } from "./design.ts";
+import type { Arm, Design, Level, LeverId } from "./design.ts";
 import type { StratumSpec } from "./settings.ts";
 // Type-only (plan P22): the import is erased at runtime, so the package ships without token-meter.
 import type { Billing, Plans } from "../../token-meter/core/plans.ts";
 
 export type Mode = "off" | "explore" | "exploit";
+
+/**
+ * A line of <agentDir>/experiments/assignments.jsonl, v2 (§5.4): one per main session at its first session_start.
+ * `stratum` = the setup its model matched (none: ineligible), `design` = that stratum's design id (always with an arm);
+ * an eligible session has `arm` (the bits of its levels, factor order) and `factors` (by factor name: the lever and
+ * the level assigned to it); an ineligible one has neither.
+ */
+export type AssignmentV2 = { v: 2; ts: string; sessionId: string; parentSessionId?: string; design?: string; mode: Mode;
+  eligible: boolean; stratum?: string; arm?: string; factors?: Record<string, { lever: LeverId; assigned: Level }> };
 
 /** token-meter's billingOf, restated (no value import across packages): a provider without a plan bills as api. */
 const billingOf = (plans: Plans, provider: string): Billing => (Object.hasOwn(plans, provider) ? plans[provider].billing : "api");
