@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { canonical, design, designId, type Arm, type Factor, type FactorSpec, type Level } from "../core/design.ts";
+import { canonical, design, designFor, designId, type Arm, type Design, type DesignArm, type Factor, type FactorSpec, type Level } from "../core/design.ts";
 
 const factors = (n: number): Factor[] =>
   Array.from({ length: n }, (_, i) => ({ name: `f${i + 1}`, values: ["off", "on"] as [string, string] }));
@@ -163,4 +163,39 @@ test("designId is sensitive: every lever, every level and every generator is par
   differs("no generators", designId(SPECS, []));
   differs("factor order", designId([...SPECS].reverse(), gens));
   assert.equal(seen.size, 1 + changes, "two changes gave the same id");
+});
+
+// designFor (redesign §7.2): one design per stratum; arms coded ±1 per factor (+1 = levels[1]); an arm's name is one
+// bit per factor in factor order ("1" = levels[1]).
+const specs = (k: number): FactorSpec[] =>
+  Array.from({ length: k }, (_, i) => ({ name: `f${i + 1}`, lever: `t.lever${i + 1}`, levels: [`lo${i + 1}`, i % 2 ? i : true] }));
+const coded = (a: DesignArm, f: FactorSpec): number => {
+  assert.ok(f.levels.includes(a.levels[f.name]), `arm ${a.name}: ${f.name} = ${String(a.levels[f.name])} is not one of its levels`);
+  return a.levels[f.name] === f.levels[1] ? 1 : -1;
+};
+/** Σ over the arms of the product of the named factors' coded levels. */
+const dot = (d: Design, idx: number[]): number => d.arms.reduce((s, a) => s + idx.reduce((p, i) => p * coded(a, d.factors[i]), 1), 0);
+/** The arms are well formed: levels for exactly the factors, names = bits, distinct. */
+function wellFormed(d: Design): void {
+  for (const a of d.arms) {
+    assert.deepEqual(Object.keys(a.levels).sort(), d.factors.map((f) => f.name).sort(), `arm ${a.name}: levels for other factors`);
+    assert.equal(a.name, d.factors.map((f) => (coded(a, f) > 0 ? "1" : "0")).join(""), `arm ${a.name}: the name is not its bits`);
+  }
+  assert.equal(new Set(d.arms.map((a) => a.name)).size, d.arms.length, "arm names are not distinct");
+}
+const pairs = (k: number): number[][] => Array.from({ length: k }, (_, i) => Array.from({ length: k - i - 1 }, (_, j) => [i, i + j + 1])).flat();
+
+test("designFor k ≤ 3: the full 2^k factorial, no generators, every factor balanced, main effects orthogonal", () => {
+  for (const k of [0, 1, 2, 3]) {
+    const fs = specs(k);
+    const d = designFor("cloud", { factors: fs });
+    assert.equal(d.stratum, "cloud");
+    assert.deepEqual(d.factors, fs);
+    assert.deepEqual(d.generators, [], `k=${k}: a full factorial has no generators`);
+    assert.equal(d.id, designId(fs, []), `k=${k}: the id is designId(factors, generators)`);
+    assert.equal(d.arms.length, 2 ** k, `k=${k}: arms`);
+    wellFormed(d);
+    for (let i = 0; i < k; i++) assert.equal(dot(d, [i]), 0, `k=${k}: ${fs[i].name} is not balanced`);
+    for (const p of pairs(k)) assert.equal(dot(d, p), 0, `k=${k}: ${p.map((i) => fs[i].name).join(", ")} are not orthogonal`);
+  }
 });

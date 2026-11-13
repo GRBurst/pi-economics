@@ -77,3 +77,20 @@ export function designId(factors: readonly FactorSpec[], generators: readonly st
   const content = { factors: factors.map(({ lever, levels }) => ({ lever, levels })), generators };
   return createHash("sha256").update(canonical(content)).digest("hex").slice(0, 12);
 }
+
+/** An arm of a design: `name` = one bit per factor in factor order ("1" = levels[1]), e.g. "010"; `levels` by factor name. */
+export type DesignArm = { name: string; levels: Record<string, Level> };
+export type Design = { id: string; stratum: string; factors: FactorSpec[]; generators: string[]; arms: DesignArm[] };
+
+/** The design of a stratum's factors: the full 2^k factorial (k ≤ 3). Arms in mask order, first factor fastest. */
+export function designFor(stratum: string, s: { factors: readonly FactorSpec[] }): Design {
+  const factors = [...s.factors];
+  const k = factors.length;
+  const generators: string[] = [];
+  const arms: DesignArm[] = [];
+  for (let mask = 0; mask < 2 ** k; mask++) {
+    const bits = factors.map((_, j) => (mask & (1 << j) ? 1 : 0));
+    arms.push({ name: bits.join(""), levels: Object.fromEntries(factors.map((f, j) => [f.name, f.levels[bits[j]]])) });
+  }
+  return { id: designId(factors, generators), stratum, factors, generators, arms };
+}
