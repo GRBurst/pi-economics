@@ -2,7 +2,7 @@
 
 The [pi](https://github.com/earendil-works/pi) coding agent's token-economics
 stack as Home Manager components: a meter that logs every provider request,
-prompt-cache and context-window management, online experiments, retries, and a
+prompt-cache and context-window management, online experiments, and a
 bench to measure all of it on your own work. Scope: a purely exploratory
 framework ([docs/scope.md](docs/scope.md)). The task router that picks the
 cheapest member that can do a job, with its local mode and research, is a flake
@@ -12,7 +12,10 @@ of its own, [pi-task-router](https://github.com/GRBurst/pi-task-router)
 pi-actor-subagents that two components use is
 [pi-setup](https://github.com/GRBurst/pi-setup)'s
 (`programs.pi.actorSubagents`; the former
-`programs.piEconomics.actorSubagents` fails likewise). Each component is
+`programs.piEconomics.actorSubagents` fails likewise). The former `retry`
+component is gone: pi's native retry (its `retry.*` settings) handles
+transient errors, and a definition of `programs.piEconomics.retry` fails
+saying so. Each component is
 an option under `programs.piEconomics` and is off until you enable it (the
 `piSettings` migration of pi's `settings.json` is the one default-on switch,
 see Requirements).
@@ -26,7 +29,6 @@ see Requirements).
 | `cacheLifecycle` | elides stale tool results and thinking after the prompt cache expired; cache warming |
 | `experiments` | one fractional-factorial arm per main session, recorded for the reports |
 | `infiniteContext` | pi-infinite-context with one patch: fold-reminder limits per provider or model |
-| `retry` | pi-retry with a patch for OpenRouter's daily free-tier cap |
 | `bench` | `pi-bench` and `bench-report`: arms, blind judges, bootstrap reports |
 | `piSettings` | idempotent edits of pi's mutable `settings.json` that the components contribute |
 
@@ -82,8 +84,7 @@ with `programs.pi.actorSubagents.enable = true`, and its economics bridge
 actor's entry included) to `programs.piEconomics.extensions` and hands the
 children's list (`childExtensions`) back to the actor's settings file. The
 components see the actor when `programs.piEconomics.extensions` has an entry
-`actor-subagents`; without one, `cacheLifecycle` and `experiments` warn and
-`retry` adds no child rule.
+`actor-subagents`; without one, `cacheLifecycle` and `experiments` warn.
 
 ## Without Nix
 
@@ -110,7 +111,6 @@ it misses the API and switches off only what needs it.
 |---|---|---|
 | pi-actor-subagents | used by `cache-lifecycle`, `experiments` | cache lifecycle does not keep sessions waiting on children warm; experiments children do not inherit an arm. Patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending. |
 | pi-infinite-context | optional | the upstream's fold reminders work as they are; the reminder limits per provider or model come only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
-| pi-retry | optional | the meter's retry accounting works with the upstream (it reads its `pi-retry:*` events); the handling of OpenRouter's daily free cap (that 429 is not retried) comes only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
 
 ### Experiments are opt-in
 
@@ -192,10 +192,8 @@ into `<agentDir>/extensions`.
 
 `piSettings` is on by default and edits pi's mutable
 `<agentDir>/settings.json` idempotently, but only for the components you
-enable: `retry` removes the `pi-retry` package entries that `pi install` wrote
-and sets the `piRetry` keys you give it; `cacheLifecycle` sets
-`cacheWarming` to `"idle"` in an existing file. `programs.piEconomics.piSettings.enable = false`
-switches all of it off.
+enable: `cacheLifecycle` sets `cacheWarming` to `"idle"` in an existing file.
+`programs.piEconomics.piSettings.enable = false` switches all of it off.
 
 ## Development
 

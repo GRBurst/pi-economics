@@ -16,14 +16,13 @@ Paths are relative to this repository's root, unless noted.
 | [pi-task-router](https://github.com/GRBurst/pi-task-router) (its own flake, `programs.piTaskRouter`; not in this repository) | Routes `spawn_subagent` calls by task card, with its local mode; what it does is in its `docs/task-router.md`. pi-economics observes it through its outcome log; its levers are no experiment factors since design v4. | main only |
 | `packages/cache-lifecycle/` (`pi-cache-lifecycle`) | Warming decision (main with running children, child awaiting a reply → warm; capped), elision of stale tool results/thinking after cache expiry, optional 1 h cache TTL for main, the pi-1.0.0 message-identity shim that keeps cache warming alive past custom messages, `peek-after-mask` guard log. | main + children |
 | `packages/experiments/` (`pi-experiments`) | One fractional-factorial arm per main session (explore/exploit/off); children inherit; other extensions read factor flags through `__piExperimentsApi_v1.flag(name, default)`; correction guard log and `/rate 1-5`. | main only |
-| `packages/retry/package.nix` + `patches/pi-retry/pi-retry-free-cap.patch` | Pinned input `inputs.pi-retry` (rev `60a3b08`, 0.11.3) with a local patch: the OpenRouter free-tier daily cap is not retried (it lasts until 00:00 UTC). Print/json mode retries inline upstream since 0.11.0 (it was the local `pi-retry-print-mode.patch` until the 2026-10-25 lock update), so `pi -p` retries 429s. Upstream vitest suite on the patched source = flake check `retry`. | main + children (linked child extension) |
 | `packages/actor-subagents/package.nix` + 3 patches in `patches/pi-actor-subagents/` of [pi-setup](https://github.com/GRBurst/pi-setup) (`programs.pi.actorSubagents`) | `child-prompt` (children keep preamble/tools/rules), `spawn-policy` (`__subagentsApi_v1`: `registerSpawnPolicy`, `subscribe`, `retune`, `send`, `list`, `task` param, neutral wording, richer `list_subagents`, transient-error notice gate, profile tool guard). The former `first-turn` patch was dropped: since pi 1.2.0 an extension-triggered run (`sendCustomMessage` with `triggerTurn`) runs `before_agent_start` and the loadout itself. | main + children |
 | `packages/infinite-context/package.nix` + 1 patch in `patches/pi-infinite-context/` | Pinned input `inputs.pi-infinite-context` (rev `494df9d`) with `reminders`: upstream's `settings.json` gains `overrides`, rules keyed by provider or exact `provider/modelId` with upstream's `nudgeAtTokens` (a number or a range `[min, max]`) and `nudgeAtPercent`; each field resolves exact model, then provider, then the top level, then upstream's 150k / 75 %. The session follows its current model; a switch to a rule with another range draws and records a new limit. Upstream's step (15k, less near the window) and fail-open parsing stay. The former `cache` patch (cost-aware fold hint, `fold_timing`, re-sync, handoff) was dropped: upstream re-syncs a snapshot and stops once when folds cannot be applied, and declined the fold hint. The former `foreign-messages` patch was dropped: upstream e6ff6803 aligns the projection as an ordered subsequence (it drops every foreign message after a folded member, where the patch dropped only toolResults of folded calls). | main + children |
-| `modules/common.nix` (`piSettings`) | Idempotent migration of the mutable `~/.pi/agent/settings.json`: removes the pi-retry runtime package entry, ensures the child retry regex, sets `cacheWarming: "idle"` when `programs.piEconomics.cacheLifecycle` is enabled. | — |
+| `modules/common.nix` (`piSettings`) | Idempotent migration of the mutable `~/.pi/agent/settings.json`: sets `cacheWarming: "idle"` when `programs.piEconomics.cacheLifecycle` is enabled. | — |
 | `packages/bench/` | Bench harness: replay of the user's own past tasks, single-agent and orchestrator (RPC) drivers, blind A/B and per-run judging, factor-effect report. Data and runs live in `<agentDir>/bench`, not in the repo. | tool |
 
 Selection is single-sourced in the registry (`programs.piEconomics.extensions`,
-`forChildren`): children get infinite-context, pi-retry,
+`forChildren`): children get infinite-context,
 token-meter, cache-lifecycle (a host adds its own, such as a provider login); task-router and experiments are main
 only. `module-eval` pins the child-extension set and each package has its check
 
@@ -68,10 +67,7 @@ Code defaults (a settings file only overrides; unknown keys are ignored):
 - **Migration** — `cacheWarming: "idle"` is ensured by
   `pi-settings-migrate` (its `idle` flag, the piSettings op `cacheLifecycle`) in
   an existing `settings.json` when cache-lifecycle is enabled —
-  pi's default `"streaming"` never fires `cache_warming_decision`;
-  the pi-retry runtime package entry is removed and the rule
-  `{"pattern": "^You were spawned by \"", "flags": "m"}` is ensured exactly once
-  in `piRetry.subagents.match.systemPromptRegex`.
+  pi's default `"streaming"` never fires `cache_warming_decision`.
 - **infinite-context** — `programs.piEconomics.infiniteContext.reminders`:
   `default` and `overrides` (per provider or model) with `nudgeAtTokens` (a
   number or a range) and `nudgeAtPercent`, e.g. 400k for the two 1M-window
@@ -177,12 +173,12 @@ of the meter yourself. Afterwards: `pi-bench judge --all`, then
 - **Masking is request-local**: it rewrites the outgoing wire, not the stored
   transcript — `context_map` still lists originals and previews; recovery is
   `context_peek`.
-- **pi-retry**: upstream retries print and json sessions inline since 0.11.0;
-  the free daily cap is not retried at all (until 00:00 UTC; the local patch).
-  The bench print driver uses pi's native retry (100 × 2 s) via a per-run `.pi/settings.json`.
+- **Retries** are pi's native ones (`retry.*` in its settings); the former
+  `retry` component (a patched retry extension for OpenRouter's free tier)
+  left with that tier. The bench runs use pi's native retry (100 × 2 s) via a
+  per-run `.pi/settings.json`.
 - **Patches are local and version-locked**: all third-party changes ride on the
-  pinned input revs; `pi update` no longer affects pi-retry, but an input bump
-  re-applies the patches and the patch checks fail loudly on drift. Two
+  pinned input revs; an input bump re-applies the patches and the patch checks fail loudly on drift. Two
   upstream issue drafts are written, not filed: pi 1.0.0's `CacheWarmer`
   identity check dies on custom messages, and `sendCustomMessage(triggerTurn)`
   skips the prompt/loadout path.

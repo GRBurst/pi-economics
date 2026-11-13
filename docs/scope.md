@@ -19,7 +19,6 @@ drive work. Everything below stays:
 | `bench` | `pi-bench`, blind judges, bootstrap reports |
 | `cacheLifecycle` | stale-result elision, cache warming (a cost mechanism) |
 | `infiniteContext` | context folding: reminders, their limits per provider or model |
-| `retry` | OpenRouter free-cap handling |
 | `piSettings` | the settings.json migration |
 
 pi-economics keeps **observing** the router after the split: the meter reads
@@ -37,9 +36,10 @@ interventions) is drafted separately; nothing here implements it.
 | `docs/local-mode/`, `docs/research/` (whole, the cleanup scripts included) | the same paths in pi-task-router |
 | `docs/prompts/`, the specification of the Gemini Deep Research cleanup tool (left after 0.2.0) | its own repository, `~/projects/gemini-research-cleanup` (not published yet): the command `gdr-clean`, the specification as its `docs/spec.md` |
 | `packages/actor-subagents`, `patches/pi-actor-subagents`, `programs.piEconomics.actorSubagents` | pi-setup: `programs.pi.actorSubagents` (infrastructure that the router, cache-lifecycle, experiments and bench use) |
+| `packages/retry`, its patch and input, `programs.piEconomics.retry` (left after 0.2.0; OpenRouter's free tier it handled is gone) | nowhere: pi's native retry (its `retry.*` settings) handles transient errors |
 
-A definition of either removed option fails with a message that names the new
-owner (`modules/removed.nix`).
+A definition of a removed option fails with a message that names the new
+owner, or for `retry` the replacement (`modules/removed.nix`).
 
 ### The model router, including local mode
 

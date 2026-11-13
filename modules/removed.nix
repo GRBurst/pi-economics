@@ -12,7 +12,7 @@
   removed = {
     taskRouter = "pi-economics: programs.piEconomics.taskRouter moved to the pi-task-router flake (programs.piTaskRouter)";
     actorSubagents = "pi-economics: programs.piEconomics.actorSubagents moved to pi-setup (programs.pi.actorSubagents)";
-    # pi-retry served OpenRouter's free tier, which is gone; pi retries
+    # The component served OpenRouter's free tier, which is gone; pi retries
     # transient errors itself.
     retry = "pi-economics: programs.piEconomics.retry was removed; pi's native retry (settings retry.*) handles transient errors";
   };

@@ -59,7 +59,7 @@
       };
       path = lib.mkOption {
         type = lib.types.nonEmptyListOf lib.types.str;
-        example = ["piRetry" "subagents" "match" "systemPromptRegex"];
+        example = ["myExt" "rules"];
         description = "Object keys from the root to the leaf: a list, never a dotted string, and never empty (no whole-object set).";
       };
       value = lib.mkOption {

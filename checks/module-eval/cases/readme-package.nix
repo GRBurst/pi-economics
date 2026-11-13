@@ -1,9 +1,9 @@
 # (AC11) README's "Without Nix" section agrees with what the package ships:
 # the install line carries the manifest's version as the tag, the subset block
-# is the checked fixture line by line, every upstream has its prerequisites
-# row with the pinned wording (the actor: patched build, upstream support
-# pending; the other two: what the upstream does as it is, and what only the
-# patched build adds), the experiments opt-in block, the skill collision note
+# is the checked fixture line by line, the prerequisites table has one row per
+# upstream and no other, each with the pinned wording (the actor: patched
+# build, upstream support pending; infinite-context: what the upstream does as
+# it is, and what only the patched build adds), the experiments opt-in block, the skill collision note
 # and the duplicate guard's version note are there. Lines are compared whole or searched with
 # `replaceStrings` (no regex over the README).
 {
@@ -27,24 +27,31 @@
   install = "pi install git:github.com/GRBurst/pi-economics@v${version}";
   # The patched actor is pi-setup's (router-extraction design §7.3), as the runtime warning says.
   pinned = "Patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending.";
-  # review L1: the upstream already gives the fold reminders and the retry events the meter reads
+  # review L1: the upstream already gives the fold reminders
   partial = {
     pi-infinite-context = "the upstream's fold reminders work as they are";
-    pi-retry = "the meter's retry accounting works with the upstream";
   };
   onlyPatched = "only with the patched build via the pi-economics Nix modules (upstream support pending for that part)";
   claimsMissing = {
     pi-infinite-context = "no fold reminders";
-    pi-retry = "no retry accounting";
   };
-  upstreams = ["pi-actor-subagents" "pi-infinite-context" "pi-retry"];
+  upstreams = ["pi-actor-subagents" "pi-infinite-context"];
   row = u: lib.filter (l: lib.hasPrefix "| ${u} |" l) readme;
+  # The prerequisites table: the first table after its heading, without the
+  # header and separator rows; a row's package is its first cell.
+  prereqAt = lib.lists.findFirstIndex (l: l == "### Prerequisites") null readme;
+  afterPrereq = lib.drop (prereqAt + 1) readme;
+  fromTable = lib.drop (lib.lists.findFirstIndex (lib.hasPrefix "|") (lib.length afterPrereq) afterPrereq) afterPrereq;
+  prereqRows = lib.drop 2 (lib.take (lib.lists.findFirstIndex (l: !lib.hasPrefix "|" l) (lib.length fromTable) fromTable) fromTable);
+  packageOf = l: lib.head (lib.splitString " |" (lib.removePrefix "| " l));
 in {
   readme-package =
     expect.eq "the install line, once" (lib.filter (l: l == install) readme) [install]
     ++ expect.eq "the fixture's source is the install line's ref" fixtureJson.source "git:github.com/GRBurst/pi-economics@v${version}"
     ++ expect.holds "README has the subset marker" (at != null)
     ++ lib.optionals (at != null) (expect.eq "README's subset block = the fixture" block fixture)
+    ++ expect.holds "README has the prerequisites heading" (prereqAt != null)
+    ++ lib.optionals (prereqAt != null) (expect.eq "the prerequisites rows are the upstreams, in order" (map packageOf prereqRows) upstreams)
     ++ lib.concatMap (
       u:
         expect.holds "one prerequisites row for ${u}" (lib.length (row u) == 1)

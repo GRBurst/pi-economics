@@ -31,7 +31,7 @@ sets this option.
   to its `programs.pi.actorSubagents` for `actor-subagents/settings.json`.
 - An entry named `actor-subagents` (pi-setup's patched actor, forwarded by
   the bridge) is how the components learn the actor is there: without it
-  `cacheLifecycle` and `experiments` warn and `retry` adds no child rule.
+  `cacheLifecycle` and `experiments` warn.
 
 ### `piSettings`
 
@@ -240,29 +240,19 @@ limit and records it (`infinite-context:settings` with the rule's key in
 Soft dependency, which does not warn: `cacheLifecycle`'s `context_peek` guard
 reads infinite-context's tools.
 
-### `retry` (`modules/retry.nix`)
+### `retry` (removed)
 
-pi-retry (upstream input `pi-retry`) with one patch from `patches/pi-retry`,
-`free-cap`: a 429 for OpenRouter's daily free-tier cap is not retried. It
-retries 400/413, credit and connection errors with backoff, inline for
-children and for one-shot (print/json) hosts. Main sessions and children load
-it. The package is the whole repository: pi finds `retry.ts` through
-`package.json`.
+The former `retry` component, a patched retry extension for OpenRouter's
+daily free-tier cap, is gone with that free tier (redesign D19): pi's native
+retry (its `retry.*` settings) handles transient errors.
+`programs.piEconomics.retry` is a hidden stub (`modules/removed.nix`): any
+definition fails the assertion
 
-| Option | Default | Effect |
-|---|---|---|
-| `enable` | `false` | registry entry `pi-retry` (link `<agentDir>/extensions/pi-retry` → the package) and `piSettings.ops.retry` |
-| `package` | the flake's `packages/retry` | the patched repository |
-| `settings` | `{}` | pi-retry's keys under `piRetry` in pi's `settings.json`, one `set` per leaf at order 500 (`baseDelayMs`, `maxDelayMs`, `multiplier`, `maxRetriesAtMaxDelay`, `messageFreeRetries`, `subagents.*`); a list is one leaf, replaced whole, and no whole object is set, so keys pi or the user wrote survive; an empty attribute set below a key is an assertion error (`pi-economics: retry.settings.<path> is an empty attribute set`), since it would set nothing |
-| `src` (internal) | set by `homeModules.default` from the input | the unpatched source the existence assertion probes |
+    pi-economics: programs.piEconomics.retry was removed; pi's native retry (settings retry.*) handles transient errors
 
-No file of its own. `piSettings.ops.retry`: remove the two stale package
-entries (`https://github.com/monotykamary/pi-retry` and
-`git:github.com/monotykamary/pi-retry`), then, only while the registry has
-`actor-subagents`, `ensureContains` the child rule `^You were spawned by "` (flag `m`)
-in `piRetry.subagents.match.systemPromptRegex`; `settings` leaves come at
-order 500, so they run first. The ops run only while `piSettings.enable` is
-`true`. Without the actor there is no child rule and no warning.
+and has no other effect; a definition under `lib.mkIf false` is none. The
+keys the component once wrote into pi's mutable `settings.json` (its child
+rule, the `settings` leaves) stay there; pi ignores them, remove them by hand.
 
 ### `taskRouter` (moved)
 
@@ -294,7 +284,7 @@ the two CLIs (`bin`). A user without Nix installs it with `pi install git:github
 
 **Render rule.** Only `nix run .#render` writes `package.json`. `render/default.nix` evaluates the module for one
 fixture (every component on but `bench`), maps the registry's own names to `./packages/<n>/index.ts` (a name without a
-package directory is a render error; the patched upstreams `infinite-context`, `pi-retry` are skipped, the user
+package directory is a render error; the patched upstream `infinite-context` is skipped, the user
 installs them; the actor, pi-setup's, is never in the fixture's registry) and adds `bin` when `tokenMeter` is on. `render-package` compares the committed file with it;
 `pi-package-manifest` states the manifest's laws one by one (private, keyword, semver, peers = pi's five host
 packages, imported-is-peer, no dependencies, paths, bin shebang and mode, skill fallback paths). The version is the
@@ -354,7 +344,7 @@ points into `src`.
 | `typecheck-bench` | `tsc --strict` over the bench |
 | `token-meter` | the token meter's own tests (`node --test`), run when it builds; they include the runtime guard's (token-meter's copy is the reference) and the claim protocol shared with the router |
 | `typecheck-token-meter` | `tsc --strict` over the token meter |
-| `home-files` | the rendered sources exist and are what pi and the harnesses read: the extension, `LOGS.md`, both commands on an empty agent dir, the skill directory, the cache-lifecycle and experiments directories, cacheLifecycle's op through the activation's script, infinite-context's rendered settings through the extension's own parser, pi-retry's entry point, `ops.retry` through the script |
+| `home-files` | the rendered sources exist and are what pi and the harnesses read: the extension, `LOGS.md`, both commands on an empty agent dir, the skill directory, the cache-lifecycle and experiments directories, cacheLifecycle's op through the activation's script, infinite-context's rendered settings through the extension's own parser |
 | `iface-harness` | the interface-comparison harness accepts a satisfied copy and rejects an unsatisfied one |
 | `iface-subagents-bench-probe` | the bench probe's copy of `__subagentsApi_v1` is satisfied by the provider's `SubagentsApiV1` (here and below: the `pi-setup` input's patched actor-subagents) |
 | `cache-lifecycle`, `experiments` | each package's own tests (`node --test`), run when it builds |
@@ -363,12 +353,10 @@ points into `src`.
 | `iface-experiments-token-meter`, `iface-experiments-cache-lifecycle` | their copies of `__piExperimentsApi_v1` are satisfied by the provider's `ExperimentsApiV1` |
 | `infinite-context` | the patched pi-infinite-context's tests: upstream's suite without its three `fast-check` tests, with the patch's additions to `settings.test.ts` and `index.test.ts`, on the shared lock; `overlay-foreign.test.ts` and `integration.test.ts` (`index.ts` driven through its event handlers with stand-ins for pi's packages, reading the settings the module renders); the greps on `index.ts` (no fold hint, no `__piExperimentsApi_v1`) |
 | `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's three `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
-| `retry` | the patched pi-retry's vitest suite (300 tests) on the shared npm lock, and the greps that pin the free-cap patch and the inline print/json route |
-| `typecheck-retry` | `tsc --strict` over `retry.ts` and `src/`; the tests stay out (one upstream test and the free-cap patch's own test do not type-check; vitest runs them) |
 | `iface-experiments-task-router` | the router's copy of `__piExperimentsApi_v1` (`ExperimentsApi` in `core/shell.ts`, read from the `pi-task-router` input) is satisfied by this flake's `ExperimentsApiV1` |
 | `log-contract` | every log writer through `pi-analyse --check` and a full report; the router's writer and vocabularies are the `pi-task-router` input's |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths (`/home/<name>`), `git+ssh` URLs, private (RFC 1918) or Tailscale addresses, LAN host URLs (`http://<one-label host>`, not `localhost`) or names under `.local`, `.lan`, `.home.arpa`, `.ts.net` in tracked files (a worktree's `.git` file is skipped) |
-| `license` | `LICENSE` is MIT, every package declares MIT, `NOTICE` has a section per patched upstream and none for another |
+| `license` | `LICENSE` is MIT, every package declares MIT, `NOTICE` has a section per patched upstream and none for another, and each licence text it names (`Licence text: <path>`, `checks/npm/LICENSE` among them) carries the MIT permission notice |
 | `boundary`, `boundary-selftest` | no file's content (binary files too), file name or directory name names an extension this repository does not ship, in the spellings `x-y`, `x_y`, `xy` and `xY` (case ignored); `NOTICE`, `LICENSE`, the root `flake.lock` and `patches/<input>/LICENSE` are skipped, the patches themselves are scanned; the selftest has a hit and a near miss for each kind of place |
 | `render-package` | the committed `package.json` is the render of the module (AC2) |
 | `pi-package-manifest` | the manifest's laws, each reported under its own name (AC3) |
@@ -394,9 +382,9 @@ actor with all its patches has since moved to pi-setup). Three patches that earl
 the upstreams or pi absorbed them: actor-subagents' `first-turn` (pi 1.2.0
 runs `before_agent_start` for extension-triggered runs), infinite-context's
 `foreign-messages` (upstream matches the projection as an ordered
-subsequence; `overlay-foreign.test.ts` pins that) and pi-retry's `print-mode`
-(upstream 0.11.0 retries print and json sessions inline; the `retry` check
-pins that route). Where its patch could not be taken byte for byte,
+subsequence; `overlay-foreign.test.ts` pins that) and the retry component's
+`print-mode` (upstream 0.11.0 retries print and json sessions inline; the
+component itself has left since, see `retry` above). Where its patch could not be taken byte for byte,
 the difference is one line: the fake `SessionLike` in the spawn-policy
 patch's test carries a double cast (`tsc --strict` rejects it otherwise), and
 the reminders patch's comment names no private path.
