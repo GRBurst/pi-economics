@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { design } from "../core/design.ts";
-import { assign, type State } from "../core/assign.ts";
+import { assign, type Mode, type State } from "../core/assign.ts";
 
 /** Deterministic seeded RNG (mulberry32). */
 function mulberry32(seed: number): () => number {
@@ -80,4 +80,46 @@ test("exploit: disabled arms are never chosen", () => {
   for (let i = 0; i < 500; i++) {
     assert.notEqual(assign("exploit", arms, st, rng, 0.2, arms[0].id).id, arms[2].id, `disabled arm chosen (draw ${i})`);
   }
+});
+
+// --- Engine v2 (redesign M5b.1, §7.3): strata, eligibility, permuted blocks, Thompson per design and stratum.
+import { eligibleFor, stratumOf } from "../core/assign.ts";
+import type { StratumSpec } from "../core/settings.ts";
+import type { Plans } from "../../token-meter/core/plans.ts";
+
+const spec = (match: StratumSpec["match"]): StratumSpec => ({ match, objective: "apiUsd", factors: [] });
+const plans: Plans = { anthropic: { billing: "subscription", windows: ["5h"] }, ollama: { billing: "local", windows: [] } };
+
+test("T5b1.1 stratumOf: the first stratum in key order whose every given condition matches", () => {
+  const byClass = { subscription: spec({ billing: ["subscription"] }), api: spec({ billing: ["api"] }), local: spec({ billing: ["local"] }) };
+  const byModel = { opus: spec({ models: ["anthropic/claude-opus-*"] }), both: spec({ billing: ["subscription"], models: ["*/claude-?"] }), rest: spec({}) };
+  const table: Array<[Record<string, StratumSpec>, string, string, string | undefined]> = [
+    [byClass, "anthropic", "claude-opus-4", "subscription"],
+    [byClass, "openai", "gpt-5", "api"], // no plan: billed as api
+    [byClass, "ollama", "qwen3", "local"],
+    [byClass, "constructor", "x", "api"], // a provider named like an Object.prototype member has no plan
+    [{ local: spec({ billing: ["local"] }) }, "openai", "gpt-5", undefined],
+    [byModel, "anthropic", "claude-opus-4", "opus"],
+    [byModel, "anthropic", "claude-x", "both"],
+    [byModel, "openai", "claude-x", "rest"], // models match, billing (api) does not
+    [byModel, "anthropic", "claude-xy", "rest"], // `?` is one character
+    [{ dot: spec({ models: ["openrouter/a.b"] }) }, "openrouter", "aXb", undefined], // glob metacharacters only * and ?
+    [{ dot: spec({ models: ["openrouter/a.b"] }) }, "openrouter", "a.b", "dot"],
+    [{ slash: spec({ models: ["openrouter/*"] }) }, "openrouter", "vendor/model", "slash"], // * spans a model id's own slash
+    [{}, "anthropic", "claude-opus-4", undefined],
+  ];
+  for (const [strata, provider, model, want] of table) {
+    assert.equal(stratumOf(strata, plans, provider, model), want, `${provider}/${model} in ${Object.keys(strata).join(",") || "no strata"}`);
+  }
+});
+
+test("T5b1.1 eligibleFor: a main (not a child) with a stratum, mode not off", () => {
+  const table: Array<[boolean, string | undefined, Mode, boolean]> = [
+    [false, "api", "explore", true],
+    [false, "api", "exploit", true],
+    [true, "api", "explore", false],
+    [false, undefined, "explore", false],
+    [false, "api", "off", false],
+  ];
+  for (const [isChild, stratum, mode, want] of table) assert.equal(eligibleFor(isChild, stratum, mode), want, `child=${isChild} stratum=${stratum} mode=${mode}`);
 });

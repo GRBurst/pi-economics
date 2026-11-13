@@ -1,8 +1,29 @@
 // Arm assignment (properties P-off, P-balance, P-floor).
 // Pure: all randomness comes in as `rng`, so tests seed it deterministically.
 import type { Arm } from "./design.ts";
+import type { StratumSpec } from "./settings.ts";
+// Type-only (plan P22): the import is erased at runtime, so the package ships without token-meter.
+import type { Billing, Plans } from "../../token-meter/core/plans.ts";
 
 export type Mode = "off" | "explore" | "exploit";
+
+/** token-meter's billingOf, restated (no value import across packages): a provider without a plan bills as api. */
+const billingOf = (plans: Plans, provider: string): Billing => (Object.hasOwn(plans, provider) ? plans[provider].billing : "api");
+/** A `<provider>/<id>` glob: `*` any run of characters (a slash included), `?` one character, everything else literal. */
+const globMatches = (glob: string, s: string): boolean =>
+  new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`, "s").test(s);
+
+/** The stratum of a main (§7.3): the first in key order whose every given condition holds for its model at session_start. */
+export function stratumOf(strata: Record<string, StratumSpec>, plans: Plans, provider: string, model: string): string | undefined {
+  const billing = billingOf(plans, provider);
+  return Object.keys(strata).find((name) => {
+    const m = strata[name].match;
+    return (m.billing === undefined || m.billing.includes(billing)) && (m.models === undefined || m.models.some((g) => globMatches(g, `${provider}/${model}`)));
+  });
+}
+
+/** §7.3: only a main (never a child) whose model falls in a stratum takes part, and only while the mode is not off. */
+export const eligibleFor = (isChild: boolean, stratum: string | undefined, mode: Mode): boolean => !isChild && stratum !== undefined && mode !== "off";
 
 export type State = {
   /** Assignments made per arm id so far (this session set; the extension persists it). */

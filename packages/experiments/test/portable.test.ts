@@ -1,7 +1,7 @@
 // Portability contract: the package can be copied into its
 // own repository and run unchanged. Generic: the same file is used by every package,
 // but for one allowance in this (experiments') copy, TYPE_IMPORTS (redesign plan P22):
-// core/settings.ts imports the types Billing and Plans from token-meter's core/plans.ts,
+// core/settings.ts and core/assign.ts import the types Billing and Plans from token-meter's core/plans.ts,
 // their one definition. `import type` is erased at runtime, so experiments still runs
 // alone; a copy type-checks only with that file beside it.
 import { test } from "node:test";
