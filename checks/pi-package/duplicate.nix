@@ -1,7 +1,7 @@
 # The duplicate guard (AC7, plan T4.1): the package installed AND every own
-# component linked into the auto-discovered <agentDir>/extensions/<c>, as the
-# Nix route linked it before M6 (a built package: a different path, the same
-# component). The first copy
+# component linked into <agentDir>/pi-economics/extensions/<c> and listed in
+# settings.json's `extensions`, as the Nix route links and lists it (M6; a
+# built package: a different path, the same component). The first copy
 # pi starts wins; each other copy stays inert and says so once. The analysis
 # skill is duplicated the same way: pi's loader reports a collision (`pi -p`
 # prints no skill diagnostics, so ./skill-collision.mjs asks the loader).
@@ -15,16 +15,23 @@
 installed {
   name = "pi-install-duplicate";
   before = ''
-    mkdir -p "$PI_CODING_AGENT_DIR/extensions" "$PI_CODING_AGENT_DIR/skills"
+    mkdir -p "$PI_CODING_AGENT_DIR/pi-economics/extensions" "$PI_CODING_AGENT_DIR/skills"
     ${lib.concatMapStrings (c: ''
-        ln -s ${self.packages.${pkgs.stdenv.hostPlatform.system}.${c}} "$PI_CODING_AGENT_DIR/extensions/${c}"
+        ln -s ${self.packages.${pkgs.stdenv.hostPlatform.system}.${c}} "$PI_CODING_AGENT_DIR/pi-economics/extensions/${c}"
       '')
       own}
+    # The entries the settings script puts first (relative to the agent dir); `pi install` wrote `packages`.
+    jq --argjson e ${lib.escapeShellArg (builtins.toJSON (map (c: "pi-economics/extensions/${c}") own))} '.extensions = $e' \
+      "$PI_CODING_AGENT_DIR/settings.json" >s.json
+    mv s.json "$PI_CODING_AGENT_DIR/settings.json"
     ln -s ${self}/skills/pi-token-economics-analysis "$PI_CODING_AGENT_DIR/skills/pi-token-economics-analysis"
   '';
   after = ''
     for c in ${lib.escapeShellArgs own}; do
       [ "$(grep -cF "pi-economics: $c is loaded twice" run.all)" = 1 ] || fail "$c: not exactly one 'loaded twice' line"
+      # settings.json's entries start before any package's: the listed link is the bound copy
+      grep -qF "pi-economics: $c is loaded twice ($PI_CODING_AGENT_DIR/pi-economics/extensions/$c/index.ts and " run.all \
+        || fail "$c: the listed link is not the bound copy"
     done
     # the winner is bound, not only a loser that said so: its actor warning (one per process) prints from a bound copy alone
     for c in cache-lifecycle; do
