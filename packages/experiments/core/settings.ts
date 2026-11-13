@@ -2,7 +2,7 @@
 // opt-in (spec D15): without it the extension is inert (plain `pi install`);
 // with it, every key it lacks takes its default.
 import { existsSync, readFileSync } from "node:fs";
-import type { Factor } from "./design.ts";
+import type { Factor, FactorSpec } from "./design.ts";
 
 export type Settings = {
   /** Arm selection mode; "off" always returns the baseline arm. */
@@ -32,6 +32,13 @@ const ONLINE_FACTORS: Factor[] = [
   { name: "warmPolicy", values: ["native", "orchestrator-aware"] },
   { name: "mainCacheTtl", values: ["5m", "1h"] },
   { name: "maskOnCold", values: ["off", "on"] },
+];
+
+/** Design v4's factors as a stratum's factors over cache-lifecycle's levers (redesign §7.2): the default of the cloud strata (P12). */
+export const V4_FACTORS: readonly FactorSpec[] = [
+  { name: "warmPolicy", lever: "cache-lifecycle.warmPolicy", levels: ["native", "orchestrator-aware"] },
+  { name: "mainCacheTtl", lever: "cache-lifecycle.mainCacheTtl", levels: ["5m", "1h"] },
+  { name: "maskOnCold", lever: "cache-lifecycle.maskOnCold", levels: ["off", "on"] },
 ];
 
 export function defaults(): Settings {

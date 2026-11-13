@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { design } from "../core/design.ts";
-import { defaults, loadSettings } from "../core/settings.ts";
+import { canonical, design, designFor } from "../core/design.ts";
+import { V4_FACTORS, defaults, loadSettings } from "../core/settings.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "experiments-"));
 
@@ -76,4 +76,15 @@ test("correctionRegex: a setting (source of a case-insensitive RegExp); an inval
   assert.equal(loadSettings(f).correctionRegex, "\\bnope\\b");
   writeFileSync(f, JSON.stringify({ correctionRegex: "(" }));
   assert.equal(loadSettings(f).correctionRegex, defaults().correctionRegex);
+});
+
+// The cloud stratum's default factors are M1's design v4 as a stratum (redesign §7.2, plan T5a.5): its design has the
+// same 8 arms (level sets) as the v4 runtime's, over cache-lifecycle's levers.
+test("V4_FACTORS: the stratum design has v4's 8 arms (the same level sets) over the levers cache-lifecycle.<factor>", () => {
+  const v4 = defaults();
+  const d = designFor("cloud", { factors: V4_FACTORS });
+  const sets = (xs: Record<string, unknown>[]) => xs.map((x) => canonical(x)).sort();
+  assert.equal(d.arms.length, 8);
+  assert.deepEqual(sets(d.arms.map((a) => a.levels)), sets(design(v4.factors, v4.maxArms).map((a) => a.flags)));
+  assert.deepEqual(V4_FACTORS.map((f) => f.lever), v4.factors.map((f) => `cache-lifecycle.${f.name}`));
 });
