@@ -490,7 +490,7 @@ const table = (head: string[], rows: string[][]): string =>
   [`| ${head.join(" | ")} |`, "|" + " --- |".repeat(head.length), ...rows.map((r) => `| ${r.join(" | ")} |`)].join("\n");
 const NO_DATA = "_no data in the period_";
 
-function renderCost(c: CostSection): string {
+export function renderCost(c: CostSection): string {
   if (!c.requests && !c.warming) return NO_DATA;
   return [
     table(["metric", "value"], [
@@ -508,7 +508,7 @@ function renderCost(c: CostSection): string {
 
 const f4 = (n: number): string => (Number.isFinite(n) ? n.toFixed(4) : "–");
 
-function renderFolds(f: LedgerSection): string {
+export function renderFolds(f: LedgerSection): string {
   if (!f.n) return "\n### Fold ledger\n\n_no folds in Claude sessions in the period_";
   const rows = (rs: LedgerSection["byDepth"]) => rs.map((r) => [r.name, String(r.n), f4(r.savingsUsd), f4(r.rewriteUsd), f4(r.netUsd), pc(r.negativeShare)]);
   const head = (first: string) => [first, "folds", "cache-read $ saved", "rewrite $ paid", "net $", "share net < 0"];
@@ -522,7 +522,7 @@ function renderFolds(f: LedgerSection): string {
   ].join("\n");
 }
 
-function renderExperiment(ds: DesignResult[]): string {
+export function renderExperiment(ds: DesignResult[]): string {
   if (!ds.length) return `${NO_DATA}: no meter line carries an arm`;
   const pooled = ds.some((d) => d.design === "v2") && ds.some((d) => d.design === "v3");
   return (pooled ? "Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware means something else in v3 (a system-prompt paragraph): they are analysed in separate tables and never pooled; guard signals and the kill switch are per design too.\n\n" : "") + ds.map((d) => [
@@ -541,7 +541,7 @@ function renderExperiment(ds: DesignResult[]): string {
 
 const withCI = (c: CI, fmt: (n: number) => string): string => (Number.isFinite(c.mean) ? `${fmt(c.mean)}${Number.isFinite(c.lo) ? ` (${fmt(c.lo)} – ${fmt(c.hi)})` : ""}` : "–");
 
-function renderRandomized(r: Randomized): string {
+export function renderRandomized(r: Randomized): string {
   if (!r.rows.length) return "\n### Randomized routing\n\n_no randomized spawns in the period_ (`assigned: \"random\"` on the spawn events)";
   return [
     `\n### Randomized routing (spawns the router sent to qwen)\n`,
@@ -552,7 +552,7 @@ function renderRandomized(r: Randomized): string {
   ].join("\n");
 }
 
-function renderSpotChecks(s: SpotChecks): string {
+export function renderSpotChecks(s: SpotChecks): string {
   if (!s.requested && !s.reviewed) return "\n### Spot checks\n\n_no spot checks in the period_ (`spotcheck` events, `reviewOf` on spawn and verdict lines)";
   return [
     "\n### Spot checks\n\nAn accepted task re-judged by a review child: agreement = the original verdict (at the draw) and the review verdict both accept or both do not.\n",
@@ -560,7 +560,7 @@ function renderSpotChecks(s: SpotChecks): string {
   ].join("\n");
 }
 
-function renderDelegation(d: DelegationSection): string {
+export function renderDelegation(d: DelegationSection): string {
   if (!d.spawns && Number.isNaN(d.childUsdShare)) return NO_DATA;
   return [
     table(["metric", "value"], [
@@ -583,7 +583,7 @@ function renderDelegation(d: DelegationSection): string {
   ].join("\n");
 }
 
-function renderGuards(g: GuardsSection): string {
+export function renderGuards(g: GuardsSection): string {
   if (!g.perArm.length) return NO_DATA;
   const per = (n: number, u: number) => (u ? f2(n / u) : "–");
   const rating = (r: number[]) => (r.length ? `${(sum(r) / r.length).toFixed(1)} (${r.length})` : "–");
@@ -595,7 +595,7 @@ function renderGuards(g: GuardsSection): string {
   ].join("\n");
 }
 
-function renderQuality(q: QualitySection): string {
+export function renderQuality(q: QualitySection): string {
   const share = (x: { pi: number; total: number; share: number }) => [String(x.pi), String(x.total), pc(x.share)];
   return [
     `Period: ${q.period.since ?? "start"} – ${q.period.until ?? "now"}; lines from ${q.period.first ?? "–"} to ${q.period.last ?? "–"}.\n`,

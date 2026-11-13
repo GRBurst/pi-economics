@@ -1,0 +1,8 @@
+
+### Spot checks
+
+An accepted task re-judged by a review child: agreement = the original verdict (at the draw) and the review verdict both accept or both do not.
+
+| requested | reviewed (judged) | agree | agreement | pending |
+| --- | --- | --- | --- | --- |
+| 3 | 2 | 1 | 50% | 1 |

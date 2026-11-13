@@ -1,0 +1,99 @@
+Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware means something else in v3 (a system-prompt paragraph): they are analysed in separate tables and never pooled; guard signals and the kill switch are per design too.
+
+### Design v1 (5 factors, baseline `-----`, 2 units with ≥ 0.05 active h)
+
+Effect = mean $/active hour of the units at the high level − at the low level (bootstrap 95% CI); negative is cheaper.
+
+| factor | low → high | n low | n high | Δ $/h | 95% CI |
+| --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 1 | 1 | 8.00 | 8.00 – 8.00 |
+| mainCacheTtl | 5m → 1h | 1 | 1 | 8.00 | 8.00 – 8.00 |
+| foldHint | fixed → cache-aware | 1 | 1 | 8.00 | 8.00 – 8.00 |
+| maskOnCold | off → on | 1 | 1 | 8.00 | 8.00 – 8.00 |
+| freshOnCold | off → advise | 1 | 1 | 8.00 | 8.00 – 8.00 |
+
+OLS with two-way interactions (n 2, df 0, R² 1.00; aliased or not estimable: mainCacheTtl=1h, foldHint=cache-aware, maskOnCold=on, freshOnCold=advise, warmPolicy=orchestrator-aware:mainCacheTtl=1h, warmPolicy=orchestrator-aware:foldHint=cache-aware, warmPolicy=orchestrator-aware:maskOnCold=on, warmPolicy=orchestrator-aware:freshOnCold=advise, mainCacheTtl=1h:foldHint=cache-aware, mainCacheTtl=1h:maskOnCold=on, mainCacheTtl=1h:freshOnCold=advise, foldHint=cache-aware:maskOnCold=on, foldHint=cache-aware:freshOnCold=advise, maskOnCold=on:freshOnCold=advise):
+
+| term | coef | se |
+| --- | --- | --- |
+| (intercept) | 8.00 | – |
+| warmPolicy=orchestrator-aware | 8.00 | – |
+
+
+| arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `+++++` | 1 | 0.50 | 16.00 | 16.00 – 16.00 | – | – | – |
+| `-----` | 1 | 0.50 | 8.00 | 8.00 – 8.00 | – | – | – |
+
+### Design v2 (6 factors, baseline `------`, 5 units with ≥ 0.05 active h)
+
+Effect = mean $/active hour of the units at the high level − at the low level (bootstrap 95% CI); negative is cheaper.
+
+| factor | low → high | n low | n high | Δ $/h | 95% CI |
+| --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 2 | 3 | 8.57 | -2.87 – 20.00 |
+| mainCacheTtl | 5m → 1h | 2 | 3 | 8.57 | -2.87 – 20.00 |
+| foldHint | fixed → cache-aware | 2 | 3 | 8.57 | -2.87 – 20.00 |
+| maskOnCold | off → on | 2 | 3 | 8.57 | -2.87 – 20.00 |
+| freshOnCold | off → advise | 2 | 3 | 8.57 | -2.87 – 20.00 |
+| delegationRule | off → on | 2 | 3 | 8.57 | -2.87 – 20.00 |
+
+OLS with two-way interactions (n 5, df 3, R² 0.31; aliased or not estimable: mainCacheTtl=1h, foldHint=cache-aware, maskOnCold=on, freshOnCold=advise, delegationRule=on, warmPolicy=orchestrator-aware:mainCacheTtl=1h, warmPolicy=orchestrator-aware:foldHint=cache-aware, warmPolicy=orchestrator-aware:maskOnCold=on, warmPolicy=orchestrator-aware:freshOnCold=advise, warmPolicy=orchestrator-aware:delegationRule=on, mainCacheTtl=1h:foldHint=cache-aware, mainCacheTtl=1h:maskOnCold=on, mainCacheTtl=1h:freshOnCold=advise, mainCacheTtl=1h:delegationRule=on, foldHint=cache-aware:maskOnCold=on, foldHint=cache-aware:freshOnCold=advise, foldHint=cache-aware:delegationRule=on, maskOnCold=on:freshOnCold=advise, maskOnCold=on:delegationRule=on, freshOnCold=advise:delegationRule=on):
+
+| term | coef | se |
+| --- | --- | --- |
+| (intercept) | 14.62 | 5.67 |
+| warmPolicy=orchestrator-aware | 8.57 | 7.32 |
+
+
+| arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `++++++` | 3 | 1.37 | 23.93 | 18.97 – 30.00 | -23.93 | 3.16 | 12% |
+| `------` | 2 | 1.58 | 17.05 | 8.00 – 21.23 | -17.05 | 4.80 | 88% |
+
+### Design v3 (6 factors, baseline `------`, 1 units with ≥ 0.05 active h)
+
+Effect = mean $/active hour of the units at the high level − at the low level (bootstrap 95% CI); negative is cheaper.
+
+| factor | low → high | n low | n high | Δ $/h | 95% CI |
+| --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 1 | 0 | – | – |
+| mainCacheTtl | 5m → 1h | 1 | 0 | – | – |
+| foldHint | fixed → cache-aware | 1 | 0 | – | – |
+| maskOnCold | off → on | 1 | 0 | – | – |
+| freshOnCold | off → advise | 1 | 0 | – | – |
+| delegationRule | off → on | 1 | 0 | – | – |
+
+OLS: too few units.
+
+
+| arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `------` | 1 | 0.50 | 16.00 | 16.00 – 16.00 | – | – | – |
+
+### Design v4 (3 factors, baseline `---`, 9 units with ≥ 0.05 active h)
+
+Effect = mean $/active hour of the units at the high level − at the low level (bootstrap 95% CI); negative is cheaper.
+
+| factor | low → high | n low | n high | Δ $/h | 95% CI |
+| --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 5 | 4 | 8.37 | 4.38 – 12.49 |
+| mainCacheTtl | 5m → 1h | 5 | 4 | 1.89 | -5.20 – 9.09 |
+| maskOnCold | off → on | 7 | 2 | 9.84 | 6.19 – 13.49 |
+
+OLS with two-way interactions (n 9, df 5, R² 0.84; aliased or not estimable: warmPolicy=orchestrator-aware:mainCacheTtl=1h, warmPolicy=orchestrator-aware:maskOnCold=on, mainCacheTtl=1h:maskOnCold=on):
+
+| term | coef | se |
+| --- | --- | --- |
+| (intercept) | 11.85 | 1.59 |
+| warmPolicy=orchestrator-aware | 4.15 | 2.51 |
+| mainCacheTtl=1h | -3.05 | 2.51 |
+| maskOnCold=on | 9.05 | 3.72 |
+
+
+| arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `+++` | 2 | 1.00 | 22.00 | 20.00 – 24.00 | -22.00 | 1.41 | 0% |
+| `+--` | 2 | 1.00 | 16.00 | 16.00 – 16.00 | -16.00 | 0.00 | 0% |
+| `-+-` | 2 | 1.00 | 8.80 | 8.00 – 9.60 | -8.80 | 0.56 | 94% |
+| `---` | 3 | 1.37 | 11.49 | 8.00 – 15.55 | -11.49 | 1.74 | 6% |

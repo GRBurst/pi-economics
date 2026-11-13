@@ -1,0 +1,34 @@
+Period: 2026-10-05 – 2026-10-05; lines from 2026-10-05T10:00:00.000Z to 2026-10-05T23:50:00.000Z.
+
+| log | lines | first | last | schema versions (v: lines) |
+| --- | --- | --- | --- | --- |
+| meter | 125 | 2026-10-05T10:00:00.000Z | 2026-10-05T23:50:00.000Z | v0: 8, v1: 117 |
+| outcomes | 56 | 2026-10-05T11:01:00.000Z | 2026-10-05T12:34:00.000Z | v1: 56 |
+| assignments | 19 | 2026-10-05T09:59:00.000Z | 2026-10-05T23:39:00.000Z | v0: 2, v1: 17 |
+| guards | 6 | 2026-10-05T11:00:00.000Z | 2026-10-05T12:10:00.000Z | v1: 6 |
+
+Unparsable lines: meter/2026-10.jsonl 2
+
+Root sessions without an arm: 2 (1.40 $, 1% of cost; 1 of them have an assignment row), e.g. bare1, bare2.
+
+| unjoinable | n | examples |
+| --- | --- | --- |
+| meter child lines whose parent session is unknown | 2 | gone |
+| child sessions without a spawn event (their $ is in no tier) | 1 | orphan |
+| spawns without a child session id | 0 | – |
+| spawns whose child session has no meter line | 1 | ku1 |
+| task events without a spawn | 2 | gone-task, nospawn |
+| guard events of sessions without meter lines | 1 | ghost |
+| assignments of sessions without meter lines | 1 | ghost2 |
+
+Pi share of the account quota (rises between pi requests < 30 min apart ÷ all rises seen per window; other use during pi activity counts as pi):
+
+| window | pi points | account points | pi share |
+| --- | --- | --- | --- |
+| 5 h | 3 | 3 | 100% |
+| 7 d | 0 | 7 | 0% |
+
+Contract (`pi-analyse --check`): 
+
+- meter: 1 line(s) miss `provider` (every meter line; e.g. m1 @ 2026-10-05T10:40:00.000Z)
+- meter: 3 line(s) miss `arm` (the session's root has an experiment assignment; e.g. bare2 @ 2026-10-05T23:40:00.000Z)

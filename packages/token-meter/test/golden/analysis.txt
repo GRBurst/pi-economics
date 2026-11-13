@@ -1,0 +1,323 @@
+# pi analysis — 2026-10-05 to 2026-10-05
+
+Generated 2026-10-06T08:30:00.000Z by pi-analyse; field meanings in <agentDir>/LOGS.md. Caveats: quota is the whole account's, in 1% steps; units are root sessions (small samples, task mix varies between them); $ per active hour counts gaps < 30 min as active.
+
+## Cost
+
+| metric | value |
+| --- | --- |
+| total $ | 145.20 |
+| requests (warming) | 123 (1) |
+| errors | 1 |
+| root sessions | 20 |
+| active hours | 9.50 |
+| $/active hour (95% CI) | 15.25 (11.96 – 18.27) |
+| q5h %/active hour | 0.32 |
+| q7d %/active hour | 0.00 |
+| $/accepted task (accepted/judged) | 0.75 (14/22) |
+
+### By model
+
+| model | requests | $ | share | $/active h |
+| --- | --- | --- | --- | --- |
+| claude-opus | 86 | 99.70 | 69% | 10.49 |
+| claude-sonnet | 15 | 27.00 | 19% | 2.84 |
+| qwen | 22 | 18.50 | 13% | 1.95 |
+
+### Splits
+
+Splits overlap (a rewrite can follow a fold); fold and cold-resume rows charge the 3 requests from the event on; cache rewrite = cache-write $ of every request but a session's first, split from the line's cost by Anthropic price ratios.
+
+| split | n | $ | share | $/active h |
+| --- | --- | --- | --- | --- |
+| cache rewrite | 81 | 26.33 | 18% | 2.77 |
+| warming | 1 | 0.50 | 0% | 0.05 |
+| after folds | 2 | 2.40 | 2% | 0.25 |
+| after cold resumes | 10 | 38.80 | 27% | 4.08 |
+
+### Token components (≈, by Anthropic price ratios)
+
+| component | $ |
+| --- | --- |
+| input | 2.80 |
+| cacheRead | 33.95 |
+| cacheWrite | 38.39 |
+| output | 70.06 |
+| unallocated | 0.00 |
+
+### Fold ledger (Claude models)
+
+Per detected fold (a non-warming request whose prompt, input + cacheRead + cacheWrite, fell below 80% of the previous one's): R = tokens removed; K ≈ the first request's cacheWrite minus the session's typical write (median of its non-first, non-fold, non-cold turns), 0 for a fold after a cold gap; n = requests after the fold until the session ends or the next cold gap (≥ 5 min, ≥ 60 min in a mainCacheTtl 1h arm; warming counts); r and w = the model's cache read and write price per token (0.1 and 1.25 × the input price recovered from the lines' costUsd). **Net = n·R·r − K·(w − r)** = cache-read $ saved − rewrite $ paid. Counterfactual only: it assumes the fold changed nothing else (output, later tool use, task path) and that an unfolded prompt would have kept being read at r; folds overlap in time but each is valued alone.
+
+| metric | value |
+| --- | --- |
+| folds (after a cold gap) | 2 (0) |
+| cache-read $ saved | 15.1704 |
+| rewrite $ paid | 7.2054 |
+| net $ | 7.9650 |
+| share with net < 0 | 0% (0/2) |
+
+By fold depth K/R (rewritten tokens per token removed; break-even ≈ n/11.5):
+
+| K/R | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
+| --- | --- | --- | --- | --- | --- |
+| < 0.25 | 2 | 15.1704 | 7.2054 | 7.9650 | 0% |
+| 0.25 – 0.5 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
+| 0.5 – 1 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
+| 1 – 2 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
+| ≥ 2 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
+
+By design and foldHint level (v2 and v3 differ in what cache-aware means: never pooled):
+
+| group | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
+| --- | --- | --- | --- | --- | --- |
+| v2 cache-aware | 1 | 10.1136 | 3.5708 | 6.5428 | 0% |
+| v4 – | 1 | 5.0568 | 3.6346 | 1.4222 | 0% |
+
+By model:
+
+| model | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
+| --- | --- | --- | --- | --- | --- |
+| claude-opus | 2 | 15.1704 | 7.2054 | 7.9650 | 0% |
+
+## Experiment
+
+Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware means something else in v3 (a system-prompt paragraph): they are analysed in separate tables and never pooled; guard signals and the kill switch are per design too.
+
+### Design v1 (5 factors, baseline `-----`, 2 units with ≥ 0.05 active h)
+
+Effect = mean $/active hour of the units at the high level − at the low level (bootstrap 95% CI); negative is cheaper.
+
+| factor | low → high | n low | n high | Δ $/h | 95% CI |
+| --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 1 | 1 | 8.00 | 8.00 – 8.00 |
+| mainCacheTtl | 5m → 1h | 1 | 1 | 8.00 | 8.00 – 8.00 |
+| foldHint | fixed → cache-aware | 1 | 1 | 8.00 | 8.00 – 8.00 |
+| maskOnCold | off → on | 1 | 1 | 8.00 | 8.00 – 8.00 |
+| freshOnCold | off → advise | 1 | 1 | 8.00 | 8.00 – 8.00 |
+
+OLS with two-way interactions (n 2, df 0, R² 1.00; aliased or not estimable: mainCacheTtl=1h, foldHint=cache-aware, maskOnCold=on, freshOnCold=advise, warmPolicy=orchestrator-aware:mainCacheTtl=1h, warmPolicy=orchestrator-aware:foldHint=cache-aware, warmPolicy=orchestrator-aware:maskOnCold=on, warmPolicy=orchestrator-aware:freshOnCold=advise, mainCacheTtl=1h:foldHint=cache-aware, mainCacheTtl=1h:maskOnCold=on, mainCacheTtl=1h:freshOnCold=advise, foldHint=cache-aware:maskOnCold=on, foldHint=cache-aware:freshOnCold=advise, maskOnCold=on:freshOnCold=advise):
+
+| term | coef | se |
+| --- | --- | --- |
+| (intercept) | 8.00 | – |
+| warmPolicy=orchestrator-aware | 8.00 | – |
+
+
+| arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `+++++` | 1 | 0.50 | 16.00 | 16.00 – 16.00 | – | – | – |
+| `-----` | 1 | 0.50 | 8.00 | 8.00 – 8.00 | – | – | – |
+
+### Design v2 (6 factors, baseline `------`, 5 units with ≥ 0.05 active h)
+
+Effect = mean $/active hour of the units at the high level − at the low level (bootstrap 95% CI); negative is cheaper.
+
+| factor | low → high | n low | n high | Δ $/h | 95% CI |
+| --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 2 | 3 | 8.57 | -2.87 – 20.00 |
+| mainCacheTtl | 5m → 1h | 2 | 3 | 8.57 | -2.87 – 20.00 |
+| foldHint | fixed → cache-aware | 2 | 3 | 8.57 | -2.87 – 20.00 |
+| maskOnCold | off → on | 2 | 3 | 8.57 | -2.87 – 20.00 |
+| freshOnCold | off → advise | 2 | 3 | 8.57 | -2.87 – 20.00 |
+| delegationRule | off → on | 2 | 3 | 8.57 | -2.87 – 20.00 |
+
+OLS with two-way interactions (n 5, df 3, R² 0.31; aliased or not estimable: mainCacheTtl=1h, foldHint=cache-aware, maskOnCold=on, freshOnCold=advise, delegationRule=on, warmPolicy=orchestrator-aware:mainCacheTtl=1h, warmPolicy=orchestrator-aware:foldHint=cache-aware, warmPolicy=orchestrator-aware:maskOnCold=on, warmPolicy=orchestrator-aware:freshOnCold=advise, warmPolicy=orchestrator-aware:delegationRule=on, mainCacheTtl=1h:foldHint=cache-aware, mainCacheTtl=1h:maskOnCold=on, mainCacheTtl=1h:freshOnCold=advise, mainCacheTtl=1h:delegationRule=on, foldHint=cache-aware:maskOnCold=on, foldHint=cache-aware:freshOnCold=advise, foldHint=cache-aware:delegationRule=on, maskOnCold=on:freshOnCold=advise, maskOnCold=on:delegationRule=on, freshOnCold=advise:delegationRule=on):
+
+| term | coef | se |
+| --- | --- | --- |
+| (intercept) | 14.62 | 5.67 |
+| warmPolicy=orchestrator-aware | 8.57 | 7.32 |
+
+
+| arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `++++++` | 3 | 1.37 | 23.93 | 18.97 – 30.00 | -23.93 | 3.16 | 12% |
+| `------` | 2 | 1.58 | 17.05 | 8.00 – 21.23 | -17.05 | 4.80 | 88% |
+
+### Design v3 (6 factors, baseline `------`, 1 units with ≥ 0.05 active h)
+
+Effect = mean $/active hour of the units at the high level − at the low level (bootstrap 95% CI); negative is cheaper.
+
+| factor | low → high | n low | n high | Δ $/h | 95% CI |
+| --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 1 | 0 | – | – |
+| mainCacheTtl | 5m → 1h | 1 | 0 | – | – |
+| foldHint | fixed → cache-aware | 1 | 0 | – | – |
+| maskOnCold | off → on | 1 | 0 | – | – |
+| freshOnCold | off → advise | 1 | 0 | – | – |
+| delegationRule | off → on | 1 | 0 | – | – |
+
+OLS: too few units.
+
+
+| arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `------` | 1 | 0.50 | 16.00 | 16.00 – 16.00 | – | – | – |
+
+### Design v4 (3 factors, baseline `---`, 9 units with ≥ 0.05 active h)
+
+Effect = mean $/active hour of the units at the high level − at the low level (bootstrap 95% CI); negative is cheaper.
+
+| factor | low → high | n low | n high | Δ $/h | 95% CI |
+| --- | --- | --- | --- | --- | --- |
+| warmPolicy | native → orchestrator-aware | 5 | 4 | 8.37 | 4.38 – 12.49 |
+| mainCacheTtl | 5m → 1h | 5 | 4 | 1.89 | -5.20 – 9.09 |
+| maskOnCold | off → on | 7 | 2 | 9.84 | 6.19 – 13.49 |
+
+OLS with two-way interactions (n 9, df 5, R² 0.84; aliased or not estimable: warmPolicy=orchestrator-aware:mainCacheTtl=1h, warmPolicy=orchestrator-aware:maskOnCold=on, mainCacheTtl=1h:maskOnCold=on):
+
+| term | coef | se |
+| --- | --- | --- |
+| (intercept) | 11.85 | 1.59 |
+| warmPolicy=orchestrator-aware | 4.15 | 2.51 |
+| mainCacheTtl=1h | -3.05 | 2.51 |
+| maskOnCold=on | 9.05 | 3.72 |
+
+
+| arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `+++` | 2 | 1.00 | 22.00 | 20.00 – 24.00 | -22.00 | 1.41 | 0% |
+| `+--` | 2 | 1.00 | 16.00 | 16.00 – 16.00 | -16.00 | 0.00 | 0% |
+| `-+-` | 2 | 1.00 | 8.80 | 8.00 – 9.60 | -8.80 | 0.56 | 94% |
+| `---` | 3 | 1.37 | 11.49 | 8.00 – 15.55 | -11.49 | 1.74 | 6% |
+
+## Delegation & routing
+
+| metric | value |
+| --- | --- |
+| spawned tasks (spot-check reviews; unresolved cards) | 24 (2; 1) |
+| child sessions' share of $ | 15% |
+| child sessions' share of requests | 25% |
+| Qwen share of tasks (SC3: ≥ 30%) | 62% |
+| escalations | 2 |
+| correctives | 1 |
+| checks (failed) | 3 (1) |
+| reroutes | 1 |
+| kinds | implement 21 |
+
+### By tier
+
+Spot-check reviews and spawns whose card files did not resolve (`unresolved`) are left out of every table below: they say nothing about routing quality.
+
+| tier | tasks | share | accepted/judged | acceptance | $ | $/accepted |
+| --- | --- | --- | --- | --- | --- | --- |
+| qwen | 13 | 62% | 8/13 | 62% | 2.80 | 0.35 |
+| T1 | 4 | 19% | 2/3 | 67% | 2.80 | 1.40 |
+| T2 | 2 | 10% | 2/2 | 100% | 3.50 | 1.75 |
+| haiku | 2 | 10% | 1/2 | 50% | 0.60 | 0.60 |
+
+### By profile and tier
+
+Profile = the card kind; acceptance = accepted ÷ judged; $/accepted = subtree cost of the judged tasks ÷ accepted ones; escalations = re-spawns one level up (D7) from this cell's failed tasks; checks = the card's check ran after the child reported.
+
+| profile | tier | tasks | accepted | partial | rejected | unjudged | acceptance | $/accepted | escalations | checks passed |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| (unknown) | qwen | 0 | 0 | 0 | 0 | 0 | – | – | 1 | – |
+| implement | qwen | 13 | 8 | 1 | 4 | 0 | 62% | 0.35 | 0 | 1/2 (50%) |
+| implement | haiku | 2 | 1 | 1 | 0 | 0 | 50% | 0.60 | 0 | – |
+| implement | T1 | 4 | 2 | 0 | 1 | 1 | 67% | 1.40 | 0 | – |
+| implement | T2 | 2 | 2 | 0 | 0 | 0 | 100% | 1.75 | 1 | – |
+
+### Randomized routing (spawns the router sent to qwen)
+
+Spawns whose router base was qwen, by the tier they actually ran on (implement); 95% bootstrap CIs from 5 judged tasks on. **Causal only for the random subset**: comparing random tiers with one another is a randomized comparison; the router row (the router's own qwen tasks of the same profiles: assigned = router, or absent in old lines) was chosen, not randomized, so it can differ in task difficulty.
+
+| assigned | actual tier | tasks | accepted/judged | acceptance (95% CI) | $/accepted (95% CI) |
+| --- | --- | --- | --- | --- | --- |
+| router | qwen | 9 | 6/9 | 67% (33% – 89%) | 0.40 (0.24 – 0.88) |
+| random | qwen | 4 | 2/4 | 50% | 0.20 |
+| random | haiku | 2 | 1/2 | 50% | 0.60 |
+| random | T1 | 2 | 2/2 | 100% | 0.90 |
+
+1 randomized spawn(s) with another router base are not compared.
+
+### Spot checks
+
+An accepted task re-judged by a review child: agreement = the original verdict (at the draw) and the review verdict both accept or both do not.
+
+| requested | reviewed (judged) | agree | agreement | pending |
+| --- | --- | --- | --- | --- |
+| 3 | 2 | 1 | 50% | 1 |
+
+### Child models
+
+| model | requests | $ |
+| --- | --- | --- |
+| qwen | 22 | 18.50 |
+| claude-sonnet | 7 | 3.00 |
+| claude-opus | 2 | 0.60 |
+
+### Escalations
+
+| from | to | n |
+| --- | --- | --- |
+| qwen | T2 | 1 |
+| cloud | T1 | 1 |
+
+### Reroutes
+
+| from | to | reason | n |
+| --- | --- | --- | --- |
+| qwen | T1 | offline | 1 |
+
+### Runaway alerts (limits: 150 requests, $10 per child session)
+
+| session | task | requests | $ | why |
+| --- | --- | --- | --- | --- |
+| runaway | t-run | 1 | 11.00 | $11.00 > $10 |
+
+## Guards
+
+| design | arm | units | peeks after mask /unit | corrections /unit | rating (n) | accepted/judged |
+| --- | --- | --- | --- | --- | --- | --- |
+| v1 | `+++++` | 1 | 0.00 | 0.00 | – | 0/0 |
+| v1 | `-----` | 1 | 0.00 | 0.00 | – | 0/0 |
+| v2 | `++++++` | 3 | 0.33 | 1.00 | 3.0 (1) | 1/2 |
+| v2 | `------` | 2 | 0.00 | 0.00 | 5.0 (1) | 13/20 |
+| v3 | `------` | 1 | 0.00 | 0.00 | – | 0/0 |
+| v4 | `+++` | 2 | 0.00 | 0.00 | – | 0/0 |
+| v4 | `+--` | 2 | 0.00 | 0.00 | – | 0/0 |
+| v4 | `-+-` | 2 | 0.00 | 0.00 | – | 0/0 |
+| v4 | `---` | 3 | 0.00 | 0.00 | – | 0/0 |
+
+Kill switch (baseline per design: v1 `-----`, v2 `------`, v3 `------`, v4 `---`; ≥ 2 units; acceptance worse by > 20%, peeks/corrections more by > 0.5/0.5 per unit, rating lower by > 0.5). Written to experiments/state.json only with `pi-analyse --apply`.
+
+- disable `++++++`: corrections 1.00/session vs baseline 0.00, more by more than 0.5; rating 3.0 vs baseline 5.0, lower by more than 0.5 after 3 sessions
+
+## Data quality
+
+Period: 2026-10-05 – 2026-10-05; lines from 2026-10-05T10:00:00.000Z to 2026-10-05T23:50:00.000Z.
+
+| log | lines | first | last | schema versions (v: lines) |
+| --- | --- | --- | --- | --- |
+| meter | 125 | 2026-10-05T10:00:00.000Z | 2026-10-05T23:50:00.000Z | v0: 8, v1: 117 |
+| outcomes | 56 | 2026-10-05T11:01:00.000Z | 2026-10-05T12:34:00.000Z | v1: 56 |
+| assignments | 19 | 2026-10-05T09:59:00.000Z | 2026-10-05T23:39:00.000Z | v0: 2, v1: 17 |
+| guards | 6 | 2026-10-05T11:00:00.000Z | 2026-10-05T12:10:00.000Z | v1: 6 |
+
+Unparsable lines: meter/2026-10.jsonl 2
+
+Root sessions without an arm: 2 (1.40 $, 1% of cost; 1 of them have an assignment row), e.g. bare1, bare2.
+
+| unjoinable | n | examples |
+| --- | --- | --- |
+| meter child lines whose parent session is unknown | 2 | gone |
+| child sessions without a spawn event (their $ is in no tier) | 1 | orphan |
+| spawns without a child session id | 0 | – |
+| spawns whose child session has no meter line | 1 | ku1 |
+| task events without a spawn | 2 | gone-task, nospawn |
+| guard events of sessions without meter lines | 1 | ghost |
+| assignments of sessions without meter lines | 1 | ghost2 |
+
+Pi share of the account quota (rises between pi requests < 30 min apart ÷ all rises seen per window; other use during pi activity counts as pi):
+
+| window | pi points | account points | pi share |
+| --- | --- | --- | --- |
+| 5 h | 3 | 3 | 100% |
+| 7 d | 0 | 7 | 0% |
+
+Contract (`pi-analyse --check`): 
+
+- meter: 1 line(s) miss `provider` (every meter line; e.g. m1 @ 2026-10-05T10:40:00.000Z)
+- meter: 3 line(s) miss `arm` (the session's root has an experiment assignment; e.g. bare2 @ 2026-10-05T23:40:00.000Z)

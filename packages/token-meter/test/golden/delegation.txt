@@ -1,0 +1,82 @@
+| metric | value |
+| --- | --- |
+| spawned tasks (spot-check reviews; unresolved cards) | 24 (2; 1) |
+| child sessions' share of $ | 15% |
+| child sessions' share of requests | 25% |
+| Qwen share of tasks (SC3: ≥ 30%) | 62% |
+| escalations | 2 |
+| correctives | 1 |
+| checks (failed) | 3 (1) |
+| reroutes | 1 |
+| kinds | implement 21 |
+
+### By tier
+
+Spot-check reviews and spawns whose card files did not resolve (`unresolved`) are left out of every table below: they say nothing about routing quality.
+
+| tier | tasks | share | accepted/judged | acceptance | $ | $/accepted |
+| --- | --- | --- | --- | --- | --- | --- |
+| qwen | 13 | 62% | 8/13 | 62% | 2.80 | 0.35 |
+| T1 | 4 | 19% | 2/3 | 67% | 2.80 | 1.40 |
+| T2 | 2 | 10% | 2/2 | 100% | 3.50 | 1.75 |
+| haiku | 2 | 10% | 1/2 | 50% | 0.60 | 0.60 |
+
+### By profile and tier
+
+Profile = the card kind; acceptance = accepted ÷ judged; $/accepted = subtree cost of the judged tasks ÷ accepted ones; escalations = re-spawns one level up (D7) from this cell's failed tasks; checks = the card's check ran after the child reported.
+
+| profile | tier | tasks | accepted | partial | rejected | unjudged | acceptance | $/accepted | escalations | checks passed |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| (unknown) | qwen | 0 | 0 | 0 | 0 | 0 | – | – | 1 | – |
+| implement | qwen | 13 | 8 | 1 | 4 | 0 | 62% | 0.35 | 0 | 1/2 (50%) |
+| implement | haiku | 2 | 1 | 1 | 0 | 0 | 50% | 0.60 | 0 | – |
+| implement | T1 | 4 | 2 | 0 | 1 | 1 | 67% | 1.40 | 0 | – |
+| implement | T2 | 2 | 2 | 0 | 0 | 0 | 100% | 1.75 | 1 | – |
+
+### Randomized routing (spawns the router sent to qwen)
+
+Spawns whose router base was qwen, by the tier they actually ran on (implement); 95% bootstrap CIs from 5 judged tasks on. **Causal only for the random subset**: comparing random tiers with one another is a randomized comparison; the router row (the router's own qwen tasks of the same profiles: assigned = router, or absent in old lines) was chosen, not randomized, so it can differ in task difficulty.
+
+| assigned | actual tier | tasks | accepted/judged | acceptance (95% CI) | $/accepted (95% CI) |
+| --- | --- | --- | --- | --- | --- |
+| router | qwen | 9 | 6/9 | 67% (33% – 89%) | 0.40 (0.24 – 0.88) |
+| random | qwen | 4 | 2/4 | 50% | 0.20 |
+| random | haiku | 2 | 1/2 | 50% | 0.60 |
+| random | T1 | 2 | 2/2 | 100% | 0.90 |
+
+1 randomized spawn(s) with another router base are not compared.
+
+### Spot checks
+
+An accepted task re-judged by a review child: agreement = the original verdict (at the draw) and the review verdict both accept or both do not.
+
+| requested | reviewed (judged) | agree | agreement | pending |
+| --- | --- | --- | --- | --- |
+| 3 | 2 | 1 | 50% | 1 |
+
+### Child models
+
+| model | requests | $ |
+| --- | --- | --- |
+| qwen | 22 | 18.50 |
+| claude-sonnet | 7 | 3.00 |
+| claude-opus | 2 | 0.60 |
+
+### Escalations
+
+| from | to | n |
+| --- | --- | --- |
+| qwen | T2 | 1 |
+| cloud | T1 | 1 |
+
+### Reroutes
+
+| from | to | reason | n |
+| --- | --- | --- | --- |
+| qwen | T1 | offline | 1 |
+
+### Runaway alerts (limits: 150 requests, $10 per child session)
+
+| session | task | requests | $ | why |
+| --- | --- | --- | --- | --- |
+| runaway | t-run | 1 | 11.00 | $11.00 > $10 |

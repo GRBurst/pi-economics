@@ -1,0 +1,75 @@
+| metric | value |
+| --- | --- |
+| total $ | 145.20 |
+| requests (warming) | 123 (1) |
+| errors | 1 |
+| root sessions | 20 |
+| active hours | 9.50 |
+| $/active hour (95% CI) | 15.25 (11.96 – 18.27) |
+| q5h %/active hour | 0.32 |
+| q7d %/active hour | 0.00 |
+| $/accepted task (accepted/judged) | 0.75 (14/22) |
+
+### By model
+
+| model | requests | $ | share | $/active h |
+| --- | --- | --- | --- | --- |
+| claude-opus | 86 | 99.70 | 69% | 10.49 |
+| claude-sonnet | 15 | 27.00 | 19% | 2.84 |
+| qwen | 22 | 18.50 | 13% | 1.95 |
+
+### Splits
+
+Splits overlap (a rewrite can follow a fold); fold and cold-resume rows charge the 3 requests from the event on; cache rewrite = cache-write $ of every request but a session's first, split from the line's cost by Anthropic price ratios.
+
+| split | n | $ | share | $/active h |
+| --- | --- | --- | --- | --- |
+| cache rewrite | 81 | 26.33 | 18% | 2.77 |
+| warming | 1 | 0.50 | 0% | 0.05 |
+| after folds | 2 | 2.40 | 2% | 0.25 |
+| after cold resumes | 10 | 38.80 | 27% | 4.08 |
+
+### Token components (≈, by Anthropic price ratios)
+
+| component | $ |
+| --- | --- |
+| input | 2.80 |
+| cacheRead | 33.95 |
+| cacheWrite | 38.39 |
+| output | 70.06 |
+| unallocated | 0.00 |
+
+### Fold ledger (Claude models)
+
+Per detected fold (a non-warming request whose prompt, input + cacheRead + cacheWrite, fell below 80% of the previous one's): R = tokens removed; K ≈ the first request's cacheWrite minus the session's typical write (median of its non-first, non-fold, non-cold turns), 0 for a fold after a cold gap; n = requests after the fold until the session ends or the next cold gap (≥ 5 min, ≥ 60 min in a mainCacheTtl 1h arm; warming counts); r and w = the model's cache read and write price per token (0.1 and 1.25 × the input price recovered from the lines' costUsd). **Net = n·R·r − K·(w − r)** = cache-read $ saved − rewrite $ paid. Counterfactual only: it assumes the fold changed nothing else (output, later tool use, task path) and that an unfolded prompt would have kept being read at r; folds overlap in time but each is valued alone.
+
+| metric | value |
+| --- | --- |
+| folds (after a cold gap) | 2 (0) |
+| cache-read $ saved | 15.1704 |
+| rewrite $ paid | 7.2054 |
+| net $ | 7.9650 |
+| share with net < 0 | 0% (0/2) |
+
+By fold depth K/R (rewritten tokens per token removed; break-even ≈ n/11.5):
+
+| K/R | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
+| --- | --- | --- | --- | --- | --- |
+| < 0.25 | 2 | 15.1704 | 7.2054 | 7.9650 | 0% |
+| 0.25 – 0.5 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
+| 0.5 – 1 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
+| 1 – 2 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
+| ≥ 2 | 0 | 0.0000 | 0.0000 | 0.0000 | – |
+
+By design and foldHint level (v2 and v3 differ in what cache-aware means: never pooled):
+
+| group | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
+| --- | --- | --- | --- | --- | --- |
+| v2 cache-aware | 1 | 10.1136 | 3.5708 | 6.5428 | 0% |
+| v4 – | 1 | 5.0568 | 3.6346 | 1.4222 | 0% |
+
+By model:
+
+| model | folds | cache-read $ saved | rewrite $ paid | net $ | share net < 0 |
+| --- | --- | --- | --- | --- | --- |
+| claude-opus | 2 | 15.1704 | 7.2054 | 7.9650 | 0% |

@@ -1,0 +1,15 @@
+| design | arm | units | peeks after mask /unit | corrections /unit | rating (n) | accepted/judged |
+| --- | --- | --- | --- | --- | --- | --- |
+| v1 | `+++++` | 1 | 0.00 | 0.00 | – | 0/0 |
+| v1 | `-----` | 1 | 0.00 | 0.00 | – | 0/0 |
+| v2 | `++++++` | 3 | 0.33 | 1.00 | 3.0 (1) | 1/2 |
+| v2 | `------` | 2 | 0.00 | 0.00 | 5.0 (1) | 13/20 |
+| v3 | `------` | 1 | 0.00 | 0.00 | – | 0/0 |
+| v4 | `+++` | 2 | 0.00 | 0.00 | – | 0/0 |
+| v4 | `+--` | 2 | 0.00 | 0.00 | – | 0/0 |
+| v4 | `-+-` | 2 | 0.00 | 0.00 | – | 0/0 |
+| v4 | `---` | 3 | 0.00 | 0.00 | – | 0/0 |
+
+Kill switch (baseline per design: v1 `-----`, v2 `------`, v3 `------`, v4 `---`; ≥ 2 units; acceptance worse by > 20%, peeks/corrections more by > 0.5/0.5 per unit, rating lower by > 0.5). Written to experiments/state.json only with `pi-analyse --apply`.
+
+- disable `++++++`: corrections 1.00/session vs baseline 0.00, more by more than 0.5; rating 3.0 vs baseline 5.0, lower by more than 0.5 after 3 sessions
