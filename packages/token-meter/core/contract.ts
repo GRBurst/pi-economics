@@ -45,7 +45,7 @@ const leverStates = (v: unknown) => obj(v) && Object.values(v as object).every((
 const METER: Rule[] = [
   versioned,
   ...requests([
-    ...every({ ts: time, sessionId: str, provider: str, model: str, kind: oneOf("turn", "warming", "nested"), status: (v) => numb(v) || v === "error" }, "every meter line"),
+    ...every({ ts: time, sessionId: str, provider: str, model: str, kind: oneOf("turn", "warming", "nested", "compaction"), status: (v) => numb(v) || v === "error" }, "every meter line"),
     // Meter line v2 (design §5.2): the retry extension's counts were on every line up to v1; native ones are present iff observed.
     ...every({ retries: numb, retryWaitMs: numb }, "every meter line up to v1", (l) => !(Number.isInteger(l.v) && l.v >= 2)),
     ...every({ billing: oneOf("subscription", "api", "free", "local") }, "every meter line from v2", (l) => Number.isInteger(l.v) && l.v >= 2),

@@ -582,3 +582,35 @@ test("levers: infinite-context's settings entry on the branch → pi.compaction.
   // the other compaction levers are still recorded (inert while IC is loaded; the analyser skips them)
   assert.deepEqual(after.levers["pi.compaction.reserveTokens"], { v: 16384, s: "fixed" });
 });
+
+// --- M3b: compaction metering. pi 1.4's compact() calls the model outside the agent loop: no before_provider_request,
+// after_provider_response or message_end; only session_compact (its compactionEntry.usage) shows the request. ---
+const compactEvent = (extra: object = {}) => ({ type: "session_compact", reason: "threshold", fromExtension: false,
+  compactionEntry: { type: "compaction", id: "c1", summary: "s", firstKeptEntryId: "e1", tokensBefore: 150000, usage }, ...extra });
+
+test("compaction: session_compact with usage → one kind compaction line, the session's model, usage and cost, no timing or retries", () => {
+  const plans = parsePlans({ anthropic: { billing: "subscription", windows: ["5h"] } });
+  const { f, lines } = setup({ settings: { ...defaults(), plans }, arm: () => "+-+--" });
+  const ctx = fakeCtx("s1", { model: { provider: "anthropic", id: "opus" }, file: "/x/sessions/subagents/p/2026_s1.jsonl" });
+  turnSend(f, ctx); f.fire("message_end", assistant(), ctx);
+  f.fire("session_compact", compactEvent(), ctx);
+  const [, c, ...rest] = lines();
+  assert.equal(rest.length, 0);
+  assert.deepEqual(c, { v: 2, ts: new Date(T0).toISOString(), sessionId: "s1", parentSessionId: "p", arm: "+-+--", provider: "anthropic",
+    model: "opus", kind: "compaction", billing: "subscription", input: 10, cacheRead: 100, cacheWrite: 20, output: 5, reasoning: 3,
+    costUsd: 0.25, status: 200 });
+});
+
+test("compaction: an extension's summary has an unknown model; no usage → no line; the next turn keeps its own timing", () => {
+  const { f, clock, lines } = setup();
+  const ctx = fakeCtx("s1", { model: { provider: "anthropic", id: "opus" } });
+  f.fire("session_compact", compactEvent({ fromExtension: true }), ctx);
+  f.fire("session_compact", compactEvent({ compactionEntry: { type: "compaction", summary: "s" } }), ctx);
+  turnSend(f, ctx);
+  clock.t += 700;
+  f.fire("session_compact", compactEvent(), ctx); // a compaction while a turn is out (not pi 1.4, but harmless)
+  f.fire("message_end", assistant(), ctx);
+  const ls = lines();
+  assert.deepEqual(ls.map((l) => [l.kind, l.provider, l.model]), [["compaction", "unknown", "unknown"], ["compaction", "anthropic", "opus"], ["turn", "anthropic", "opus"]]);
+  assert.equal(ls[2].durationMs, 700);
+});

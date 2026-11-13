@@ -13,7 +13,7 @@ export type Usage = { input: number; cacheRead: number; cacheWrite: number;
  * Every optional measurement is written iff given: absent = unknown, never 0 (design §5.2).
  */
 export type LineInput = { now: Date; sessionId: string; parentSessionId?: string; arm?: string; design?: string;
-  provider: string; model: string; effort?: string; kind: "turn" | "warming" | "nested"; billing?: Billing;
+  provider: string; model: string; effort?: string; kind: "turn" | "warming" | "nested" | "compaction"; billing?: Billing;
   usage?: Usage; status: number | "error"; retries?: number; retryWaitMs?: number; snap?: Snapshot;
   errorMessage?: string; durationMs?: number; ttftMs?: number };
 type LineBase = { ts: string; sessionId: string; parentSessionId?: string; arm?: string;

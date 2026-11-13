@@ -180,6 +180,19 @@ export function install(pi: PiLike, deps: Deps): void {
     }
   });
 
+  // M3b (design §8.1, plan D5): pi 1.4 compact() calls the session model outside the agent loop (no provider
+  // request/response or message_end events), so session_compact is the one sign of that request: one line from the
+  // entry usage, no timing or retries (not observed). An extension summary may use any model: unknown.
+  pi.on("session_compact", (e, ctx) => {
+    const sid = sidOf(ctx);
+    const usage = mapUsage(e?.compactionEntry?.usage);
+    if (sid === undefined || !usage) return;
+    const model = e?.fromExtension === true ? undefined : safe(() => ctx.model);
+    const known = typeof model?.provider === "string" && typeof model?.id === "string";
+    write({ ...common(sid, ctx), now: now(), provider: known ? model.provider : "unknown", model: known ? model.id : "unknown",
+      kind: "compaction", status: 200, usage });
+  });
+
   pi.on("context", (_e, ctx) => {
     const sid = sidOf(ctx);
     if (sid !== undefined) turnSend.add(sid); // returns nothing: the messages stay as they are
