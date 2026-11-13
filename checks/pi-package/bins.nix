@@ -29,7 +29,8 @@ pkgs.runCommand "bins-smoke" {nativeBuildInputs = [pkgs.nodejs pkgs.jq pkgs.core
   run g/bin/meter-report --dir agent/meter >mr.out 2>&1 || { cat mr.out >&2; fail "meter-report failed"; }
   rc=0
   run g/bin/pi-analyse --check --agent-dir "$PWD/agent" >pa.out 2>&1 || rc=$?
-  case $rc in 0 | 1) ;; *) cat pa.out >&2; fail "pi-analyse exited $rc" ;; esac
+  # an empty agent dir has nothing to complain about: 0, and 1 (a SyntaxError on a missing export) is a broken CLI
+  case $rc in 0) ;; *) cat pa.out >&2; fail "pi-analyse exited $rc" ;; esac
   if grep -qF 'ERR_' pa.out; then cat pa.out >&2; fail "pi-analyse hit a node error"; fi
   # README's statement (E20): a copy under node_modules cannot run
   mkdir -p nm/node_modules
