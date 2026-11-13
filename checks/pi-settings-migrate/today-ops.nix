@@ -1,7 +1,8 @@
 # Today's piSettings edits as ops per contributor (spec §5.4): what the host's
 # pi-settings-migrate.nix does at f6a3c81. withWarming is with cacheLifecycle
-# enabled (the host's `idle` flag). M4 compares ops.cacheLifecycle and M6
-# ops.retry with these.
+# enabled (the host's `idle` flag). M4 compares ops.cacheLifecycle with these;
+# the `retry` ops stay as op-engine fixtures against ./legacy.nix (the retry
+# component, whose ops M6 compared, left the flake: redesign D19).
 let
   removePackage = value: {
     op = "removeWhere";
