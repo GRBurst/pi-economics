@@ -67,3 +67,34 @@ test("property (B3): growth ≤ cacheWrite, 0 ≤ miss ≤ the previous prompt; 
     }
   }
 });
+
+// ---- causes (T2a.2: ttl) ----
+
+const HOUR = 60 * MIN;
+
+test("B3: a 6-minute gap at the 5-minute TTL loses the prefix: miss = the previous prompt, cause ttl", () => {
+  const steps = cacheSteps([R(0, 0, 1000), R(1, 1000, 200), R(7, 0, 1200)], ttl5m, noEvent);
+  assert.deepEqual(steps.map((s) => [s.miss, s.cause]), [[0, undefined], [0, undefined], [1200, "ttl"]]);
+  assert.equal(steps[2].growth, 0, "a rewrite is not growth");
+});
+
+test("B3: the TTL in force is the previous request's: a 6-minute gap under a 1 h TTL is no ttl miss; the TTL itself is not over it", () => {
+  const branch = [R(0, 0, 1000), R(6, 0, 1000)];
+  assert.equal(cacheSteps(branch, () => HOUR, noEvent)[1].cause, "other", "a miss without a reason the analyser can name");
+  assert.equal(cacheSteps([R(0, 0, 1000), R(5, 0, 1000)], ttl5m, noEvent)[1].cause, "other", "a gap of exactly the TTL has not outlived it");
+  const seen: unknown[] = [];
+  cacheSteps([R(0, 0, 1000, { model: "a" }), R(9, 0, 1000, { model: "b" })], (l) => (seen.push(l.model), 5 * MIN), noEvent);
+  assert.deepEqual(seen, ["a"], "ttlMs is asked about the request before the gap, not the one after");
+});
+
+test("B3: a request that read its prefix has no cause, whatever the gap", () => {
+  const steps = cacheSteps([R(0, 0, 1000), R(30, 1000, 50)], ttl5m, noEvent);
+  assert.deepEqual([steps[1].miss, steps[1].cause], [0, undefined], "the provider kept the cache: nothing was lost");
+});
+
+test("B3: a warming request refreshes the prefix and takes part in the gap", () => {
+  const warmed = cacheSteps([R(0, 0, 1000), R(4, 1000, 0, { kind: "warming" }), R(8, 1000, 50)], ttl5m, noEvent);
+  assert.deepEqual(warmed.map((s) => [s.i, s.miss, s.cause]), [[0, 0, undefined], [2, 0, undefined]]);
+  const cold = cacheSteps([R(0, 0, 1000), R(8, 0, 1050)], ttl5m, noEvent);
+  assert.deepEqual([cold[1].miss, cold[1].cause], [1000, "ttl"], "the same request without the warm in between");
+});
