@@ -118,3 +118,12 @@ test("LOGS.md: the cache-miss causes and the Levers section are described", () =
   assert.ok(cache.includes("durationMs"), "the gap from send to send (ts − durationMs) not described");
   assert.ok(md.includes("- **Levers**"), "no Levers bullet in the Analysis section");
 });
+
+// M3b review F3, F5, F11: the levers' and the hash's known limits are stated where a reader of the raw lines looks.
+test("LOGS.md: the limits of systemHash, pi.defaultThinkingLevel and the infinite-context evidence are stated", () => {
+  const row = md.split("\n").find((l) => l.startsWith("| `systemHash` |")) ?? "";
+  for (const s of ["mid-conversation", "forceSystemPrompt"]) assert.ok(row.includes(s), `systemHash row: ${s}`);
+  const levers = md.slice(md.indexOf("### Levers lines"), md.indexOf("## task-router/"));
+  for (const s of ["configured default", "`effort`", "resumed in a pi\nwithout infinite-context"]) assert.ok(levers.includes(s), `Levers lines: ${s}`);
+  assert.ok(md.slice(md.indexOf("### Compaction lines"), md.indexOf("### Levers lines")).includes("virtual model"), "Compaction lines: virtual model");
+});

@@ -113,7 +113,7 @@ largest (`rawRatelimit` is dropped first).
 | `cacheWrite1h` | number | when the provider reports the split (Anthropic) | the part of `cacheWrite` written with the 1-hour TTL |
 | `durationMs` | int (ms) | turn lines whose request the session sent | the session's last own provider request (a `before_provider_request` right after the agent loop's `context` event) to this `message_end`; a resend restarts it, a warm's or a compaction's send (no `context` event) does not |
 | `ttftMs` | int (ms) | when a stream event followed that request | the request to its first `provider_stream_event` |
-| `systemHash` | 16 hex digits | turn lines whose send ran pi's `context_with_system` (pi ≥ 1.4) | the first 16 hex digits of a sha256 over the system state the session sent: system prompt, prompt sections, tool list (name, description, parameters), replayed from that event's system messages as pi-ai does; a change between two requests of a branch is the cache-miss cause `prefix` (*Analysis: cache misses*). Neither the prompt nor the tools are written |
+| `systemHash` | 16 hex digits | turn lines whose send ran pi's `context_with_system` (pi ≥ 1.4) | the first 16 hex digits of a sha256 over the system state the session sent: system prompt, prompt sections, tool list (name, description, parameters), replayed from that event's system messages as pi-ai does; a change between two requests of a branch is the cache-miss cause `prefix` (*Analysis: cache misses*). Neither the prompt nor the tools are written. Limits: it is the state as pi-ai folds the system messages; a model that takes system messages mid-conversation (the current Claude models on the `anthropic` provider) gets a later section or tool change appended after the cached prefix, which loses nothing, yet the hash changes; a prompt set by `forceSystemPrompt` (applied after `context_with_system`) is not seen |
 | `errorKind` | `context_overflow` \| `rate_limit` \| `other` | `status: "error"` | class of the error message: `context_overflow` exactly when pi 1.4 takes it for one (pi-ai's overflow patterns, mirrored; throttling and rate-limit texts never are), then a leading 429, a throttling or a rate-limit text → `rate_limit`; else `other` (an overloaded server too). The message itself is never written |
 | `retries`, `retryWaitMs` | int, int (ms) | turn lines | pi's native retry: `retries` = 1 when this request is pi's resend of the session's previous request that failed (an `error` line, not a context overflow, with no other message and no end of the run in between), else 0; `retryWaitMs` = that failure's `message_end` to this request. Absent on warming lines (pi never resends a warm) |
 
@@ -156,7 +156,7 @@ pi's own compaction (at the threshold, after a context overflow, `/compact`) ask
 agent loop: no `before_provider_request`, `after_provider_response` or `message_end` sees that request. Its
 `session_compact` event carries the compaction entry with the request's `usage` (pi 1.4), and the meter writes one
 `kind: "compaction"` line from it: `provider`/`model` = the session's model at that moment (`unknown` when an extension
-made the summary, `fromExtension`), `status` 200, tokens and `costUsd` from the entry; no `durationMs`, `ttftMs`,
+made the summary, `fromExtension`; on a virtual model the virtual one, though pi summarizes with the model it resolves to), `status` 200, tokens and `costUsd` from the entry; no `durationMs`, `ttftMs`,
 `retries` or quota fields (not observed). An entry without usage gets no line. With infinite-context loaded pi never
 compacts (it cancels every `session_before_compact`), so these lines come from sessions without it. The analysis counts them
 as requests (cost, *By model*, active hours, quota) but not as a step of the session's cached branch: the *Cache* branches take
@@ -200,11 +200,15 @@ the inherited selection): `pi.cacheWarming` (global only), `pi.promptCache` (`PI
 (per-model overrides of the session's model), `pi.branchSummary.{reserveTokens,skipPrompt}`, `pi.codemode.{mode,inlineBudget}`,
 `pi.transport`, `pi.retry.{enabled,maxRetries,baseDelayMs,maxAgentDelayMs}`, `pi.retry.provider.{timeoutMs,maxRetries,maxRetryDelayMs}` (`timeoutMs` defaults to `httpIdleTimeoutMs`, parsed as pi does; `"disabled"` or
 0 = 2147483647),
-`pi.images.{autoResize,blockImages}`, `pi.thinkingBudgets.{minimal,low,medium,high}`, `pi.defaultThinkingLevel` and
+`pi.images.{autoResize,blockImages}`, `pi.thinkingBudgets.{minimal,low,medium,high}`, `pi.defaultThinkingLevel` (the configured default
+for a new session: the session model's `modelThinkingLevels` entry, else `defaultThinkingLevel`, else `medium`; not the level the session
+ran with, which a resumed session's recorded level, `/thinking`, a CLI option or clamping to the model can change: that one is `effort` on
+the request lines, and an effective-level lever comes with the add-ons, M5b/M7b) and
 `pi.defaultTools.<tool>` (a boolean per pi tool: read, bash, powershell, edit, write, grep, find, ls, codemode, tool_search). A value pi
 would reject leaves its lever out (unknown); `cacheWarming` falls back to `streaming` as in pi. With infinite-context's settings entry on
 the session branch `pi.compaction.enabled` is `{ "v": false, "s": "ext" }` (it cancels every native compaction); the other
-`pi.compaction.*` levers are then inert and the analysis leaves them out. `pe`, `a`, `rb` and `tier` come with pi-economics'
+`pi.compaction.*` levers are then inert and the analysis leaves them out. The entry stays on the branch: a session resumed in a pi
+without infinite-context still reads `{ false, ext }`. `pe`, `a`, `rb` and `tier` come with pi-economics'
 experiment add-ons.
 
 A main session's first line (complete), a later line of it as the add-ons will write it and a child line under
@@ -351,9 +355,9 @@ table is; this is what a reader of the raw files needs to reproduce them).
   when there is none); guard events and verdicts are attributed the same way (spawn events by
   their `parentSessionId`) before they are keyed by arm. `--apply` writes one posterior per arm id,
   from the newest design.
-- **Fold ledger** (*Cost*, Claude models only). A **fold** = a non-warming request whose prompt
-  (`input + cacheRead + cacheWrite`) is below 80 % of the previous non-warming request's in the
-  same session (the rule of the *after folds* split). For each fold:
+- **Fold ledger** (*Cost*, Claude models only). A **fold** = a turn request whose prompt
+  (`input + cacheRead + cacheWrite`) is below 80 % of the previous turn request's in the
+  same session (compaction lines are no part of it, *Compaction lines*) (the rule of the *after folds* split). For each fold:
   - **R** = prompt before − prompt after (tokens removed);
   - **K** = the fold request's `cacheWrite` − the session's *typical write*, floored at 0; typical write
     = median `cacheWrite` of the session's non-first turns that are neither folds nor after a cold
@@ -385,7 +389,7 @@ table is; this is what a reader of the raw files needs to reproduce them).
   routing-quality figure.
 - **Randomized comparison.** See *Analysis: router observation*.
 - **Spot-check agreement.** See *Analysis: router observation*.
-- **Levers** (*Levers lines*). Units = the sessions with a meter line in the period, each with its last levers line up to the
+- **Levers** (*Levers lines*). Units = the sessions with a line of the meter log in the period (a request or a levers line), each with its last levers line up to the
   period's end (one written before the period counts: levers lines are written on change only). Per lever: the sessions, the
   distribution of `v` (the four most frequent values), the sources and the read-backs; refusal rate = refused ÷ assigned (a factor
   refused in > 20 % of its sessions points at a broken add-on). In a session where infinite-context disables compaction
@@ -411,7 +415,8 @@ request is no row of its own (it only refreshes the prefix).
   or is a main session's in an arm with `mainCacheTtl` = `1h`, else 5 min; `fold` — the prompt fell below 80 % of the previous
   request's (the fold rule of the other tables; real fold and compaction entries live in session files, not in the meter log);
   `model` — the model changed (its own cache); `prefix` — the system state changed: the line's `systemHash` differs from the last
-  one before it in the branch (system prompt, a prompt section or the tool list; v2 lines with `systemHash` only); `other` — a prefix
+  one before it in the branch (system prompt, a prompt section or the tool list; v2 lines with `systemHash` only): the system state changed,
+  which is no proof that the change cost the prefix (see the limits of `systemHash`); `other` — a prefix
   change inside the TTL that the meter lines do not show: a small fold or mask, an injected agent message, a system change on lines
   without a `systemHash`. A real cost (the lost prefix is paid at the write price), not noise; the session files hold the reason, the
   meter line does not.
@@ -535,7 +540,6 @@ every report section has data.
 
 - **Branch summaries** (`/tree` with a summary) are summary requests outside the agent loop like compactions; pi 1.4 keeps
   their usage on the branch-summary entry, which the meter does not read yet: they are not metered.
-
 - A **resumed** child session does not inherit its arm again (inheritance happens on the
   spawn event only), so its later meter lines miss `arm` (seen 2026-10-03).
 - Quota readings of parallel sessions interleave and are slightly stale; per-root and per-arm
