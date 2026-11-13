@@ -28,10 +28,10 @@ sets this option.
   at the unpatched input's entry file (probing a build output would be
   import-from-derivation); its message names `input`.
 - `forChildren` selects the extensions actor-subagents children load: their
-  link paths `<home>/<agentDir>/pi-economics/extensions/<name>`, sorted by
-  name, are the
-  internal option `childExtensions`, which pi-setup's economics bridge hands
-  to its `programs.pi.actorSubagents` for `actor-subagents/settings.json`.
+  link paths `<home>/<agentDir>/pi-economics/extensions/<name>`, in load
+  order (`loadOrder`), are the internal option `childExtensions`, which
+  pi-setup's economics bridge hands to its `programs.pi.actorSubagents` for
+  `actor-subagents/settings.json`.
 - An entry named `actor-subagents` (pi-setup's patched actor, forwarded by
   the bridge) is how the components learn the actor is there: without it
   `cacheLifecycle` and `experiments` warn.

@@ -56,7 +56,7 @@ in {
     };
     childNames = map baseNameOf c.programs.piEconomics.childExtensions;
   in
-    eq "children" childNames ["cache-lifecycle" "infinite-context" "token-meter"]
+    eq "children" childNames ["token-meter" "cache-lifecycle" "infinite-context"]
     ++ holds "no activation entry" (!(c.home.activation ? piSettingsMigrate))
     ++ eq "failed assertions" (failed "" c) []
     # (M6) The registry is no longer auto-discovered: one warning.

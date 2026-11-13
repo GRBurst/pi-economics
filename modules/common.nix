@@ -222,8 +222,9 @@ in {
       internal = true;
       description = ''
         The link path `<home>/<agentDir>/pi-economics/extensions/<name>` of every registry
-        entry with `forChildren`, sorted by name: what actor-subagents loads
-        into each child (its settings file's `childExtensions`).
+        entry with `forChildren`, in load order (`loadOrder`): what
+        actor-subagents loads into each child, in this order (its settings
+        file's `childExtensions`).
       '';
     };
 
@@ -316,9 +317,10 @@ in {
 
     # (M2.5) Link paths, not store paths: the extension resolves them in a child
     # process, and a reader can take each name from the last path component.
+    # (M6) In load order: the actor loads them in list order.
     programs.piEconomics.childExtensions =
       map (n: "${config.home.homeDirectory}/${cfg.agentDir}/${linkRel n}")
-      (lib.filter (n: cfg.extensions.${n}.forChildren) (lib.attrNames cfg.extensions));
+      (lib.filter (n: cfg.extensions.${n}.forChildren) orderedNames);
 
     # (M0.8)
     home.file = lib.mapAttrs' (name: e:

@@ -216,7 +216,7 @@ in {
         piSettings.enable = false;
       };
     };
-    kids = ["/home/u/.pi/agent/pi-economics/extensions/cache-lifecycle" "/home/u/.pi/agent/pi-economics/extensions/token-meter"];
+    kids = ["/home/u/.pi/agent/pi-economics/extensions/token-meter" "/home/u/.pi/agent/pi-economics/extensions/cache-lifecycle"];
   in
     eq "childExtensions" (pe c).childExtensions kids
     ++ eq "no actor-subagents/settings.json here" (fileAt ".pi/agent/actor-subagents/settings.json" c) null

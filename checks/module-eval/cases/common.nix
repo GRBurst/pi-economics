@@ -134,9 +134,10 @@ in {
     (lib.any (lib.hasPrefix "Conflicting managed target files: .pi/agent/pi-economics/extensions/ext-a") (failed "" c));
 
   # (M2.5) The registry's children: link paths of the forChildren entries,
-  # sorted by name, whatever else the registry holds; pi-setup's economics
-  # bridge hands the list to the actor's settings file (router-extraction
-  # design §7.2). Two children, out of name order, and one entry withheld.
+  # in load order (M6: the components first, then by name), whatever else
+  # the registry holds; pi-setup's economics bridge hands the list to the
+  # actor's settings file (router-extraction design §7.2). Children out of
+  # name order, and two entries withheld.
   child-extensions = lib.concatMap (dir: let
     c = hm.eval {
       programs.piEconomics = {
@@ -145,16 +146,21 @@ in {
           zeta = extA;
           alpha = extA // {description = "fixture alpha";};
           mid = extB;
+          infinite-context = extA;
+          experiments = extB;
+          cache-lifecycle = extA;
+          token-meter = extA;
         };
       };
     };
     kids = (pe c).childExtensions;
     targets = map (f: f.target) (lib.attrValues c.home.file);
+    names = ["token-meter" "cache-lifecycle" "infinite-context" "alpha" "zeta"];
   in
-    eq "childExtensions (${dir})" kids ["/home/u/${dir}/pi-economics/extensions/alpha" "/home/u/${dir}/pi-economics/extensions/zeta"]
+    eq "childExtensions (${dir})" kids (map (n: "/home/u/${dir}/pi-economics/extensions/${n}") names)
     ++ holds "every child is a link the registry renders (${dir})"
     (lib.all (p: lib.elem p (map (t: "${c.home.homeDirectory}/${t}") targets)) kids)
-    ++ eq "names from the last path component (${dir})" (map (p: lib.last (lib.splitString "/" p)) kids) ["alpha" "zeta"])
+    ++ eq "names from the last path component (${dir})" (map (p: lib.last (lib.splitString "/" p)) kids) names)
   [".pi/agent" "custom/agent"];
 
   # (M6) settings.json's `extensions` lists the registry first, in load order:
