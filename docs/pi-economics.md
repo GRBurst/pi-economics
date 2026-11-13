@@ -232,6 +232,17 @@ itself, in the control tier (read back at `before_agent_start`; main sessions on
 register is refused up front). The module refuses levels pi does not accept
 (`pi-economics: experiments factor <f> in stratum <s> has a level that <lever> does not accept`); the first level is the
 baseline, so `[false, true]` for a tool that is off by default.
+A third kind seeds any extension that adopts a value recorded on the session branch the way infinite-context does,
+without the repository naming it: `session-entry(<customType>,<field>)` (seed tier). The engine appends the custom entry
+`{ <field>: <level> }` at its own session start, before the target reads the branch, and reads back the latest entry of
+that type at `before_agent_start`: the seed itself when the target adopted it, the target's own record (source `ext`,
+`refused`) when it drew another value. The target is not named, so a target that is not loaded, or that ignores the seed
+without recording anything, reads back as `confirmed`: the read-back sees what the target records, never that it
+adopted. Children are seeded with their root's level. The module refuses a factor whose `lever` is neither an id of
+`packages/experiments/addons/catalogue.json` nor one of the two kinds (`pi-economics: experiments factor <f> in stratum
+<s> has an unknown lever <lever>`: it would randomize nothing) and a level that is not a level name (`a-z`, `0-9`, `_`,
+`-`, at most 32 characters), a number or a boolean (`... has a level that is not a level name, a number or a boolean`);
+the package's `parseStrata` drops such a stratum with a warning.
 Corrections and `/rate` ratings go to `<agentDir>/guards/events.jsonl`. There
 is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 
@@ -418,6 +429,7 @@ points into `src`.
 | `ic-seed-contract` | the seed contract of infinite-context's limit on the real code of the patched extension, the experiments engine with its add-on and token-meter's shell: the seed's record shape, adopted (confirmed in the levers line), a fixed-number rule (refused up front), a range the extension does not adopt (planted refusal: refused, source `ext`, in the levers line), a model switch (re-seeded in the new range), and the add-on's rule matcher equal to the extension's own over a generated table |
 | `iface-infinite-context-seed` | the extension's `Settings` is assignable to the engine's copy of the seed record (`IcRecord`): a type-shape check only (an optional field dropped or renamed upstream is `ic-seed-contract`'s to see) |
 | `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's three `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
+| `session-entry-contract` | the engine's real code and a fixture extension that adopts a recorded session entry the way infinite-context does (`checks/session-entry-contract/entry-ext`, a neutral stand-in) in one fake runtime: a level the target can adopt reads back `confirmed`, one it redraws `refused` with its own value; with no target the seed stands (the seed-tier limit) |
 | `dependency-direction` | no file of `patches/`, the built patched infinite-context or the patched actor mentions a `pi-economics:` channel or the removed `__piExperimentsApi_v1`: extensions never depend on pi-economics (the router stays out: it shares the claim channel and still holds its dead read) |
 | `state-contract` | `experiments/state.json` between the analyser and the engine: token-meter's writer (`nextState`) writes each v2 design's `disabled` and `posterior` under `designs.<id>.<stratum>`, and experiments' `designState` reads them back from that place (another stratum or design reads nothing; the flat keys are never read for a v2 design). Both sources side by side: packages import no other. |
 | `log-contract` | every log writer through `pi-analyse --check` and a full report; the router's writer and vocabularies are the `pi-task-router` input's |

@@ -122,6 +122,8 @@ export type StratumSpec = { match: { billing?: Billing[]; models?: string[] }; o
 export type Strata = { strata: Record<string, StratumSpec>; warnings: string[] };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+/** A level name (`medium`, `5m`, `1h`): the levers line records no other text (token-meter core/levers.ts holds the same literal; the module-eval case experiments-level-names keeps the two lines equal). */
+const LEVEL = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const isLevel = (v: unknown): v is Level => typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v));
 const nonEmptyListOf = <T>(v: unknown, is: (x: unknown) => x is T): v is T[] => Array.isArray(v) && v.length > 0 && v.every(is);
 /** The first key of `o` not in `known` (a misspelt key would otherwise widen the stratum or drop its factors). */
@@ -188,6 +190,8 @@ function parseStratum(s: unknown): StratumSpec | string {
     const extraFactor = unknownKey(f, ["name", "lever", "levels"]);
     if (extraFactor !== undefined) return `factor ${i + 1}: unknown key ${extraFactor}`;
     if (f.levels[0] === f.levels[1]) return `factor ${i + 1} has two equal levels`;
+    const unnamed = f.levels.find((l) => typeof l === "string" && !LEVEL.test(l));
+    if (unnamed !== undefined) return `factor ${i + 1} has a level that is not a level name: ${JSON.stringify(unnamed)}`;
     if (factors.some((g) => g.name === f.name)) return `factor name ${f.name} repeated`;
     if (factors.some((g) => g.lever === f.lever)) return `lever ${f.lever} repeated`;
     factors.push({ name: f.name, lever: f.lever, levels: [f.levels[0], f.levels[1]] });

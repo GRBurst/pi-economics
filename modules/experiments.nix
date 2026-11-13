@@ -38,12 +38,14 @@
       then given
       else {}
     );
-  # (redesign M7b) What pi accepts of the levers that set pi itself
-  # (packages/experiments/addons/pi.ts, THINKING_LEVELS; module-eval case
-  # experiments-pi-levels keeps the lists equal): pi.thinkingLevel takes pi's
-  # six names, pi.activeTool(<name>) booleans. Levels that are no list are the
-  # two-levels assertion's.
-  thinkingLevels = ["off" "minimal" "low" "medium" "high" "xhigh"];
+  # (redesign M7c) What the engine can set: the package's add-on catalogue
+  # (addons/catalogue.json; the package's test/catalogue.test.ts holds it equal
+  # to what the code registers).
+  catalogue = lib.importJSON ../packages/experiments/addons/catalogue.json;
+  # (redesign M7b) What pi accepts of the levers that set pi itself:
+  # pi.thinkingLevel takes pi's six names, pi.activeTool(<name>) booleans.
+  # Levels that are no list are the two-levels assertion's.
+  inherit (catalogue) thinkingLevels;
   levelsAccepted = f: let
     lever = f.lever or null;
     levels = f.levels or null;
@@ -56,6 +58,35 @@
       then lib.all builtins.isBool levels
       else true
     );
+  # (redesign M7c) A factor's lever is one the engine can set: an id of the
+  # catalogue or a data-only kind, pi.activeTool(<name>) or
+  # session-entry(<customType>,<field>) (names without parentheses, commas or
+  # whitespace: space, tab, newline, carriage return; addons/session-entry.ts and
+  # addons/pi.ts parse the same).
+  plainName = s:
+    s != "" && lib.all (c: !lib.elem c ["(" ")" "," " " "\t" "\n" "\r"]) (lib.stringToCharacters s);
+  kindArgs = prefix: lever:
+    if lib.hasPrefix "${prefix}(" lever && lib.hasSuffix ")" lever
+    then lib.splitString "," (lib.removeSuffix ")" (lib.removePrefix "${prefix}(" lever))
+    else null;
+  knownLever = lever:
+    lib.isString lever
+    && (
+      lib.elem lever catalogue.levers
+      || (let args = kindArgs "pi.activeTool" lever; in args != null && lib.length args == 1 && lib.all plainName args)
+      || (let args = kindArgs "session-entry" lever; in args != null && lib.length args == 2 && lib.all plainName args)
+    );
+  # (redesign M7c, M5b.2 review m2) A level reaches a levers line as a value:
+  # a level name (core/settings.ts LEVEL: lowercase letters, digits, "_" and
+  # "-", at most 32 characters, not starting with "_" or "-"), a number or a
+  # boolean; the module-eval case experiments-level-names keeps the rule equal
+  # to token-meter's.
+  levelChars = lib.stringToCharacters "abcdefghijklmnopqrstuvwxyz0123456789";
+  isLevelName = s: let
+    cs = lib.stringToCharacters s;
+  in
+    cs != [] && lib.length cs <= 32 && lib.elem (lib.head cs) levelChars && lib.all (c: lib.elem c (levelChars ++ ["_" "-"])) cs;
+  isLevel = l: lib.isBool l || lib.isInt l || lib.isFloat l || (lib.isString l && isLevelName l);
   factorName = f:
     if lib.isString (f.name or null)
     then f.name
@@ -133,6 +164,21 @@ in {
       ++ map (f: {
         assertion = levelsAccepted f;
         message = "pi-economics: experiments factor ${factorName f} in stratum ${name} has a level that ${f.lever} does not accept";
+      })
+      fs
+      # (redesign M7c)
+      ++ map (f: {
+        assertion = knownLever (f.lever or null);
+        message = "pi-economics: experiments factor ${factorName f} in stratum ${name} has an unknown lever ${
+          if lib.isString (f.lever or null)
+          then f.lever
+          else builtins.toJSON (f.lever or null)
+        }";
+      })
+      fs
+      ++ map (f: {
+        assertion = !(lib.isList (f.levels or null)) || lib.all isLevel f.levels;
+        message = "pi-economics: experiments factor ${factorName f} in stratum ${name} has a level that is not a level name, a number or a boolean";
       })
       fs)
     strata);

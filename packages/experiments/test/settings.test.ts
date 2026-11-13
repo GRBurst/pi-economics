@@ -170,6 +170,21 @@ test("strata: a malformed stratum is dropped whole, never repaired, and each dro
   assert.deepEqual(got.warnings, Object.entries(bad).map(([n, [, why]]) => `experiments stratum ${n} dropped: ${why}`));
 });
 
+// M5b.2 review m2, carried to M7c: a lever's level reaches a levers line as `a` and `v`, and token-meter's writer drops a state whose
+// value is no level name, number or boolean; a data-only kind (session-entry) takes any levels, so the stratum is refused up front.
+test("T7c.4 a factor level that is no level name (the levers line's rule) drops the stratum with the level named; names, numbers and booleans pass", () => {
+  const stratum = (levels: unknown[]) => ({ match: {}, factors: [{ name: "a", lever: "x.a", levels }] });
+  for (const levels of [["5m", "1h"], ["a_b-c", "x"], ["x".repeat(32), "y"], ["0", "9"], [0.25, 0.75], [false, true], ["1", 2], [-1, 1e21]]) {
+    const got = parseStrata({ s: stratum(levels) }, PLANS, V4_FACTORS);
+    assert.deepEqual([Object.keys(got.strata), got.warnings], [["s"], []], JSON.stringify(levels));
+  }
+  for (const bad of ["1H", "", " a", "a b", "a\n", "-a", "_a", "x".repeat(33), "é", "a.b", "Medium"]) {
+    const got = parseStrata({ s: stratum(["ok", bad]) }, PLANS, V4_FACTORS);
+    assert.deepEqual(got.strata, {}, JSON.stringify(bad));
+    assert.deepEqual(got.warnings, [`experiments stratum s dropped: factor 1 has a level that is not a level name: ${JSON.stringify(bad)}`]);
+  }
+});
+
 test("strata: a stratum named __proto__ is an own key like any other (review NIT)", () => {
   const got = parseStrata(JSON.parse('{"__proto__": {"match": {"billing": ["api"]}}}'), {}, V4_FACTORS);
   assert.equal(Object.getPrototypeOf(got.strata), Object.prototype);

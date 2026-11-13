@@ -241,7 +241,12 @@ session runs with, where `pi.defaultThinkingLevel` is the configured default) an
 whether `getActiveTools` lists the tool; a tool pi does not register is infeasible). A value other than the assigned one is
 `refused`, with source `fixed` when it is what pi reported right after the engine set it (pi clamped the level to the model's, or
 ignored the tool) and `ext` otherwise (another extension, `/thinking` or pi's reset at a model switch changed it afterwards: the
-source does not tell them apart). A level name may start with a digit (`5m`, `1h`). A read-back that changes
+source does not tell them apart). The data-only seed kind `session-entry(<customType>,<field>)` (redesign M7c; tier `seed`,
+read back at `before_agent_start`, also in a child, seeded with its root's level) appends the custom entry `{ <field>: <level> }`
+to the session branch before an extension that adopts recorded values reads it, and reads back the latest entry of that type:
+the seed when the target adopted it, the target's own record (`refused`, source `ext`) when it drew another value. The read-back
+sees what the target records: a target that is not loaded, or that ignores the seed without recording, reads `confirmed`.
+A level name may start with a digit (`5m`, `1h`) and holds lowercase letters, digits, `_` and `-` (at most 32 characters). A read-back that changes
 a state writes a new levers line. A child runtime's experiments never draws: it derives its root's assignment (the
 session file's directory `subagents/<root>/`, or for an in-memory child the actor's agent list) and serves it on the
 child's own channel, so an in-memory child (no session file) takes its `parentSessionId` and the root's `arm`, `design`
