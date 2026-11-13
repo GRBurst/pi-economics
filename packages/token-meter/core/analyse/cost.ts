@@ -4,7 +4,7 @@ import { type LedgerSection } from "../ledger.ts";
 import { taskCosts, type TaskCost } from "../tasks.ts";
 import { bootstrapRatioCI, type CI } from "../stats.ts";
 import { byTs, isLine, num, sum } from "./logs.ts";
-import { allocate, apiUsd, type Component } from "./units.ts";
+import { allocate, apiUsd, cacheWrite1hOf, type Component } from "./units.ts";
 import { foldsOf } from "./folds.ts";
 
 export type Split = { name: string; n: number; usd: number; share: number; perHour: number };
@@ -43,15 +43,15 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
     if (l.kind !== "warming" && !isError(l)) m.requests += 1;
     m.usd += apiUsd(l);
   }
-  const components = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, unallocated: 0 };
+  const components: Record<Component, number> = { input: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 0, unallocated: 0 };
   let rewrite = 0;
   let rewrites = 0;
   const seen = new Set<string>();
   for (const l of lines) {
-    const a = allocate(l);
+    const a = allocate(l, cacheWrite1hOf(l, l.parentSessionId === undefined, flags[l.arm])); // 1 h writes weigh 2.0, 5-minute writes 1.25 (B13)
     for (const k of Object.keys(components) as Component[]) components[k] += a[k];
     if (l.kind === "warming") continue;
-    if (seen.has(l.sessionId) && num(l.cacheWrite) > 0) { rewrite += a.cacheWrite; rewrites += 1; } else seen.add(l.sessionId);
+    if (seen.has(l.sessionId) && num(l.cacheWrite) > 0) { rewrite += a.cacheWrite5m + a.cacheWrite1h; rewrites += 1; } else seen.add(l.sessionId);
   }
   const warm = lines.filter((l) => l.kind === "warming");
   // Fold and cold-resume events are found per arm (the cold-resume TTL depends on the arm's mainCacheTtl).

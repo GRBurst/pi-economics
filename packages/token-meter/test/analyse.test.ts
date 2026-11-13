@@ -42,6 +42,24 @@ test("cost: per-model costs sum to the total (property, random logs)", () => {
   }
 });
 
+test("cost (B13): the token components value a 1h-arm main's cache writes at 2.0 × input, a 5m arm's and a child's at 1.25", () => {
+  const P = 1e-6;
+  const tokens = { input: 1000, cacheRead: 0, cacheWrite: 1000, output: 0 };
+  const line = (sessionId: string, at: number, arm: string, weight: number, extra: Record<string, unknown> = {}) =>
+    turn(sessionId, T0 + at * MIN, { arm, ...tokens, costUsd: P * (1000 + weight * 1000), ...extra });
+  const meter = [
+    line("h", 0, "-+-", 2.0), line("h", 1, "-+-", 2.0), // main in a mainCacheTtl 1h arm: pi priced 2.0
+    line("f", 0, "---", 1.25), // main in a 5m arm
+    line("k", 0, "-+-", 1.25, { parentSessionId: "h" }), // its child: 5m
+  ];
+  const assignments = [assignment("h", "-+-", T0 - MIN), assignment("f", "---", T0 - MIN)];
+  const c = analyse({ meter, outcomes: [], assignments, guards: [] }).cost;
+  close(c.components.cacheWrite1h, 2 * 2.0 * P * 1000, 1e-12);
+  close(c.components.cacheWrite5m, 2 * 1.25 * P * 1000, 1e-12);
+  close(c.components.input, 4 * P * 1000, 1e-12);
+  close(Object.values(c.components).reduce((s, x) => s + x, 0), c.totalUsd, 1e-12);
+});
+
 test("cost: splits by model, cache rewrite, warming, folds; $ per accepted task", () => {
   const c = analyse(world()).cost;
   const model = Object.fromEntries(c.byModel.map((m) => [m.model, m.usd]));
@@ -49,7 +67,7 @@ test("cost: splits by model, cache rewrite, warming, folds; $ per accepted task"
   const split = Object.fromEntries(c.splits.map((s) => [s.name, s]));
   close(split.warming.usd, 0.5);
   close(split.warming.perHour, 0.5 / 3);
-  assert.ok(split["cache rewrite"].usd > 0 && split["cache rewrite"].usd < c.components.cacheWrite + 1e-9);
+  assert.ok(split["cache rewrite"].usd > 0 && split["cache rewrite"].usd < c.components.cacheWrite5m + c.components.cacheWrite1h + 1e-9);
   assert.ok("after folds" in split && "after cold resumes" in split);
   // t1 (0.2) accepted, t2 (1.0) rejected, t3 (2.0) accepted: (0.2 + 1 + 2) / 2
   close(c.perAccepted.perAccepted, 1.6);

@@ -1,12 +1,5 @@
-// Dollars of a line and their split by token component.
+// Dollars of a line, the price rules behind them (1 h cache writes, redesign M2a B13) and their split by token component.
 import { num, sum } from "./logs.ts";
-
-/**
- * API-equivalent dollars of one meter line: the one place the analyser (core/analyse/*, and arms.ts, tasks.ts and ledger.ts, which it
- * calls) turns a line into $; a pricing rule for 1 h cache writes (M2a) changes this function only.
- * Until then it is the line's costUsd (0 when absent or not finite).
- */
-export const apiUsd = (l: any): number => num(l.costUsd);
 
 /**
  * Does the `costUsd` pi logs already charge 1 h cache writes at 2 × input (Anthropic's list)? Yes (redesign M2a, T2a.0).
@@ -19,14 +12,66 @@ export const apiUsd = (l: any): number => num(l.costUsd);
  */
 export const PI_PRICES_1H = true;
 
-/** Relative token prices (Anthropic: cache read 0.1, cache write 1.25, output 5 × input), used only to split a line's cost. */
-export const WEIGHT = { input: 1, cacheRead: 0.1, cacheWrite: 1.25, output: 5 } as const;
+/** Relative token prices (Anthropic list): read 0.1, 5-minute write 1.25, 1 h write 2.0, output 5 × input. */
+export const WEIGHT = { input: 1, cacheRead: 0.1, cacheWrite5m: 1.25, cacheWrite1h: 2.0, output: 5 } as const;
 export type Component = keyof typeof WEIGHT | "unallocated";
-export function allocate(l: any): Record<Component, number> {
-  const c = apiUsd(l);
-  const w = (Object.keys(WEIGHT) as Array<keyof typeof WEIGHT>).map((k) => [k, WEIGHT[k] * num(l[k])] as const);
+
+/** The cache rules (misses, the ledger) hold for Anthropic's explicit prompt caching: a Claude model or the anthropic provider. */
+export const isClaude = (l: any): boolean => /claude/i.test(String(l.model)) || l.provider === "anthropic";
+
+/**
+ * Tokens of the line's `cacheWrite` written with the 1 h TTL: its own `cacheWrite1h` when it has one (meter v2); else, for a v1 line, all
+ * of `cacheWrite` when the line is a main session's (`main`) and its arm's `mainCacheTtl` is "1h" (a documented approximation: children
+ * and 5m arms write with the 5-minute TTL); else 0. Never more than `cacheWrite`.
+ */
+export function cacheWrite1hOf(l: any, main: boolean, armFlags?: Record<string, unknown>): number {
+  const written = num(l.cacheWrite);
+  const long = typeof l.cacheWrite1h === "number" && Number.isFinite(l.cacheWrite1h) ? l.cacheWrite1h : main && armFlags?.mainCacheTtl === "1h" ? written : 0;
+  return Math.min(Math.max(long, 0), written);
+}
+
+const weighted = (l: any, long: number, longWeight: number): number =>
+  WEIGHT.input * num(l.input) + WEIGHT.cacheRead * num(l.cacheRead) + WEIGHT.cacheWrite5m * (num(l.cacheWrite) - long) + longWeight * long + WEIGHT.output * num(l.output);
+
+/**
+ * The input price p ($ per input token) of a line: its cost ÷ its tokens weighted by WEIGHT, `long` of the writes being 1 h writes
+ * (weight 2.0 when pi priced them: `priced1h`, else 1.25). 0 for a line without a cost or tokens.
+ */
+export function pIn(l: any, long: number = num(l.cacheWrite1h), priced1h: boolean = PI_PRICES_1H): number {
+  const w = weighted(l, long, priced1h ? WEIGHT.cacheWrite1h : WEIGHT.cacheWrite5m);
+  return w > 0 ? num(l.costUsd) / w : 0;
+}
+
+export type PriceOpt = {
+  /** 1 h-written tokens of the line (cacheWrite1hOf); default its own `cacheWrite1h`, else 0. */
+  cacheWrite1h?: number;
+  /** Whether the line's costUsd already charges 1 h writes at 2.0 (default PI_PRICES_1H). */
+  pricesLongWrite?: boolean;
+};
+
+/**
+ * API-equivalent dollars of one meter line: the one place the analyser (core/analyse/*, and arms.ts, tasks.ts and ledger.ts, which it
+ * calls) turns a line into $. The line's costUsd (0 when absent or not finite), plus, for a pi that did not charge 1 h writes at 2.0
+ * (`pricesLongWrite` false), 0.75 × its input price per 1 h-written token. With the default (PI_PRICES_1H) it is the costUsd.
+ */
+export function apiUsd(l: any, opt: PriceOpt = {}): number {
+  const base = num(l.costUsd);
+  if (opt.pricesLongWrite ?? PI_PRICES_1H) return base;
+  const long = opt.cacheWrite1h ?? num(l.cacheWrite1h);
+  return base + (WEIGHT.cacheWrite1h - WEIGHT.cacheWrite5m) * pIn(l, long, false) * long;
+}
+
+/**
+ * A line's apiUsd split by token component with the WEIGHT ratios (`long` = its 1 h-written tokens, cacheWrite1hOf; the rest of
+ * cacheWrite is 5-minute); a line without tokens keeps its $ unallocated. The parts add up to apiUsd(l, { cacheWrite1h: long }).
+ */
+export function allocate(l: any, long: number = num(l.cacheWrite1h)): Record<Component, number> {
+  const c = apiUsd(l, { cacheWrite1h: long });
+  const h = Math.min(Math.max(long, 0), num(l.cacheWrite));
+  const tokens = { input: num(l.input), cacheRead: num(l.cacheRead), cacheWrite5m: num(l.cacheWrite) - h, cacheWrite1h: h, output: num(l.output) };
+  const w = (Object.keys(WEIGHT) as Array<keyof typeof WEIGHT>).map((k) => [k, WEIGHT[k] * tokens[k]] as const);
   const total = sum(w.map(([, x]) => x));
-  const out = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, unallocated: total ? 0 : c };
+  const out: Record<Component, number> = { input: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 0, unallocated: total ? 0 : c };
   if (total) for (const [k, x] of w) out[k] = (c * x) / total;
   return out;
 }

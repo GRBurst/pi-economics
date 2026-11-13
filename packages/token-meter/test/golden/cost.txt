@@ -24,7 +24,7 @@ Splits overlap (a rewrite can follow a fold); fold and cold-resume rows charge t
 
 | split | n | $ | share | $/active h |
 | --- | --- | --- | --- | --- |
-| cache rewrite | 81 | 26.33 | 18% | 2.77 |
+| cache rewrite | 81 | 31.25 | 22% | 3.29 |
 | warming | 1 | 0.50 | 0% | 0.05 |
 | after folds | 2 | 2.40 | 2% | 0.25 |
 | after cold resumes | 10 | 38.80 | 27% | 4.08 |
@@ -33,10 +33,11 @@ Splits overlap (a rewrite can follow a fold); fold and cold-resume rows charge t
 
 | component | $ |
 | --- | --- |
-| input | 2.80 |
-| cacheRead | 33.95 |
-| cacheWrite | 38.39 |
-| output | 70.06 |
+| input | 2.63 |
+| cacheRead | 32.03 |
+| cacheWrite5m | 20.19 |
+| cacheWrite1h | 24.71 |
+| output | 65.65 |
 | unallocated | 0.00 |
 
 ### Fold ledger (Claude models)
