@@ -94,7 +94,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderArms } from "../core/arms.ts";
+import { renderArms, V2_SCOPE } from "../core/arms.ts";
 
 const bin = resolve(dirname(fileURLToPath(import.meta.url)), "..", "bin", "meter-report.ts");
 const jsonl = (dir: string, file: string, rows: unknown[]) => {
@@ -326,4 +326,17 @@ test("a long session is analysed in linear time", () => {
   const t = Date.now();
   assert.equal(byArm(lines)["+"].units, 1);
   assert.ok(Date.now() - t < 5_000, `${Date.now() - t} ms`);
+});
+
+// Review M2 (M5b.1): the kill switch and the posterior are the v1 engine's (flat `disabled`, `posterior`); the v2 engine
+// reads `designs.<id>.<stratum>`, which these tools neither write nor drop, and they say so.
+test("review M2: meter-report --arms/--posterior say the v2 designs are not affected and keep state.json's designs", () => {
+  const a = agentDirWith();
+  const designs = { b4d458675108: { api: { posterior: { "010": { mean: -1, sd: 1 } }, disabled: ["111"] } } };
+  writeFileSync(join(a.agentDir, "experiments", "state.json"), JSON.stringify({ disabled: [], posterior: {}, designs }));
+  const out = a.run("--arms", "--posterior");
+  assert.ok(out.includes(V2_SCOPE), out);
+  assert.deepEqual(a.state().designs, designs);
+  assert.ok(a.run("--posterior").includes(V2_SCOPE));
+  assert.equal(V2_SCOPE, "kill switch and posterior: the v1 engine's designs (v1–v4; state.json `disabled`, `posterior`) only; the v2 engine's designs (state.json `designs`) are not affected");
 });

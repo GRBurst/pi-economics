@@ -161,11 +161,15 @@ export function renderArms(stats: ArmStat[], acc: Acc, reasons: Record<string, s
     ["peeks/s", (s) => per(s, "peeks")], ["corr/s", (s) => per(s, "corrections")], ["rating", rating],
   ];
   const rows = stats.map((s) => `| ${cols.map(([, f]) => f(s)).join(" | ")} |`);
-  return [`| ${cols.map(([h]) => h).join(" | ")} |`, "|" + " --- |".repeat(cols.length), ...rows, ...Object.entries(reasons).map(([a, r]) => `\ndisabled ${a}: ${r}`)].join("\n") + "\n";
+  return [`| ${cols.map(([h]) => h).join(" | ")} |`, "|" + " --- |".repeat(cols.length), ...rows, ...Object.entries(reasons).map(([a, r]) => `\ndisabled ${a}: ${r}`), `\n${V2_SCOPE}`].join("\n") + "\n";
 }
 
-/** The experiments package's state.json: fresh posterior; disabled arms stay disabled (re-enable by editing the file). */
-export function nextState(old: any, stats: ArmStat[], reasons: Record<string, string>): { disabled: string[]; posterior: ReturnType<typeof posterior>; reasons: Record<string, string> } {
+/** What the kill switch and the posterior cover (review M2, M5b.1): the v2 engine reads `designs.<id>.<stratum>`, which nothing writes yet. */
+export const V2_SCOPE = "kill switch and posterior: the v1 engine's designs (v1–v4; state.json `disabled`, `posterior`) only; the v2 engine's designs (state.json `designs`) are not affected";
+
+/** The experiments package's state.json: fresh posterior; disabled arms stay disabled (re-enable by editing the file); the v2 engine's `designs` are kept as they are. */
+export function nextState(old: any, stats: ArmStat[], reasons: Record<string, string>): { disabled: string[]; posterior: ReturnType<typeof posterior>; reasons: Record<string, string>; designs?: unknown } {
   const kept = Array.isArray(old?.disabled) ? old.disabled.filter((x: unknown) => typeof x === "string") : [];
-  return { disabled: [...new Set([...kept, ...Object.keys(reasons)])], posterior: posterior(stats), reasons: { ...(old?.reasons ?? {}), ...reasons } };
+  const designs = old !== null && typeof old === "object" && "designs" in old ? { designs: old.designs } : {};
+  return { disabled: [...new Set([...kept, ...Object.keys(reasons)])], posterior: posterior(stats), reasons: { ...(old?.reasons ?? {}), ...reasons }, ...designs };
 }

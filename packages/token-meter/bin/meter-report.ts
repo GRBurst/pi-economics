@@ -1,11 +1,12 @@
 #!/usr/bin/env -S node --experimental-strip-types --no-warnings
 // Usage: node --experimental-strip-types meter-report.ts [--dir <meterDir>] [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 //        meter-report.ts --arms [--posterior] [--agent-dir <dir>]   per-arm experiment analysis; --posterior also
-//        writes <agentDir>/experiments/state.json (posterior rewards, kill-switch arms) atomically.
+//        writes <agentDir>/experiments/state.json (posterior rewards, kill-switch arms) atomically: the v1
+//        engine's designs only (the v2 engine's `designs` key is kept as it is).
 import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { armStats, nextState, renderArms } from "../core/arms.ts";
+import { armStats, nextState, renderArms, V2_SCOPE } from "../core/arms.ts";
 import { acceptance, killSwitch, signals } from "../core/guards.ts";
 import { aggregate, render } from "../core/report.ts";
 import { taskCosts } from "../core/tasks.ts";
@@ -56,7 +57,7 @@ if (args.includes("--arms") || args.includes("--posterior")) {
     const tmp = `${file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(nextState(readJson(file), stats, reasons), null, 2) + "\n");
     renameSync(tmp, file);
-    if (!args.includes("--arms")) process.stdout.write(`state.json: ${stats.length} arms, ${Object.keys(reasons).length} newly disabled\n`);
+    if (!args.includes("--arms")) process.stdout.write(`state.json: ${stats.length} arms, ${Object.keys(reasons).length} newly disabled\n${V2_SCOPE}\n`);
   }
 } else {
   process.stdout.write(render(aggregate(readLines(dir), { from: opt("--from"), to: opt("--to") })));

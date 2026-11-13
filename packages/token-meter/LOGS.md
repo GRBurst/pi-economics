@@ -373,7 +373,8 @@ Disabled arms stay disabled until the file is edited. These keys belong to the v
 engine's designs (arm ids like `-+-`). The v2 engine reads `designs.<design id>.<stratum>`
 = `{ "posterior": { <arm>: { "mean", "sd" } }, "disabled": [<arm>] }` at session start
 (exploit samples from `posterior`; no arm in `disabled` is assigned; with every arm disabled
-the session is ineligible); nothing writes that key yet (M5c).
+the session is ineligible); nothing writes that key yet (M5c): `meter-report --posterior` and
+`pi-analyse --apply` write the v1 engine's keys only, keep `designs` as it is and say so.
 
 `experiments/blocks.json`: `{ "<design id>/<stratum>": { "queue": [<arm>] } }`, the arms
 left in each explore block (refilled with a shuffle of the enabled arms when empty).

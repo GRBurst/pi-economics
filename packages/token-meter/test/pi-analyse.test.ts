@@ -123,3 +123,14 @@ test("pi-analyse without a plans setting (the CLI passes {}): Budget says plans 
   assert.ok(!told.md.includes("billing class guessed"));
   assert.ok(!told.md.split("\n## Budget\n")[1].split(/\n## /)[0].includes("plans absent"));
 });
+
+test("review M2: --apply says the v2 designs are not affected and keeps state.json's designs", () => {
+  const dir = agentDir();
+  const designs = { b4d458675108: { api: { posterior: {}, disabled: ["111"] } } };
+  writeFileSync(join(dir, "experiments", "state.json"), JSON.stringify({ disabled: [], designs }));
+  const r = run(["--agent-dir", dir, "--out", join(dir, "r"), "--apply"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, "experiments", "state.json"), "utf8")).designs, designs);
+  const lines = r.stdout.split("\n");
+  assert.ok(lines.some((l) => l.startsWith("kill switch and posterior: the v1 engine's designs (v1–v4;")), r.stdout);
+});
