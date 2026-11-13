@@ -43,8 +43,8 @@ without the user's explicit approval.
   quota %/active hour (the account's rise split between the roots active at the time, never
   double-counted across parallel sessions), $/accepted task; splits by model, cache rewrite, warming, after
   folds and after cold resumes. Splits overlap; they are not additive.
-- **Experiment** (per design: v1 = 5 factors / 5-character arms, v2 = 6 factors incl.
-  `delegationRule`): per-factor effect on $/active hour with a bootstrap CI, OLS with
+- **Experiment** (per design: v1 = 5 factors / 5-character arms, v2 and v3 = 6 factors incl.
+  `delegationRule`, v4 = 3 factors `warmPolicy`, `mainCacheTtl`, `maskOnCold`): per-factor effect on $/active hour with a bootstrap CI, OLS with
   two-way interactions (aliased terms listed), per-arm $/h, posterior and P(best).
   An effect counts only when its CI excludes 0 *and* each level has several units.
 - **Delegation & routing**: share of tasks and $ in child sessions, tier mix, Qwen share

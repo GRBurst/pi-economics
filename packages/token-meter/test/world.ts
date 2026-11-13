@@ -18,15 +18,16 @@ export function turns(sessionId: string, start: number, n: number, extra: Record
 
 const V1 = { warmPolicy: ["native", "orchestrator-aware"], mainCacheTtl: ["5m", "1h"], foldHint: ["fixed", "cache-aware"], maskOnCold: ["off", "on"], freshOnCold: ["off", "advise"] };
 const V2 = { ...V1, delegationRule: ["off", "on"] };
+const V4 = { warmPolicy: ["native", "orchestrator-aware"], mainCacheTtl: ["5m", "1h"], maskOnCold: ["off", "on"] };
 export function flagsOf(arm: string): Record<string, string> {
-  const names = Object.entries(arm.length === 6 ? V2 : V1);
+  const names = Object.entries(arm.length === 6 ? V2 : arm.length === 3 ? V4 : V1);
   return Object.fromEntries(names.map(([n, v], i) => [n, arm[i] === "+" ? v[1] : v[0]]));
 }
 
-/** v0 row (legacy: no v, no design) for v1 arms; v1 row with design "v2" for 6-char arms. */
+/** v0 row (legacy: no v, no design) for v1 arms; v1 row with design "v2" for 6-char arms, "v4" for 3-char arms. */
 export function assignment(sessionId: string, arm: string, at: number): Record<string, unknown> {
   const row = { ts: iso(at), sessionId, arm, mode: "explore", flags: flagsOf(arm) };
-  return arm.length === 6 ? { v: 1, ...row, design: "v2" } : row;
+  return arm.length === 6 ? { v: 1, ...row, design: "v2" } : arm.length === 3 ? { v: 1, ...row, design: "v4" } : row;
 }
 
 /**

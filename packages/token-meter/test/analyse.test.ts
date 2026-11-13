@@ -433,3 +433,31 @@ test("quality: review lines and overseer sessions are no data-quality defect", (
   assert.deepEqual(item(w, KIDS), item(base, KIDS));
   assert.equal(item(base, TASKS).n, 1);
 });
+
+// ---- design v4 ---------------------------------------------------------------------------------
+
+/** v4 = three factors (warmPolicy, mainCacheTtl, maskOnCold), the full 2^3: 3-char arm ids, rows with design "v4". */
+test("experiment: design v4 has the experiments package's three factors in their order, with their levels", () => {
+  const meter = [...turns("a4", T0, 4, { arm: "---", costUsd: 1 }), ...turns("b4", T0, 4, { arm: "+++", costUsd: 3 })];
+  const [d] = analyse({ meter, outcomes: [], guards: [], assignments: [assignment("a4", "---", T0), assignment("b4", "+++", T0)] }).experiment.designs;
+  assert.equal(d.design, "v4");
+  assert.deepEqual(d.factors, ["warmPolicy", "mainCacheTtl", "maskOnCold"]);
+  assert.equal(d.baseline, "---");
+  assert.deepEqual(d.effects.map((e) => [e.factor, e.low, e.high]), [["warmPolicy", "native", "orchestrator-aware"], ["mainCacheTtl", "5m", "1h"], ["maskOnCold", "off", "on"]]);
+  for (const e of d.effects) close(e.diff, 24 - 8); // 4 turns × $3 vs × $1 over 0.5 active h
+});
+
+test("experiment: 3-char arm ids without an assignment row are decoded as v4", () => {
+  const meter = [...turns("x", T0, 4, { arm: "---" }), ...turns("y", T0, 4, { arm: "-+-", costUsd: 2 })];
+  const [d] = analyse({ meter, outcomes: [], assignments: [], guards: [] }).experiment.designs;
+  assert.equal(d.design, "v4");
+  const ttl = d.effects.find((f) => f.factor === "mainCacheTtl")!;
+  assert.deepEqual([ttl.low, ttl.high, ttl.nHigh], ["5m", "1h", 1]);
+  close(ttl.diff, 8);
+});
+
+test("cost: v4 folds form their own ledger group; v4 has no foldHint level", () => {
+  const logs: Logs = { meter: [...foldy("f3", "--+---"), ...foldy("f4", "---")], outcomes: [], guards: [],
+    assignments: [v3("f3", "--+---", T0), assignment("f4", "---", T0)] };
+  assert.deepEqual(analyse(logs).cost.folds.byGroup.map((g) => [g.name, g.n]), [["v3 cache-aware", 1], ["v4 –", 1]]);
+});

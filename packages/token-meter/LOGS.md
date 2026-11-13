@@ -44,7 +44,7 @@ field does not bump it). `pi-analyse` reports the versions per log under *Data q
 | --- | --- | --- |
 | meter | lines before 2026-10-03; early lines have no `arm` | `v` added (2026-10-03) |
 | outcomes | lines before 2026-10-03 | `v` added (2026-10-03) |
-| assignments | design v1 rows (5-character arms, no `design`) | `v`, `design` (`"v2"`: 6 factors; `"v3"` since 2026-10-04) |
+| assignments | design v1 rows (5-character arms, no `design`) | `v`, `design` (`"v2"`: 6 factors; `"v3"` since 2026-10-04; `"v4"`: 3 factors) |
 | guards | lines before 2026-10-03 | `v` added (2026-10-03) |
 
 ## Join keys
@@ -165,7 +165,7 @@ unknown. `startEffort`: `workerEffort`, except `qwen chain → Sonnet: …` → 
 | `ts` | ISO time | yes | assignment time (session start) |
 | `sessionId` | string | yes | root session |
 | `arm` | string | yes | arm id: one `+`/`-` per factor in `factors` order |
-| `design` | `"v2"` \| `"v3"` | v ≥ 1 | design version; absent = v1 (5 factors) |
+| `design` | `"v2"` \| `"v3"` \| `"v4"` | v ≥ 1 | design version; absent = v1 (5 factors) |
 | `mode` | `off` \| `explore` \| `exploit` | yes | selection mode |
 | `flags` | object | yes | factor → value of the arm |
 
@@ -176,12 +176,18 @@ Designs: **v1** — 5 factors `warmPolicy`, `mainCacheTtl`, `foldHint`, `maskOnC
 first row (no second row).
 
 **v3** (T8.10) — the same six factors, arms (6-character ids, baseline `------`) and
-fraction as v2, but the meaning of `foldHint` = `cache-aware` changed: it now also adds a
-paragraph to the system prompt. New assignments carry `design: "v3"`; a resumed v2 session
-keeps its v2 row, arm and flags. Arm ids repeat across v2 and v3, so **a meter line's design
-is its root session's assignment row, never its arm id**; `pi-analyse` therefore keeps v2 and v3
-in separate experiment tables (and separate guard/kill-switch figures), never pools them, and
-the experiments extension balances arms over v3 rows only.
+fraction as v2, but the meaning of `foldHint` = `cache-aware` changed: it then also added a
+paragraph to the system prompt. A resumed v2 session keeps its v2 row, arm and flags. Arm ids
+repeat across v2 and v3, so **a meter line's design is its root session's assignment row,
+never its arm id**; `pi-analyse` therefore keeps v2 and v3 in separate experiment tables (and
+separate guard/kill-switch figures) and never pools them.
+
+**v4** — 3 factors `warmPolicy`, `mainCacheTtl`, `maskOnCold` (the full 2^3, 8 arms,
+3-character ids, baseline `---`). `foldHint` went with infinite-context's fold hint;
+`freshOnCold` and `delegationRule` are the task router's levers and no factors any more.
+New assignments carry `design: "v4"`; resumed v1, v2 and v3 sessions keep their rows, arms
+and flags, and the experiments extension balances arms over v4 rows only. A row without
+`design` whose arm has 3 characters counts as v4.
 
 ## guards/events.jsonl
 
@@ -216,7 +222,8 @@ table is; this is what a reader of the raw files needs to reproduce them).
   account's rise seen between pi requests ("pi share" in *Data quality*); a lone root gets
   the full rise, two identical parallel roots half each. A root without any reading has no
   quota figure. 1 % steps make per-root figures coarse; they are fair only over many steps.
-- **Designs v2 and v3** are analysed alike (same factors) but as separate tables: a unit
+- **Designs v2 and v3** are analysed alike (same factors) but as separate tables, v4 (its own
+  three factors) in a third: a unit
   (root session) belongs to the design named by its root's first assignment row (arm length
   when there is none); guard events and verdicts are attributed the same way (spawn events by
   their `parentSessionId`) before they are keyed by arm. `--apply` writes one posterior per arm id,
@@ -241,7 +248,7 @@ table is; this is what a reader of the raw files needs to reproduce them).
     tokens are written at w where they would have been read at r);
     **net = savings − rewrite = n·R·r − K·(w − r)** exactly. Break-even depth K/R = n·r/(w − r) ≈ n/11.5.
   - The report gives count, Σ net, the share of folds with net < 0, and the same by K/R bucket
-    (< 0.25, 0.25–0.5, 0.5–1, 1–2, ≥ 2), by design + `foldHint` level (v2 and v3 apart) and by model.
+    (< 0.25, 0.25–0.5, 0.5–1, 1–2, ≥ 2), by design + `foldHint` level (v2 and v3 apart; v4 has none: `v4 –`) and by model.
   Counterfactual by construction: each fold is valued alone, as if nothing else changed
   (output, tool use and the task path stay the same; the unfolded prompt would have been read at r).
   Folds of one session overlap in `n`; the sums are therefore a per-fold ledger, not a total saving.
