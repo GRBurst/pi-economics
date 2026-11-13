@@ -10,14 +10,14 @@ import { experiment, type DesignResult } from "./experiment.ts";
 import { delegation, type DelegationSection } from "./delegation.ts";
 import { guards, type GuardsSection } from "./guards.ts";
 import { quality, type QualitySection } from "./quality.ts";
-import { levers, type LeversSection } from "./levers.ts";
+import { leverStates, levers, type LeversSection } from "./levers.ts";
 import { budget, type BudgetSection } from "./budget.ts";
 
 export { LOGS, inPeriod, versionOf, type FileInfo, type LogName, type Logs, type Period } from "./logs.ts";
 export { DESIGNS, designOf } from "./designs.ts";
 export { type CostSection, type Split } from "./cost.ts";
 export { type CacheSection, type CauseRow, type MissCause } from "./cache.ts";
-export { type BalanceRow, type DesignResult, type Effect, type Objective, type StratumResult, type Unit } from "./experiment.ts";
+export { type BalanceRow, type DesignResult, type Effect, type Objective, type OverflowRow, type PerProtocol, type RefusalRow, type Sensitivity, type StratumResult, type Unit } from "./experiment.ts";
 export { type Agreement, type DelegationSection, type MatrixCell, type ProfileTier, type ControlRows, type RandomRow, type Randomized, type Row, type RouterFactor, type Runaway, type SpotChecks } from "./delegation.ts";
 export { type GuardsSection } from "./guards.ts";
 export { type QualitySection } from "./quality.ts";
@@ -31,7 +31,7 @@ export type Analysis = { period: Period; budget: BudgetSection; cost: CostSectio
 export function analyse(all: Logs, period: Period = {}): Analysis {
   const logs = inPeriod(all, period);
   const meter = logs.meter.filter(isRequestLine); // levers lines record settings, no request (quality counts them as log lines)
-  const designs = experiment(meter, all.assignments, all.expSettings, all.plans);
+  const designs = experiment(meter, all.assignments, all.expSettings, all.plans, leverStates(all.meter, period));
   const flags = Object.fromEntries([...armInfo([...new Set(meter.filter((l) => typeof l?.arm === "string").map((l) => l.arm))], all.assignments)].map(([a, i]) => [a, i.flags]));
   return {
     period,

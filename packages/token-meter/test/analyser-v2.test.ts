@@ -1,0 +1,147 @@
+// The analyser on assignments v2 (redesign M5c, §7.5, §9.4): units keyed (design, stratum), per-protocol over confirmed read-backs,
+// refusal rates, overflow per active hour, the model-switch sensitivity row, design ids never pooled.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { analyse, renderExperiment, type Logs, type Effect } from "../core/analyse.ts";
+import { mulberry32 } from "../core/stats.ts";
+import { iso, MIN, T0, turns } from "./world.ts";
+
+const D = "a1b2c3d4e5f6", E = "0f9e8d7c6b5a";
+const FACTORS: Array<[string, string, [string, string]]> = [
+  ["warmPolicy", "cache-lifecycle.warmPolicy", ["native", "orchestrator-aware"]],
+  ["mainCacheTtl", "cache-lifecycle.mainCacheTtl", ["5m", "1h"]],
+];
+const row = (sessionId: string, arm: string, stratum = "api", design = D, factors = FACTORS) => ({
+  v: 2, ts: iso(T0), sessionId, design, mode: "explore", eligible: true, stratum, arm,
+  factors: Object.fromEntries(factors.map(([name, lever, levels], i) => [name, { lever, assigned: levels[Number(arm[i])] }])),
+});
+/** A levers line of a root's main: per factor lever the read-back `rb` (default confirmed), v = a unless refused. */
+const levers = (sessionId: string, arm: string, rb: Record<string, "confirmed" | "refused" | "unverified"> = {}, design = D) => ({
+  v: 2, ts: iso(T0), sessionId, kind: "levers", eligible: true, design, stratum: "api", arm,
+  levers: Object.fromEntries(FACTORS.map(([name, lever, levels], i) => {
+    const a = levels[Number(arm[i])], r = rb[name] ?? "confirmed";
+    return [lever, r === "refused" ? { v: levels[1 - Number(arm[i])], s: "ext", a, rb: r } : { v: a, s: "pe", a, rb: r }];
+  })),
+});
+/** A cloud root of 1 active hour, `usd` in all. */
+const cloud = (id: string, arm: string, usd: number, extra: Record<string, unknown> = {}, design = D) => turns(id, T0 + MIN, 7, { v: 2, arm, design, costUsd: usd / 7, ...extra });
+const logs = (meter: Record<string, unknown>[], rows: Record<string, unknown>[], plans?: Logs["plans"]): Logs => ({ meter, outcomes: [], guards: [], assignments: rows, plans });
+const stratumOf = (l: Logs, s = "api", d = D) => analyse(l).experiment.designs.find((x) => x.design === d)!.strata.find((x) => x.stratum === s)!;
+const eff = (es: Effect[], f: string) => es.find((e) => e.factor === f)!;
+const close = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
+
+/** Eight units of 1 active h in four arms: warmPolicy low 10/12 $, high 20/24 $ (marginal ratios 11 and 22). */
+const base = () => {
+  const spec: Array<[string, string, number]> = [["a", "00", 10], ["b", "00", 10], ["c", "10", 20], ["d", "10", 20], ["e", "01", 12], ["f", "01", 12], ["g", "11", 24], ["h", "11", 24]];
+  return spec.map(([id, arm, usd]) => ({ id, arm, usd }));
+};
+
+test("T5c.1: units are keyed (design, stratum) from the v2 rows: a stratum named by the row, the arm's factors from the row", () => {
+  const us = base();
+  const l = logs(us.flatMap((u) => cloud(u.id, u.arm, u.usd)), us.map((u, i) => row(u.id, u.arm, i < 4 ? "api" : "opus")));
+  const d = analyse(l).experiment.designs.find((x) => x.design === D)!;
+  assert.deepEqual(d.strata.map((s) => s.stratum).sort(), ["api", "opus"]);
+  assert.deepEqual(d.strata.find((s) => s.stratum === "opus")!.balance.map((b) => [b.arm, b.units]), [["01", 2], ["11", 2]]);
+});
+
+test("T5c.2: a v2 stratum named by its row takes the objective from settings: wallMs = Σ durationMs of the main's requests per active hour", () => {
+  const us = base();
+  const meter = us.flatMap((u) => cloud(u.id, u.arm, u.usd, { durationMs: u.usd * 1000 }));
+  const l = { ...logs(meter, us.map((u) => row(u.id, u.arm, "opus"))), expSettings: { strata: { opus: { objective: "wallMs" } } } };
+  const s = stratumOf(l, "opus");
+  assert.equal(s.objective, "wallMs");
+  const e = eff(s.effects, "warmPolicy");
+  assert.ok(!("notMeasurable" in e));
+  if ("notMeasurable" in e) return;
+  close(e.ratioA, 7 * 11 * 1000); close(e.ratioB, 7 * 22 * 1000);
+});
+
+test("T5c.3: per-protocol keeps the units whose every factor lever is read back 'confirmed'; unverified and refused units leave it", () => {
+  const us = base();
+  // c ("10") is unverified on warmPolicy, e ("01") refused on mainCacheTtl.
+  const lv = us.map((u) => levers(u.id, u.arm, u.id === "c" ? { warmPolicy: "unverified" } : u.id === "e" ? { mainCacheTtl: "refused" } : {}));
+  const s = stratumOf(logs([...us.flatMap((u) => cloud(u.id, u.arm, u.usd)), ...lv], us.map((u) => row(u.id, u.arm))));
+  assert.ok(s.perProtocol, "a v2 stratum has a per-protocol block");
+  assert.equal(s.perProtocol!.units, 6);
+  assert.equal(s.perProtocol!.excluded, 2);
+  const e = eff(s.perProtocol!.effects, "warmPolicy");
+  assert.ok(!("notMeasurable" in e));
+  if ("notMeasurable" in e) return;
+  assert.deepEqual([e.nA, e.nB], [3, 3]); // low: a b f; high: d g h
+  close(e.ratioA, 32 / 3); close(e.ratioB, 68 / 3);
+  // The intention-to-treat estimate keeps every unit.
+  const itt = eff(s.effects, "warmPolicy");
+  if (!("notMeasurable" in itt)) assert.deepEqual([itt.nA, itt.nB], [4, 4]);
+});
+
+test("T5c.3: a unit without a levers line is not confirmed; the rendering labels per-protocol a non-randomized comparison", () => {
+  const us = base();
+  const l = logs(us.flatMap((u) => cloud(u.id, u.arm, u.usd)), us.map((u) => row(u.id, u.arm)));
+  assert.equal(stratumOf(l).perProtocol!.units, 0);
+  const text = renderExperiment(analyse(l).experiment.designs);
+  assert.ok(text.includes("non-randomized comparison"), text);
+  assert.ok(text.includes("Per-protocol"), text);
+});
+
+test("T5c.4: refusal rate per factor = refused ÷ eligible; above 0.20 the add-on is flagged broken (0.20 itself is not)", () => {
+  const us = base().concat([{ id: "i", arm: "00", usd: 10 }, { id: "j", arm: "00", usd: 10 }]);
+  const lv = (refused: string[]) => us.map((u) => levers(u.id, u.arm, refused.includes(u.id) ? { warmPolicy: "refused" } : {}));
+  const world = (refused: string[]) => logs([...us.flatMap((u) => cloud(u.id, u.arm, u.usd)), ...lv(refused)], us.map((u) => row(u.id, u.arm)));
+  const two = stratumOf(world(["a", "c"])).refusal!; // 2 / 10 = 0.20
+  const w2 = two.find((r) => r.factor === "warmPolicy")!;
+  assert.deepEqual([w2.eligible, w2.refused, w2.broken, w2.lever], [10, 2, false, "cache-lifecycle.warmPolicy"]);
+  close(w2.rate, 0.2);
+  const three = stratumOf(world(["a", "c", "e"])).refusal!;
+  const w3 = three.find((r) => r.factor === "warmPolicy")!;
+  assert.deepEqual([w3.refused, w3.broken], [3, true]);
+  assert.equal(three.find((r) => r.factor === "mainCacheTtl")!.refused, 0);
+  assert.ok(renderExperiment(analyse(world(["a", "c", "e"])).experiment.designs).includes("broken add-on"));
+  assert.ok(!renderExperiment(analyse(world(["a"])).experiment.designs).includes("broken add-on"));
+});
+
+test("T5c.5: context overflows per active hour per arm (errorKind), error lines add no hours", () => {
+  const us = base();
+  const errLine = (id: string, at: number, errorKind: string) => ({ v: 2, ts: iso(T0 + at * MIN), sessionId: id, provider: "anthropic", model: "claude-opus", kind: "turn", status: "error", errorKind, arm: "00", design: D });
+  const l = logs([...us.flatMap((u) => cloud(u.id, u.arm, u.usd)), errLine("a", 5, "context_overflow"), errLine("a", 6, "context_overflow"), errLine("b", 5, "context_overflow"), errLine("a", 3, "rate_limit")], us.map((u) => row(u.id, u.arm)));
+  const o = stratumOf(l).overflow!;
+  const r = o.find((x) => x.arm === "00")!;
+  assert.deepEqual([r.overflows, r.units], [3, 2]);
+  close(r.hours, 2); close(r.perHour, 1.5);
+  assert.equal(o.find((x) => x.arm === "11")!.overflows, 0);
+  assert.ok(renderExperiment(analyse(l).experiment.designs).includes("Context overflows"));
+});
+
+test("T5c.6: the sensitivity row restricts a unit's objective to requests billed as its start class; a model switch is counted", () => {
+  const us = base();
+  const plans = { llama: { billing: "local" as const, windows: [] as ("5h" | "7d")[] } };
+  // c switches its main to the local provider after 3 requests.
+  const meter = us.flatMap((u) => cloud(u.id, u.arm, u.usd).map((x, i) => (u.id === "c" && i >= 3 ? { ...x, provider: "llama", model: "qwen" } : x)));
+  const l = logs(meter, us.map((u) => row(u.id, u.arm)), plans);
+  const s = stratumOf(l);
+  assert.ok(s.sensitivity);
+  assert.equal(s.sensitivity!.switched, 1);
+  const e = eff(s.sensitivity!.effects, "warmPolicy");
+  assert.ok(!("notMeasurable" in e));
+  if ("notMeasurable" in e) return;
+  close(e.ratioA, 11); close(e.ratioB, (60 / 7 + 20 + 24 + 24) / 4);
+  const itt = eff(s.effects, "warmPolicy");
+  if (!("notMeasurable" in itt)) close(itt.ratioB, 22); // the primary estimate counts every request
+  assert.ok(renderExperiment(analyse(l).experiment.designs).includes("Sensitivity"));
+});
+
+test("T5c.7 property: two designs with equal factor names (distinct ids) are never pooled", () => {
+  for (let seed = 1; seed <= 25; seed++) {
+    const rand = mulberry32(seed);
+    const meter: Record<string, unknown>[] = [], rows: Record<string, unknown>[] = [], onlyD: Record<string, unknown>[] = [], rowsD: Record<string, unknown>[] = [];
+    const n = 6 + Math.floor(rand() * 10);
+    for (let i = 0; i < n; i++) {
+      const design = rand() < 0.5 ? D : E, id = `s${seed}-${i}`, arm = `${Math.floor(rand() * 2)}${Math.floor(rand() * 2)}`, usd = 1 + Math.floor(rand() * 30);
+      const ls = cloud(id, arm, usd, {}, design), r = row(id, arm, rand() < 0.3 ? "opus" : "api", design);
+      meter.push(...ls); rows.push(r);
+      if (design === D) { onlyD.push(...ls); rowsD.push(r); }
+    }
+    const all = analyse(logs(meter, rows)).experiment.designs, d = analyse(logs(onlyD, rowsD)).experiment.designs;
+    assert.deepEqual(all.map((x) => x.design).sort(), [...new Set(rows.map((r) => r.design as string))].sort(), `seed ${seed}`);
+    assert.deepEqual(all.find((x) => x.design === D)?.strata, d.find((x) => x.design === D)?.strata, `seed ${seed}: design D's strata do not depend on E`);
+  }
+});

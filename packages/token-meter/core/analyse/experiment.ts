@@ -4,6 +4,8 @@ import { armStats, isError, MIN_HOURS, quotaAttribution, rootUnits, type ArmStat
 import { bootstrapRatio, mulberry32, normal, ratio } from "../stats.ts";
 import { billingOf, plansAbsent, type Billing, type Plans } from "../plans.ts";
 import { byTs, isLine } from "./logs.ts";
+import { type LeverState } from "../levers.ts";
+import { apiUsd } from "./units.ts";
 import { armInfo, DESIGNS, designOf, designOfLine, rowsBySession, v2Levels } from "./designs.ts";
 
 /**
@@ -17,6 +19,8 @@ const OBJECTIVES = ["apiUsd", "cashUsd", "localCost", "wallMs", "points5h", "poi
 /** A root session as the estimate sees it: its stratum (billing class of its main's provider), arm, factor levels, active hours and objective (undefined = not measurable). */
 export type Unit = { sessionId: string; design: string; stratum: string; arm: string; levels: Record<string, string | number | boolean>;
   hours: number; objective?: number;
+  /** v2 rows only (M5c): every factor lever of the row read back "confirmed" (per-protocol); the objective over the requests billed as the start class (sensitivity); the root's context overflows; a request of another class than the start's. */
+  confirmed?: boolean; sensitivity?: number; switched?: boolean; overflows?: number;
   /** Request timing behind a wallMs / localCost objective: lines that carry `durationMs` and lines that do not (those add no time). */ timing?: { timed: number; untimed: number } };
 export type Effect =
   | { design: string; stratum: string; factor: string; a: string; b: string; nA: number; nB: number; ratioA: number; ratioB: number;
@@ -30,7 +34,18 @@ export type Effect =
  * and for a wallMs / localCost objective the lines of those units with and without `durationMs` (the untimed ones add no time).
  */
 export type BalanceRow = { arm: string; units: number; hours: number; excluded: number; unmeasured: number; timedLines: number; untimedLines: number };
-export type StratumResult = { stratum: string; objective: Objective; balance: BalanceRow[]; effects: Effect[] };
+/** M5c (§7.5), v2-engine strata only. Per-protocol: units whose every factor lever is "confirmed" (a non-randomized comparison); `excluded` = the other measured units. */
+export type PerProtocol = { units: number; excluded: number; effects: Effect[] };
+/** Refusal rate of a factor's lever: units whose lever state is "refused" ÷ the stratum's eligible units; broken = above REFUSAL_LIMIT. */
+export type RefusalRow = { factor: string; lever: string; eligible: number; refused: number; rate: number; broken: boolean };
+export type OverflowRow = { arm: string; units: number; hours: number; overflows: number; perHour: number };
+/** Effects with each unit's objective over the requests billed as its start class; `switched` = units with a request of another class. */
+export type Sensitivity = { switched: number; effects: Effect[] };
+export type StratumResult = { stratum: string; objective: Objective; balance: BalanceRow[]; effects: Effect[];
+  perProtocol?: PerProtocol; refusal?: RefusalRow[]; overflow?: OverflowRow[]; sensitivity?: Sensitivity;
+  /** Per-arm stats of this stratum's units alone (the kill switch and the posterior of `designs.<id>.<stratum>`, T5c.9). */ arms?: ArmStat[] };
+export const REFUSAL_LIMIT = 0.2;
+export type LeverStates = Map<string, Record<string, LeverState>>;
 export type DesignResult = { design: string; factors: string[]; baseline: string; units: number; arms: ArmStat[];
   /** One result per stratum (billing class), never pooled. */ strata: StratumResult[];
   /** True when no usable `plans` entry exists: a unit is then in stratum "api" unless its own v2 line says otherwise. */ plansAbsent: boolean;
@@ -110,7 +125,7 @@ function strataOf(ls: any[], plans: Plans): string {
  * Every root session of the design's lines as a Unit (all hours; the estimate excludes short ones, the balance table counts them). Its stratum is
  * the one its assignment row records (v2 engine: a named stratum), else the billing class of its main's first request (strataOf).
  */
-function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<string, string> }>, plans: Plans, quota: ReturnType<typeof quotaAttribution>, expSettings: any, rows: Map<string, any>): { units: Unit[]; objectives: Map<string, Objective> } {
+function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<string, string> }>, plans: Plans, quota: ReturnType<typeof quotaAttribution>, expSettings: any, rows: Map<string, any>, states: LeverStates): { units: Unit[]; objectives: Map<string, Objective> } {
   const byRoot = new Map<string, any[]>();
   for (const l of [...dl].sort(byTs)) { const r = l.parentSessionId ?? l.sessionId; (byRoot.get(r) ?? byRoot.set(r, []).get(r)!).push(l); }
   const objectives = new Map<string, Objective>();
@@ -119,21 +134,25 @@ function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<st
     const recorded = rows.get(r.root)?.stratum;
     const stratum = typeof recorded === "string" && recorded ? recorded : strataOf(ls, plans);
     if (!objectives.has(stratum)) objectives.set(stratum, objectiveFor(stratum, plans, expSettings));
-    return { sessionId: r.root, design, stratum, arm: r.arm, levels: info.get(r.arm)?.flags ?? {}, hours: r.hours, ...objectiveOf(objectives.get(stratum)!, r, ls, plans) };
+    const o = objectives.get(stratum)!;
+    const unit: Unit = { sessionId: r.root, design, stratum, arm: r.arm, levels: info.get(r.arm)?.flags ?? {}, hours: r.hours, ...objectiveOf(o, r, ls, plans) };
+    const row = rows.get(r.root);
+    if (row?.v !== 2) return unit;
+    const start = strataOf(ls, plans), same = ls.filter((l) => billingOfLine(l, plans) === start);
+    const mine = states.get(r.root);
+    const factors: Array<{ lever?: string }> = plainObject(row.factors) ? Object.values(row.factors) : [];
+    return { ...unit, confirmed: factors.every((f) => typeof f?.lever === "string" && mine?.[f.lever]?.rb === "confirmed"),
+      sensitivity: objectiveOf(o, { ...r, cost: same.reduce((s, l) => s + apiUsd(l), 0) }, same.filter((l) => l.kind !== "warming" || o === "apiUsd"), plans).objective,
+      switched: ls.some((l) => l.kind !== "warming" && !isError(l) && billingOfLine(l, plans) !== start),
+      overflows: ls.filter((l) => l.errorKind === "context_overflow").length };
   });
   return { units, objectives };
 }
 
-function stratumResult(design: string, stratum: string, objective: Objective, units: Unit[], factors: string[], levels: (f: string) => [string, string]): StratumResult {
-  const included = units.filter((u) => u.hours >= MIN_HOURS);
-  const measured = included.filter((u) => u.objective !== undefined);
-  const arms = [...new Set(units.map((u) => u.arm))].sort();
-  const balance = arms.map((arm): BalanceRow => {
-    const mine = included.filter((u) => u.arm === arm);
-    return { arm, units: mine.length, hours: mine.reduce((s, u) => s + u.hours, 0), excluded: units.filter((u) => u.arm === arm && u.hours < MIN_HOURS).length, unmeasured: mine.filter((u) => u.objective === undefined).length,
-      timedLines: mine.reduce((s, u) => s + (u.timing?.timed ?? 0), 0), untimedLines: mine.reduce((s, u) => s + (u.timing?.untimed ?? 0), 0) };
-  });
-  const effects = factors.map((factor): Effect => {
+/** Effects of each factor over `included` units with the objective `value` (undefined = not measurable). */
+function effectsOf(design: string, stratum: string, objective: Objective, included: Unit[], factors: string[], levels: (f: string) => [string, string], value: (u: Unit) => number | undefined = (u) => u.objective): Effect[] {
+  const measured = included.filter((u) => value(u) !== undefined).map((u) => ({ ...u, objective: value(u) }));
+  return factors.map((factor): Effect => {
     if (!included.length) return { design, stratum, factor, notMeasurable: `not measurable: every unit is under ${MIN_HOURS} active h` };
     if (!measured.length) return { design, stratum, factor, notMeasurable: `not measurable: ${WHY[objective]}` };
     const [a, b] = levels(factor);
@@ -145,10 +164,44 @@ function stratumResult(design: string, stratum: string, objective: Objective, un
     const boot = thin ? { ci: [NaN, NaN] as [number, number], sd: NaN, dropped: 0 } : bootstrapRatio(A, B, BOOTSTRAP, 1);
     return { design, stratum, factor, a, b, nA: A.length, nB: B.length, ratioA, ratioB, effect: ratioB / ratioA - 1, ci: boot.ci, mde: 2.8 * boot.sd, dropped: boot.dropped };
   });
-  return { stratum, objective, balance, effects };
 }
 
-export function experiment(meter: any[], rows: any[], expSettings: any, plans?: Plans): DesignResult[] {
+function stratumResult(design: string, stratum: string, objective: Objective, units: Unit[], factors: string[], levels: (f: string) => [string, string]): StratumResult {
+  const included = units.filter((u) => u.hours >= MIN_HOURS);
+  const arms = [...new Set(units.map((u) => u.arm))].sort();
+  const balance = arms.map((arm): BalanceRow => {
+    const mine = included.filter((u) => u.arm === arm);
+    return { arm, units: mine.length, hours: mine.reduce((s, u) => s + u.hours, 0), excluded: units.filter((u) => u.arm === arm && u.hours < MIN_HOURS).length, unmeasured: mine.filter((u) => u.objective === undefined).length,
+      timedLines: mine.reduce((s, u) => s + (u.timing?.timed ?? 0), 0), untimedLines: mine.reduce((s, u) => s + (u.timing?.untimed ?? 0), 0) };
+  });
+  const effects = effectsOf(design, stratum, objective, included, factors, levels);
+  if (!included.some((u) => u.confirmed !== undefined)) return { stratum, objective, balance, effects };
+  const proto = included.filter((u) => u.confirmed);
+  const switched = included.filter((u) => u.switched).length;
+  return { stratum, objective, balance, effects,
+    perProtocol: { units: proto.length, excluded: included.length - proto.length, effects: effectsOf(design, stratum, objective, proto, factors, levels) },
+    sensitivity: { switched, effects: effectsOf(design, stratum, objective, included, factors, levels, (u) => u.sensitivity) },
+    overflow: arms.map((arm) => { const mine = included.filter((u) => u.arm === arm), hours = mine.reduce((s, u) => s + u.hours, 0), overflows = mine.reduce((s, u) => s + (u.overflows ?? 0), 0);
+      return { arm, units: mine.length, hours, overflows, perHour: hours > 0 ? overflows / hours : NaN }; }) };
+}
+
+/** factor name → lever id, from the design's v2 rows. */
+function factorLevers(rows: any[], design: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of rows) if (r?.v === 2 && r.design === design && plainObject(r.factors)) for (const [n, f] of Object.entries(r.factors)) if (typeof f?.lever === "string" && !out.has(n)) out.set(n, f.lever);
+  return out;
+}
+
+/** Per factor: the stratum's units whose lever state is "refused" ÷ its units (every unit has an assignment row with an arm). */
+function refusalOf(units: Unit[], levers: Map<string, string>, states: LeverStates): RefusalRow[] {
+  return [...levers].map(([factor, lever]) => {
+    const refused = units.filter((u) => states.get(u.sessionId)?.[lever]?.rb === "refused").length;
+    const rate = units.length ? refused / units.length : NaN;
+    return { factor, lever, eligible: units.length, refused, rate, broken: rate > REFUSAL_LIMIT };
+  });
+}
+
+export function experiment(meter: any[], rows: any[], expSettings: any, plans?: Plans, states: LeverStates = new Map()): DesignResult[] {
   const armed = meter.filter((l) => isLine(l) && typeof l.sessionId === "string" && typeof l.arm === "string" && l.arm);
   const quota = quotaAttribution(meter.filter((l) => isLine(l) && typeof l.sessionId === "string")); // account-wide: over every root, armed or not
   const by = rowsBySession(rows);
@@ -165,9 +218,15 @@ export function experiment(meter: any[], rows: any[], expSettings: any, plans?: 
     const isV2 = v2.size > 0;
     const factors = known ? known.map(([n]) => n) : [...new Set(arms.flatMap((a) => Object.keys(info.get(a)!.flags)))];
     const levels = (f: string): [string, string] => known?.find(([n]) => n === f)?.[1] ?? v2.get(f) ?? ([...new Set(arms.map((a) => info.get(a)!.flags[f]))].sort().concat(["", ""]).slice(0, 2) as [string, string]);
-    const { units, objectives } = unitsOf(dl, design, info, plans ?? {}, quota, expSettings, by);
+    const { units, objectives } = unitsOf(dl, design, info, plans ?? {}, quota, expSettings, by, states);
     const names = [...objectives.keys()].sort((x, y) => (STRATA_ORDER.indexOf(x) + 1 || 99) - (STRATA_ORDER.indexOf(y) + 1 || 99) || (x < y ? -1 : 1));
-    const strata = names.map((s) => stratumResult(design, s, objectives.get(s)!, units.filter((u) => u.stratum === s), factors, levels));
+    const strata = names.map((s) => {
+      const mine = units.filter((u) => u.stratum === s), result = stratumResult(design, s, objectives.get(s)!, mine, factors, levels);
+      if (!isV2) return result;
+      const roots = new Set(mine.map((u) => u.sessionId));
+      return { ...result, refusal: refusalOf(mine, factorLevers(rows, design), states),
+        arms: armStats(dl.filter((l) => roots.has(l.parentSessionId ?? l.sessionId)), { flags, quota }) };
+    });
     const stats = armStats(dl, { flags, quota });
     const post = stats.filter((s) => s.units >= 2).map((s) => ({ arm: s.arm, mean: -s.costPerHour, sd: s.sd }));
     const pb = pBest(post);

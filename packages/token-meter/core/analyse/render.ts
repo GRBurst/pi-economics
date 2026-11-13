@@ -5,7 +5,7 @@ import { type CI } from "../stats.ts";
 import { sum } from "./logs.ts";
 import { type CostSection } from "./cost.ts";
 import { type CacheSection } from "./cache.ts";
-import { type DesignResult, type StratumResult } from "./experiment.ts";
+import { REFUSAL_LIMIT, type DesignResult, type StratumResult } from "./experiment.ts";
 import { MIN_CI_N, type CostPerAccepted, type DelegationSection, type Randomized, type Row, type RouterFactor, type SpotChecks } from "./delegation.ts";
 import { type GuardsSection } from "./guards.ts";
 import { type QualitySection } from "./quality.ts";
@@ -119,6 +119,26 @@ export function renderFolds(f: LedgerSection, beta?: Beta): string {
 
 const pp = (n: number): string => (Number.isFinite(n) ? `${n >= 0 ? "+" : ""}${(100 * n).toFixed(0)}%` : "–");
 
+const effectRows = (es: StratumResult["effects"]): string[][] => es.map((e) => "notMeasurable" in e
+  ? [e.factor, "–", "–", "–", "–", "–", e.notMeasurable, "–"]
+  : [e.factor, `${e.a} → ${e.b}`, String(e.nA), String(e.nB), f2(e.ratioA), f2(e.ratioB), pp(e.effect), Number.isFinite(e.ci[0]) ? `${pp(e.ci[0])} – ${pp(e.ci[1])}` : "–"]);
+const EFFECT_HEAD = ["factor", "low → high", "n low", "n high", "ratio low", "ratio high", "effect", "95% CI"];
+
+/** The v2 engine's extras of a stratum (M5c, §7.5): refusal rates, overflows, per-protocol and the model-switch sensitivity row. Nothing for a v1-engine stratum. */
+function renderV2(s: StratumResult): string {
+  if (!s.refusal && !s.perProtocol && !s.overflow && !s.sensitivity) return "";
+  return [
+    ...(s.refusal ? ["\nRefusal rate per factor (units whose lever was refused by its owner ÷ the stratum's eligible units; above " + (REFUSAL_LIMIT * 100).toFixed(0) + "% the add-on is flagged in the last column):\n",
+      table(["factor", "lever", "eligible", "refused", "rate", "flag"], s.refusal.map((r) => [r.factor, `\`${r.lever}\``, String(r.eligible), String(r.refused), pc(r.rate), r.broken ? "broken add-on" : "ok"]))] : []),
+    ...(s.perProtocol ? [`\nPer-protocol (non-randomized comparison): the ${s.perProtocol.units} units whose every factor lever was read back \`confirmed\` (${s.perProtocol.excluded} unverified or refused units left out). Units that kept the assignment are not a random sample of the assigned ones: this row can be confounded and is no causal estimate; the intention-to-treat table above is.\n`,
+      table(EFFECT_HEAD, effectRows(s.perProtocol.effects))] : []),
+    ...(s.sensitivity ? [`\nSensitivity (model switch): the objective over the requests billed as the unit's start class only (billing of its main's first request); ${s.sensitivity.switched} unit(s) used another billing class in a request. Same units and hours as the table above.\n`,
+      table(EFFECT_HEAD, effectRows(s.sensitivity.effects))] : []),
+    ...(s.overflow ? ["\nContext overflows (`errorKind = context_overflow`) per active hour and arm:\n",
+      table(["arm", "units", "active h", "overflows", "per active h"], s.overflow.map((o) => [`\`${o.arm}\``, String(o.units), f2(o.hours), String(o.overflows), f2(o.perHour)]))] : []),
+  ].join("\n");
+}
+
 function renderStratum(s: StratumResult): string {
   const measurable = s.effects.flatMap((e) => ("notMeasurable" in e ? [] : [e]));
   const mdes = measurable.filter((e) => Number.isFinite(e.mde) && e.mde > 0);
@@ -138,6 +158,7 @@ function renderStratum(s: StratumResult): string {
     mdes.length ? `\nPower: at the current n the smallest detectable effect (α .05 two-sided, power .8) is ${pp(lo.mde).replace("+", "±")} (${lo.factor}), the largest ${pp(hi.mde).replace("+", "±")} (${hi.factor}); a smaller true effect is not distinguishable from noise.`
       : flat ? "\nPower: n/a (zero variance: every unit of a level has the same ratio)." : measurable.length ? "\nPower: not estimable (fewer than 2 units at a level of every factor)." : reasons.length ? `\nPower: not estimable (${reasons[0].replace(/^not measurable: /, "")}).` : "",
     dropped.length ? `\n${dropped.map((e) => `${e.factor} ${e.dropped}`).join(", ")} non-finite bootstrap draws dropped (of 2000; a resample with a zero low ratio or no hours).` : "",
+    ...(renderV2(s) ? [renderV2(s)] : []),
   ].join("\n");
 }
 

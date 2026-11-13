@@ -42,3 +42,10 @@ export function levers(all: any[], period: any[], p: Period = {}): LeversSection
     }),
   };
 }
+
+/** The last levers line of each session up to the period's end (a session that began earlier keeps the line written at its start): session → its levers. */
+export function leverStates(all: any[], p: Period = {}): Map<string, Record<string, LeverState>> {
+  const out = new Map<string, Record<string, LeverState>>();
+  for (const l of all.filter((l) => isLine(l) && isLevers(l) && (p.until === undefined || l.ts.slice(0, 10) <= p.until)).sort(byTs)) out.set(l.sessionId, l.levers);
+  return out;
+}
