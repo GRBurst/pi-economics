@@ -38,24 +38,34 @@ export function createRegistry(levers: readonly Lever[]): Registry {
   };
 }
 
-type Track = { lever: Lever; a: Level; feasible: readonly Level[]; obs: Observed };
+/** `level`: the factor's assigned level; `a`: the lever value it stands for (the level itself unless the add-on maps it); `ok`: the add-on can set it. */
+type Track = { lever: Lever; name: string; level: Level; a: Level; ok: boolean; obs: Observed };
 
 /**
  * One session's levers: each factor of its assignment whose add-on is registered and whose target is loaded starts once
  * (feasibility, then `apply` when feasible); an observer's last defined observation stands until a new one differs.
- * `levelsOf(name)` = the design's levels of a factor.
+ * `levelsOf(name)` = the design's levels of a factor. `ctxOf()` = the session as the add-ons see it now (its model, branch
+ * and entry writer; default: the id only); a lever that follows the model is evaluated again by `modelChanged`.
  */
 export function sessionLevers(
   registry: Registry,
   assigned: { sessionId: string; factors?: Record<string, { lever: LeverId; assigned: Level }> },
   env: TargetEnv,
   levelsOf: (factor: string) => readonly Level[],
+  ctxOf: () => SessionCtx = () => ({ sessionId: assigned.sessionId }),
 ) {
   const tracks = new Map<LeverId, Track>();
-  const ctx: SessionCtx = { sessionId: assigned.sessionId };
   const stateOf = (t: Track): LeverState | undefined => {
-    const st = readBack(t.a, t.feasible, t.lever.observe ? t.obs : "no-observer");
+    const st = readBack(t.a, t.ok ? undefined : [], t.lever.observe ? t.obs : "no-observer");
     return st?.a === undefined ? st : { ...st, tier: t.lever.tier };
+  };
+  /** Feasibility and value of a track's level now; sets the level when feasible. */
+  const start = (t: Track): void => {
+    const ctx = ctxOf();
+    const m = ctx.model;
+    t.ok = t.lever.feasible(m === undefined ? env : { ...env, model: m }, levelsOf(t.name)).includes(t.level);
+    t.a = t.lever.valueFor?.(ctx, t.level) ?? t.level;
+    if (t.ok) t.lever.apply(ctx, t.level);
   };
   return {
     /** Starts every live lever not started yet; true when one started. */
@@ -64,9 +74,9 @@ export function sessionLevers(
       for (const [name, f] of Object.entries(assigned.factors ?? {})) {
         const lever = registry.lever(f.lever);
         if (lever === undefined || tracks.has(lever.id) || !registry.loaded(lever.target)) continue;
-        const feasible = lever.feasible(env, levelsOf(name));
-        tracks.set(lever.id, { lever, a: f.assigned, feasible, obs: undefined });
-        if (feasible.includes(f.assigned)) lever.apply(ctx, f.assigned);
+        const t: Track = { lever, name, level: f.assigned, a: f.assigned, ok: false, obs: undefined };
+        tracks.set(lever.id, t);
+        start(t);
         started = true;
       }
       return started;
@@ -80,6 +90,21 @@ export function sessionLevers(
         if (o === undefined || (t.obs !== undefined && t.obs.v === o.v && t.obs.s === o.s)) continue;
         const before = JSON.stringify(stateOf(t));
         t.obs = o;
+        changed ||= JSON.stringify(stateOf(t)) !== before;
+      }
+      return changed;
+    },
+    /**
+     * The session's model changed (`ctxOf()` already says the new one): the levers that follow the model are evaluated and
+     * set again, and their earlier observation no longer holds. True when a state changed.
+     */
+    modelChanged(): boolean {
+      let changed = false;
+      for (const t of tracks.values()) {
+        if (t.lever.follow !== "model") continue;
+        const before = JSON.stringify(stateOf(t));
+        start(t);
+        t.obs = undefined;
         changed ||= JSON.stringify(stateOf(t)) !== before;
       }
       return changed;

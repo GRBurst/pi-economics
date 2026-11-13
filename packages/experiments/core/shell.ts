@@ -13,8 +13,9 @@ import { join } from "node:path";
 import { designState, draw, eligibleFor, parseBlocks, stratumOf, type AssignmentV2, type BlockState } from "./assign.ts";
 import { CACHE_LIFECYCLE } from "../addons/cache-lifecycle.ts";
 import { piProcessLevers } from "../addons/pi-process.ts";
+import { IC_TARGET, IC_TOOL, infiniteContext, parseIcRules } from "../addons/infinite-context.ts";
 import { createRegistry, sessionLevers } from "../addons/registry.ts";
-import type { Lever } from "../addons/types.ts";
+import type { Lever, ModelRef, SessionCtx } from "../addons/types.ts";
 import { publish, serve, type Assigned, type Bus, type Levers } from "./channel.ts";
 import { designFor, type Design, type Level } from "./design.ts";
 import { V4_FACTORS, defaults, loadOptIn, parseStrata, readPlans, type Settings } from "./settings.ts";
@@ -24,6 +25,8 @@ export type PiLike = {
   on(name: string, handler: (e: any, ctx: any) => unknown): void;
   registerCommand(name: string, command: { description: string; handler: (args: string, ctx: any) => unknown }): void;
   appendEntry(customType: string, data?: unknown): void;
+  /** pi 1.4: every registered tool; where it is absent (or throws) no target is detected by its tools. */
+  getAllTools?(): Array<{ name?: unknown }>;
   events: Bus;
 };
 /** The part of the actor-subagents API this package reads (own copy: packages do not import each other); the type check compares it with the provider's SubagentsApiV1 (spec §5.3). */
@@ -113,6 +116,7 @@ export function install(pi: PiLike, deps: Deps): void {
   const lookup = (sid: string): Assigned | undefined => known.get(sid);
   // The add-ons (§7.4): a session's levers start when their target first asks the channel; their read-back states ride
   // on every publication and answer.
+  const icFile = join(deps.agentDir, "infinite-context", "settings.json");
   // pi's process levers read back from the settings files (the project's under the checkout the session runs in).
   // What pi merges (the project's settings only when the project is trusted, as pi and token-meter do) and the model whose
   // per-model compaction tokens apply: noted from the session's context at session_start and before each read-back.
@@ -125,12 +129,24 @@ export function install(pi: PiLike, deps: Deps): void {
     const m = safe(() => ctx.model as { provider?: unknown; id?: unknown } | undefined);
     model = typeof m?.provider === "string" && typeof m?.id === "string" ? `${m.provider}/${m.id}` : undefined;
   };
-  const registry = createRegistry([...CACHE_LIFECYCLE, ...piProcessLevers(() => ({
+  const registry = createRegistry([...CACHE_LIFECYCLE, ...infiniteContext(() => parseIcRules(safe(() => readFileSync(icFile, "utf8")))), ...piProcessLevers(() => ({
     global: readJson(join(deps.agentDir, "settings.json")),
     project: trusted ? readJson(join(cwd, ".pi", "settings.json")) : undefined,
     model,
   }))]);
   const tracked = new Map<string, ReturnType<typeof sessionLevers>>();
+  /** What a session offers its add-ons now: its current model, its branch and its entry writer (seed tier, §7.4). */
+  const live = new Map<string, { model?: ModelRef; branch: () => readonly unknown[] }>();
+  const modelOf = (m: unknown): ModelRef | undefined => (isRecord(m) ? { ...(typeof m.provider === "string" ? { provider: m.provider } : {}), ...(typeof m.id === "string" ? { id: m.id } : {}) } : undefined);
+  const sessionOf = (sid: string, event?: unknown): SessionCtx => {
+    const l = live.get(sid);
+    return { sessionId: sid, ...(event === undefined ? {} : { event }), ...(l?.model === undefined ? {} : { model: l.model }), ...(l === undefined ? {} : { branch: l.branch }), appendEntry: (t, d) => pi.appendEntry(t, d) };
+  };
+  const watch = (sid: string, ctx: any): void => {
+    const sm = safe(() => ctx.sessionManager);
+    const model = modelOf(safe(() => ctx.model));
+    live.set(sid, { ...(model === undefined ? {} : { model }), branch: () => safe(() => sm.getBranch() as unknown[]) ?? [] });
+  };
   /** A factor's levels in the design the session was assigned (another design under the same stratum: just its own). */
   const levelsOf = (a: Assigned) => (name: string): readonly Level[] => {
     const d = a.stratum === undefined ? undefined : designs.get(a.stratum);
@@ -140,7 +156,7 @@ export function install(pi: PiLike, deps: Deps): void {
   const trackerOf = (a: Assigned) => {
     let t = tracked.get(a.sessionId);
     if (t === undefined) {
-      t = sessionLevers(registry, a, { child: a.parentSessionId !== undefined }, levelsOf(a));
+      t = sessionLevers(registry, a, { child: a.parentSessionId !== undefined }, levelsOf(a), () => sessionOf(a.sessionId));
       tracked.set(a.sessionId, t);
       t.refresh();
     }
@@ -168,16 +184,31 @@ export function install(pi: PiLike, deps: Deps): void {
       flushing = false;
     }
   };
+  /** A target is loaded (it asked the channel, or pi lists its tool): its levers start in every session already tracked. */
+  const loaded = (target: string): void => {
+    if (registry.load(target)) for (const [s, t] of tracked) if (t.refresh()) announce(s);
+  };
   serve(pi.events, (sid, target) => {
-    if (target !== undefined && registry.load(target)) for (const [s, t] of tracked) if (t.refresh()) announce(s);
+    if (target !== undefined) loaded(target);
     return leversOf(sid);
   });
   const observeAt = (at: Lever["readBackAt"], e: unknown, ctx: any): void => {
     noteEnv(ctx);
     const sid = safe(() => ctx.sessionManager.getSessionId() as string);
     const t = sid === undefined ? undefined : tracked.get(sid);
-    if (t?.observe(at, { sessionId: sid!, event: e })) announce(sid!);
+    if (sid !== undefined && t !== undefined && live.has(sid)) live.get(sid)!.model = modelOf(safe(() => ctx.model)) ?? live.get(sid)!.model;
+    if (t?.observe(at, sessionOf(sid!, e))) announce(sid!);
   };
+  // A model switch: the levers that follow the model (the seed of a range lever) are set again before the extensions after
+  // this one (load order: experiments first) see the switch.
+  pi.on("model_select", (e, ctx) => {
+    const sid = safe(() => ctx.sessionManager.getSessionId() as string);
+    const l = sid === undefined ? undefined : live.get(sid);
+    const model = modelOf(e?.model);
+    if (sid === undefined || l === undefined || model === undefined) return;
+    live.set(sid, { ...l, model });
+    if (tracked.get(sid)?.modelChanged()) announce(sid);
+  });
   pi.on("before_agent_start", (e, ctx) => void observeAt("before_agent_start", e, ctx));
   const adopt = (a: Assigned): void => {
     known.set(a.sessionId, a);
@@ -308,6 +339,10 @@ export function install(pi: PiLike, deps: Deps): void {
     if (settings.legacy?.length) warnOnce(ctx, "experiments:legacy", `experiments: ignores the settings ${settings.legacy.join(", ")} (the v1 engine's): its factors come from strata (default: one stratum per billing class); baseline only labels the analyses of v1–v4 designs`);
     const main = ctx.sessionManager.getSessionId() as string;
     noteEnv(ctx);
+    watch(main, ctx);
+    // An extension that does not know pi-economics cannot ask the channel: its tools show it is loaded (§7.4).
+    const tools = safe(() => pi.getAllTools?.());
+    if (Array.isArray(tools) && tools.some((t) => t?.name === IC_TOOL)) loaded(IC_TARGET);
     // A child's runtime (experiments among the actor's childExtensions): never drawn, no row; its arm is its root's.
     const file = safe(() => ctx.sessionManager.getSessionFile() as string | undefined);
     const root = rootOf(main, file, safe(() => ctx.hasUI));

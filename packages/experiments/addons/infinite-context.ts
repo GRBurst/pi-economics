@@ -21,7 +21,8 @@ export const IC_ENTRY = "infinite-context:settings";
 export const IC_TOOL = "context_fold";
 /** The extension's own limit when no rule and no top level sets one (its DEFAULT_SETTINGS; the contract check holds it equal). */
 export const IC_DEFAULT_NUDGE = 150_000;
-const TARGET = "infinite-context";
+export const IC_TARGET = "infinite-context";
+const TARGET = IC_TARGET;
 
 const positiveInt = (v: unknown): number => (typeof v === "number" && Number.isInteger(v) && v > 0 ? v : 0);
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -69,6 +70,17 @@ export const tokensAt = (range: readonly [number, number], q: number): number =>
 const isFraction = (l: Level): l is number => typeof l === "number" && l >= 0 && l <= 1;
 const isRange = (n: Nudge): n is readonly [number, number] => typeof n !== "number";
 
+/** The extension's latest well-formed settings record on a branch (the one it resolves from, and the read-back). */
+function latestRecord(branch: readonly unknown[]): IcRecord | undefined {
+  for (let i = branch.length - 1; i >= 0; i--) {
+    const e = branch[i];
+    const d = isObject(e) && e.type === "custom" && e.customType === IC_ENTRY ? e.data : undefined;
+    if (isObject(d) && typeof d.nudgeAtTokens === "number" && Number.isFinite(d.nudgeAtTokens)) return d as IcRecord;
+  }
+  return undefined;
+}
+const sameRange = (a: unknown, b: readonly [number, number]): boolean => Array.isArray(a) && a.length === 2 && a[0] === b[0] && a[1] === b[1];
+
 /** The lever of infinite-context's limit; `rules` reads the settings file the extension reads (the module writes it). */
 export function infiniteContext(rules: () => IcRules): readonly Lever[] {
   const matched = (model: ModelRef | undefined) => {
@@ -87,18 +99,15 @@ export function infiniteContext(rules: () => IcRules): readonly Lever[] {
       const { rule, nudge: n } = matched(ctx.model);
       if (!isRange(n) || !isFraction(level)) return;
       const record: IcRecord = { nudgeAtTokens: tokensAt(n, level), nudgeAtTokensRange: n, ...(rule === undefined ? {} : { rule }) };
+      // The branch already holds it (a resumed session, a switch within one range): the extension keeps it; no second record.
+      const held = latestRecord(ctx.branch?.() ?? []);
+      if (held?.nudgeAtTokens === record.nudgeAtTokens && sameRange(held.nudgeAtTokensRange, n)) return;
       ctx.appendEntry?.(IC_ENTRY, record);
     },
     observe(ctx: SessionCtx): Observed {
-      const branch = ctx.branch?.() ?? [];
-      for (let i = branch.length - 1; i >= 0; i--) {
-        const e = branch[i];
-        const d = isObject(e) && e.type === "custom" && e.customType === IC_ENTRY ? e.data : undefined;
-        if (!isObject(d) || typeof d.nudgeAtTokens !== "number" || !Number.isFinite(d.nudgeAtTokens)) continue;
-        // A range: the extension drew it (its own experiment); none: a number the configuration fixed.
-        return { v: d.nudgeAtTokens, s: d.nudgeAtTokensRange === undefined ? "fixed" : "ext" };
-      }
-      return undefined;
+      const d = latestRecord(ctx.branch?.() ?? []);
+      // A range: the extension drew it (its own experiment); none: a number the configuration fixed.
+      return d === undefined ? undefined : { v: d.nudgeAtTokens, s: d.nudgeAtTokensRange === undefined ? "fixed" : "ext" };
     },
   };
   return [nudge];
