@@ -1,24 +1,24 @@
 // Per-arm analysis of the meter log for the experiments package. Pure; bin/meter-report.ts does the I/O.
 // Unit of analysis = one root session (a main session with all its children), the random effect of the design.
+import { armEvents, type FoldPremium } from "./analyse/cache.ts";
+import { FOLD_SHRINK, isError, push } from "./analyse/logs.ts";
 import { apiUsd } from "./analyse/units.ts";
 
-export type Ev = { n: number; meanCost: number };
+export { FOLD_SHRINK, isError, push };
+
 export type ArmStat = { arm: string; units: number; costUsd: number; activeHours: number; costPerHour: number;
-  ci: [number, number]; sd: number; coldResume: Ev; fold: Ev;
+  ci: [number, number]; sd: number;
+  /** After cold resumes and folds: events, their premium (misses × (write − read price) over the event's window), the baseline of ordinary requests and the net (B4; cache.ts foldPremiums). Claude models only. */
+  coldResume: FoldPremium; fold: FoldPremium;
   /** Account quota used per active hour (percentage points of the 5 h / 7 d window; 1 % steps), NaN without readings. */
   q5hPerHour: number; q7dPerHour: number };
 
 const MIN = 60_000;
 const IDLE_MS = 30 * MIN; // a gap longer than this is idle, not activity
 export const MIN_HOURS = 0.05; // units with less activity make $/h meaningless
-const N_AFTER = 3; // requests whose cost an event is charged with
-export const FOLD_SHRINK = 0.8; // a warm turn whose context fell below this share of the previous one is a fold
 const BOOT = 1000;
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-/** A failed request: the log line has no usage and is not a request (it is neither a fold, nor activity). */
-export const isError = (l: any): boolean => l.status === "error";
-const ctx = (l: any): number => num(l.input) + num(l.cacheRead) + num(l.cacheWrite);
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -114,49 +114,27 @@ export function rootUnits(all: any[], quota: Record<QuotaKey, QuotaAttribution> 
   });
 }
 
-/** Append to the list under `k` (linear; never copy the list). */
-export function push<K, V>(m: Map<K, V[]>, k: K, v: V): void {
-  const xs = m.get(k);
-  if (xs) xs.push(v); else m.set(k, [v]);
-}
-
-const ev = (costs: number[]): Ev => ({ n: costs.length, meanCost: costs.length ? costs.reduce((s, c) => s + c, 0) / costs.length : 0 });
+const NO_EVENTS: FoldPremium = { events: 0, premiumUsd: 0, baselineUsd: 0, netUsd: 0 };
 
 /** `flags`: arm id → factor values (assignments.jsonl); only `mainCacheTtl` is read, for the cold-resume TTL of main sessions. `quota`: attribution over all lines, when `all` is a subset (an arm, a design). */
 export function armStats(all: any[], opt: { flags?: Record<string, Record<string, string>>; quota?: Record<QuotaKey, QuotaAttribution> } = {}): ArmStat[] {
   const quota = opt.quota ?? quotaAttribution(all); // over every line, before the arm filter
   const t = (l: any): number => Date.parse(l.ts);
   const lines = all.filter((l) => l && typeof l.ts === "string" && !Number.isNaN(t(l)) && typeof l.sessionId === "string" && typeof l.arm === "string" && l.arm).sort((a, b) => t(a) - t(b));
-  const bySession = new Map<string, any[]>();
-  for (const l of lines) push(bySession, l.sessionId, l);
-  const arms = new Map<string, { units: Unit[]; cost: number; cold: number[]; fold: number[] }>();
-  const slot = (arm: string) => arms.get(arm) ?? arms.set(arm, { units: [], cost: 0, cold: [], fold: [] }).get(arm)!;
+  const arms = new Map<string, { units: Unit[]; cost: number }>();
+  const slot = (arm: string) => arms.get(arm) ?? arms.set(arm, { units: [], cost: 0 }).get(arm)!;
 
   for (const u of rootUnits(lines, quota)) {
     const a = slot(u.arm);
     a.cost += u.cost;
     if (u.hours >= MIN_HOURS) a.units.push({ cost: u.cost, hours: u.hours, q5h: u.q5h, q7d: u.q7d });
   }
-  for (const ss of bySession.values()) {
-    const ttl = (ss[0].parentSessionId === undefined && opt.flags?.[ss[0].arm]?.mainCacheTtl === "1h" ? 60 : 5) * MIN;
-    // Warming is not a turn; a failed request is neither (no usage), so it starts no event and sits in no window.
-    const reqs = ss.filter((l) => !isError(l));
-    const turns = reqs.filter((l) => l.kind !== "warming");
-    let at = 0; // index in `reqs` of turns[i]
-    turns.forEach((l, i) => {
-      while (reqs[at] !== l) at++;
-      const prev = reqs[at - 1];
-      const window = turns.slice(i, i + N_AFTER);
-      if (!prev || window.length < N_AFTER) return;
-      const cost = window.reduce((s, x) => s + apiUsd(x), 0);
-      if (t(l) - t(prev) >= ttl) slot(l.arm).cold.push(cost);
-      else if (i && ctx(l) < FOLD_SHRINK * ctx(turns[i - 1])) slot(l.arm).fold.push(cost);
-    });
-  }
+  const events = armEvents(lines, opt.flags);
   return [...arms].sort(([a], [b]) => (a < b ? -1 : 1)).map(([arm, a]) => {
     const costPerHour = a.units.length ? rate(a.units) : NaN;
     const b = a.units.length > 1 ? bootstrap(a.units) : { ci: [costPerHour, costPerHour] as [number, number], sd: 0 };
-    return { arm, units: a.units.length, costUsd: a.cost, activeHours: a.units.reduce((s, u) => s + u.hours, 0), costPerHour, ...b, coldResume: ev(a.cold), fold: ev(a.fold), q5hPerHour: perHour(a.units, "q5h"), q7dPerHour: perHour(a.units, "q7d") };
+    const ev = events.get(arm);
+    return { arm, units: a.units.length, costUsd: a.cost, activeHours: a.units.reduce((s, u) => s + u.hours, 0), costPerHour, ...b, coldResume: ev?.coldResume ?? NO_EVENTS, fold: ev?.fold ?? NO_EVENTS, q5hPerHour: perHour(a.units, "q5h"), q7dPerHour: perHour(a.units, "q7d") };
   });
 }
 
@@ -166,7 +144,7 @@ export function posterior(stats: ArmStat[]): Record<string, { mean: number; sd: 
 }
 
 const f2 = (n: number): string => (Number.isFinite(n) ? n.toFixed(2) : "–");
-const evs = (e: Ev): string => (e.n ? `${f2(e.meanCost)} (${e.n})` : "–");
+const evs = (e: FoldPremium): string => (e.events ? `${f2(e.netUsd / e.events)} (${e.events})` : "–"); // net premium per event
 
 type Acc = Record<string, { accepted: number; judged: number }>;
 type Sig = Record<string, { peeks: number; corrections: number; ratings: number[] }>;
@@ -177,7 +155,7 @@ export function renderArms(stats: ArmStat[], acc: Acc, reasons: Record<string, s
   const rating = (s: ArmStat) => { const r = sig[s.arm]?.ratings ?? []; return r.length ? (r.reduce((x, y) => x + y, 0) / r.length).toFixed(1) : "–"; };
   const cols: Array<[string, (s: ArmStat) => string]> = [
     ["arm", (s) => s.arm], ["units", (s) => String(s.units)], ["active h", (s) => f2(s.activeHours)], ["costUsd", (s) => f2(s.costUsd)], ["$/h", (s) => f2(s.costPerHour)],
-    ["95% CI", (s) => `${f2(s.ci[0])} – ${f2(s.ci[1])}`], ["cold resume $ (n)", (s) => evs(s.coldResume)], ["fold $ (n)", (s) => evs(s.fold)],
+    ["95% CI", (s) => `${f2(s.ci[0])} – ${f2(s.ci[1])}`], ["cold resume net $/event (n)", (s) => evs(s.coldResume)], ["fold net $/event (n)", (s) => evs(s.fold)],
     ["accepted", (s) => (acc[s.arm] ? `${acc[s.arm].accepted}/${acc[s.arm].judged}` : "–")],
     ["$/accepted task", (s) => f2(perTask[s.arm]?.perAccepted ?? NaN)], ["q5h %/h", (s) => f2(s.q5hPerHour)], ["q7d %/h", (s) => f2(s.q7dPerHour)],
     ["peeks/s", (s) => per(s, "peeks")], ["corr/s", (s) => per(s, "corrections")], ["rating", rating],

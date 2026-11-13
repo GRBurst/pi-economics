@@ -29,3 +29,13 @@ export function inPeriod(logs: Logs, p: Period): Logs {
   const keep = (l: any) => isLine(l) && (p.since === undefined || l.ts.slice(0, 10) >= p.since) && (p.until === undefined || l.ts.slice(0, 10) <= p.until);
   return { ...logs, meter: logs.meter.filter(keep), outcomes: logs.outcomes.filter(keep), guards: logs.guards.filter(keep) };
 }
+
+/** A failed request: the log line has no usage and is not a request (it is neither a fold, nor activity). */
+export const isError = (l: any): boolean => l.status === "error";
+/** A warm turn whose context fell below this share of the previous one is a fold. */
+export const FOLD_SHRINK = 0.8;
+/** Append to the list under `k` (linear; never copy the list). */
+export function push<K, V>(m: Map<K, V[]>, k: K, v: V): void {
+  const xs = m.get(k);
+  if (xs) xs.push(v); else m.set(k, [v]);
+}

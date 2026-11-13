@@ -1,6 +1,5 @@
 // (a) cache: what a request wrote because the context grew and what it had to rewrite because the cache lost the prefix (redesign M2a, B3).
-import { FOLD_SHRINK, isError, push } from "../arms.ts";
-import { byTs, isLine, num } from "./logs.ts";
+import { byTs, FOLD_SHRINK, isError, isLine, num, push } from "./logs.ts";
 import { cacheWrite1hOf, isClaude, pIn, WEIGHT, writeWeight } from "./units.ts";
 
 type Flags = Record<string, Record<string, string>>;
@@ -154,4 +153,15 @@ export function foldPremiums(branches: Iterable<readonly any[]>, ttlMs: (l: any)
     e.netUsd = e.premiumUsd - e.baselineUsd;
   }
   return out;
+}
+
+/**
+ * The events of every arm (arm = the first line's of a session branch): foldPremiums over the arm's branches. The per-arm fold and cold-resume
+ * columns of arms.ts (B4: the premium of the cache a fold or a cold resume lost, not the cost of the requests after it).
+ */
+export function armEvents(lines: readonly any[], flags: Flags = {}): Map<string, Record<EventKind, FoldPremium>> {
+  const byArm = new Map<string, any[][]>();
+  for (const branch of branchesOf(lines).values()) push(byArm, String(branch[0].arm ?? ""), branch);
+  const ttl = ttlMsOf(flags);
+  return new Map([...byArm].map(([arm, branches]) => [arm, foldPremiums(branches, ttl, shrinkFold, flags)]));
 }

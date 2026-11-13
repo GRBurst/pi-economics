@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { armStats, posterior, quotaAttribution, rootUnits } from "../core/arms.ts";
+import { pIn, WEIGHT } from "../core/analyse/units.ts";
 
 const MIN = 60_000;
 const T0 = Date.UTC(2026, 9, 5, 8, 0, 0);
@@ -45,24 +46,37 @@ test("bootstrap CI: deterministic, contains the estimate, collapses when every u
   assert.deepEqual(byArm(mixed)["+"].ci, m.ci);
 });
 
-test("cold resume: cost of the next N=3 requests after a gap ≥ the TTL; a main session with mainCacheTtl 1h is not cold at 10 min", () => {
-  const lines = [L("-", "s", 0, 0.1), L("-", "s", 1, 0.1), L("-", "s", 11, 5), L("-", "s", 12, 1), L("-", "s", 13, 1), L("-", "s", 14, 0.1)];
-  const cold = byArm(lines)["-"].coldResume;
-  assert.deepEqual([cold.n, cold.meanCost], [1, 7]);
-  assert.equal(byArm(lines, { "-": { mainCacheTtl: "1h" } })["-"].coldResume.n, 0);
+/** What a cache miss of `tokens` costs over reading them: tokens × (write − read) × the line's input price (B4, the fold premium). */
+const premium = (l: any, tokens: number): number => tokens * (WEIGHT.cacheWrite5m - WEIGHT.cacheRead) * pIn(l);
+const cold = (at: number, cost: number, extra: Record<string, unknown> = {}) => L("-", "s", at, cost, { cacheRead: 0, cacheWrite: 99_001, ...extra });
+
+test("cold resume column: events after a gap ≥ the TTL with their miss premium (B4); a main with mainCacheTtl 1h is not cold at 10 min", () => {
+  const resume = cold(11, 5);
+  const lines = [L("-", "s", 0, 0.1), L("-", "s", 1, 0.1), resume, L("-", "s", 12, 1, { cacheRead: 99_001 }), L("-", "s", 13, 1, { cacheRead: 99_001 }), L("-", "s", 14, 0.1, { cacheRead: 99_001 })];
+  const c = byArm(lines)["-"].coldResume;
+  assert.equal(c.events, 1);
+  assert.ok(Math.abs(c.premiumUsd - premium(resume, 99_000)) < 1e-12, `${c.premiumUsd}`);
+  assert.equal(c.baselineUsd, 0, "the ordinary requests miss nothing");
+  assert.ok(Math.abs(c.netUsd - c.premiumUsd) < 1e-12);
+  assert.equal(byArm(lines, { "-": { mainCacheTtl: "1h" } })["-"].coldResume.events, 0);
   // a child keeps the 5 min TTL whatever the arm says
   const child = lines.map((l) => ({ ...l, parentSessionId: "m" }));
-  assert.equal(byArm(child, { "-": { mainCacheTtl: "1h" } })["-"].coldResume.n, 1);
-  // an event too close to the end of the log has no full window
-  assert.equal(byArm(lines.slice(0, 4))["-"].coldResume.n, 0);
+  assert.equal(byArm(child, { "-": { mainCacheTtl: "1h" } })["-"].coldResume.events, 1);
+  // an event at the end of the log has a short window but still counts
+  assert.equal(byArm(lines.slice(0, 3))["-"].coldResume.events, 1);
 });
 
-test("fold: a warm turn whose context shrank below 80% of the previous one; cost of that request and the next two", () => {
+test("fold column: a warm turn whose context shrank below 80% of the previous one; the premium of its misses, not the cost of the next requests (B4)", () => {
   const small = { cacheRead: 30_000, cacheWrite: 10_000 };
-  const lines = [L("+", "s", 0, 0.1), L("+", "s", 1, 0.1), L("+", "s", 2, 2, small), L("+", "s", 3, 0.5, small), L("+", "s", 4, 0.5, small)];
+  const fold = L("+", "s", 2, 2, small);
+  const lines = [L("+", "s", 0, 0.1), L("+", "s", 1, 0.1), fold, L("+", "s", 3, 0.5, { cacheRead: 40_000 }), L("+", "s", 4, 0.5, { cacheRead: 40_000 })];
   const s = byArm(lines)["+"];
-  assert.deepEqual([s.fold.n, s.fold.meanCost], [1, 3]);
-  assert.equal(s.coldResume.n, 0);
+  assert.equal(s.fold.events, 1);
+  assert.ok(Math.abs(s.fold.premiumUsd - premium(fold, 10_001)) < 1e-12, `${s.fold.premiumUsd}`);
+  assert.equal(s.coldResume.events, 0);
+  // an expensive window that lost no cache costs nothing here (the old column charged the three requests' whole cost)
+  const dear = [L("+", "s", 0, 0.1), L("+", "s", 1, 0.1), L("+", "s", 2, 9, { cacheRead: 30_000, cacheWrite: 0 }), L("+", "s", 3, 9, { cacheRead: 30_000, cacheWrite: 0 })];
+  assert.ok(byArm(dear)["+"].fold.premiumUsd < 0.01, "one token of the 30 000 was not read: a premium of a third of a cent, not the window's $27");
 });
 
 test("posterior: reward = −$ per active hour, sd from the bootstrap; arms with fewer than 2 units are left out", () => {
@@ -296,14 +310,14 @@ test("error lines are not activity: they add no active hours", () => {
 
 test("an error line is no fold (its zero context is not a shrink)", () => {
   const lines = [L("+", "m", 0, 1), L("+", "m", 1, 1), E("+", "m", 2), L("+", "m", 3, 1), L("+", "m", 4, 1), L("+", "m", 5, 1)];
-  assert.equal(byArm(lines)["+"].fold.n, 0);
+  assert.equal(byArm(lines)["+"].fold.events, 0);
 });
 
-test("a cold resume starts on a real request and its window holds real requests only", () => {
-  const lines = [L("+", "m", 0, 1), L("+", "m", 1, 1), E("+", "m", 20), L("+", "m", 21, 4), L("+", "m", 22, 4), L("+", "m", 23, 4)];
+test("a cold resume starts on a real request: an error line neither starts nor ends a gap", () => {
+  const lines = [L("+", "m", 0, 1), L("+", "m", 1, 1), E("+", "m", 20), L("+", "m", 21, 4, { cacheRead: 0, cacheWrite: 99_001 }), L("+", "m", 22, 4), L("+", "m", 23, 4)];
   const s = byArm(lines)["+"];
-  assert.equal(s.coldResume.n, 1);
-  assert.equal(s.coldResume.meanCost, 12);
+  assert.equal(s.coldResume.events, 1);
+  assert.ok(s.coldResume.premiumUsd > 0);
 });
 
 test("a long session is analysed in linear time", () => {
