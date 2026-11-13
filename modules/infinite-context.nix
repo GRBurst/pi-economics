@@ -13,31 +13,52 @@
 
   r = cfg.reminders;
 
+  # One rule: the fields of upstream's settings file, null = inherit.
   reminderRule = lib.types.submodule {
     options = {
-      startTokens = lib.mkOption {
-        type = lib.types.nullOr lib.types.ints.positive;
+      nudgeAtTokens = lib.mkOption {
+        type = with lib.types; nullOr (either ints.positive (listOf ints.positive));
         default = null;
-        description = "Context size, in tokens, at which the first fold reminder is sent. null inherits (provider, then default, then 75% of the model window). Never later than 75% of the window.";
+        example = [100000 300000];
+        description = ''
+          Context size, in tokens, from which fold reminders start, or a range
+          `[min, max]` (min < max): each session branch then draws one limit
+          from it and records it, again when a model switch selects a rule with
+          another range. null inherits (exact model, then provider, then
+          `default`, then the extension's 150000).
+        '';
       };
-      everyTokens = lib.mkOption {
-        type = lib.types.nullOr lib.types.ints.positive;
+      nudgeAtPercent = lib.mkOption {
+        type = lib.types.nullOr (lib.types.numbers.between 0 100);
         default = null;
-        description = "Tokens between further reminders above startTokens. null inherits (provider, then default, then 5% of the model window).";
+        description = "Share of the model window, in percent (above 0), from which reminders start at the latest: the earlier of the two limits applies. null inherits like nudgeAtTokens (the extension's default is 75).";
       };
     };
   };
 
-  # Nulls mean "inherit" and are left out, so the file carries only what was set.
+  # Nulls mean "inherit" and are left out, so the file carries only what was
+  # set; a rule that sets nothing is left out too.
   renderRule = rule: lib.filterAttrs (_: v: v != null) rule;
+  overrides = lib.filterAttrs (_: rule: rule != {}) (lib.mapAttrs (_: renderRule) r.overrides);
 
-  # (M6.9) The reminder options as the extension reads them.
-  rendered = {
-    reminders = {
-      default = renderRule r.default;
-      overrides = lib.mapAttrs (_: renderRule) r.overrides;
-    };
-  };
+  # (M6.9) The reminder options as the extension reads them: `default` is the
+  # file's top level, the rest its `overrides`.
+  rendered = renderRule r.default // lib.optionalAttrs (overrides != {}) {inherit overrides;};
+
+  # Every rule with the name its assertion messages use.
+  namedRules =
+    [
+      {
+        name = "default";
+        rule = r.default;
+      }
+    ]
+    ++ lib.mapAttrsToList (key: rule: {
+      name = "overrides.${builtins.toJSON key}";
+      inherit rule;
+    })
+    r.overrides;
+  goodRange = t: !builtins.isList t || (lib.length t == 2 && lib.elemAt t 0 < lib.elemAt t 1);
 in {
   options.programs.piEconomics.infiniteContext = {
     enable = lib.mkEnableOption "pi-infinite-context, folds of the agent's own conversation with fold reminders per provider or model";
@@ -64,23 +85,26 @@ in {
       default = lib.mkOption {
         type = reminderRule;
         default = {};
-        description = "Fold-reminder thresholds for every model without an override.";
+        description = "Fold-reminder limits for every model, as far as no override sets them.";
       };
       overrides = lib.mkOption {
         type = lib.types.attrsOf reminderRule;
         default = {};
         example = {
-          anthropic = {
-            startTokens = 200000;
-            everyTokens = 20000;
+          anthropic.nudgeAtTokens = [100000 300000];
+          "anthropic/claude-opus-5-5" = {
+            nudgeAtTokens = 400000;
+            nudgeAtPercent = 50;
           };
         };
         description = ''
-          Fold-reminder thresholds keyed by pi provider (`anthropic`) or exact
+          Fold-reminder limits keyed by pi provider (`anthropic`) or exact
           `provider/modelId`. Each field resolves on its own: exact model, then
-          provider, then `default`, then infinite-context's built-in 75% / 5%
-          of the model window. Read once per extension instance, so a change
-          applies to sessions and subagents started after the switch.
+          provider, then `default`, then the extension's 150000 tokens / 75%.
+          The step between reminders is upstream's (15000 tokens, less when
+          little room is left). The session follows its current model; the
+          file is read once per extension instance, so a change applies to
+          sessions and subagents started after the switch.
         '';
       };
     };
@@ -93,22 +117,39 @@ in {
       description = ''
         Merged into `<agentDir>/infinite-context/settings.json` with
         `lib.recursiveUpdate`, on the right of what `reminders` renders: a
-        nested key replaces only its own leaf. The extension accepts
-        `nudgeAtTokens`, `nudgeAtPercent` and `reminders`; an unknown key or an invalid value
-        rejects the whole file with a warning at session start. `nudgeAtTokens`
-        is a token count or a range `[min, max]`, from which each session draws
-        one limit and records it (upstream since 9918c40).
+        nested key replaces only its own leaf. The extension reads
+        `nudgeAtTokens`, `nudgeAtPercent` and `overrides` (per rule the
+        same two fields); it ignores unknown keys and an invalid value of its
+        own, so neither is reported.
       '';
     };
   };
 
   config = lib.mkIf cfg.enable {
+    # The extension drops an invalid value without a word (fail-open per
+    # field), so the module rejects what its types let through.
+    assertions =
+      lib.concatMap ({
+        name,
+        rule,
+      }: [
+        {
+          assertion = goodRange rule.nudgeAtTokens;
+          message = "pi-economics: infiniteContext.reminders.${name}.nudgeAtTokens is a token count or a range [min, max] with min < max, not ${builtins.toJSON rule.nudgeAtTokens}";
+        }
+        {
+          assertion = rule.nudgeAtPercent == null || rule.nudgeAtPercent > 0;
+          message = "pi-economics: infiniteContext.reminders.${name}.nudgeAtPercent is a share of the model window in (0, 100], not 0";
+        }
+      ])
+      namedRules;
+
     programs.piEconomics.extensions.infinite-context = {
       path = "${cfg.package}/extensions/infinite-context";
       checkPath = "${cfg.src}/extensions/infinite-context/index.ts";
       input = "pi-infinite-context";
       forChildren = true;
-      description = "context_map, context_fold, context_unfold, context_peek and context_search: folds ranges of the agent's own conversation by message id and unfolds them on demand, without rewriting live messages. Also steers a maintenance reminder: by default from 75% of the model window, every 5 points; patched to take absolute token thresholds per provider or model from infiniteContext.reminders.";
+      description = "context_map, context_fold, context_unfold, context_peek and context_search: folds ranges of the agent's own conversation by message id and unfolds them on demand, without rewriting live messages. Also reminds the agent to fold: by default from 150k tokens or 75% of the model window, whichever comes first, then every 15k tokens; patched to take these limits (a token limit may be a range, drawn per branch) per provider or model from infiniteContext.reminders.";
     };
 
     # Always written, even with every option at its default: the path stays

@@ -65,13 +65,13 @@
   # (M6.4) The patched pi-infinite-context.
   infiniteContext = self.packages.${pkgs.stdenv.hostPlatform.system}.infinite-context;
   # (M6.5) The type-check copy: the extension without upstream's tsconfig.json
-  # (TS5112, M2.2) and without the two property tests that import fast-check,
-  # which the shared lock does not hold (the check does not run them either).
+  # (TS5112, M2.2) and without the three tests that import fast-check, which
+  # the shared lock does not hold (the check does not run them either).
   infiniteContextTs = pkgs.runCommand "infinite-context-ts" {} ''
     mkdir $out
     cp -r ${infiniteContext}/extensions ${infiniteContext}/package.json $out/
     chmod -R u+w $out
-    rm $out/extensions/infinite-context/{archive-properties,forest}.test.ts
+    rm $out/extensions/infinite-context/{archive-properties,forest,nudge}.test.ts
   '';
   # (M6.6) The patched pi-retry.
   retry = self.packages.${pkgs.stdenv.hostPlatform.system}.retry;
@@ -172,7 +172,10 @@ in {
     };
   };
   # The patched upstreams' suites, with the host's checks (spec §8.1).
-  infinite-context = pkgs.callPackage ./infinite-context {src = infiniteContext;};
+  infinite-context = pkgs.callPackage ./infinite-context {
+    src = infiniteContext;
+    inherit (npm) nodeModules;
+  };
   typecheck-infinite-context = typecheck.typecheck {
     name = "infinite-context";
     src = infiniteContextTs;

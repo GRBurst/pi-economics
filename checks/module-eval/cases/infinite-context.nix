@@ -5,7 +5,7 @@
   self,
   expect,
 }: let
-  inherit (expect) eq holds failed;
+  inherit (expect) eq holds failed throws evaluates;
   pe = cfg: cfg.programs.piEconomics;
   dirs = [".pi/agent" "custom/agent"];
   # dir: agentDir; ic: infiniteContext options, null = not enabled.
@@ -20,25 +20,43 @@
   fileAt = target: cfg: lib.findFirst (f: f.target == target) null (lib.attrValues cfg.home.file);
   settingsOf = dir: ic: (fileAt "${dir}/infinite-context/settings.json" (eval dir ic)).text;
   bare = hm.evalBare {};
-  # Example values: exact overrides for two models.
+  # Example values: a default range, exact overrides for two models (one a
+  # range), and a provider rule that sets nothing.
   exampleReminders = {
+    default.nudgeAtTokens = [100000 300000];
     overrides = {
-      "example/model-a" = {
-        startTokens = 200000;
-        everyTokens = 50000;
-      };
+      "example/model-a".nudgeAtTokens = 400000;
       "example/model-b" = {
-        startTokens = 200000;
-        everyTokens = 50000;
+        nudgeAtTokens = [200000 250000];
+        nudgeAtPercent = 50;
+      };
+      example = {};
+    };
+  };
+  # The file those values render: nulls and empty rules left out.
+  exampleRendered = {
+    nudgeAtTokens = [100000 300000];
+    overrides = {
+      "example/model-a".nudgeAtTokens = 400000;
+      "example/model-b" = {
+        nudgeAtTokens = [200000 250000];
+        nudgeAtPercent = 50;
       };
     };
   };
+  # The assertion messages of the infinite-context options.
+  icFailed = ic: failed "pi-economics: infiniteContext." (eval ".pi/agent" ic);
 in {
   # The cache patch's options left with it (upstream rejected the fold hint).
   infinite-context-removed = let
     o = (hm.options {}).programs.piEconomics.infiniteContext.reminders;
   in
-    eq "options of the dropped cache patch" (lib.filter (n: o ? ${n}) ["prices" "cacheTtlMinutes" "foldHint"]) [];
+    eq "options of the dropped cache patch" (lib.filter (n: o ? ${n}) ["prices" "cacheTtlMinutes" "foldHint"]) []
+    # The former rule fields (startTokens, everyTokens) are no options: a
+    # consumer still setting them fails evaluation instead of losing them.
+    ++ throws "startTokens" (settingsOf ".pi/agent" {reminders.default.startTokens = 100000;})
+    ++ throws "everyTokens" (settingsOf ".pi/agent" {reminders.overrides.anthropic.everyTokens = 100000;})
+    ++ evaluates "nudgeAtTokens (control)" (settingsOf ".pi/agent" {reminders.overrides.anthropic.nudgeAtTokens = 100000;});
 
   # (M6.8) Off by default: no registry entry, no file.
   infinite-context-off = let
@@ -74,36 +92,54 @@ in {
     ++ eq "name" ic.package.name "pi-infinite-context-patched";
 
   # (M6.8) Files: the link and the settings file, always written; with every
-  # option at its default the file is today's, byte for byte (spec §9.1 W5).
+  # option at its default the file is empty, so the extension runs on
+  # upstream's defaults.
   infinite-context-files = lib.concatMap (dir:
     eq "home.file targets (${dir})" (sorted (targets (eval dir {})))
     (sorted (targets bare ++ ["${dir}/extensions/infinite-context" "${dir}/infinite-context/settings.json"]))
-    ++ eq "settings text (${dir})" (settingsOf dir {}) ''{"reminders":{"default":{},"overrides":{}}}'')
+    ++ eq "settings text (${dir})" (settingsOf dir {}) "{}")
   dirs;
 
-  # (M6.9) The reminder options render as the host's piContextReminders did (spec §5.2):
-  # nulls are left out.
+  # (M6.9) The reminder rules render as the extension reads them: `default` at
+  # the top level, the rest under `overrides`; nulls and empty rules are left
+  # out.
   infinite-context-reminders = let
     example = builtins.fromJSON (settingsOf ".pi/agent" {reminders = exampleReminders;});
-    all = builtins.fromJSON (settingsOf ".pi/agent" {
+    percent = builtins.fromJSON (settingsOf ".pi/agent" {
       reminders = {
-        default.startTokens = 150000;
-        overrides.anthropic.everyTokens = 20000;
+        default.nudgeAtPercent = 60;
+        overrides.anthropic.nudgeAtPercent = 100;
       };
     });
   in
-    eq "example values" example {
-      reminders = {
-        default = {};
-        inherit (exampleReminders) overrides;
-      };
+    eq "example values" example exampleRendered
+    ++ eq "percentages" percent {
+      nudgeAtPercent = 60;
+      overrides.anthropic.nudgeAtPercent = 100;
     }
-    ++ eq "every option" all {
+    ++ eq "failed assertions" (icFailed {reminders = exampleReminders;}) [];
+
+  # A range is [min, max] with min < max, a percentage is above 0: the
+  # extension would drop any other value silently (fail-open per field).
+  infinite-context-assertions = let
+    range = name: v: "pi-economics: infiniteContext.reminders.${name}.nudgeAtTokens is a token count or a range [min, max] with min < max, not ${builtins.toJSON v}";
+    zero = name: "pi-economics: infiniteContext.reminders.${name}.nudgeAtPercent is a share of the model window in (0, 100], not 0";
+  in
+    lib.concatMap (v:
+      eq "default range ${builtins.toJSON v}" (icFailed {reminders.default.nudgeAtTokens = v;}) [(range "default" v)]
+      ++ eq "override range ${builtins.toJSON v}" (icFailed {reminders.overrides."a/b".nudgeAtTokens = v;}) [(range ''overrides."a/b"'' v)])
+    [[5 5] [6 5] [1] [1 2 3] []]
+    ++ eq "default percent 0" (icFailed {reminders.default.nudgeAtPercent = 0;}) [(zero "default")]
+    ++ eq "override percent 0" (icFailed {reminders.overrides.anthropic.nudgeAtPercent = 0;}) [(zero ''overrides."anthropic"'')]
+    ++ eq "valid values (control)" (icFailed {
       reminders = {
-        default.startTokens = 150000;
-        overrides.anthropic.everyTokens = 20000;
+        default = {
+          nudgeAtTokens = [1 2];
+          nudgeAtPercent = 0.5;
+        };
+        overrides.anthropic.nudgeAtTokens = 1;
       };
-    };
+    }) [];
 
   # (M6.10) settings merge with lib.recursiveUpdate, the user's on the right:
   # a nested key replaces its own leaf, the rendered siblings survive.
@@ -112,24 +148,21 @@ in {
       reminders = exampleReminders;
       settings = {
         nudgeAtPercent = 60;
-        reminders.default.everyTokens = 5000;
-        reminders.overrides."example/model-a".startTokens = 300000;
+        overrides."example/model-a".nudgeAtPercent = 40;
       };
     });
   in
-    eq "merged (${dir})" got {
-      nudgeAtPercent = 60;
-      reminders = {
-        default.everyTokens = 5000;
+    eq "merged (${dir})" got (exampleRendered
+      // {
+        nudgeAtPercent = 60;
         overrides =
-          exampleReminders.overrides
+          exampleRendered.overrides
           // {
             "example/model-a" = {
-              startTokens = 300000;
-              everyTokens = 50000;
+              nudgeAtTokens = 400000;
+              nudgeAtPercent = 40;
             };
           };
-      };
-    })
+      }))
   dirs;
 }

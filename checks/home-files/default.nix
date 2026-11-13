@@ -21,9 +21,10 @@
         infiniteContext = {
           enable = true;
           reminders = {
+            default.nudgeAtTokens = 200000;
             overrides."example/model-a" = {
-              startTokens = 200000;
-              everyTokens = 50000;
+              nudgeAtTokens = [150000 250000];
+              nudgeAtPercent = 50;
             };
           };
         };
@@ -67,17 +68,23 @@
     ${lib.getExe pe.piSettings.package} "$TMPDIR/settings.json" 2>/dev/null
     jq -e 'del(.piRetry) == {theme: "dark", cacheWarming: "idle"}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the op: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }
     # (M6.16) infiniteContext: the extension pi loads, and the rendered file
-    # accepted by the extension's own parser (an invalid file is rejected whole).
+    # read by the extension's own parser without loss: it drops an invalid
+    # value silently (fail-open per field), so every rendered key must come
+    # back as written.
     ic=${pe.extensions.infinite-context.path}
     for f in index.ts settings.ts; do
       [ -f $ic/$f ] || { echo "FAIL ${dir}: infinite-context lacks $f" >&2; exit 1; }
     done
     node --experimental-strip-types --input-type=module -e "
       import { readFileSync } from 'node:fs';
-      import { parseSettingsWithError } from '$ic/settings.ts';
-      const r = parseSettingsWithError(readFileSync(process.argv[1], 'utf8'));
-      if (r.error !== undefined) { console.error(r.error); process.exit(1); }
-    " ${c.home.file."${dir}/infinite-context/settings.json".source} || { echo "FAIL ${dir}: infinite-context rejects its settings.json" >&2; exit 1; }
+      import { isDeepStrictEqual } from 'node:util';
+      import { parseSettings } from '$ic/settings.ts';
+      const text = readFileSync(process.argv[1], 'utf8');
+      const raw = JSON.parse(text);
+      const parsed = parseSettings(text);
+      const lost = Object.keys(raw).filter((key) => !isDeepStrictEqual(parsed[key], raw[key]));
+      if (Object.keys(raw).length === 0 || lost.length > 0) { console.error('lost: ' + lost.join(', ')); process.exit(1); }
+    " ${c.home.file."${dir}/infinite-context/settings.json".source} || { echo "FAIL ${dir}: infinite-context does not read its settings.json as written" >&2; exit 1; }
     # retry: the repository, whose package.json names the entry point; the
     # stale package entries go.
     rt=${pe.extensions.pi-retry.path}
