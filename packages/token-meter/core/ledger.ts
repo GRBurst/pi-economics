@@ -6,12 +6,10 @@
 //   net = n·R·r − K·(w − r)        (savings − rewrite, exactly)
 // Pure bookkeeping on the meter lines: nothing here asserts that the fold was the cause of anything else.
 
-import { apiUsd } from "./analyse/units.ts";
+import { apiUsd, cacheWrite1hOf, isClaude, weightedTokens, WEIGHT } from "./analyse/units.ts";
 
 const MIN = 60_000;
 const FOLD_SHRINK = 0.8; // same rule as arms.ts: a turn whose prompt fell below this share of the previous turn's is a fold
-/** Relative prices (Anthropic): read 0.1, 5-minute write 1.25, output 5 × input (the weights core/analyse/units.ts splits costs with). */
-const WEIGHT = { input: 1, cacheRead: 0.1, cacheWrite: 1.25, output: 5 } as const;
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 const prompt = (l: any): number => num(l.input) + num(l.cacheRead) + num(l.cacheWrite);
@@ -21,27 +19,29 @@ const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
   return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
 };
-const isClaude = (l: any): boolean => /claude/i.test(String(l.model)) || l.provider === "anthropic";
 
-/** Per-token prices of a model: `w` (cache write) and `r` (cache read), $. */
-export type Price = { r: number; w: number };
+/** Per-token prices of a model, $: `r` (cache read), `w` (5-minute cache write) and `w1h` (1 h cache write). */
+export type Price = { r: number; w: number; w1h: number };
 
 /**
- * Per model: input price p = Σ the lines' cost ÷ Σ (input + 0.1·cacheRead + 1.25·cacheWrite + 5·output) over its lines with a cost and tokens
- * (the line's own cost and token fields; no price table), then r = 0.1·p and w = 1.25·p. A model without such a line has no price.
- * 1 h writes cost 2·p on Anthropic's list but pi's cost field uses the 1.25 table, which this follows.
+ * Per model: input price p = Σ the lines' cost ÷ Σ their tokens weighted by units.ts WEIGHT (read 0.1, 5-minute write 1.25, 1 h write 2.0,
+ * output 5) over its lines with a cost and tokens (the lines' own cost and token fields; no price table), then r = 0.1·p, w = 1.25·p and
+ * w1h = 2.0·p (B13: pi charges 1 h writes 2.0, so a 1h-arm main's lines must weigh them so). A line's 1 h writes are cacheWrite1hOf:
+ * its own `cacheWrite1h`, else all writes of a main session whose arm has `mainCacheTtl` 1h in `opt.flags`. A model without such a line
+ * has no price.
  */
-export function prices(lines: any[]): Map<string, Price> {
+export function prices(lines: any[], opt: LedgerOpts = {}): Map<string, Price> {
   const acc = new Map<string, { usd: number; weighted: number }>();
   for (const l of lines) {
-    const usd = apiUsd(l);
-    const weighted = (Object.keys(WEIGHT) as Array<keyof typeof WEIGHT>).reduce((s, k) => s + WEIGHT[k] * num(l[k]), 0);
+    const long = cacheWrite1hOf(l, l.parentSessionId === undefined, opt.flags?.[l.arm]);
+    const usd = apiUsd(l, { cacheWrite1h: long });
+    const weighted = weightedTokens(l, long, WEIGHT.cacheWrite1h);
     if (usd <= 0 || weighted <= 0) continue;
     const a = acc.get(String(l.model)) ?? acc.set(String(l.model), { usd: 0, weighted: 0 }).get(String(l.model))!;
     a.usd += usd;
     a.weighted += weighted;
   }
-  return new Map([...acc].map(([m, a]) => [m, { r: (WEIGHT.cacheRead * a.usd) / a.weighted, w: (WEIGHT.cacheWrite * a.usd) / a.weighted }]));
+  return new Map([...acc].map(([m, a]) => [m, { r: (WEIGHT.cacheRead * a.usd) / a.weighted, w: (WEIGHT.cacheWrite5m * a.usd) / a.weighted, w1h: (WEIGHT.cacheWrite1h * a.usd) / a.weighted }]));
 }
 
 export type FoldEntry = {
@@ -61,7 +61,7 @@ export type LedgerOpts = {
 };
 
 /** The entry of a fold with these numbers (the one formula; savings − rewrite is the net by construction). */
-export function value(R: number, K: number, n: number, p: Price): Pick<FoldEntry, "savings" | "rewrite" | "net"> {
+export function value(R: number, K: number, n: number, p: Pick<Price, "r" | "w">): Pick<FoldEntry, "savings" | "rewrite" | "net"> {
   const savings = n * R * p.r;
   const rewrite = K * (p.w - p.r);
   return { savings, rewrite, net: savings - rewrite };
@@ -76,7 +76,7 @@ export function value(R: number, K: number, n: number, p: Price): Pick<FoldEntry
  */
 export function foldLedger(all: any[], opt: LedgerOpts = {}): FoldEntry[] {
   const lines = all.filter((l) => l && typeof l.ts === "string" && !Number.isNaN(t(l)) && typeof l.sessionId === "string" && isClaude(l)).sort((a, b) => t(a) - t(b));
-  const price = prices(lines);
+  const price = prices(lines, opt);
   const sessions = new Map<string, any[]>();
   for (const l of lines) if (prompt(l) > 0) { const xs = sessions.get(l.sessionId); if (xs) xs.push(l); else sessions.set(l.sessionId, [l]); }
   const out: FoldEntry[] = [];
@@ -95,12 +95,14 @@ export function foldLedger(all: any[], opt: LedgerOpts = {}): FoldEntry[] {
       const l = reqs[i];
       const p = price.get(String(l.model));
       if (!p) continue;
+      const written = num(l.cacheWrite), long = cacheWrite1hOf(l, reqs[0].parentSessionId === undefined, opt.flags?.[arm]);
+      const w = written > 0 ? p.w + (long / written) * (p.w1h - p.w) : p.w; // the fold request's writes: its 1 h share at w1h, the rest at w (B13)
       const prev = reqs[prevTurn.get(i)!];
       const R = prompt(prev) - prompt(l);
       const wasCold = cold(i);
       const K = wasCold ? 0 : Math.max(0, num(l.cacheWrite) - typical);
       const n = after[i];
-      out.push({ sessionId, root: reqs[0].parentSessionId ?? sessionId, arm, model: String(l.model), ts: l.ts, R, K, n, cold: wasCold, ...value(R, K, n, p) });
+      out.push({ sessionId, root: reqs[0].parentSessionId ?? sessionId, arm, model: String(l.model), ts: l.ts, R, K, n, cold: wasCold, ...value(R, K, n, { r: p.r, w }) });
     }
   }
   return out.sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));

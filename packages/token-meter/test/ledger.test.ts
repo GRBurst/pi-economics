@@ -7,17 +7,17 @@ const MIN = 60_000;
 const T0 = Date.UTC(2026, 9, 5, 8, 0, 0);
 const P = 1e-6; // $ per input token; r = 0.1·P, w = 1.25·P
 const R_ = 0.1 * P, W_ = 1.25 * P;
-/** A line `at` minutes after T0 whose cost follows the weights exactly (so prices() recovers P). */
-const L = (sid: string, at: number, ctx: number, write: number, extra: Record<string, unknown> = {}) => {
+/** A line `at` minutes after T0 whose cost follows the weights exactly (so prices() recovers P); `ww` = the weight of a cache write (1.25: 5 minutes, 2.0: 1 h). */
+const L = (sid: string, at: number, ctx: number, write: number, extra: Record<string, unknown> = {}, ww = 1.25) => {
   const input = 2, cacheWrite = write, cacheRead = ctx - input - write, output = 10;
   return { ts: new Date(T0 + at * MIN).toISOString(), sessionId: sid, provider: "anthropic", model: "claude-x", kind: "turn", status: 200,
-    input, cacheRead, cacheWrite, output, costUsd: P * (input + 0.1 * cacheRead + 1.25 * cacheWrite + 5 * output), ...extra };
+    input, cacheRead, cacheWrite, output, costUsd: P * (input + 0.1 * cacheRead + ww * cacheWrite + 5 * output), ...extra };
 };
 /** `warm` warm turns (1 min apart, ctx 100k, write 1k), then a fold to `ctx` writing `write`, then `after` warm turns. */
-const withFold = (ctx: number, write: number, after: number, gap = 1, sid = "s") => {
-  const lines = Array.from({ length: 5 }, (_, i) => L(sid, i, 100_000, 1_000));
-  lines.push(L(sid, 4 + gap, ctx, write));
-  for (let i = 1; i <= after; i++) lines.push(L(sid, 4 + gap + i, ctx, 1_000));
+const withFold = (ctx: number, write: number, after: number, gap = 1, sid = "s", ww = 1.25) => {
+  const lines = Array.from({ length: 5 }, (_, i) => L(sid, i, 100_000, 1_000, {}, ww));
+  lines.push(L(sid, 4 + gap, ctx, write, {}, ww));
+  for (let i = 1; i <= after; i++) lines.push(L(sid, 4 + gap + i, ctx, 1_000, {}, ww));
   return lines;
 };
 const approx = (a: number, b: number) => assert.ok(Math.abs(a - b) <= 1e-12 + 1e-9 * Math.abs(b), `${a} ≈ ${b}`);
@@ -26,6 +26,30 @@ test("prices: per-model r and w recovered from the lines' own cost and token fie
   const p = prices(withFold(50_000, 3_000, 3)).get("claude-x")!;
   approx(p.r, R_);
   approx(p.w, W_);
+});
+
+// B13: pi charges the writes of a main session in a mainCacheTtl 1h arm at 2.0 × input (units.ts PI_PRICES_1H), so the ledger's price of a
+// rewrite there is w = 2.0·P, and the input price recovered from such lines must weigh their writes 2.0, not 1.25.
+const H = { "+": { mainCacheTtl: "1h" } };
+const inArm = (lines: any[], extra: Record<string, unknown> = {}) => lines.map((l) => ({ ...l, arm: "+", ...extra }));
+
+test("B13: prices recovers the input price of a 1h-arm main whose writes were charged 2.0, and offers the 1 h write price", () => {
+  const p = prices(inArm(withFold(50_000, 3_000, 3, 1, "s", 2.0)), { flags: H }).get("claude-x")!;
+  approx(p.r, R_);
+  approx(p.w, W_);
+  approx(p.w1h, 2.0 * P);
+});
+
+test("B13: a fold in a 1h arm rewrites at 2.0·P: rewrite = K·(2.0·P − r); the same fold of a child or in a 5m arm at 1.25·P", () => {
+  const [f] = foldLedger(inArm(withFold(50_000, 3_000, 10, 1, "s", 2.0)), { flags: H });
+  assert.equal(f.K, 2_000);
+  approx(f.rewrite, 2_000 * (2.0 * P - R_));
+  approx(f.net, f.savings - f.rewrite);
+  // a child of the 1h arm keeps the 5 minute TTL and its writes are charged 1.25
+  const [c] = foldLedger(inArm(withFold(50_000, 3_000, 10), { parentSessionId: "p" }), { flags: H });
+  approx(c.rewrite, 2_000 * (W_ - R_));
+  // no flags: every session is a 5m one
+  approx(foldLedger(withFold(50_000, 3_000, 10))[0].rewrite, 2_000 * (W_ - R_));
 });
 
 test("a shallow fold in a warm cache pays off: net = n·R·r − K·(w − r)", () => {

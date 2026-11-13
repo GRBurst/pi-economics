@@ -30,7 +30,8 @@ export function cacheWrite1hOf(l: any, main: boolean, armFlags?: Record<string, 
   return Math.min(Math.max(long, 0), written);
 }
 
-const weighted = (l: any, long: number, longWeight: number): number =>
+/** The line's tokens weighted by WEIGHT (cost = p × this, p the input price), `long` of its writes being 1 h writes of weight `longWeight`. */
+export const weightedTokens = (l: any, long: number, longWeight: number): number =>
   WEIGHT.input * num(l.input) + WEIGHT.cacheRead * num(l.cacheRead) + WEIGHT.cacheWrite5m * (num(l.cacheWrite) - long) + longWeight * long + WEIGHT.output * num(l.output);
 
 /**
@@ -38,7 +39,7 @@ const weighted = (l: any, long: number, longWeight: number): number =>
  * (weight 2.0 when pi priced them: `priced1h`, else 1.25). 0 for a line without a cost or tokens.
  */
 export function pIn(l: any, long: number = num(l.cacheWrite1h), priced1h: boolean = PI_PRICES_1H): number {
-  const w = weighted(l, long, priced1h ? WEIGHT.cacheWrite1h : WEIGHT.cacheWrite5m);
+  const w = weightedTokens(l, long, priced1h ? WEIGHT.cacheWrite1h : WEIGHT.cacheWrite5m);
   return w > 0 ? num(l.costUsd) / w : 0;
 }
 
