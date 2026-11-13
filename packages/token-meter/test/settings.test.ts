@@ -17,6 +17,15 @@ test("known keys override defaults, unknown keys and wrong types are ignored", (
   assert.deepEqual(loadSettings(f), { ...defaults(), dir: "m2" });
 });
 
+test("plans: read through parsePlans (malformed plans dropped); default none", () => {
+  assert.deepEqual(defaults().plans, {});
+  const f = join(tmp(), "settings.json");
+  writeFileSync(f, JSON.stringify({ plans: { "p-local": { billing: "local" }, bad: { billing: 1 } } }));
+  assert.deepEqual(loadSettings(f), { ...defaults(), plans: { "p-local": { billing: "local", windows: [] } } });
+  writeFileSync(f, JSON.stringify({ plans: [{ billing: "local" }] }));
+  assert.deepEqual(loadSettings(f), defaults());
+});
+
 test("invalid JSON → defaults (never partly applied)", () => {
   const f = join(tmp(), "settings.json");
   writeFileSync(f, "{ not json");
