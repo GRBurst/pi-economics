@@ -10,10 +10,8 @@ import type { Snapshot } from "./ratelimit.ts";
 import { defaults } from "./settings.ts";
 import type { Settings } from "./settings.ts";
 
-export type PiLike = {
-  on(name: string, handler: (e: any, ctx: any) => unknown): void;
-  events?: { on(name: string, handler: (d: any) => void): void };
-};
+/** What the meter uses of pi's ExtensionAPI: event handlers only (D19: no pi.events channel since the retry extension left). */
+export type PiLike = { on(name: string, handler: (e: any, ctx: any) => unknown): void };
 export type Deps = {
   agentDir: string;
   now?: () => Date;

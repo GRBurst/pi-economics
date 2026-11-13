@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { install } from "../core/shell.ts";
+import { install, type PiLike } from "../core/shell.ts";
 import { parsePlans } from "../core/plans.ts";
 import { defaults } from "../core/settings.ts";
 import { fakeCtx, fakePi } from "./fake-pi.ts";
@@ -417,7 +417,8 @@ test("native retry: warming lines carry no retries (pi's session retry never res
 
 test("no bus listener: the meter subscribes to no pi.events channel (D19: the retry extension's events retired)", () => {
   const names: string[] = [];
-  install({ on: () => {}, events: { on: (n: string) => void names.push(n) } }, { agentDir: mkdtempSync(join(tmpdir(), "token-meter-shell-")) });
+  const pi = { on: () => {}, events: { on: (n: string) => void names.push(n) } }; // a pi with the bus PiLike no longer names
+  install(pi as PiLike, { agentDir: mkdtempSync(join(tmpdir(), "token-meter-shell-")) });
   assert.deepEqual(names, []);
 });
 
