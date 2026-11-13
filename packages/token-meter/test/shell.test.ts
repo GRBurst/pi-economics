@@ -23,10 +23,17 @@ const turnSend = (f: ReturnType<typeof fakePi>, ctx: unknown) => {
   f.fire("before_provider_request", {}, ctx);
 };
 
-function setup(over: Partial<Parameters<typeof install>[1]> = {}) {
+/** The internal channel (experiments' core/channel.ts): a session's Levers (assignment and read-back states). */
+const LEVERS = "pi-economics:levers:v1";
+const LEVERS_QUERY = "pi-economics:levers-query:v1";
+type Exp = (sid: string) => Record<string, unknown> | undefined;
+
+/** `exp`: an experiments engine on the bus, answering every query with exp(sessionId) (levers {} unless it names some). */
+function setup(over: Partial<Parameters<typeof install>[1]> = {}, exp?: Exp) {
   const agentDir = mkdtempSync(join(tmpdir(), "token-meter-shell-"));
   const clock = { t: T0 };
   const f = fakePi();
+  if (exp) f.pi.events.on(LEVERS_QUERY, (q: any) => { const a = exp(q.sessionId); if (a) q.reply({ sessionId: q.sessionId, levers: {}, ...a }); });
   install(f.pi, { agentDir, now: () => new Date(clock.t), ...over });
   const lines = (): any[] => {
     const file = join(agentDir, "meter", "2026-10.jsonl");
@@ -415,15 +422,15 @@ test("native retry: warming lines carry no retries (pi's session retry never res
   assert.ok(!("retries" in warm) && !("retryWaitMs" in warm));
 });
 
-test("no bus listener: the meter subscribes to no pi.events channel (D19: the retry extension's events retired)", () => {
+test("one bus listener: the internal channel's levers publications (D19's retry events retired; M5b.2)", () => {
   const names: string[] = [];
-  const pi = { on: () => {}, events: { on: (n: string) => void names.push(n) } }; // a pi with the bus PiLike no longer names
+  const pi = { on: () => {}, events: { on: (n: string) => (names.push(n), () => {}), emit: () => {} } };
   install(pi as PiLike, { agentDir: mkdtempSync(join(tmpdir(), "token-meter-shell-")) });
-  assert.deepEqual(names, []);
+  assert.deepEqual(names, [LEVERS]);
 });
 
-test("arm comes from the experiments stub; absent → no arm key", () => {
-  const withArm = setup({ arm: (sid) => `arm-of-${sid}` });
+test("arm comes from the internal channel; no engine → no arm key", () => {
+  const withArm = setup({}, (sid) => ({ eligible: true, arm: `arm-of-${sid}` }));
   const ctx = fakeCtx("s1");
   withArm.f.fire("message_end", assistant(), ctx);
   assert.equal(withArm.lines()[0].arm, "arm-of-s1");
@@ -471,30 +478,36 @@ test("write failure never throws into pi", () => {
   assert.doesNotThrow(() => f.fire("message_end", assistant(), fakeCtx("s1")));
 });
 
-// Every line carries the experiment arm id, read from the process-global experiments API.
-test("arm: lines carry armFor(sessionId).id from __piExperimentsApi_v1; children via inheritance; absent API → no arm field", () => {
+// Every line carries the experiment arm id, read from the internal channel (M5b.2; the process-global API is gone).
+test("arm: lines carry the session's arm from the channel; a session the engine does not know → no arm field", () => {
+  let on = false;
+  const { f, lines } = setup({}, (sid) => (on && (sid === "s-main" || sid === "s-child") ? { eligible: true, arm: "+-+--" } : undefined));
+  const turn = (sid: string) => { const ctx = fakeCtx(sid); f.fire("after_provider_response", resp, ctx); f.fire("message_end", assistant(), ctx); };
+  turn("s-none");
+  on = true;
+  turn("s-main"); turn("s-child"); turn("s-other");
+  const [none, main, child, other] = lines();
+  assert.ok(!("arm" in none) && !("arm" in other));
+  assert.equal(main.arm, "+-+--"); assert.equal(child.arm, "+-+--");
+  // M3a T3a.9: `design` is written iff the assignment names one (a v1-engine row names none before v2).
+  assert.ok(!("design" in main) && !("design" in child));
+});
+
+test("T5b2.5 no global API is read: a stale __piExperimentsApi_v1 changes nothing", () => {
   const g = globalThis as { __piExperimentsApi_v1?: unknown };
+  g.__piExperimentsApi_v1 = { version: 1, armFor: () => ({ id: "+-+--", flags: {} }) };
   try {
     const { f, lines } = setup();
-    const turn = (sid: string) => { const ctx = fakeCtx(sid); f.fire("after_provider_response", resp, ctx); f.fire("message_end", assistant(), ctx); };
-    turn("s-none");
-    g.__piExperimentsApi_v1 = { version: 1, armFor: (sid: string) => (sid === "s-main" || sid === "s-child" ? { id: "+-+--", flags: {} } : undefined) };
-    turn("s-main"); turn("s-child"); turn("s-other");
-    const [none, main, child, other] = lines();
-    assert.ok(!("arm" in none) && !("arm" in other));
-    assert.equal(main.arm, "+-+--"); assert.equal(child.arm, "+-+--");
-    // M3a T3a.9: `design` is written iff the API's arm names one (a v1-engine arm { id, flags } names none).
-    assert.ok(!("design" in main) && !("design" in child));
+    f.fire("message_end", assistant(), fakeCtx("s1"));
+    assert.equal("arm" in lines()[0], false);
   } finally {
     delete g.__piExperimentsApi_v1;
   }
 });
 
 test("M5b.1 carry-over 1: an arm of the v2 engine names its design and stratum: request and levers lines carry them", () => {
-  const g = globalThis as { __piExperimentsApi_v1?: unknown };
-  try {
-    const { f, lines } = setup({ env: {} });
-    g.__piExperimentsApi_v1 = { version: 1, armFor: () => ({ id: "010", flags: {}, design: "b4d458675108", stratum: "api" }) };
+  {
+    const { f, lines } = setup({ env: {} }, () => ({ eligible: true, arm: "010", design: "b4d458675108", stratum: "api" }));
     const ctx = fakeCtx("s-v2");
     agentStart(f, ctx);
     f.fire("after_provider_response", resp, ctx);
@@ -502,8 +515,6 @@ test("M5b.1 carry-over 1: an arm of the v2 engine names its design and stratum: 
     const [lev, req] = lines();
     assert.deepEqual([lev.kind, lev.arm, lev.design, lev.stratum, lev.eligible], ["levers", "010", "b4d458675108", "api", true]);
     assert.deepEqual([req.arm, req.design, "stratum" in req], ["010", "b4d458675108", false]); // no stratum on request lines
-  } finally {
-    delete g.__piExperimentsApi_v1;
   }
 });
 
@@ -544,7 +555,7 @@ test("levers: an untrusted project's settings are not pi's; PI_CACHE_RETENTION s
 
 test("levers: a new line only when a lever, the arm or the model's levers change", () => {
   let arm: string | undefined;
-  const { f, agentDir, clock, lines } = setup({ env: {}, arm: () => arm });
+  const { f, agentDir, clock, lines } = setup({ env: {} }, () => (arm === undefined ? undefined : { eligible: true, arm }));
   putJson(join(agentDir, "settings.json"), { compaction: { modelOverrides: { "anthropic/opus": { reserveTokens: 9000 } } } });
   const opts: any = { model: { provider: "anthropic", id: "sonnet" } };
   const ctx = fakeCtx("s1", opts);
@@ -562,7 +573,7 @@ test("levers: a new line only when a lever, the arm or the model's levers change
 });
 
 test("levers: per session; a child carries parentSessionId and is never eligible, even with its parent's arm", () => {
-  const { f, lines } = setup({ env: {}, arm: () => "+-+--" });
+  const { f, lines } = setup({ env: {} }, () => ({ eligible: true, arm: "+-+--" }));
   agentStart(f, fakeCtx("main"));
   agentStart(f, fakeCtx("child", { file: "/x/sessions/subagents/main/2026_child.jsonl" }));
   agentStart(f, fakeCtx("main"));
@@ -570,6 +581,54 @@ test("levers: per session; a child carries parentSessionId and is never eligible
   assert.equal(rest.length, 0);
   assert.deepEqual([m.sessionId, m.parentSessionId, m.arm, m.eligible], ["main", undefined, "+-+--", true]);
   assert.deepEqual([c.sessionId, c.parentSessionId, c.arm, c.eligible], ["child", "main", "+-+--", false]);
+});
+
+// M5b.2 (design §5.3, §7.4): pi-economics' own levers and their read-back come from the engine on the internal channel.
+const PE = {
+  "cache-lifecycle.warmPolicy": { v: "native", s: "pe", a: "native", rb: "unverified", tier: "replace" },
+  "cache-lifecycle.mainCacheTtl": { v: "1h", s: "pe", a: "1h", rb: "unverified", tier: "replace" },
+};
+
+test("T5b2.5 levers: the engine's lever states join the line beside pi's settings; eligible is the engine's", () => {
+  const { f, lines } = setup({ env: {} }, () => ({ eligible: true, design: "b4d458675108", stratum: "api", arm: "010", levers: PE }));
+  agentStart(f, fakeCtx("s1"));
+  const [l] = lines();
+  assert.deepEqual([l.arm, l.design, l.stratum, l.eligible], ["010", "b4d458675108", "api", true]);
+  assert.deepEqual(l.levers["cache-lifecycle.warmPolicy"], PE["cache-lifecycle.warmPolicy"]);
+  assert.deepEqual(l.levers["cache-lifecycle.mainCacheTtl"], PE["cache-lifecycle.mainCacheTtl"]);
+  assert.deepEqual(l.levers["pi.transport"], { v: "auto", s: "fixed" });
+  const off = setup({ env: {} }, () => ({ eligible: false, design: "b4d458675108", stratum: "api" }));
+  agentStart(off.f, fakeCtx("s2"));
+  assert.deepEqual(["arm" in off.lines()[0], off.lines()[0].eligible], [false, false]);
+});
+
+test("T5b2.5 levers: a publication that changes a session's states writes a new line; the same states or an unseen session do not", () => {
+  let levers: Record<string, unknown> = PE;
+  const { f, clock, lines } = setup({ env: {} }, () => ({ eligible: true, arm: "010", levers }));
+  const pub = (sid: string) => f.pi.events.emit(LEVERS, { sessionId: sid, eligible: true, arm: "010", levers });
+  pub("s1");
+  assert.deepEqual(lines(), [], "no line before the session's first prompt");
+  agentStart(f, fakeCtx("s1"));
+  clock.t += 1000; pub("s1");
+  levers = { ...PE, "cache-lifecycle.mainCacheTtl": { v: "1h", s: "pe", a: "1h", rb: "confirmed", tier: "replace" } };
+  clock.t += 1000; pub("s1");
+  pub("s2");
+  const ls = leversOf(lines());
+  assert.deepEqual(ls.map((l) => [l.sessionId, Date.parse(l.ts) - T0, l.levers["cache-lifecycle.mainCacheTtl"].rb]), [["s1", 0, "unverified"], ["s1", 2000, "confirmed"]]);
+  assert.deepEqual(ls[1].levers["pi.transport"], { v: "auto", s: "fixed" }, "the settings levers of the last prompt stay");
+});
+
+test("T5b2.5 an in-memory child (no session file): parent from the channel; its levers line is never eligible", () => {
+  const { f, lines } = setup({ env: {} }, () => ({ eligible: true, arm: "010", parentSessionId: "m1" }));
+  const ctx = fakeCtx("c1");
+  agentStart(f, ctx);
+  f.fire("message_end", assistant(), ctx);
+  const [l, r] = lines();
+  assert.deepEqual([l.parentSessionId, l.arm, l.eligible], ["m1", "010", false]);
+  assert.deepEqual([r.parentSessionId, r.arm], ["m1", "010"]);
+  const file = setup({}, () => ({ eligible: true, arm: "010", parentSessionId: "m1" }));
+  file.f.fire("message_end", assistant(), fakeCtx("c2", { file: "/x/sessions/subagents/m0/2026_c2.jsonl" }));
+  assert.equal(file.lines()[0].parentSessionId, "m0", "the session file decides when it names a parent");
 });
 
 test("levers: unreadable settings read as pi's defaults; a ctx without model, cwd or trust still gets a line; never throws", () => {
@@ -606,7 +665,7 @@ const compactEvent = (extra: object = {}) => ({ type: "session_compact", reason:
 
 test("compaction: session_compact with usage → one kind compaction line, the session's model, usage and cost, no timing or retries", () => {
   const plans = parsePlans({ anthropic: { billing: "subscription", windows: ["5h"] } });
-  const { f, lines } = setup({ settings: { ...defaults(), plans }, arm: () => "+-+--" });
+  const { f, lines } = setup({ settings: { ...defaults(), plans } }, () => ({ eligible: true, arm: "+-+--" }));
   const ctx = fakeCtx("s1", { model: { provider: "anthropic", id: "opus" }, file: "/x/sessions/subagents/p/2026_s1.jsonl" });
   turnSend(f, ctx); f.fire("message_end", assistant(), ctx);
   f.fire("session_compact", compactEvent(), ctx);

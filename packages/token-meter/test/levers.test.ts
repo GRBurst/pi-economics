@@ -98,3 +98,8 @@ test("leversLine: a line over 4096 bytes is refused, never truncated", () => {
   for (let i = 0; i < 200; i++) levers[`pi.lever${i}`] = { v: 16384, s: "fixed" };
   assert.throws(() => leversLine({ ...BASE, levers }), /^Error: levers: line of \d+ bytes exceeds 4096/);
 });
+
+test("T5b2.6 a level name may start with a digit: the experiment levels 5m and 1h (cache-lifecycle.mainCacheTtl) are values", () => {
+  for (const v of ["5m", "1h", "2x"]) assert.deepEqual(leverViolations({ v, s: "pe", a: v, rb: "confirmed", tier: "replace" }), [], v);
+  for (const v of ["-x", "_x", "5 m"]) assert.match(leverViolations({ v, s: "fixed" } as LeverState).join(";"), /v is not a level name/, v);
+});

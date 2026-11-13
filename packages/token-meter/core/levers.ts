@@ -18,8 +18,8 @@ export type LeverId = string;
 const SOURCES = ["pe", "ext", "fixed"];
 const READBACKS = ["confirmed", "refused", "unverified"];
 const TIERS = ["seed", "control", "replace", "shadow"];
-/** A level name (`medium`, `streaming`, `short`): no text values on a levers line (§5.3). */
-const LEVEL = /^[a-z][a-z0-9_-]{0,31}$/;
+/** A level name (`medium`, `streaming`, `short`, `5m`, `1h`): no text values on a levers line (§5.3). */
+const LEVEL = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 
 export const isValue = (x: unknown): x is Value =>
   typeof x === "boolean" || (typeof x === "number" && Number.isFinite(x)) || (typeof x === "string" && LEVEL.test(x));

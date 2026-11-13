@@ -2,7 +2,8 @@
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { effectiveSettings, extensionLevers } from "./effective-settings.ts";
-import { leversLine, serializeLevers } from "./levers.ts";
+import { LEVERS, LEVERS_QUERY, type Bus, type Levers, type LeversQuery } from "./channel.ts";
+import { leversLine, serializeLevers, type LeverId, type LeverState } from "./levers.ts";
 import { systemHash } from "./system-hash.ts";
 import { Joiner } from "./join.ts";
 import { errorKindOf } from "./errorkind.ts";
@@ -13,25 +14,16 @@ import type { Snapshot } from "./ratelimit.ts";
 import { defaults } from "./settings.ts";
 import type { Settings } from "./settings.ts";
 
-/** What the meter uses of pi's ExtensionAPI: event handlers only (D19: no pi.events channel since the retry extension left). */
-export type PiLike = { on(name: string, handler: (e: any, ctx: any) => unknown): void };
+/** What the meter uses of pi's ExtensionAPI: event handlers, and pi.events for pi-economics' internal channel (M5b.2;
+ * D19's retry events are gone). */
+export type PiLike = { on(name: string, handler: (e: any, ctx: any) => unknown): void; events: Bus };
 export type Deps = {
   agentDir: string;
   now?: () => Date;
   settings?: Settings;
-  /** Experiment arm id of a session, resolved at line time; default: `__piExperimentsApi_v1.armFor(sid)?.id`. */
-  arm?: (sessionId: string) => string | undefined;
   /** The environment pi reads (PI_CACHE_RETENTION); default: process.env. */
   env?: Record<string, string | undefined>;
 };
-
-/** What token-meter reads of the experiments package's globalThis.__piExperimentsApi_v1; the type check compares it with the provider's ExperimentsApiV1 (spec §5.3).
- * The v2 engine's arms name their design and stratum (M5b.1); a v1-engine arm names neither. */
-export type ExperimentsApi = { armFor?(s: string): { id?: string; design?: string; stratum?: string } | undefined };
-
-/** The experiments package is optional and never imported: its process-global API, or nothing. */
-const experimentOf = (sid: string): { id?: string; design?: string; stratum?: string } | undefined =>
-  (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1?.armFor?.(sid);
 
 /** pi usage → meter usage (cost.total → costUsd; pi 1.4's `cacheWrite1h` only where the provider reports it). */
 function mapUsage(u: any): Usage | undefined {
@@ -93,6 +85,9 @@ export function install(pi: PiLike, deps: Deps): void {
   const env = deps.env ?? process.env;
   /** Per session, the last levers line written (without its ts): a new one only on change. */
   const leversSeen = new Map<string, string>();
+  /** Per session, what its last prompt's levers line read of pi's settings, the branch and the session file (a
+   * publication reuses it). */
+  const leversBase = new Map<string, { parent?: string; levers: Record<LeverId, LeverState> }>();
 
   const warn = (err: unknown, what = "meter"): void => {
     if (!warned.has(what)) {
@@ -118,19 +113,35 @@ export function install(pi: PiLike, deps: Deps): void {
     }
   };
 
-  /** The session's arm and, iff the arm names them, its design and stratum (M3a T3a.9; M5b.1 carry-over 1: a v2 arm id
-   * alone may read as v4). */
-  const experiment = (sid: string): { arm: string; design?: string; stratum?: string } | undefined => {
-    const a = deps.arm ? { id: safe(() => deps.arm!(sid)) } : safe(() => experimentOf(sid));
-    if (typeof a?.id !== "string") return undefined;
-    return { arm: a.id, ...(typeof a.design === "string" ? { design: a.design } : {}), ...(typeof a.stratum === "string" ? { stratum: a.stratum } : {}) };
+  /**
+   * The session's Levers from pi-economics' experiments engine (optional, never imported): its answer on the internal
+   * channel (redesign §7.7), or undefined (no engine in this runtime, or a session it does not know).
+   */
+  const assignedOf = (sid: string): Levers | undefined =>
+    safe(() => {
+      let answer: Levers | undefined;
+      const q: LeversQuery = { sessionId: sid, reply: (a) => void (answer ??= a) };
+      pi.events.emit(LEVERS_QUERY, q);
+      return answer;
+    });
+
+  /** The session's arm and, iff the assignment names them, its design and stratum (M3a T3a.9; M5b.1 carry-over 1: a v2
+   * arm id alone may read as v4). */
+  const experiment = (a: Levers | undefined): { arm: string; design?: string; stratum?: string } | undefined => {
+    if (typeof a?.arm !== "string") return undefined;
+    return { arm: a.arm, ...(typeof a.design === "string" ? { design: a.design } : {}), ...(typeof a.stratum === "string" ? { stratum: a.stratum } : {}) };
   };
+
+  /** The session file names a child's parent; an in-memory child's comes from its assignment (M5b.2). */
+  const parentFrom = (ctx: any, a: Levers | undefined): string | undefined =>
+    parentOf(safe(() => ctx.sessionManager.getSessionFile())) ?? (typeof a?.parentSessionId === "string" ? a.parentSessionId : undefined);
 
   const common = (sid: string, ctx: any) => {
     const input: Pick<LineInput, "sessionId" | "parentSessionId" | "arm" | "design"> = { sessionId: sid };
-    const parent = parentOf(safe(() => ctx.sessionManager.getSessionFile()));
+    const a = assignedOf(sid);
+    const parent = parentFrom(ctx, a);
     if (parent !== undefined) input.parentSessionId = parent;
-    const exp = experiment(sid);
+    const exp = experiment(a);
     if (exp?.arm !== undefined) input.arm = exp.arm;
     if (exp?.design !== undefined) input.design = exp.design;
     return input;
@@ -167,13 +178,39 @@ export function install(pi: PiLike, deps: Deps): void {
   };
 
   // M3b (design §5.3, §8.1): the session's effective pi settings as levers, at its first prompt and again whenever
-  // one changes (settings files, the model's per-model levers, the arm). D4: eligible until the engine says so
-  // (M5b.2) = a main session with an arm (the v1 engine assigns arms to eligible mains only; children inherit).
+  // one changes (settings files, the model's per-model levers, the assignment or a lever's read-back). M5b.2: the
+  // engine's lever states (`s: "pe"`, `a`, `rb`, `tier`) join pi's settings, and `eligible` is the engine's (a main
+  // session that is an experiment unit; a child, with its root's eligibility, never is).
+  const writeLevers = (sid: string, a: Levers | undefined): void => {
+    const base = leversBase.get(sid)!;
+    const exp = experiment(a);
+    const parentSessionId = base.parent ?? (typeof a?.parentSessionId === "string" ? a.parentSessionId : undefined);
+    const at = now();
+    const line = leversLine({
+      ts: at.toISOString(), sessionId: sid, ...(parentSessionId === undefined ? {} : { parentSessionId }),
+      ...(exp === undefined ? {} : { arm: exp.arm }), ...(exp?.design === undefined ? {} : { design: exp.design }),
+      eligible: a?.eligible === true && parentSessionId === undefined,
+      ...(exp?.stratum === undefined ? {} : { stratum: exp.stratum }),
+      levers: { ...base.levers, ...(a?.levers !== null && typeof a?.levers === "object" ? a.levers : {}) },
+    });
+    const key = JSON.stringify({ ...line, ts: undefined });
+    if (leversSeen.get(sid) === key) return;
+    append(at, serializeLevers(line));
+    leversSeen.set(sid, key);
+  };
+  // A read-back the engine publishes later (a response confirming a TTL) is a change of the session's levers.
+  pi.events.on(LEVERS, (a: Levers) => {
+    if (typeof a?.sessionId !== "string" || !leversBase.has(a.sessionId)) return;
+    try {
+      writeLevers(a.sessionId, a);
+    } catch (err) {
+      warn(err, "levers");
+    }
+  });
   pi.on("before_agent_start", (_e, ctx) => {
     const sid = sidOf(ctx);
     if (sid === undefined) return;
     try {
-      const base = common(sid, ctx);
       const model = safe(() => ctx.model);
       const cwd = safe(() => ctx.cwd);
       const project = typeof cwd === "string" && safe(() => ctx.isProjectTrusted()) === true ? readJson(join(cwd, ".pi", "settings.json")) : undefined;
@@ -183,13 +220,9 @@ export function install(pi: PiLike, deps: Deps): void {
       });
       const branch = safe(() => ctx.sessionManager.getBranch());
       Object.assign(levers, extensionLevers(Array.isArray(branch) ? branch : []));
-      const at = now();
-      const stratum = experiment(sid)?.stratum;
-      const line = leversLine({ ts: at.toISOString(), ...base, eligible: base.arm !== undefined && base.parentSessionId === undefined, ...(stratum === undefined ? {} : { stratum }), levers });
-      const key = JSON.stringify({ ...line, ts: undefined });
-      if (leversSeen.get(sid) === key) return;
-      append(at, serializeLevers(line));
-      leversSeen.set(sid, key);
+      const parent = parentOf(safe(() => ctx.sessionManager.getSessionFile()));
+      leversBase.set(sid, { ...(parent === undefined ? {} : { parent }), levers });
+      writeLevers(sid, assignedOf(sid));
     } catch (err) {
       warn(err, "levers");
     }

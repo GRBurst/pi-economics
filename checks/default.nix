@@ -154,16 +154,6 @@ in {
       type = "SubagentsApi";
     };
   };
-  # (M4.7) The copy of __piExperimentsApi_v1 in token-meter.
-  iface-experiments-token-meter = iface.compare {
-    name = "experiments-token-meter";
-    provider = experimentsProvider;
-    consumer = {
-      src = ../packages/token-meter;
-      file = "core/shell.ts";
-      type = "ExperimentsApi";
-    };
-  };
   # The patched upstream's suite, with the host's checks (spec §8.1).
   infinite-context = pkgs.callPackage ./infinite-context {
     src = infiniteContext;
