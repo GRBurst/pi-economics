@@ -43,8 +43,12 @@ without the user's explicit approval.
   quota %/active hour (the account's rise split between the roots active at the time, never
   double-counted across parallel sessions), $/accepted task (over all routed tasks: what a task cost, judged or not, paid for by the accepted ones); splits by model and warming; token components (a 1 h cache write
   weighs 2.0 × input, a 5-minute one 1.25). **Cache** (Claude models): new context (growth) apart from misses (the cached prefix a
-  request had to write again) by cause (ttl, fold, model, other), and the premium of folds and cold resumes over a baseline
-  (net of what an ordinary request misses).
+  request had to write again) by cause (ttl, fold, model, prefix, other) — prefix: the system prompt, a prompt section or the
+  tool list changed — and the premium of folds and cold resumes over a baseline (net of what an ordinary request misses).
+- **Levers**: per lever (a pi setting, an extension's or pi-economics' control) the values the period's sessions ran with,
+  their sources (pe = pi-economics assigned it, ext = an extension, fixed = configuration or pi default) and the refusal rate
+  of assigned values (a factor refused in > 20% of its sessions points at a broken add-on). Sessions from before levers lines
+  existed count as without one.
 - **Experiment** (per design: v1 = 5 factors / 5-character arms, v2 and v3 = 6 factors incl.
   `delegationRule`, v4 = 3 factors `warmPolicy`, `mainCacheTtl`, `maskOnCold`): per **stratum** (billing class of the main's provider, never pooled) the marginal per-factor effect
   ratio(high) ÷ ratio(low) − 1 of the objective per active hour (a ratio of sums), with a bootstrap CI and minimum detectable effect, a balance table

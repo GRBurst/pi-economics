@@ -68,4 +68,9 @@ in {
     ++ holds "${dir}/LOGS.md installed (${dir})" (c.home.file ? "${dir}/LOGS.md")
     ++ holds "the skill reads ~/${dir}/LOGS.md (${dir})" (lib.hasInfix "~/${dir}/LOGS.md" text))
   dirs;
+
+  # (M3b) The skill explains every section of the report, the Levers one included, and every cache-miss cause.
+  analysis-skill-sections =
+    lib.concatMap (s: holds "the skill explains ${s}" (builtins.replaceStrings [s] [""] source != source))
+    ["- **Cost**" "- **Levers**" "- **Experiment**" "- **Delegation & routing**" "- **Guards**" "- **Data quality**" "(ttl, fold, model, prefix, other)"];
 }
