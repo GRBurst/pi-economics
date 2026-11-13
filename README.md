@@ -192,7 +192,8 @@ into `<agentDir>/extensions`.
 
 `piSettings` is on by default and edits pi's mutable
 `<agentDir>/settings.json` idempotently, but only for the components you
-enable: `cacheLifecycle` sets `cacheWarming` to `"idle"` in an existing file.
+enable: `cacheLifecycle` sets `cacheWarming` to `"idle"`, creating the file
+if it is absent.
 `programs.piEconomics.piSettings.enable = false` switches all of it off.
 
 ## Development

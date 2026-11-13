@@ -76,9 +76,11 @@
   $m u.json
   cmp u.json u0.json
 
-  echo "case missing: no-op, still missing"
+  # Changed in M6 (the host's script left a missing file alone): the links
+  # are no longer auto-discovered, so a missing file would load no component.
+  echo "case missing: created as {}, then the ops ran"
   $m none.json
-  [ ! -e none.json ]
+  jq -e --argjson rx "$RX" '. == {"piRetry":{"subagents":{"match":{"systemPromptRegex":[$rx]}}}}' none.json
 
   # ops.cacheLifecycle (order 1500) sets cacheWarming = "idle": the warm
   # policy's cache_warming_decision never fires in pi's default "streaming" mode.

@@ -1,9 +1,9 @@
 # Part 3: spec §5.4's op table on the path ["a","b","c"] with value 1, and one
 # skipped op against an aborted program. Sourced by ./default.nix with $set_,
 # $ens, $rem, $pre (ensurePrefix [1,2]), $pre1 (ensurePrefix 1, a one-element
-# prefix) and $mix (removeWhere packages "s" at order 900, then set s1.x,
+# prefix), $mix (removeWhere packages "s" at order 900, then set s1.x,
 # ensureContains e1.x, removeWhere r1.x, each with value 1, and ensurePrefix
-# p1.x [1]).
+# p1.x [1]) and $none (no ops).
 t() { # label, script, input, expected JSON or UNTOUCHED
   printf '%s' "$3" >t.json
   cp t.json t0.json
@@ -68,6 +68,26 @@ t "mix set false aborts" "$mix" '{"packages":["s"],"s1":false}' UNTOUCHED
 t "mix ensure false aborts" "$mix" '{"packages":["s"],"e1":false}' UNTOUCHED
 t "mix remove false aborts" "$mix" '{"packages":["s"],"r1":false}' UNTOUCHED
 t "mix prefix false aborts" "$mix" '{"packages":["s"],"p1":false}' UNTOUCHED
+
+# A missing file (M6: pi does not discover the registry's links, settings.json
+# lists them): with ops, created as {} with its directory, mode 644 (as pi
+# writes it), then the ops run; a dangling link stays as it is, with a notice;
+# without ops ($none), nothing is created.
+"$pre" new/dir/s.json 2>/dev/null
+jq -e '. == {"a":{"b":{"c":[1,2]}}}' new/dir/s.json >/dev/null || { echo "FAIL missing file: expected it created with the ops, got $(cat new/dir/s.json 2>&1)" >&2; exit 1; }
+[ "$(stat -c %a new/dir/s.json)" = 644 ] || { echo "FAIL missing file: mode $(stat -c %a new/dir/s.json), expected 644" >&2; exit 1; }
+[ "$(ls -A new/dir)" = s.json ] || { echo "FAIL missing file: left $(ls -A new/dir)" >&2; exit 1; }
+echo "ok missing file created, then the ops"
+ln -s nowhere/s.json dangling.json
+"$pre" dangling.json 2>notice.txt
+[ -L dangling.json ] && [ "$(readlink dangling.json)" = nowhere/s.json ] && [ ! -e nowhere ] ||
+  { echo "FAIL dangling link: expected it left as it is" >&2; exit 1; }
+[ "$(cat notice.txt)" = "pi-settings-migrate: dangling.json is a link to a missing file, left as it is" ] ||
+  { echo "FAIL dangling link: notice $(cat notice.txt)" >&2; exit 1; }
+echo "ok dangling link left, with a notice"
+"$none" absent.json
+[ ! -e absent.json ] && [ ! -L absent.json ] || { echo "FAIL no ops: created absent.json" >&2; exit 1; }
+echo "ok no ops, no file"
 
 # ensurePrefix's properties, for every list of length 0 to 4 over
 # [1, 2, 3, "-builtin:mcp"] with $pre's values [1,2]: the values come first in

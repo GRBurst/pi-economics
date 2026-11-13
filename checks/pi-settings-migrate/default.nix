@@ -5,7 +5,8 @@
 #     script (./legacy.nix), with and without ops.cacheLifecycle;
 #  3. ./op-table.sh: set, ensureContains, removeWhere and ensurePrefix on a
 #     nested path, for missing parents, wrong shapes, null and false, and
-#     ensurePrefix's properties over generated lists.
+#     ensurePrefix's properties over generated lists; a missing file, created
+#     only when ops exist, and a dangling link.
 {
   lib,
   pkgs,
@@ -77,6 +78,7 @@ in
       mix=${exe mix}
       pre=${exe (prefix [1 2])}
       pre1=${exe (prefix 1)}
+      none=${exe {}}
 
       mkdir part1 part2 part3
       (cd part1 && source ${./ported-cases.sh})

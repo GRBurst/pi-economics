@@ -4,7 +4,7 @@
 # (registry entries of the pi-setup and pi-task-router inputs' packages;
 # router-extraction design §7.3), each
 # `home.file` under it linked as Home Manager links it, its settings script run
-# on a seeded settings.json as the activation entry runs it (M6: the registry
+# on a fresh agent directory (no settings.json) as the activation entry runs it (M6: the registry
 # loads from settings.json's `extensions`, its links are not auto-discovered),
 # then `pi -p x` offline
 # with the probe (./probe.ts). Every registry entry loads (pi prints each
@@ -64,7 +64,6 @@ in
   pkgs.runCommand "nix-route-smoke" {nativeBuildInputs = [pkgs.pi-coding-agent pkgs.jq pkgs.coreutils pkgs.gnugrep];} ''
     export HOME=$PWD/home PI_CODING_AGENT_DIR=$PWD/home/${dir} PI_OFFLINE=1 PI_TIMING=1 PROBE_OUT=$PWD/probe.json
     ${links}
-    printf '{}\n' >"$PI_CODING_AGENT_DIR/settings.json"
     ${lib.getExe c.programs.piEconomics.piSettings.package} "$PI_CODING_AGENT_DIR/settings.json"
     fail() {
       echo "nix-route-smoke: $*" >&2

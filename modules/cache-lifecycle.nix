@@ -23,9 +23,8 @@ in {
       expiry, 1 h TTL for the main session, orchestrator-aware warming). It
       also sets cacheWarming = "idle" in pi's settings.json through the
       piSettings activation entry: its warm policy fires only in that mode,
-      and pi's default is "streaming". Standalone, pi keeps its default while
-      there is no settings.json (the entry edits an existing file only) and
-      while piSettings.enable is false'';
+      and pi's default is "streaming" (the entry creates settings.json if
+      absent). pi keeps its default while piSettings.enable is false'';
 
     package = lib.mkOption {
       type = lib.types.package;

@@ -70,8 +70,10 @@ Edits of pi's mutable `settings.json`, run by one activation entry,
 - `false` on the way aborts the whole program: the file stays untouched.
 - Order: by `order`, then contributor key, then position in the list.
 - The entry runs only when `enable` is `true` and at least one op exists. It
-  does nothing on an absent file, never fails the activation, and rewrites
-  the file only when its JSON changes.
+  creates an absent file as `{}` (and its directory; mode 644, as pi writes
+  it) before the ops, since nothing else loads the registry; a dangling link
+  stays as it is, with a notice. It never fails the activation, and rewrites
+  an existing file only when its JSON changes.
 
 ## Components
 
@@ -196,9 +198,9 @@ sessions and children load it.
 | `settings` | `{}` | written to `<agentDir>/cache-lifecycle/settings.json` when non-empty (`warmPolicy`, `mainCacheTtl`, `maskOnCold`, `protectedTailTokens`, `identityShim`; each has a default in the package) |
 
 pi asks for a warming decision only while its `settings.json` says
-`cacheWarming` is `"idle"`, and pi's default is `streaming`. The op edits an
-existing file only: standalone, pi keeps its default while there is no
-`settings.json`, and while `piSettings.enable` is `false`. Without
+`cacheWarming` is `"idle"`, and pi's default is `streaming`. The op edits
+that file (the entry creates it if absent); pi keeps its default while
+`piSettings.enable` is `false`. Without
 the actor in the registry (`extensions.actor-subagents`) it warns: no
 warming while a session waits on its children.
 Without `infiniteContext` the `context_peek` guard has nothing to log; without

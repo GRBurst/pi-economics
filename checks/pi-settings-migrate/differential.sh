@@ -28,5 +28,6 @@ done
 }
 "$old" none-old.json
 "$mi" none-new.json
-[ ! -e none-old.json ] && [ ! -e none-new.json ]
+# The one departure (M6): a missing file is created, the legacy script left it.
+[ ! -e none-old.json ] && [ -e none-new.json ]
 echo "part 2: $n comparisons, all equal"

@@ -141,33 +141,60 @@
     );
 
   # (M0.14) The host's script, with the program in a file and without the
-  # positional `idle` flag (now ops.cacheLifecycle). Missing file: no-op.
+  # positional `idle` flag (now ops.cacheLifecycle). Missing file: created as
+  # {} (with its directory, mode 644 as pi writes it) when ops exist, since
+  # nothing else loads the registry's links (M6, redesign §7.6); a dangling
+  # link is left as it is, with a notice; without ops, no-op.
   # jq failure (invalid JSON, false on the way): untouched, exit 0. Equal as
   # JSON: untouched, so the owners' bytes and formatting survive.
   script = pkgs.writeShellApplication {
     name = "pi-settings-migrate";
     runtimeInputs = [pkgs.jq pkgs.coreutils];
-    text = ''
-      f=''${1:?usage: pi-settings-migrate <settings.json>}
-      [ -e "$f" ] || exit 0
+    text =
+      ''
+        f=''${1:?usage: pi-settings-migrate <settings.json>}
+      ''
+      + (
+        if sortedOps == []
+        then ''
+          [ -e "$f" ] || exit 0
+        ''
+        else ''
+          if [ ! -e "$f" ]; then
+            if [ -L "$f" ]; then
+              echo "pi-settings-migrate: $f is a link to a missing file, left as it is" >&2
+              exit 0
+            fi
+            mkdir -p "$(dirname "$f")"
+            new=$(mktemp "$f.XXXXXX")
+            echo '{}' >"$new"
+            chmod 644 "$new"
+            # Never over a file that appeared meanwhile.
+            mv -n "$new" "$f" || true
+            rm -f "$new"
+            echo "pi-settings-migrate: created $f" >&2
+          fi
+        ''
+      )
+      + ''
 
-      tmp=$(mktemp "$f.XXXXXX")
-      trap 'rm -f "$tmp"' EXIT
+        tmp=$(mktemp "$f.XXXXXX")
+        trap 'rm -f "$tmp"' EXIT
 
-      if ! jq -f ${pkgs.writeText "pi-settings-migrate.jq" program} "$f" >"$tmp" 2>/dev/null; then
-        exit 0
-      fi
+        if ! jq -f ${pkgs.writeText "pi-settings-migrate.jq" program} "$f" >"$tmp" 2>/dev/null; then
+          exit 0
+        fi
 
-      # Equal as JSON: keep the owners' bytes.
-      if jq -e -n --slurpfile a "$f" --slurpfile b "$tmp" '$a == $b' >/dev/null; then
-        exit 0
-      fi
+        # Equal as JSON: keep the owners' bytes.
+        if jq -e -n --slurpfile a "$f" --slurpfile b "$tmp" '$a == $b' >/dev/null; then
+          exit 0
+        fi
 
-      chmod --reference="$f" "$tmp"
-      mv -f "$tmp" "$f"
-      trap - EXIT
-      echo "pi-settings-migrate: migrated $f" >&2
-    '';
+        chmod --reference="$f" "$tmp"
+        mv -f "$tmp" "$f"
+        trap - EXIT
+        echo "pi-settings-migrate: migrated $f" >&2
+      '';
   };
 
   # (M6) The registry in load order (redesign §7.6): the components first,
