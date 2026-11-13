@@ -404,6 +404,10 @@ as "not measurable", never as a number.
   killed without a verdict is paid for by the accepted ones); **judged** = the routed tasks with a judged verdict (the cells of *By
   profile and tier*); **spot-check reviews** = the review children, a population of their own, never in the headline. A task without a child
   session has no cost and is in neither numerator nor denominator.
+- **Unresolved cards** (B15): a spawn with `unresolved: true` (its card files did not resolve) says nothing about routing quality, so it is in
+  no acceptance, profile or randomized figure and is never counted as accepted; but its child session cost real money. Its $ is in the
+  **all** population's $ (the tier table, the headline) and shown in its own column, and `$/accepted` is a bound pair over the same
+  accepted tasks: **lower** leaves the unresolved $ out, **upper** counts it. One number means no unresolved $.
 - **Qwen share of tasks** is the share of routed tasks *planned* on `qwen`; the report states no target for it.
 
 ## Data contract (`pi-analyse --check`)

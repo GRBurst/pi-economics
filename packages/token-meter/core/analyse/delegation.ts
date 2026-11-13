@@ -25,6 +25,8 @@ export type DelegationSection = { spawns: number; unresolved: number; reviewSpaw
   byTier: Array<{ tier: string; spawns: number; share: number; accepted: number; judged: number; acceptance: number; cost: CostPerAccepted }>;
   /** The "all" row of the tier table: every routed task; `cost` is the report's headline $/accepted. */
   all: { tasks: number; accepted: number; judged: number; acceptance: number; cost: CostPerAccepted };
+  /** The spot-check reviews' own population: their $ and accepted reviews. */
+  spotCheckReviews: CostPerAccepted;
   byKind: Record<string, number>; childModels: Array<{ model: string; requests: number; usd: number }>;
   escalations: Array<{ from: string; to: string; n: number }>; correctives: number;
   reroutes: Array<{ from: string; to: string; reason: string; n: number }>; checks: { n: number; failed: number };
@@ -94,23 +96,24 @@ export function taskRows(lines: any[], outcomes: any[]): TaskRow[] {
 export type Population = "all" | "judged" | "spotCheckReviews";
 /**
  * $ per accepted task of a population (B5): `usd` = what the population's tasks cost, whatever came of them (all their child requests),
- * `accepted` = the accepted ones among them. A task without a child session has no cost and is in neither.
+ * `accepted` = the accepted ones among them, `tasks` the routed tasks. A task without a child session has no cost and is in neither.
  */
 export type CostPerAccepted = { tasks: number; usd: number; accepted: number; unresolvedUsd: number; lower: number; upper: number };
 
 /**
  * The one $/accepted function of the report (B5): the headline and every row of the tier table. Populations: `all` = every routed task, judged
- * or not (what it cost is paid for by the accepted ones); `judged` = the routed tasks with a judged verdict; `spotCheckReviews` = the review
- * children, apart from routing.
+ * or not (what it cost is paid for by the accepted ones), and the unresolved cards (B15: their children cost too, but nothing says whether
+ * their tasks were routed, so `lower` leaves their $ out and `upper` has it, over the same accepted tasks; an unresolved card is never
+ * counted as accepted); `judged` = the routed tasks with a judged verdict; `spotCheckReviews` = the review children, apart from routing.
  */
 export function costPerAccepted(tasks: readonly TaskRow[], pop: Population): CostPerAccepted {
   const inPop = (t: TaskRow): boolean => t.cost !== undefined &&
-    (pop === "all" ? t.cls === "routed" : pop === "judged" ? t.cls === "routed" && t.verdict !== undefined && JUDGED.includes(t.verdict) : t.cls === "review");
+    (pop === "all" ? t.cls !== "review" : pop === "judged" ? t.cls === "routed" && t.verdict !== undefined && JUDGED.includes(t.verdict) : t.cls === "review");
   const ts = tasks.filter(inPop);
   const usd = sum(ts.map((t) => t.cost!));
   const unresolvedUsd = sum(ts.filter((t) => t.cls === "unresolved").map((t) => t.cost!));
   const accepted = ts.filter((t) => t.cls !== "unresolved" && t.verdict === "accepted").length;
-  return { tasks: ts.length, usd, accepted, unresolvedUsd, lower: accepted ? (usd - unresolvedUsd) / accepted : NaN, upper: accepted ? usd / accepted : NaN };
+  return { tasks: ts.filter((t) => t.cls === "routed").length, usd, accepted, unresolvedUsd, lower: accepted ? (usd - unresolvedUsd) / accepted : NaN, upper: accepted ? usd / accepted : NaN };
 }
 
 /**
@@ -233,7 +236,8 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   };
   const spotChecks = spotCheckAgreement(outcomes, allSpawns);
   const acc = acceptance(asTier);
-  const tiers = countBy(spawns, ranOn);
+  // a tier only an unresolved card ran on has no routed task, and is a row only if that card cost something
+  const tiers = { ...Object.fromEntries(rows.filter((r) => r.cls === "unresolved" && (r.cost ?? 0) > 0).map((r) => [r.executed, 0])), ...countBy(spawns, ranOn) };
   const children = lines.filter((l) => typeof l.parentSessionId === "string");
   const total = sum(lines.map((l) => apiUsd(l)));
   const requests = (ls: any[]) => ls.filter((l) => l.kind !== "warming" && !isError(l)).length;
@@ -271,6 +275,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
       const a = acc[tier] ?? { accepted: 0, judged: 0 };
       return { tier, spawns: n, share: n / spawns.length, accepted: a.accepted, judged: a.judged, acceptance: a.judged ? a.accepted / a.judged : NaN, cost: costPerAccepted(rows.filter((r) => r.executed === tier), "all") };
     }),
+    spotCheckReviews: costPerAccepted(rows, "spotCheckReviews"),
     all: { tasks: routed.length, accepted: totalAccepted, judged: totalJudged, acceptance: totalJudged ? totalAccepted / totalJudged : NaN, cost: costPerAccepted(rows, "all") },
     byKind: countBy(spawns, (e) => String(e.kind)),
     childModels: [...models].map(([model, m]) => ({ model, ...m })).sort((a, b) => b.usd - a.usd),

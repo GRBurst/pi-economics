@@ -133,16 +133,18 @@ export function renderDelegation(d: DelegationSection): string {
   if (!d.spawns && Number.isNaN(d.childUsdShare)) return NO_DATA;
   return [
     table(["metric", "value"], [
-      ["spawned tasks (spot-check reviews; unresolved cards)", `${d.spawns} (${d.reviewSpawns}; ${d.unresolved})`], ["child sessions' share of $", pc(d.childUsdShare)], ["child sessions' share of requests", pc(d.childRequestShare)],
+      ["spawned tasks (spot-check reviews; unresolved cards)", `${d.spawns} (${d.reviewSpawns}; ${d.unresolved})`],
+      ["$ of spot-check reviews; of unresolved cards", `${f2(d.spotCheckReviews.usd)}; ${f2(d.all.cost.unresolvedUsd)}`], ["child sessions' share of $", pc(d.childUsdShare)], ["child sessions' share of requests", pc(d.childRequestShare)],
       ["Qwen share of tasks (planned)", pc(d.qwenShare)], ["escalations", String(sum(d.escalations.map((e) => e.n)))], ["correctives", String(d.correctives)],
       ["checks (failed)", `${d.checks.n} (${d.checks.failed})`], ["reroutes", String(sum(d.reroutes.map((r) => r.n)))],
       ["kinds", Object.entries(d.byKind).map(([k, n]) => `${k} ${n}`).join(", ") || "–"],
     ]),
-    "\n### By tier\n\nTier = the model the task ran on (the router's `workerModel`, after its last reroute; else the model of the child's last request), not the tier the router planned. Spot-check reviews and spawns whose card files did not resolve (`unresolved`) are left out of every table below: they say nothing about routing quality.\n",
-    table(["tier", "tasks", "share", "accepted/judged", "acceptance", "$", "$/accepted"], [
-      ...d.byTier.map((t) => [t.tier, String(t.spawns), pc(t.share), `${t.accepted}/${t.judged}`, pc(t.acceptance), f2(t.cost.usd), bounds(t.cost)]),
-      ["all", String(d.all.tasks), pc(d.all.tasks ? 1 : NaN), `${d.all.accepted}/${d.all.judged}`, pc(d.all.acceptance), f2(d.all.cost.usd), bounds(d.all.cost)],
+    "\n### By tier\n\nTier = the model the task ran on (the router's `workerModel`, after its last reroute; else the model of the child's last request), not the tier the router planned. Spot-check reviews are left out of every table below, and so are spawns whose card files did not resolve (`unresolved`), except for their $ (tier table and the first table): they say nothing about routing quality.\n",
+    table(["tier", "tasks", "share", "accepted/judged", "acceptance", "$", "of which unresolved $", "$/accepted (lower – upper)"], [
+      ...d.byTier.map((t) => [t.tier, String(t.spawns), pc(t.share), `${t.accepted}/${t.judged}`, pc(t.acceptance), f2(t.cost.usd), f2(t.cost.unresolvedUsd), bounds(t.cost)]),
+      ["all", String(d.all.tasks), pc(d.all.tasks ? 1 : NaN), `${d.all.accepted}/${d.all.judged}`, pc(d.all.acceptance), f2(d.all.cost.usd), f2(d.all.cost.unresolvedUsd), bounds(d.all.cost)],
     ]),
+    "\n$ = what the tier's tasks cost (every request of their child sessions), judged or not; $/accepted = that ÷ the accepted tasks. The cost of an unresolved card's child is in the $ column and in its own: the bounds leave it out (lower) or count it (upper), so a single number means there is none.\n",
     "\n### Planned → executed tier\n\nThe tier the router planned (`workerTier`) against the model the task ran on: a task counts under the model in every table here, so a planned qwen that ran another model is visible only in this matrix.\n",
     table(["planned", "ran on", "tasks"], d.matrix.map((c) => [c.planned, c.executed, String(c.n)])),
     "\n### By profile and tier\n\nProfile = the card kind; acceptance = accepted ÷ judged; $/accepted = subtree cost of the judged tasks ÷ accepted ones; escalations = re-spawns one level up (D7) from this cell's failed tasks; checks = the card's check ran after the child reported.\n",

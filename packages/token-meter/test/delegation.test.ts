@@ -158,7 +158,52 @@ test("B5: the headline is not the judged-only ratio: a task killed without a ver
   close(a.delegation.byTier[0].cost.upper, 6);
   const md = renderAnalysis(a, new Date("2026-10-06T00:00:00Z"));
   assert.match(md, /\| \$\/accepted task, all routed tasks \(accepted\/tasks\) \| 6\.00 \(1\/2\) \|/);
-  assert.match(md, /\| all \| 2 \| 100% \| 1\/1 \| 100% \| 6\.00 \| 6\.00 \|/);
+  assert.match(md, /\| all \| 2 \| 100% \| 1\/1 \| 100% \| 6\.00 \| 0\.00 \| 6\.00 \|/);
+});
+
+// ---- B15: unresolved cards are an outcome class with $, and bound the $/accepted ---------------------
+
+test("B15: an unresolved card's $ is in the population's $; lower leaves it out, upper has it; they differ by its $ per accepted task", () => {
+  const w = logsOf([{ id: "a", verdict: "accepted", cost: 1 }, { id: "b", verdict: "accepted", cost: 1 }, { id: "u", verdict: "accepted", cost: 5, spawn: { unresolved: true } }]);
+  const all = costPerAccepted(taskRows(w.meter, w.outcomes), "all");
+  assert.deepEqual([all.usd, all.unresolvedUsd, all.accepted], [7, 5, 2]); // the unresolved card's own verdict is no routing evidence: not accepted
+  assert.deepEqual([all.lower, all.upper], [1, 3.5]);
+  close(all.upper - all.lower, 5 / 2);
+  const judged = costPerAccepted(taskRows(w.meter, w.outcomes), "judged");
+  assert.deepEqual([judged.usd, judged.unresolvedUsd], [2, 0]); // the judged population has no unresolved card
+});
+
+test("B15: the unresolved $ shows in the tier table's $ column, in its own column and in the bounds; the tier's task count is without it", () => {
+  const a = analyse(logsOf([{ id: "a", verdict: "accepted", cost: 1 }, { id: "u", cost: 5, tier: "T1", spawn: { unresolved: true } }]));
+  const [qwen, t1] = [a.delegation.byTier.find((t) => t.tier === EXEC.qwen)!, a.delegation.byTier.find((t) => t.tier === EXEC.T1)!];
+  assert.deepEqual([t1.spawns, t1.cost.usd, t1.cost.unresolvedUsd, t1.cost.tasks], [0, 5, 5, 0]); // a tier only an unresolved card ran on is a row, with no routed task
+  assert.deepEqual([qwen.spawns, qwen.cost.usd, qwen.cost.lower, qwen.cost.upper], [1, 1, 1, 1]);
+  assert.deepEqual([a.delegation.all.cost.usd, a.delegation.all.cost.unresolvedUsd, a.delegation.all.cost.lower, a.delegation.all.cost.upper], [6, 5, 1, 6]);
+  assert.deepEqual(a.cost.perAccepted, a.delegation.all.cost);
+  const md = renderAnalysis(a, new Date("2026-10-06T00:00:00Z"));
+  assert.match(md, /\| tier \| tasks \| share \| accepted\/judged \| acceptance \| \$ \| of which unresolved \$ \| \$\/accepted \(lower – upper\) \|/);
+  assert.match(md, /\| all \| 1 \| 100% \| 1\/1 \| 100% \| 6\.00 \| 5\.00 \| 1\.00 – 6\.00 \|/);
+  assert.match(md, /\| \$\/accepted task, all routed tasks \(accepted\/tasks\) \| 1\.00 – 6\.00 \(1\/1\) \|/);
+  assert.match(md, /\| \$ of spot-check reviews; of unresolved cards \| 0\.00; 5\.00 \|/);
+});
+
+test("B15: an unresolved card whose child has no lines (no $) makes no tier row", () => {
+  const w = logsOf([{ id: "a", verdict: "accepted", cost: 1 }, { id: "u", tier: "T1", spawn: { unresolved: true } }]);
+  w.meter = w.meter.filter((l) => l.sessionId !== "c-u");
+  assert.deepEqual(analyse(w).delegation.byTier.map((t) => t.tier), [EXEC.qwen]);
+});
+
+test("B15 property: lower ≤ upper, equal exactly when no unresolved $ is in the population, and they differ by the unresolved $ per accepted task", () => {
+  for (const seed of SEEDS) {
+    const a = analyse(generated(seed));
+    for (const c of [a.delegation.all.cost, ...a.delegation.byTier.map((t) => t.cost)]) {
+      if (!c.accepted) { assert.ok(Number.isNaN(c.lower) && Number.isNaN(c.upper)); continue; }
+      assert.ok(c.lower <= c.upper + 1e-12, `seed ${seed}`);
+      assert.equal(c.lower === c.upper || Math.abs(c.lower - c.upper) < 1e-12, c.unresolvedUsd === 0, `seed ${seed}`);
+      close(c.upper - c.lower, c.unresolvedUsd / c.accepted);
+    }
+  }
+  assert.ok(SEEDS.some((seed) => analyse(generated(seed)).delegation.all.cost.unresolvedUsd > 0), "the generator makes unresolved cards that cost");
 });
 
 // RG9 (review-g4 Low 4): since 2026-10-17 `escalate.from` is a route label (`local`, `cloud`, `haiku`, `T1`, `T2`; `"?"` when
@@ -199,7 +244,10 @@ test("unresolved cards are counted and kept out of every routing-quality statist
   assert.equal(d.byTier.find((t) => t.tier === EXEC.qwen)!.spawns, 5); // q1–q4 and s1, not u1
   assert.equal(d.byTier.find((t) => t.tier === EXEC.T2)!.spawns, 2); // not the review child
   close(d.qwenShare, 5 / 7);
-  close(d.byTier.find((t) => t.tier === EXEC.qwen)!.cost.usd, 1.5 + 2 + 0.5 + 0.3 + 0.2); // B5: q4, unjudged, is paid for too
+  const qwenCost = d.byTier.find((t) => t.tier === EXEC.qwen)!.cost;
+  close(qwenCost.usd, 1.5 + 2 + 0.5 + 0.3 + 0.2 + 9); // B5: q4, unjudged, is paid for too; B15: so is u1, an unresolved card ($9)
+  close(qwenCost.unresolvedUsd, 9);
+  assert.equal(qwenCost.accepted, 2); // q1 and s1; u1's accepted verdict is no routing evidence
 });
 
 test("profile × tier: property — the cells' tasks sum to the routed spawns, outcomes sum to tasks", () => {

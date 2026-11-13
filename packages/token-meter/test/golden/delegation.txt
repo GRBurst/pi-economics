@@ -1,6 +1,7 @@
 | metric | value |
 | --- | --- |
 | spawned tasks (spot-check reviews; unresolved cards) | 24 (2; 1) |
+| $ of spot-check reviews; of unresolved cards | 0.80; 0.00 |
 | child sessions' share of $ | 15% |
 | child sessions' share of requests | 25% |
 | Qwen share of tasks (planned) | 62% |
@@ -12,14 +13,17 @@
 
 ### By tier
 
-Tier = the model the task ran on (the router's `workerModel`, after its last reroute; else the model of the child's last request), not the tier the router planned. Spot-check reviews and spawns whose card files did not resolve (`unresolved`) are left out of every table below: they say nothing about routing quality.
+Tier = the model the task ran on (the router's `workerModel`, after its last reroute; else the model of the child's last request), not the tier the router planned. Spot-check reviews are left out of every table below, and so are spawns whose card files did not resolve (`unresolved`), except for their $ (tier table and the first table): they say nothing about routing quality.
 
-| tier | tasks | share | accepted/judged | acceptance | $ | $/accepted |
-| --- | --- | --- | --- | --- | --- | --- |
-| openrouter/qwen | 14 | 67% | 9/14 | 64% | 3.20 | 0.36 |
-| anthropic/claude-sonnet-5-5 | 5 | 24% | 2/4 | 50% | 14.00 | 7.00 |
-| anthropic/claude-opus-5-5 | 2 | 10% | 2/2 | 100% | 3.50 | 1.75 |
-| all | 21 | 100% | 13/20 | 65% | 20.70 | 1.59 |
+| tier | tasks | share | accepted/judged | acceptance | $ | of which unresolved $ | $/accepted (lower – upper) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| openrouter/qwen | 14 | 67% | 9/14 | 64% | 3.20 | 0.00 | 0.36 |
+| anthropic/claude-sonnet-5-5 | 5 | 24% | 2/4 | 50% | 14.00 | 0.00 | 7.00 |
+| anthropic/claude-opus-5-5 | 2 | 10% | 2/2 | 100% | 3.50 | 0.00 | 1.75 |
+| all | 21 | 100% | 13/20 | 65% | 20.70 | 0.00 | 1.59 |
+
+$ = what the tier's tasks cost (every request of their child sessions), judged or not; $/accepted = that ÷ the accepted tasks. The cost of an unresolved card's child is in the $ column and in its own: the bounds leave it out (lower) or count it (upper), so a single number means there is none.
+
 
 ### Planned → executed tier
 
