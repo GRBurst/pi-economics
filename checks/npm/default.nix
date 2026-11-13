@@ -1,11 +1,12 @@
-# The shared npm lock (spec §3, "npm dependencies"). ./package.json and
-# ./package-lock.json are the host's checks/pi-retry files at 4c714f0, byte for
-# byte: pi-retry's devDependencies, which pin typescript, @types/node and pi's
-# own packages for the type check and, from M6, vitest for pi-retry's suite.
-# pname and source set are the host's, so the derivation is the host's.
-# pi-retry left the flake (redesign D19); its manifest stays byte for byte,
-# pname and source set too, so the fixed-output hash holds (P17). Its licence
-# text is ./LICENSE (NOTICE).
+# The shared npm lock (spec §3, "npm dependencies"): the node_modules of the
+# type checks (../typecheck, every typecheck-* and iface-* check) and of the
+# infinite-context suite, which need typescript, @types/node and pi's own
+# packages. ./package.json and ./package-lock.json are a third party's
+# manifest, pi-retry's (the host's checks/pi-retry files at 4c714f0), kept byte
+# for byte though pi-retry left the flake (redesign D19): with them, pname and
+# source set, the fixed-output hash holds without the network (P17). Its other
+# devDependencies (vitest, knip) serve no check any more. Licence text:
+# ./LICENSE (NOTICE).
 {
   lib,
   pkgs,

@@ -252,7 +252,7 @@ in {
     holds "no entry while enable = false, with ops from ${toString (lib.attrNames today.withWarming)}" (activation c == null);
   pisettings-no-ops =
     holds "no entry without ops" (activation (hm.eval {}) == null)
-    ++ holds "no entry with only empty lists" (activation (hm.eval {programs.piEconomics.piSettings.ops.retry = [];}) == null);
+    ++ holds "no entry with only empty lists" (activation (hm.eval {programs.piEconomics.piSettings.ops.x = [];}) == null);
   pisettings-file =
     lib.concatMap ({
       file,
