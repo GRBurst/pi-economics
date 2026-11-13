@@ -4,6 +4,7 @@
 # false` is none: pi-setup's economics bridge before the router left wrote the
 # router's settings only while a local health URL was set, and evaluates
 # without one; a consumer's guarded leftover of the actor evaluates alike.
+# `retry` left the flake (redesign D19, P16): pi's native retry replaces it.
 {
   lib,
   hm,
@@ -22,6 +23,7 @@
   messages = {
     taskRouter = "pi-economics: programs.piEconomics.taskRouter moved to the pi-task-router flake (programs.piTaskRouter)";
     actorSubagents = "pi-economics: programs.piEconomics.actorSubagents moved to pi-setup (programs.pi.actorSubagents)";
+    retry = "pi-economics: programs.piEconomics.retry was removed; pi's native retry (settings retry.*) handles transient errors";
   };
   # The bridge's router part (pi-setup `main`, modules/home-manager/economics-bridge.nix), the URL as an argument.
   oldBridge = url: {lib, ...}: {
@@ -48,6 +50,12 @@
       nested = {settings.maxAgents = 4;};
       bare-value = true;
     };
+    retry = {
+      enable = {enable = true;};
+      off = {enable = false;};
+      nested = {settings.baseDelayMs = 2000;};
+      bare-value = true;
+    };
   };
   one = name: what: d: let
     c = hm.eval {programs.piEconomics.${name} = d;};
@@ -69,4 +77,6 @@ in {
     stub "actorSubagents"
     ++ eq "a guarded definition, condition true: the one failure" (safe (failed "pi-economics:" (hm.eval (guardedActor true)))) [messages.actorSubagents]
     ++ eq "a guarded definition, condition false: no failure" (safe (failed "" (hm.eval (guardedActor false)))) [];
+
+  removed-retry = stub "retry";
 }

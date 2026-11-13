@@ -73,14 +73,6 @@
     chmod -R u+w $out
     rm $out/extensions/infinite-context/{archive-properties,forest,nudge}.test.ts
   '';
-  # (M6.6) The patched pi-retry.
-  retry = self.packages.${pkgs.stdenv.hostPlatform.system}.retry;
-  # (M6.7) The type-check copy: the code pi loads (retry.ts, src/) with
-  # package.json; upstream's tsconfig.json and tests stay out (D8).
-  retryTs = pkgs.runCommand "retry-ts" {} ''
-    mkdir $out
-    cp -r ${retry}/retry.ts ${retry}/src ${retry}/package.json $out/
-  '';
 in {
   leak = leakLib.check ../.;
   leak-selftest = leakLib.selftest;
@@ -171,7 +163,7 @@ in {
       type = "ExperimentsApi";
     };
   };
-  # The patched upstreams' suites, with the host's checks (spec §8.1).
+  # The patched upstream's suite, with the host's checks (spec §8.1).
   infinite-context = pkgs.callPackage ./infinite-context {
     src = infiniteContext;
     inherit (npm) nodeModules;
@@ -179,14 +171,6 @@ in {
   typecheck-infinite-context = typecheck.typecheck {
     name = "infinite-context";
     src = infiniteContextTs;
-  };
-  retry = pkgs.callPackage ./retry {
-    src = retry;
-    inherit (npm) nodeModules;
-  };
-  typecheck-retry = typecheck.typecheck {
-    name = "retry";
-    src = retryTs;
   };
   # (T2.1) The components' runtime check of __subagentsApi_v1 (core/runtime-guard.ts,
   # identical in each package: runtime-guard-copies; token-meter's is the reference).

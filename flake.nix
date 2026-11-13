@@ -12,14 +12,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # The patched upstreams (spec §3), locked to the revisions the patches were
-    # made against; a consumer makes them follow its own inputs.
+    # The patched upstream (spec §3), locked to the revision the patch was
+    # made against; a consumer makes it follow its own input.
     pi-infinite-context = {
       url = "github:fdietze/pi-infinite-context";
-      flake = false;
-    };
-    pi-retry = {
-      url = "github:monotykamary/pi-retry";
       flake = false;
     };
 
@@ -51,7 +47,6 @@
     nixpkgs,
     home-manager,
     pi-infinite-context,
-    pi-retry,
     pi-setup,
     pi-task-router,
   }: let
@@ -69,9 +64,8 @@
     # common.nix, so every option a cross-component assertion reads exists.
     homeModules.default = {
       imports = [./modules];
-      # The upstream sources the patched components build from (spec §3).
+      # The upstream source the patched component builds from (spec §3).
       programs.piEconomics.infiniteContext.src = lib.mkDefault pi-infinite-context;
-      programs.piEconomics.retry.src = lib.mkDefault pi-retry;
     };
 
     # One package per component (spec §3); the module's `package` default
@@ -82,7 +76,6 @@
       cache-lifecycle = pkgs.callPackage ./packages/cache-lifecycle/package.nix {};
       experiments = pkgs.callPackage ./packages/experiments/package.nix {};
       infinite-context = pkgs.callPackage ./packages/infinite-context/package.nix {src = pi-infinite-context;};
-      retry = pkgs.callPackage ./packages/retry/package.nix {src = pi-retry;};
     };
 
     formatter.${system} = pkgs.alejandra;

@@ -8,7 +8,6 @@
     ./cache-lifecycle.nix
     ./experiments.nix
     ./infinite-context.nix
-    ./retry.nix
     ./removed.nix
   ];
 }

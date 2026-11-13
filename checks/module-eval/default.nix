@@ -21,7 +21,6 @@
     ./cases/readme.nix
     ./cases/readme-package.nix
     ./cases/removed.nix
-    ./cases/retry.nix
     ./cases/together.nix
   ];
   cases =
