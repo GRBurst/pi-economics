@@ -68,18 +68,25 @@ test("cost: splits by model, warming, folds; $ per accepted task", () => {
   close(split.warming.usd, 0.5);
   close(split.warming.perHour, 0.5 / 3);
   assert.ok(!("cache rewrite" in split), "every non-first write is no rewrite (B3): the Cache section reports growth and misses");
-  assert.ok("after folds" in split && "after cold resumes" in split);
+  assert.ok(!("after folds" in split) && !("after cold resumes" in split), "events are in the Cache section, with a premium and a baseline (B4)");
+  assert.ok(c.cache.events.fold.events >= 0 && c.cache.events.coldResume.events > 0, "the world's mains resume after gaps of 10 minutes");
   // t1 (0.2) accepted, t2 (1.0) rejected, t3 (2.0) accepted: (0.2 + 1 + 2) / 2
   close(c.perAccepted.perAccepted, 1.6);
   assert.equal(c.perAccepted.accepted, 2);
 });
 
-test("cost: a fold (context shrink) is found and charged with the next 3 requests", () => {
-  const meter = [...turns("f", T0, 3, { arm: "-----" }, 1), ...turns("f", T0 + 3 * MIN, 3, { arm: "-----", cacheRead: 100, costUsd: 0.5 }, 1)];
+test("cost (B4): a fold (context shrink) is an event; its premium is the extra it paid over reading what it rewrote, net of what an ordinary request misses", () => {
+  // five ordinary requests that miss nothing, then a fold that reads 3000 of 5000 (R = 2000 rewritten), 1 $ per request
+  const t = (at: number, read: number, write: number) => turn("f", T0 + at * MIN, { arm: "-----", input: 0, cacheRead: read, cacheWrite: write, output: 0, costUsd: 1 });
+  const meter = [t(0, 0, 10_000), t(1, 10_000, 200), t(2, 10_200, 200), t(3, 10_400, 200), t(4, 3_000, 2_000), t(5, 5_000, 100), t(6, 5_100, 100)];
   const c = analyse({ meter, outcomes: [], assignments: [], guards: [] }).cost;
-  const fold = c.splits.find((s) => s.name === "after folds")!;
-  assert.equal(fold.n, 1);
-  close(fold.usd, 1.5);
+  const p = 1 / (0.1 * 3_000 + 1.25 * 2_000); // the fold request's input price: its 1 $ over its weighted tokens
+  assert.equal(c.cache.events.fold.events, 1);
+  assert.equal(c.cache.events.coldResume.events, 0);
+  close(c.cache.events.fold.premiumUsd, 2_000 * (1.25 - 0.1) * p);
+  close(c.cache.events.fold.baselineUsd, 0); // the ordinary requests miss nothing
+  close(c.cache.events.fold.netUsd, 2_000 * (1.25 - 0.1) * p);
+  assert.ok(renderAnalysis(analyse({ meter, outcomes: [], assignments: [], guards: [] })).includes("| after folds | 1 |"));
 });
 
 const errLine = (sid: string, at: number, extra: Record<string, unknown> = {}) =>
@@ -98,7 +105,7 @@ test("cost: error lines are not requests (counted apart), nor active hours", () 
 
 test("cost: an error line makes no fold", () => {
   const meter = [...turns("f", T0, 3, { arm: "-----" }, 1), errLine("f", 3, { arm: "-----" }), ...turns("f", T0 + 4 * MIN, 3, { arm: "-----" }, 1)];
-  assert.equal(analyse(none(meter)).cost.splits.find((s) => s.name === "after folds")!.n, 0);
+  assert.equal(analyse(none(meter)).cost.cache.events.fold.events, 0);
 });
 
 test("cost (B3): the Cache section: growth is new context, only the prefix a request had to process again is a miss, with its cause", () => {

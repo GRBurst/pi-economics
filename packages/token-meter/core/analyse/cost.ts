@@ -1,5 +1,5 @@
 // (a) cost: $, requests, active hours, quota per active hour, splits by model, the cache (cache.ts), warming, folds and cold resumes.
-import { armStats, attributeQuota, isError, MIN_HOURS, push, rootUnits } from "../arms.ts";
+import { attributeQuota, isError, MIN_HOURS, push, rootUnits } from "../arms.ts";
 import { type LedgerSection } from "../ledger.ts";
 import { taskCosts, type TaskCost } from "../tasks.ts";
 import { bootstrapRatioCI, type CI } from "../stats.ts";
@@ -50,9 +50,6 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
     for (const k of Object.keys(components) as Component[]) components[k] += a[k];
   }
   const warm = lines.filter((l) => l.kind === "warming");
-  // Fold and cold-resume events are found per arm (the cold-resume TTL depends on the arm's mainCacheTtl).
-  const stats = armStats(lines.map((l) => ({ ...l, arm: typeof l.arm === "string" && l.arm ? l.arm : "(none)" })), { flags });
-  const evs = (k: "fold" | "coldResume") => ({ n: sum(stats.map((s) => s[k].n)), usd: sum(stats.map((s) => s[k].n * s[k].meanCost)) });
   const split = (name: string, n: number, usd: number): Split => ({ name, n, usd, share: totalUsd ? usd / totalUsd : NaN, perHour: perHour(usd) });
   const all = taskCosts(lines, outcomes.map((e) => (e?.event === "spawn" ? { ...e, arm: "all" } : e))).all;
   return {
@@ -60,8 +57,7 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
     q5hPerHour: perHour(quotaShare(lines, "q5h").pi), q7dPerHour: perHour(quotaShare(lines, "q7d").pi),
     perAccepted: all ?? { accepted: 0, judged: 0, costUsd: 0, perAccepted: NaN },
     byModel: [...models].map(([model, m]) => ({ model, ...m, share: totalUsd ? m.usd / totalUsd : NaN, perHour: perHour(m.usd) })).sort((a, b) => b.usd - a.usd),
-    splits: [split("warming", warm.length, sum(warm.map((l) => apiUsd(l)))),
-      split("after folds", evs("fold").n, evs("fold").usd), split("after cold resumes", evs("coldResume").n, evs("coldResume").usd)],
+    splits: [split("warming", warm.length, sum(warm.map((l) => apiUsd(l))))],
     components, cache: cacheSection(lines, flags), folds: foldsOf(lines, flags, rows),
   };
 }

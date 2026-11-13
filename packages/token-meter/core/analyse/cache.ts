@@ -65,6 +65,7 @@ export type CacheSection = {
   /** Growth writes: tokens and $ at the write price. */ newContext: { tokens: number; usd: number };
   /** Misses by cause, in the order ttl, fold, model, other: requests, missed tokens, premium API-eq $ = tokens × (write − read price). */ misses: CauseRow[];
   /** Missed tokens ÷ cacheWrite tokens (0 without writes). */ missShare: number;
+  /** Folds and cold resumes: premium over the baseline (foldPremiums). */ events: Record<EventKind, FoldPremium>;
 };
 const CAUSES: MissCause[] = ["ttl", "fold", "model", "other"];
 
@@ -75,8 +76,9 @@ const CAUSES: MissCause[] = ["ttl", "fold", "model", "other"];
 export function cacheSection(lines: readonly any[], flags: Flags = {}): CacheSection {
   const ttl = ttlMsOf(flags);
   const misses = CAUSES.map((cause): CauseRow => ({ cause, n: 0, tokens: 0, usd: 0 }));
-  const out: CacheSection = { requests: 0, branches: 0, writeTokens: 0, newContext: { tokens: 0, usd: 0 }, misses, missShare: 0 };
-  for (const branch of branchesOf(lines).values()) {
+  const branches = branchesOf(lines);
+  const out: CacheSection = { requests: 0, branches: 0, writeTokens: 0, newContext: { tokens: 0, usd: 0 }, misses, missShare: 0, events: foldPremiums(branches.values(), ttl, shrinkFold, flags) };
+  for (const branch of branches.values()) {
     out.branches += 1;
     for (const step of cacheSteps(branch, ttl, shrinkFold)) {
       const l = branch[step.i];
@@ -110,10 +112,13 @@ const N_AFTER = 3; // requests an event is charged with: its own and the next tw
  * previous request, warming included); a **fold** is a turn request after which \`eventBetween(previous, this)\` holds (not itself cold: P8,
  * the gap wins). An event's window is its request and the next two turn requests of the branch, cut short by the next event: every request
  * is in at most one window. premium_e = Σ over the window of miss_j × (w_j − r) × p_j (the line's write weight w, read weight r, input
- * price p): the extra cost over reading the tokens the cache lost.
+ * price p): the extra cost over reading the tokens the cache lost. The baseline is what an ordinary request costs the same way: the mean
+ * premium of the turn requests outside every window (not the first) of the sessions that have an event of that kind; each event is
+ * charged one request's worth of it (net = Σ premium_e − events × baseline, the design's B4).
  */
 export function foldPremiums(branches: Iterable<readonly any[]>, ttlMs: (l: any) => number, eventBetween: (a: any, b: any) => boolean, flags: Flags = {}): Record<EventKind, FoldPremium> {
   const out: Record<EventKind, FoldPremium> = { fold: { events: 0, premiumUsd: 0, baselineUsd: 0, netUsd: 0 }, coldResume: { events: 0, premiumUsd: 0, baselineUsd: 0, netUsd: 0 } };
+  const pool: Record<EventKind, { usd: number; n: number }> = { fold: { usd: 0, n: 0 }, coldResume: { usd: 0, n: 0 } };
   for (const branch of branches) {
     const steps = cacheSteps(branch, ttlMs, eventBetween);
     const premium = steps.map((s) => {
@@ -128,12 +133,20 @@ export function foldPremiums(branches: Iterable<readonly any[]>, ttlMs: (l: any)
       if (Date.parse(l.ts) - Date.parse(prev.ts) > ttlMs(prev)) events.push({ at: k, kind: "coldResume" });
       else if (eventBetween(prev, l)) events.push({ at: k, kind: "fold" });
     });
+    const inWindow = new Array<boolean>(steps.length).fill(false);
     events.forEach((e, n) => {
       const end = Math.min(e.at + N_AFTER, events[n + 1]?.at ?? Infinity, steps.length);
       out[e.kind].events += 1;
-      for (let k = e.at; k < end; k++) out[e.kind].premiumUsd += premium[k];
+      for (let k = e.at; k < end; k++) { out[e.kind].premiumUsd += premium[k]; inWindow[k] = true; }
     });
+    let usd = 0, n = 0;
+    steps.forEach((s, k) => { if (s.i > 0 && !inWindow[k]) { usd += premium[k]; n += 1; } });
+    for (const kind of new Set(events.map((e) => e.kind))) { pool[kind].usd += usd; pool[kind].n += n; }
   }
-  for (const e of Object.values(out)) e.netUsd = e.premiumUsd - e.baselineUsd;
+  for (const kind of ["fold", "coldResume"] as const) {
+    const e = out[kind];
+    e.baselineUsd = pool[kind].n ? (e.events * pool[kind].usd) / pool[kind].n : 0;
+    e.netUsd = e.premiumUsd - e.baselineUsd;
+  }
   return out;
 }

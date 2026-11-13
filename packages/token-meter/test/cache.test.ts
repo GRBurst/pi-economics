@@ -267,3 +267,71 @@ test("property (B4): premium ≥ 0 and every request is counted in at most one w
     assert.ok(fold.premiumUsd + coldResume.premiumUsd <= everyMiss + 1e-12, "windows do not overlap: no request is paid twice");
   }
 });
+
+// ---- B4: the baseline (T2a.6) ----
+
+/** Steady requests that each miss 100 tokens, a fold (misses 2000) and two requests after it that miss 100 again, then one more steady request. */
+const noisy = (sessionId: string, missEach = 100) => {
+  const l: any[] = [C(sessionId, 0, 0, 10_000)];
+  let cachedTokens = 10_000;
+  const add = (at: number, miss: number, grow = 200, read?: number) => {
+    const r = read ?? cachedTokens - miss;
+    l.push(C(sessionId, at, r, grow + miss));
+    cachedTokens = r + grow + miss;
+  };
+  add(1, missEach); add(2, missEach); add(3, missEach);
+  l.push(C(sessionId, 4, 3_000, 2_000)); cachedTokens = 5_000; // the fold: prompt 10 600 → 5 000, 2000 rewritten
+  add(5, missEach, 100); add(6, missEach, 100); add(7, missEach, 100);
+  return l;
+};
+
+test("B4: the baseline (what an ordinary request of the same sessions misses) is subtracted: net = premium − events × baseline", () => {
+  const { fold } = premiums(noisy("f"));
+  const per = 100 * (1.25 - 0.1) * P; // one ordinary request's miss
+  assert.equal(fold.events, 1);
+  close(fold.premiumUsd, (2000 + 100 + 100) * (1.25 - 0.1) * P);
+  close(fold.baselineUsd, per); // the mean over the 4 requests outside the window, times 1 event
+  close(fold.netUsd, fold.premiumUsd - per);
+  close(fold.netUsd, 2000 * (1.25 - 0.1) * P + per);
+});
+
+test("B4: only sessions that have an event of that kind form its baseline; each event gets one request's worth", () => {
+  const quiet = [C("q", 0, 0, 10_000)]; // misses 1000 at every request, no fold, no gap
+  for (let i = 1, cachedTokens = 10_000; i <= 6; i++) { quiet.push(C("q", i, cachedTokens - 1_000, 1_100)); cachedTokens += 100; }
+  const alone = premiums(noisy("f")).fold;
+  const withQuiet = premiums([...noisy("f"), ...quiet]).fold;
+  close(withQuiet.baselineUsd, alone.baselineUsd); // a session without a fold does not move the fold baseline
+  const two = premiums([...noisy("f"), ...noisy("g")]).fold;
+  assert.equal(two.events, 2);
+  close(two.baselineUsd, 2 * alone.baselineUsd);
+  close(two.netUsd, 2 * alone.netUsd);
+});
+
+test("B4: no ordinary request to compare with: baseline 0, net = premium", () => {
+  const { fold } = premiums([C("b", 0, 0, 10_000), C("b", 1, 1_000, 1_000)]); // the second request is the fold and the whole branch
+  assert.equal(fold.events, 1);
+  assert.equal(fold.baselineUsd, 0);
+  close(fold.netUsd, fold.premiumUsd);
+  assert.ok(fold.premiumUsd > 0);
+  const bare = premiums([C("b", 0, 0, 1000), C("b", 1, 0, 1000)]); // a miss, no event kind applies (gap 1 min, no shrink)
+  assert.deepEqual([bare.fold.events, bare.fold.baselineUsd, bare.coldResume.events], [0, 0, 0]);
+});
+
+test("property (B4): net = premium − baseline; premium and baseline are not negative", () => {
+  const rng = mulberry32(17);
+  for (let k = 0; k < 100; k++) {
+    const lines: any[] = [];
+    let cachedTokens = 0;
+    for (let i = 0, at = 0; i < 30; i++) {
+      at += rng() < 0.15 ? 7 : 1;
+      const read = rng() < 0.2 ? 0 : Math.floor(cachedTokens * rng());
+      const write = Math.floor(rng() * 800) + (rng() < 0.1 ? 0 : Math.max(0, cachedTokens - read));
+      lines.push(C("r", at, read, write));
+      cachedTokens = rng() < 0.1 ? Math.floor(cachedTokens / 3) : read + write;
+    }
+    for (const e of Object.values(premiums(lines))) {
+      assert.ok(e.premiumUsd >= 0 && e.baselineUsd >= 0);
+      close(e.netUsd, e.premiumUsd - e.baselineUsd);
+    }
+  }
+});

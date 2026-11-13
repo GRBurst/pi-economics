@@ -27,7 +27,7 @@ export function renderCost(c: CostSection): string {
       ["$/accepted task (accepted/judged)", `${f2(c.perAccepted.perAccepted)} (${c.perAccepted.accepted}/${c.perAccepted.judged})`],
     ]),
     "\n### By model\n", table(["model", "requests", "$", "share", "$/active h"], c.byModel.map((m) => [m.model, String(m.requests), f2(m.usd), pc(m.share), f2(m.perHour)])),
-    "\n### Splits\n\nSplits overlap; fold and cold-resume rows charge the 3 requests from the event on.\n",
+    "\n### Splits\n\nWarming = the cache-warming requests (kind warming). Folds and cold resumes are in the Cache section.\n",
     table(["split", "n", "$", "share", "$/active h"], c.splits.map((s) => [s.name, String(s.n), f2(s.usd), pc(s.share), f2(s.perHour)])),
     "\n### Token components (≈, by Anthropic price ratios)\n", table(["component", "$"], Object.entries(c.components).map(([k, v]) => [k, f2(v)])),
     renderCache(c.cache),
@@ -45,6 +45,8 @@ export function renderCache(c: CacheSection): string {
       ["missed prefix", `${c.misses.reduce((s, m) => s + m.tokens, 0)} tokens, ${f2(c.misses.reduce((s, m) => s + m.usd, 0))} $ premium`], ["miss share (missed ÷ cache-write tokens)", pc(c.missShare)],
     ]),
     "\nMisses by cause:\n", table(["cause", "requests", "missed tokens", "premium API-eq $"], c.misses.map((m) => [m.cause, String(m.n), String(m.tokens), f2(m.usd)])),
+    "\nFolds and cold resumes (a cold resume = a request after a gap beyond the TTL in force; a fold as in the cause table, unless the gap came first). Window = the event's request and the next two turn requests (cut short by the next event): premium = their misses × (write − read price). Baseline = what an ordinary request costs the same way (the mean premium of the requests outside every window, in the sessions that have such an event) once per event; net = premium − baseline.\n",
+    table(["event", "n", "premium API-eq $", "baseline $", "net $"], ([["after folds", c.events.fold], ["after cold resumes", c.events.coldResume]] as const).map(([name, e]) => [name, String(e.events), f2(e.premiumUsd), f2(e.baselineUsd), f2(e.netUsd)])),
   ].join("\n");
 }
 

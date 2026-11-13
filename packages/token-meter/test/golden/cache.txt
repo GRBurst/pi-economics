@@ -18,3 +18,10 @@ Misses by cause:
 | fold | 2 | 6020 | 1.37 |
 | model | 0 | 0 | 0.00 |
 | other | 44 | 10400 | 18.17 |
+
+Folds and cold resumes (a cold resume = a request after a gap beyond the TTL in force; a fold as in the cause table, unless the gap came first). Window = the event's request and the next two turn requests (cut short by the next event): premium = their misses × (write − read price). Baseline = what an ordinary request costs the same way (the mean premium of the requests outside every window, in the sessions that have such an event) once per event; net = premium − baseline.
+
+| event | n | premium API-eq $ | baseline $ | net $ |
+| --- | --- | --- | --- | --- |
+| after folds | 2 | 1.43 | 0.20 | 1.23 |
+| after cold resumes | 28 | 9.19 | 1.02 | 8.17 |

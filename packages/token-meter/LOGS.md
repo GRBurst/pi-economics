@@ -286,6 +286,13 @@ request is no row of its own (it only refreshes the prefix).
   after it: 1 h if that line has `cacheWrite1h` > 0 or is a main session's in an arm with `mainCacheTtl` = `1h`, else 5 min; `fold` — the
   prompt fell below 80 % of the previous request's (the fold rule of the other tables; real fold and compaction entries live in session
   files, not in the meter log); `model` — the model changed (its own cache); `other`.
+- **Fold and cold-resume events** (the rows *after folds* / *after cold resumes*): a **cold resume** is a turn request after a gap beyond
+  the TTL in force (above); a **fold** is a turn request whose prompt fell below 80 % of the previous request's, unless the gap came
+  first (a cold fold is a cold resume). An event's **window** is its request and the next two turn requests of the branch, cut short by
+  the next event, so no request is paid twice. **Premium** of an event = the sum over its window of `miss × (write − read price)`
+  (the extra cost over reading what the cache lost). **Baseline** = the mean premium of the turn requests outside every window
+  (not the first one) in the sessions that have an event of that kind, once per event; **net** = premium − baseline. The old
+  rows charged the whole cost of the next three requests, with no baseline (about 1.6–2× too much on the author's log).
 - **$** at the line's input price *p* (`costUsd` ÷ its tokens weighted read 0.1, 5-minute write 1.25, 1 h write 2.0, output 5): a miss costs
   its tokens × (write − read) × *p*, new context its tokens × write × *p*. A 1 h write is a line's `cacheWrite1h` tokens (meter v2), or for a
   v1 line all of `cacheWrite` when the line is a main session's in a `mainCacheTtl` 1h arm (an approximation: children and 5m arms write 5
