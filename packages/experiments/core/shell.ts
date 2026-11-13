@@ -249,6 +249,7 @@ export function install(pi: PiLike, deps: Deps): void {
     // spec D5: without the patched actor only the children's inheritance is off; the main session is assigned as before.
     if (!hasSubagentsApiV1(subagents())) warnOnce(ctx, "actor:experiments", actorMissing("experiments", "child agents do not inherit their parent's arm"));
     for (const w of warnings) warnOnce(ctx, `experiments:${w}`, w); // a dropped stratum (parseStrata says why)
+    if (settings.legacy?.length) warnOnce(ctx, "experiments:legacy", `experiments: ignores the settings ${settings.legacy.join(", ")} (the v1 engine's): its factors come from strata (default: one stratum per billing class); baseline only labels the analyses of v1–v4 designs`);
     main = ctx.sessionManager.getSessionId() as string;
     sessionDir = safe(() => ctx.sessionManager.getSessionDir() as string | undefined);
     // A child's runtime (experiments among the actor's childExtensions): never drawn, no row; its arm is its parent's.

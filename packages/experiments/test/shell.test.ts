@@ -380,3 +380,17 @@ test("review m1: malformed blocks.json → the block is rebuilt, the session ass
   assert.equal(h.notes.filter((n) => n.startsWith("experiments: blocks.json")).length, 1, h.notes.join("\n"));
   assert.equal(readFileSync(join(dir, "blocks.json.tmp"), "utf8"), "another process's write in flight");
 });
+
+// Review m3: the v1 engine's keys set on purpose (package route; Nix warns at build time) are named once.
+test("review m3: settings with the v1 engine's factors/maxArms/baseline → one warning naming them; the session still gets a v2 arm", () => {
+  const h = harness({ legacy: ["factors", "baseline"] });
+  h.start("s1");
+  h.start("s2");
+  const w = h.notes.filter((n) => n.startsWith("experiments: ignores"));
+  assert.deepEqual(w, ["experiments: ignores the settings factors, baseline (the v1 engine's): its factors come from strata (default: one stratum per billing class); baseline only labels the analyses of v1–v4 designs"]);
+  assert.equal(h.rows()[0].design, API.id);
+  delete (globalThis as G).__piEconomicsWarned_v1;
+  const none = harness();
+  none.start("s3");
+  assert.equal(none.notes.filter((n) => n.startsWith("experiments: ignores")).length, 0);
+});

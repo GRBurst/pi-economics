@@ -226,4 +226,23 @@ in {
     ++ eq "failed assertions" (failed "" c) []
     # (M6) The registry is no longer auto-discovered: one warning.
     ++ eq "new warnings" (lib.subtractLists bare.warnings c.warnings) ["pi-economics: piSettings.enable is false, so nothing lists the registry in settings.json's `extensions`, and pi does not auto-discover its links in .pi/agent/pi-economics/extensions: put programs.piEconomics.loadOrder at the front of `extensions` yourself"];
+
+  # (redesign M5b.1, review m3) The v1 engine's keys: one warning naming
+  # those set; none without them.
+  experiments-legacy-keys = let
+    new = s: lib.subtractLists bare.warnings (eval ".pi/agent" {settings = s;} withActor).warnings;
+    tail = "(the v1 engine's): its factors come from settings.strata (default: one stratum per billing class); baseline only labels the analyses of v1–v4 designs";
+  in
+    eq "factors, maxArms, baseline" (new {
+      factors = [];
+      maxArms = 8;
+      baseline = "---";
+      mode = "explore";
+    }) ["pi-economics: experiments ignores settings.factors, settings.maxArms, settings.baseline ${tail}"]
+    ++ eq "maxArms alone" (new {maxArms = 4;}) ["pi-economics: experiments ignores settings.maxArms ${tail}"]
+    ++ eq "none" (new {
+      mode = "exploit";
+      strata = {};
+    }) []
+    ++ eq "default" (new {}) [];
 }

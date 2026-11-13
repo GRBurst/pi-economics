@@ -37,6 +37,7 @@
       then given
       else {}
     );
+  legacyKeys = lib.filter (k: cfg.settings ? ${k}) ["factors" "maxArms" "baseline"];
 in {
   options.programs.piEconomics.experiments = {
     enable = lib.mkEnableOption "the pi experiments extension (one fractional-factorial arm per main session; explore/exploit assignment, spawn inheritance for children)";
@@ -64,7 +65,8 @@ in {
         has a default in the package's core/settings.ts (`mode`, `minExplore`,
         `strata`, `guards`, `correctionRegex`); `strata` defaults to one stratum
         per billing class of `tokenMeter.plans` (and `api`). The v1 engine's
-        `factors`, `maxArms` and `baseline` are ignored.
+        `factors`, `maxArms` and `baseline` are not applied (a warning names
+        them); `baseline` still labels the analyses of v1–v4 designs.
       '';
     };
   };
@@ -109,6 +111,10 @@ in {
     strata);
 
     # (M4.15) A soft dependency (spec §4.1): shell.ts tolerates a missing API.
-    warnings = lib.optional (!hasActor) "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
+    warnings =
+      lib.optional (!hasActor) "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)"
+      # (redesign M5b.1, review m3) The v1 engine's keys, set on purpose:
+      # its factors are no longer drawn (the package warns too).
+      ++ lib.optional (legacyKeys != []) "pi-economics: experiments ignores ${lib.concatMapStringsSep ", " (k: "settings.${k}") legacyKeys} (the v1 engine's): its factors come from settings.strata (default: one stratum per billing class); baseline only labels the analyses of v1–v4 designs";
   };
 }

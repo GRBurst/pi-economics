@@ -7,6 +7,8 @@ import type { FactorSpec, Level } from "./design.ts";
 import type { Billing, Plan, Plans } from "../../token-meter/core/plans.ts";
 
 export type Settings = {
+  /** The v1 engine's keys the file sets (factors, maxArms, baseline): never applied, named once to the user (review m3). */
+  legacy?: string[];
   /** Arm selection mode; "off": no session is eligible (every lever keeps its extension's own setting). */
   mode: "off" | "explore" | "exploit";
   /** Share of the choice probability every enabled arm keeps in exploit mode (P-floor). */
@@ -32,6 +34,8 @@ export function defaults(): Settings {
   return { mode: "explore", minExplore: 0.1, guards: { minSessions: 10, threshold: 0.2, peekThreshold: 1, correctionThreshold: 1, ratingThreshold: 0.5 }, correctionRegex: String.raw`\b(no|wrong|revert|undo|that's not)\b` };
 }
 
+const LEGACY = ["factors", "maxArms", "baseline"];
+
 const allowed: Record<string, readonly string[]> = {
   mode: ["off", "explore", "exploit"],
 };
@@ -42,8 +46,8 @@ export function loadOptIn(file: string): Settings | undefined {
 }
 
 /**
- * Missing or invalid file → defaults(); known keys with a valid value override, others are ignored (the v1 engine's
- * factors, maxArms and baseline among them: designs come from `strata`). `strata` is kept as written.
+ * Missing or invalid file → defaults(); known keys with a valid value override, others are ignored. The v1 engine's
+ * factors, maxArms and baseline are not applied (designs come from `strata`) but named in `legacy`. `strata` is kept as written.
  */
 export function loadSettings(file: string): Settings {
   const base = defaults();
@@ -56,6 +60,10 @@ export function loadSettings(file: string): Settings {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return base;
   const out: Record<string, unknown> = { ...base };
   for (const [k, v] of Object.entries(raw)) {
+    if (LEGACY.includes(k)) {
+      out.legacy = [...((out.legacy as string[] | undefined) ?? []), k];
+      continue;
+    }
     if (k === "strata") {
       out[k] = v;
       continue;

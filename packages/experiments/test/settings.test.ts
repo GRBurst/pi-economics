@@ -28,7 +28,10 @@ test("defaults: explore, a 0.1 floor, the kill-switch guards, the correction reg
 test("known keys override defaults; unknown keys (the v1 engine's factors, maxArms, baseline among them) and wrong types are ignored", () => {
   const f = join(tmp(), "settings.json");
   writeFileSync(f, JSON.stringify({ mode: "exploit", minExplore: 0.2, maxArms: 8, baseline: "b", factors: [{ name: "x", values: ["a", "b"] }], extra: 1 }));
-  assert.deepEqual(loadSettings(f), { ...defaults(), mode: "exploit", minExplore: 0.2 });
+  // review m3: the v1 engine's keys are named (the shell warns once), never applied
+  assert.deepEqual(loadSettings(f), { ...defaults(), mode: "exploit", minExplore: 0.2, legacy: ["maxArms", "baseline", "factors"] });
+  writeFileSync(f, JSON.stringify({ mode: "exploit" }));
+  assert.deepEqual(loadSettings(f), { ...defaults(), mode: "exploit" });
 });
 
 test("strata: passed through as written (any JSON value); parseStrata validates it and says why it drops one", () => {
