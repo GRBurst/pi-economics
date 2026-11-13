@@ -363,3 +363,20 @@ test("review M1: a stale runtime still subscribed (no session_shutdown seen) nev
   }
   assert.deepEqual(seen, ["s-w1"]);
 });
+
+// Review m1: a malformed blocks.json never leaves a session unassigned; the user is told once; another process's
+// temporary file is never touched (each writer has its own).
+test("review m1: malformed blocks.json → the block is rebuilt, the session assigned, one warning; another process's tmp file untouched", () => {
+  const h = harness();
+  const dir = join(h.agentDir, "experiments");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "blocks.json"), JSON.stringify({ [`${API.id}/api`]: { queue: "011" } }));
+  writeFileSync(join(dir, "blocks.json.tmp"), "another process's write in flight");
+  h.start("s1");
+  h.start("s2");
+  assert.deepEqual(h.rows().map((r) => [r.sessionId, r.eligible, typeof r.arm]), [["s1", true, "string"], ["s2", true, "string"]]);
+  const b = JSON.parse(readFileSync(join(dir, "blocks.json"), "utf8"));
+  assert.ok(Array.isArray(b[`${API.id}/api`].queue) && b[`${API.id}/api`].queue.length === 6, "rebuilt: 8 arms, 2 drawn");
+  assert.equal(h.notes.filter((n) => n.startsWith("experiments: blocks.json")).length, 1, h.notes.join("\n"));
+  assert.equal(readFileSync(join(dir, "blocks.json.tmp"), "utf8"), "another process's write in flight");
+});

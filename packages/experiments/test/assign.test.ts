@@ -167,3 +167,13 @@ test("T5b1.4 exploit: disabled arms are never chosen; without any posterior it e
   const r = draw("explore", d, {}, { disabled: d.arms.map((a) => a.name) }, rand, 0.1);
   assert.equal(r.arm, undefined, "every arm disabled: no arm");
 });
+
+// Review m1: blocks.json is read as data, never trusted: a malformed block is rebuilt, the rest kept.
+import { parseBlocks } from "../core/assign.ts";
+test("review m1: parseBlocks keeps well-formed queues, drops malformed blocks (bad = true), a missing file is no fault", () => {
+  assert.deepEqual(parseBlocks(undefined), { blocks: {}, bad: false });
+  assert.deepEqual(parseBlocks({ "d/api": { queue: ["000", "011"] } }), { blocks: { "d/api": { queue: ["000", "011"] } }, bad: false });
+  for (const raw of [[], "x", 3, null]) assert.deepEqual(parseBlocks(raw), { blocks: {}, bad: true }, JSON.stringify(raw));
+  const mixed = { ok: { queue: ["1"] }, s: { queue: "011" }, o: { queue: { a: 1 } }, n: { queue: [1] }, x: "q", m: {} };
+  assert.deepEqual(parseBlocks(mixed), { blocks: { ok: { queue: ["1"] } }, bad: true });
+});

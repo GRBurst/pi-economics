@@ -39,6 +39,23 @@ export const eligibleFor = (isChild: boolean, stratum: string | undefined, mode:
  * blockKey. Two strata with the same factors share a design id but never a queue (strata are never pooled, Q1).
  */
 export type BlockState = Record<string, { queue: string[] }>;
+/**
+ * blocks.json as read (review m1): every block whose `queue` is a list of strings; any other block is dropped, so it is
+ * rebuilt by the next draw (`bad` = something was dropped). A missing file (undefined) is no fault.
+ */
+export function parseBlocks(raw: unknown): { blocks: BlockState; bad: boolean } {
+  if (raw === undefined) return { blocks: {}, bad: false };
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return { blocks: {}, bad: true };
+  const blocks: BlockState = {};
+  let bad = false;
+  for (const [k, v] of Object.entries(raw)) {
+    const q = v !== null && typeof v === "object" ? (v as { queue?: unknown }).queue : undefined;
+    if (Array.isArray(q) && q.every((x) => typeof x === "string")) blocks[k] = { queue: q };
+    else bad = true;
+  }
+  return { blocks, bad };
+}
+
 /** `<design id>/<stratum>`: the id is 12 hex, so the first slash separates them. */
 export const blockKey = (d: Design): string => `${d.id}/${d.stratum}`;
 

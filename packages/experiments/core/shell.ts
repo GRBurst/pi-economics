@@ -6,10 +6,11 @@
 // to pi-economics' add-ons on the internal channel (core/channel.ts) and, until M5b.2, to the process-global API.
 // Children inherit via spawn events; a RESUMED child (whose spawn event was lost to the process restart) re-derives the
 // arm from its session file layout on lookup.
+import { randomUUID } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createApi, type ApiArm } from "./api.ts";
-import { designState, draw, eligibleFor, stratumOf, type AssignmentV2, type BlockState } from "./assign.ts";
+import { designState, draw, eligibleFor, parseBlocks, stratumOf, type AssignmentV2, type BlockState } from "./assign.ts";
 import { publish, serve, type Assigned, type Bus } from "./channel.ts";
 import { designFor, type Design } from "./design.ts";
 import { V4_FACTORS, defaults, loadOptIn, parseStrata, readPlans, type Settings } from "./settings.ts";
@@ -146,26 +147,28 @@ export function install(pi: PiLike, deps: Deps): void {
     }
     return undefined;
   };
-  /** Atomically (a reader never sees half a file); two processes drawing at once may each take the same arm (a slight imbalance, never a wrong arm). */
+  /** Atomically through this writer's own temporary file (a reader never sees half a file, review m1); two processes drawing
+   * at once may each take the same arm (a slight imbalance, never a wrong arm). */
   const writeBlocks = (b: BlockState): void => {
     const file = join(dir, "blocks.json");
     try {
       mkdirSync(dir, { recursive: true });
-      writeFileSync(`${file}.tmp`, JSON.stringify(b) + "\n");
-      renameSync(`${file}.tmp`, file);
+      const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+      writeFileSync(tmp, JSON.stringify(b) + "\n");
+      renameSync(tmp, file);
     } catch (err) {
       console.warn(`experiments: cannot record the explore blocks: ${(err as Error).message}`);
     }
   };
   /** A new main's assignment: its stratum, and an arm when eligible (none left enabled: ineligible). */
-  const assignNew = (sid: string, model: unknown): AssignmentV2 => {
+  const assignNew = (sid: string, model: unknown, ctx: Parameters<typeof warnOnce>[0]): AssignmentV2 => {
     const m = isRecord(model) && typeof model.provider === "string" && typeof model.id === "string" ? model : undefined;
     const stratum = m === undefined ? undefined : stratumOf(strata, plans, m.provider as string, m.id as string);
     const d = stratum === undefined ? undefined : designs.get(stratum);
     let arm: string | undefined;
     if (d !== undefined && settings.mode !== "off" && eligibleFor(false, stratum, settings.mode)) {
-      const raw = readJson(join(dir, "blocks.json"));
-      const blocks: BlockState = isRecord(raw) ? (raw as BlockState) : {};
+      const { blocks, bad } = parseBlocks(readJson(join(dir, "blocks.json")));
+      if (bad) warnOnce(ctx, "experiments:blocks", `experiments: blocks.json in ${dir} held a malformed explore block; it is rebuilt`);
       const r = draw(settings.mode, d, blocks, designState(readJson(join(dir, "state.json")), d), rng, settings.minExplore);
       arm = r.arm;
       if (r.blocks !== blocks) writeBlocks(r.blocks);
@@ -258,7 +261,7 @@ export function install(pi: PiLike, deps: Deps): void {
     const prior = rows().find((r) => r.sessionId === main);
     const resumed = prior && fromRow(prior);
     if (resumed) return adopt(resumed.a, resumed.legacy);
-    const row = assignNew(main, safe(() => ctx.model));
+    const row = assignNew(main, safe(() => ctx.model), ctx);
     const a = assignedOf(row);
     try {
       mkdirSync(dir, { recursive: true });

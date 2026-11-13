@@ -377,7 +377,8 @@ the session is ineligible); nothing writes that key yet (M5c): `meter-report --p
 `pi-analyse --apply` write the v1 engine's keys only, keep `designs` as it is and say so.
 
 `experiments/blocks.json`: `{ "<design id>/<stratum>": { "queue": [<arm>] } }`, the arms
-left in each explore block (refilled with a shuffle of the enabled arms when empty).
+left in each explore block (refilled with a shuffle of the enabled arms when empty). A block whose `queue` is no list of
+strings is rebuilt (the user is told once); each writer renames its own temporary file over it.
 
 ## Analysis (`pi-analyse`)
 
