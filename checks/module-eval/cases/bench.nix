@@ -228,8 +228,9 @@ in
     })) [(msg "search-ext, log-ext")];
 
     # `extensions = lib.mkForce {}` exports no link farm: the bench then looks
-    # the names up in ~/.pi/agent/extensions at run time, which evaluation
-    # cannot see, so the assertion does not apply.
+    # the names up in <agent source>/pi-economics/extensions (the registry's
+    # links, M6) at run time, which evaluation cannot see, so the assertion
+    # does not apply.
     "bench-${name}-extensions-no-farm" = let
       c = on {
         extensions = lib.mkForce {};
@@ -237,6 +238,8 @@ in
       };
     in
       eq var c.home.sessionVariables.${var} "auth-ext"
+      ++ holds "no link farm" (!(c.home.sessionVariables ? PI_BENCH_EXT_DIR))
+      ++ eq "the agent source" c.home.sessionVariables.PI_BENCH_AGENT_SRC "/home/u/.pi/agent"
       ++ eq "failed assertions" (failed "" c) [];
 
     # A comma would split a name in the exported list, and the runtime trims its

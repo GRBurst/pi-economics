@@ -75,7 +75,9 @@ test("paths: bench data under ~/.pi/agent/bench, workdir under the runtime dir, 
 	const p = resolvePaths({ HOME: "/h", XDG_RUNTIME_DIR: "/run/u" }, "/pkg");
 	assert.equal(p.data, "/h/.pi/agent/bench");
 	assert.equal(p.work, "/run/u/pi/tmp/bench");
-	assert.equal(p.extDir, "/h/.pi/agent/extensions");
+	// The registry's links (M6), not pi's auto-discovered extensions/; they follow the agent source.
+	assert.equal(p.extDir, "/h/.pi/agent/pi-economics/extensions");
+	assert.equal(resolvePaths({ HOME: "/h", PI_BENCH_AGENT_SRC: "/a" }, "/pkg").extDir, "/a/pi-economics/extensions");
 	assert.equal(p.probeExt, "/pkg/probe");
 	assert.equal(p.shimBin, "/pkg/bin");
 	const q = resolvePaths({ HOME: "/h", PI_BENCH_DATA: "/d", PI_BENCH_WORK: "/w", PI_BENCH_EXT_DIR: "/e" }, "/pkg");

@@ -24,7 +24,7 @@ const USAGE = `usage: pi-bench <command>
   metrics                         session metrics of every run, one JSON line each
   report [--factors a,b]          bench-report: factor CIs, interactions, judge agreement
 environment: PI_BENCH_DATA (~/.pi/agent/bench), PI_BENCH_WORK ($XDG_RUNTIME_DIR/pi/tmp/bench),
-  PI_BENCH_EXT_DIR, PI_BENCH_BASE_EXTENSIONS (comma-separated names under it that every run and judge loads),
+  PI_BENCH_EXT_DIR (<PI_BENCH_AGENT_SRC, ~/.pi/agent>/pi-economics/extensions), PI_BENCH_BASE_EXTENSIONS (comma-separated names under it that every run and judge loads),
   PI_BENCH_ORCH_EXTENSIONS (comma-separated names under it that the factor arms and their children load too),
   PI_BENCH_PI (pi binary), BENCH_TIMEOUT (seconds per run, default 5400)`;
 

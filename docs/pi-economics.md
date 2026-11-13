@@ -103,7 +103,8 @@ The bench's `extensions` default covers the flake's own packages and the
 registry's `actor-subagents` and `task-router` (whoever installs them). A
 definition adds names (extensions of your own, not shipped here) or replaces one
 by name; `lib.mkForce {}` exports nothing, and the bench then looks the names
-up in `~/.pi/agent/extensions`. `cache-lifecycle` and `experiments` are not
+up in the registry's links, `<agentDir>/pi-economics/extensions`.
+`cache-lifecycle` and `experiments` are not
 loaded by the bench arms and are not in the default.
 
 The orchestrator factor arms start their router settings from a base the bench

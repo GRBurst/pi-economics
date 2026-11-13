@@ -61,8 +61,8 @@ in {
         and `token-meter`, and `actor-subagents` and `task-router`
         at the path of their entry in `programs.piEconomics.extensions` when
         it has one. A definition adds names or replaces one; `lib.mkForce {}`
-        exports nothing, and the bench then looks the names up in
-        `~/.pi/agent/extensions`.
+        exports nothing, and the bench then looks the names up in the
+        registry's links, `<agentDir>/pi-economics/extensions`.
         A name missing here fails its arm at run time (the link does not
         exist): your own extensions, named in `baseExtensions`,
         `orchExtensions` or an arm of `<data>/arms.json`, need a definition
@@ -85,7 +85,7 @@ in {
         Exported comma-separated (`PI_BENCH_BASE_EXTENSIONS`); `[]` exports
         nothing. Each name must be defined in `extensions` (an assertion),
         unless `extensions` is empty and the names resolve in
-        `~/.pi/agent/extensions`.
+        `<agentDir>/pi-economics/extensions`.
       '';
     };
 
@@ -140,7 +140,8 @@ in {
   config = lib.mkIf cfg.enable {
     home.packages = [cfg.package];
     # A listed name has no link to load unless `extensions` defines it; with
-    # no link farm the bench looks the names up in ~/.pi/agent/extensions,
+    # no link farm the bench looks the names up in the registry's links,
+    # <agentDir>/pi-economics/extensions (PI_BENCH_AGENT_SRC),
     # which evaluation cannot see.
     assertions =
       lib.mapAttrsToList (opt: _: let

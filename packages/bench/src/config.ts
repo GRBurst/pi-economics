@@ -44,7 +44,8 @@ export function resolvePaths(env: Env, pkgRoot: string): Paths {
 	return {
 		data: env.PI_BENCH_DATA ?? `${home}/.pi/agent/bench`,
 		work: env.PI_BENCH_WORK ?? `${env.XDG_RUNTIME_DIR ?? "/tmp"}/pi/tmp/bench`,
-		extDir: env.PI_BENCH_EXT_DIR ?? `${home}/.pi/agent/extensions`,
+		// The registry's links (M6): pi does not discover them, settings.json lists them.
+		extDir: env.PI_BENCH_EXT_DIR ?? `${agentSrc}/pi-economics/extensions`,
 		baseExtensions: parseList(env.PI_BENCH_BASE_EXTENSIONS),
 		orchExtensions: parseList(env.PI_BENCH_ORCH_EXTENSIONS),
 		probeExt: `${pkgRoot}/probe`,
