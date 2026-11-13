@@ -40,48 +40,6 @@ test("P-balance: explore keeps enabled-arm counts within 1 and never picks a dis
   }
 });
 
-test("P-floor: exploit gives every enabled arm probability ≥ minExplore/|A|", () => {
-  const arms = design(factors(2), 4);
-  const st: State = {
-    counts: {},
-    disabled: [],
-    // One clearly superior arm; the rest must still keep their floor.
-    posterior: {
-      [arms[0].id]: { mean: 5, sd: 0.1 },
-      [arms[1].id]: { mean: 0, sd: 1 },
-      [arms[2].id]: { mean: 0, sd: 1 },
-      [arms[3].id]: { mean: 0, sd: 1 },
-    },
-  };
-  const minExplore = 0.2;
-  const floor = minExplore / arms.length; // 0.05
-  const tol = 0.008; // ≈ 5σ of a 20k-draw frequency
-  const draws = 20000;
-  for (const seed of [7, 99]) {
-    const rng = mulberry32(seed);
-    const picks: Record<string, number> = Object.fromEntries(arms.map((a) => [a.id, 0]));
-    for (let i = 0; i < draws; i++) picks[assign("exploit", arms, st, rng, minExplore, arms[0].id).id]++;
-    for (const a of arms) {
-      const p = picks[a.id] / draws;
-      assert.ok(p >= floor - tol, `seed ${seed}: arm ${a.id} chosen ${p.toFixed(4)}, below floor ${floor} − ${tol}`);
-    }
-    assert.ok(picks[arms[0].id] > 0.5 * draws, `seed ${seed}: the superior arm should still dominate`);
-  }
-});
-
-test("exploit: disabled arms are never chosen", () => {
-  const arms = design(factors(2), 4);
-  const st: State = {
-    counts: {},
-    disabled: [arms[2].id],
-    posterior: Object.fromEntries(arms.map((a) => [a.id, { mean: 1, sd: 1 }])),
-  };
-  const rng = mulberry32(3);
-  for (let i = 0; i < 500; i++) {
-    assert.notEqual(assign("exploit", arms, st, rng, 0.2, arms[0].id).id, arms[2].id, `disabled arm chosen (draw ${i})`);
-  }
-});
-
 // --- Engine v2 (redesign M5b.1, §7.3): strata, eligibility, permuted blocks, Thompson per design and stratum.
 import { eligibleFor, stratumOf } from "../core/assign.ts";
 import type { StratumSpec } from "../core/settings.ts";
@@ -180,4 +138,59 @@ test("T5b1.2 nextArm: one queue per design and stratum (strata never pooled, Q1)
   }
   for (const arm of a.arms) assert.equal(seen[arm.name] ?? 0, disabled.includes(arm.name) ? 0 : 4, `arm ${arm.name}`);
   assert.equal(nextArm({}, a, rand, a.arms.map((x) => x.name)).arm, undefined, "every arm disabled: no arm");
+});
+
+import { designState, draw, type DesignState } from "../core/assign.ts";
+
+test("T5b1.4 designState: state.json's posterior and disabled arms of one design in one stratum; others never leak in", () => {
+  const a = designFor("api", { factors: V4_FACTORS });
+  const raw = {
+    posterior: { "---": { mean: 9, sd: 0 } }, disabled: ["---"], // designs v1–v4 (flat, by v4 arm id): not this design's
+    designs: {
+      [a.id]: { api: { posterior: { "000": { mean: 1, sd: 0.1 } }, disabled: ["111"] }, subscription: { posterior: { "111": { mean: 5, sd: 0.1 } } } },
+      ffffffffffff: { api: { disabled: ["000"] } },
+    },
+  };
+  assert.deepEqual(designState(raw, a), { posterior: { "000": { mean: 1, sd: 0.1 } }, disabled: ["111"] });
+  assert.deepEqual(designState(raw, designFor("subscription", { factors: V4_FACTORS })), { posterior: { "111": { mean: 5, sd: 0.1 } }, disabled: [] });
+  for (const bad of [undefined, null, 3, [], { designs: 1 }, { designs: { [a.id]: { api: { posterior: 1, disabled: "x" } } } }]) {
+    assert.deepEqual(designState(bad, a), { disabled: [] }, JSON.stringify(bad));
+  }
+});
+
+// Adapted from the v1 engine's P-floor and disabled-arm tests: the posterior is now one design's in one stratum (Q1).
+test("T5b1.4 P-floor: exploit gives every enabled arm probability ≥ minExplore/|A|; Thompson favours the best posterior", () => {
+  const d = designFor("api", { factors: V4_FACTORS.slice(0, 2) }); // 4 arms
+  const ds: DesignState = { disabled: [], posterior: Object.fromEntries(d.arms.map((a, i) => [a.name, i === 0 ? { mean: 5, sd: 0.1 } : { mean: 0, sd: 1 }])) };
+  const minExplore = 0.2;
+  const floor = minExplore / d.arms.length; // 0.05
+  const tol = 0.008; // ≈ 5σ of a 20k-draw frequency
+  const draws = 20000;
+  for (const seed of [7, 99]) {
+    const rand = mulberry32(seed);
+    const picks: Record<string, number> = Object.fromEntries(d.arms.map((a) => [a.name, 0]));
+    for (let i = 0; i < draws; i++) picks[draw("exploit", d, {}, ds, rand, minExplore).arm!]++;
+    for (const a of d.arms) {
+      const p = picks[a.name] / draws;
+      assert.ok(p >= floor - tol, `seed ${seed}: arm ${a.name} chosen ${p.toFixed(4)}, below floor ${floor} − ${tol}`);
+    }
+    assert.ok(picks[d.arms[0].name] > 0.5 * draws, `seed ${seed}: the superior arm should still dominate`);
+  }
+});
+
+test("T5b1.4 exploit: disabled arms are never chosen; without any posterior it explores in blocks", () => {
+  const d = designFor("api", { factors: V4_FACTORS.slice(0, 2) });
+  const ds: DesignState = { disabled: [d.arms[2].name], posterior: Object.fromEntries(d.arms.map((a) => [a.name, { mean: 1, sd: 1 }])) };
+  const rand = mulberry32(3);
+  for (let i = 0; i < 500; i++) assert.notEqual(draw("exploit", d, {}, ds, rand, 0.2).arm, d.arms[2].name, `disabled arm chosen (draw ${i})`);
+  let blocks: BlockState = {};
+  const counts: Record<string, number> = {};
+  for (let i = 0; i < 2 * d.arms.length; i++) {
+    const r = draw("exploit", d, blocks, { disabled: [] }, rand, 0);
+    counts[r.arm!] = (counts[r.arm!] ?? 0) + 1;
+    blocks = r.blocks;
+  }
+  for (const a of d.arms) assert.equal(counts[a.name], 2, `no posterior yet: arm ${a.name} balanced`);
+  const r = draw("explore", d, {}, { disabled: d.arms.map((a) => a.name) }, rand, 0.1);
+  assert.equal(r.arm, undefined, "every arm disabled: no arm");
 });

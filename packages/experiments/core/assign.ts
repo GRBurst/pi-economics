@@ -53,6 +53,58 @@ export function nextArm(state: BlockState, d: Design, rand: () => number, disabl
   return { arm: queue[0], state: { ...state, [key]: { queue: queue.slice(1) } } };
 }
 
+export type Posterior = Record<string, { mean: number; sd: number }>;
+/**
+ * One design of one stratum in <agentDir>/experiments/state.json, under `designs.<design id>.<stratum>`: the posterior
+ * REWARD by arm name and the arms the kill switch disabled. The flat `posterior`/`disabled` beside it belong to
+ * designs v1–v4 (arm ids like "-+-") and are never read for a v2 design.
+ */
+export type DesignState = { posterior?: Posterior; disabled: string[] };
+
+const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+const own = (o: unknown, k: string): unknown => (isRecord(o) && Object.hasOwn(o, k) ? o[k] : undefined);
+
+export function designState(raw: unknown, d: Design): DesignState {
+  const s = own(own(own(raw, "designs"), d.id), d.stratum);
+  const disabled = own(s, "disabled");
+  const posterior = own(s, "posterior");
+  return {
+    ...(isRecord(posterior) ? { posterior: posterior as Posterior } : {}),
+    disabled: Array.isArray(disabled) ? disabled.filter((x): x is string => typeof x === "string") : [],
+  };
+}
+
+/**
+ * An eligible main's arm (§7.3). explore: nextArm's permuted blocks. exploit: with probability minExplore a uniform
+ * enabled arm (P-floor: every enabled arm keeps ≥ minExplore/|A|), else Thompson sampling over this design's posterior in
+ * this stratum, argmax of the sampled rewards; no posterior for any enabled arm yet: the blocks, as in explore. No
+ * enabled arm: none. `blocks` is the new queue state (unchanged unless the blocks drew).
+ */
+export function draw(mode: "explore" | "exploit", d: Design, blocks: BlockState, ds: DesignState, rand: () => number, minExplore: number): { arm: string | undefined; blocks: BlockState } {
+  const enabled = d.arms.map((a) => a.name).filter((n) => !ds.disabled.includes(n));
+  const post = ds.posterior;
+  if (mode === "explore" || enabled.length === 0 || !enabled.some((n) => post !== undefined && Object.hasOwn(post, n))) {
+    const r = nextArm(blocks, d, rand, ds.disabled);
+    return { arm: r.arm, blocks: r.state };
+  }
+  if (rand() < minExplore) return { arm: enabled[Math.floor(rand() * enabled.length) % enabled.length], blocks };
+  const sample = (n: string): number => {
+    const p = post !== undefined && Object.hasOwn(post, n) ? post[n] : undefined;
+    if (!p || !(p.sd > 0)) return Number.isFinite(p?.mean) ? p!.mean : 0;
+    // Box–Muller normal from two rand draws.
+    const u1 = Math.max(rand(), 1e-12);
+    const u2 = rand();
+    return p.mean + p.sd * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  };
+  let best = enabled[0];
+  let bestSample = sample(best);
+  for (const n of enabled.slice(1)) {
+    const s = sample(n);
+    if (s > bestSample) [best, bestSample] = [n, s];
+  }
+  return { arm: best, blocks };
+}
+
 export type State = {
   /** Assignments made per arm id so far (this session set; the extension persists it). */
   counts: Record<string, number>;
