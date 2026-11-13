@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { analyse, applyKill, renderAnalysis, reportName, type Logs } from "../core/analyse.ts";
 import { mulberry32 } from "../core/stats.ts";
+import { leversLine } from "../core/levers.ts";
 import { assignment, iso, MIN, T0, turn, turns, world } from "./world.ts";
 
 const close = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -321,10 +322,12 @@ test("cost: a root session without active time does not break the $/active hour 
 // ---- rendering ---------------------------------------------------------------------------------
 
 test("render: every section is present and non-empty; tables are JSON-safe", () => {
-  const a = analyse({ ...world(), expSettings: limits });
+  const w = world();
+  w.meter.push(leversLine({ ts: iso(T0), sessionId: "m1", eligible: true, levers: { "pi.promptCache": { v: "short", s: "fixed" } } }));
+  const a = analyse({ ...w, expSettings: limits });
   const md = renderAnalysis(a);
   const sections = md.split(/^## /m).slice(1);
-  assert.deepEqual(sections.map((s) => s.split("\n")[0]), ["Cost", "Experiment", "Delegation & routing", "Guards", "Data quality"]);
+  assert.deepEqual(sections.map((s) => s.split("\n")[0]), ["Cost", "Levers", "Experiment", "Delegation & routing", "Guards", "Data quality"]);
   for (const s of sections) assert.ok(s.split("\n").filter((l) => l.startsWith("| ")).length >= 3, s);
   assert.match(md, /disable `\+\+\+\+\+\+`/);
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(a)));
@@ -332,7 +335,7 @@ test("render: every section is present and non-empty; tables are JSON-safe", () 
 
 test("render: empty logs still render every section with a 'no data' note", () => {
   const md = renderAnalysis(analyse({ meter: [], outcomes: [], assignments: [], guards: [] } as Logs));
-  assert.equal(md.split(/^## /m).length - 1, 5);
+  assert.equal(md.split(/^## /m).length - 1, 6);
   assert.match(md, /no data/);
 });
 

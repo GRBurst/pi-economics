@@ -119,9 +119,9 @@ function withLevers(): Logs {
     arm: l.arm, eligible: typeof l.arm === "string" && l.parentSessionId === undefined, levers: effectiveSettings({}, {}) }));
   return { ...w, meter: [...levers, ...w.meter] };
 }
-/** The analysis without the meter log's line and version counts. */
+/** The analysis without the meter log's line and version counts and without the Levers section (the one reader of levers lines). */
 const sansMeterCounts = (a: ReturnType<typeof analyse>) =>
-  ({ ...a, quality: { ...a.quality, logs: a.quality.logs.map((x) => (x.log === "meter" ? { ...x, lines: 0, versions: {} } : x)) } });
+  ({ ...a, levers: undefined, quality: { ...a.quality, logs: a.quality.logs.map((x) => (x.log === "meter" ? { ...x, lines: 0, versions: {} } : x)) } });
 
 test("levers lines: analyse, report, arms, quota regression and task costs read the meter log as without them", () => {
   const v1 = v1World(), lv = withLevers();
@@ -132,6 +132,7 @@ test("levers lines: analyse, report, arms, quota regression and task costs read 
   assert.deepEqual(sansMeterCounts(a), sansMeterCounts(analyse(v1)));
   const meter = a.quality.logs.find((x) => x.log === "meter")!;
   assert.deepEqual([meter.lines, meter.versions["2"]], [lv.meter.length, n]);
+  assert.equal(a.levers.withLevers, n);
   const req = lv.meter.filter(isRequestLine);
   assert.deepEqual(req, v1.meter);
   assert.deepEqual(aggregate(lv.meter), aggregate(v1.meter));

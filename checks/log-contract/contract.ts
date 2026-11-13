@@ -59,8 +59,10 @@ const meter = meterPi();
 installMeter(meter.pi, { agentDir, now: () => new Date(clock.t) });
 let q5h = 10;
 function turn(sid: string, parent?: string, model = "claude-opus-5-5", usd = 0.4): void {
-  const ctx = meterCtx(sid, parent ? { file: `/sessions/subagents/${parent}/${sid}.jsonl` } : {});
+  const ctx = meterCtx(sid, { ...(parent ? { file: `/sessions/subagents/${parent}/${sid}.jsonl` } : {}), model: { provider: "anthropic", id: model } });
+  meter.fire("before_agent_start", { type: "before_agent_start", prompt: "go", systemPrompt: "s" }, ctx); // a levers line at the session's first start (M3b)
   meter.fire("context", { type: "context", messages: [] }, ctx); // the agent loop's hook before the session's own send
+  meter.fire("context_with_system", { type: "context_with_system", messages: [{ role: "system", content: "s", timestamp: 0 }] }, ctx); // systemHash (M3b)
   meter.fire("before_provider_request", {}, ctx);
   meter.fire("after_provider_response", { type: "after_provider_response", status: 200,
     headers: { [P + "unified-5h-utilization"]: String(q5h++ / 100), [P + "unified-7d-utilization"]: "0.2" } }, ctx);
@@ -84,6 +86,11 @@ async function mainSession(sid: string, child: string, usd: number): Promise<voi
   expFire("session_start", {}, sid);
   tr.clock.t = clock.t;
   for (let i = 0; i < 6; i++) turn(sid, undefined, undefined, usd);
+  // pi's own compaction (no infinite-context here): its summary request shows only as session_compact (M3b)
+  meter.fire("session_compact", { type: "session_compact", fromExtension: false, reason: "threshold", compactionEntry: { type: "compaction", summary: "s", firstKeptEntryId: "e", tokensBefore: 22_510,
+    usage: { input: 20_000, output: 300, cacheRead: 0, cacheWrite: 0, totalTokens: 20_300, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.1 } } } },
+    meterCtx(sid, { model: { provider: "anthropic", id: "claude-opus-5-5" } }));
+  tick();
   // task-router: a forced spawn (`/force` for the next one: set, used, expired), the child's session id, its check and the verdict
   tr.clock.t = clock.t;
   const registry = { find: (p: string, id: string) => ({ provider: p, id }), getAvailable: () => [] };
@@ -220,6 +227,9 @@ if (!same(CONTRACT_ROLES, ROLES)) failures.push(`contract ROLES ${JSON.stringify
 if (!same(CONTRACT_TRIPS, TRIPS)) failures.push(`contract TRIPS ${JSON.stringify(CONTRACT_TRIPS)} differ from the router's ${JSON.stringify(TRIPS)}`);
 if (!same(CONTRACT_REASONS, REASONS)) failures.push(`contract REASONS ${JSON.stringify(CONTRACT_REASONS)} differ from the router's ${JSON.stringify(REASONS)}`);
 if (!same(CONTRACT_TRIGGERS, TRIGGERS)) failures.push(`contract TRIGGERS ${JSON.stringify(CONTRACT_TRIGGERS)} differ from the router's ${JSON.stringify(TRIGGERS)}`);
+// M3b: levers lines (before_agent_start), a compaction line (session_compact), systemHash on turn lines (context_with_system)
+for (const k of ["turn", "levers", "compaction"]) if (!logs.meter.some((l) => l.kind === k)) failures.push(`meter: no kind ${k} line`);
+if (!logs.meter.some((l) => typeof l.systemHash === "string")) failures.push("meter: no turn line with a systemHash");
 for (const e of ["correction", "rating", "peek-after-mask"]) if (!logs.guards.some((l) => l.event === e)) failures.push(`guards: no ${e} event`);
 
 // --- pi-analyse --check over the produced lines, then the full analysis
@@ -244,7 +254,7 @@ else {
   const text = readFileSync(join(reports, md), "utf8");
   const json = readdirSync(reports).some((f) => REPORT.test(f) && f.endsWith(".json"));
   if (!json) failures.push("pi-analyse wrote no <YYYY-MM-DD>-<HHMM>-analysis.json");
-  for (const h of ["## Cost", "## Experiment", "## Delegation & routing", "## Guards", "## Data quality"]) {
+  for (const h of ["## Cost", "## Levers", "## Experiment", "## Delegation & routing", "## Guards", "## Data quality"]) {
     const at = text.indexOf(`\n${h}\n`);
     if (at < 0) { failures.push(`report: section "${h}" missing`); continue; }
     const body = text.slice(at + h.length + 2).split(/\n## /)[0];

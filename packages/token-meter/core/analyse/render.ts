@@ -9,6 +9,7 @@ import { type DesignResult, type StratumResult } from "./experiment.ts";
 import { MIN_CI_N, type CostPerAccepted, type DelegationSection, type Randomized, type Row, type RouterFactor, type SpotChecks } from "./delegation.ts";
 import { type GuardsSection } from "./guards.ts";
 import { type QualitySection } from "./quality.ts";
+import { type LeversSection } from "./levers.ts";
 import { type Analysis } from "./index.ts";
 
 const f2 = (n: number): string => (Number.isFinite(n) ? n.toFixed(2) : "–");
@@ -196,6 +197,21 @@ export function renderGuards(g: GuardsSection): string {
   ].join("\n");
 }
 
+export function renderLevers(s: LeversSection): string {
+  if (!s.withLevers) return `${NO_DATA} (no \`levers\` lines: meter before M3b)`;
+  const TOP = 4;
+  const values = (m: Record<string, number>): string => {
+    const xs = Object.entries(m).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : a > b ? 1 : 0));
+    return xs.slice(0, TOP).map(([k, n]) => `\`${k}\` ${n}`).join(", ") + (xs.length > TOP ? `, +${xs.length - TOP} more` : "");
+  };
+  return [
+    `${s.sessions} sessions in the period, ${s.withLevers} with a levers line (eligible ${s.eligible}, children ${s.children}), ${s.sessions - s.withLevers} without one; per session its last levers line up to the period's end. Sources: pe = pi-economics assigned it, ext = an extension chose it, fixed = configuration or pi default.${s.inert ? ` Infinite-context disables compaction (\`pi.compaction.enabled\` false, ext) in ${s.inert} of them: their other \`pi.compaction.*\` levers are inert, left out.` : ""}\n`,
+    table(["lever", "sessions", "values (sessions)", "sources", "assigned", "refused", "unverified", "refusal rate"], s.levers.map((r) =>
+      [`\`${r.lever}\``, String(r.sessions), values(r.values), Object.entries(r.sources).map(([k, n]) => `${k} ${n}`).join(", "), String(r.assigned), String(r.refused), String(r.unverified), pc(r.refusalRate)])),
+    "\nRefusal rate = refused ÷ assigned (read-back, design §7.4); a factor refused in > 20% of its sessions points at a broken add-on.",
+  ].join("\n");
+}
+
 export function renderQuality(q: QualitySection): string {
   const share = (x: { pi: number; total: number; share: number }) => [String(x.pi), String(x.total), pc(x.share)];
   return [
@@ -218,6 +234,7 @@ export function renderAnalysis(a: Analysis, generated = new Date()): string {
     `# pi analysis — ${a.period.since ?? "start"} to ${a.period.until ?? "now"}`,
     `\nGenerated ${generated.toISOString()} by pi-analyse; field meanings in <agentDir>/LOGS.md. Caveats: quota is the whole account's, in 1% steps; units are root sessions (small samples, task mix varies between them); $ per active hour counts gaps < 30 min as active.`,
     "\n## Cost\n", renderCost(a.cost),
+    "\n## Levers\n", renderLevers(a.levers),
     "\n## Experiment\n", renderExperiment(a.experiment.designs),
     "\n## Delegation & routing\n", renderDelegation(a.delegation),
     "\n## Guards\n", renderGuards(a.guards),

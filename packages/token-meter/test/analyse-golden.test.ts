@@ -6,7 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { analyse, renderAnalysis, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderQuality, renderRandomized, renderSpotChecks, type Logs } from "../core/analyse.ts";
+import { leversLine, type LeverState } from "../core/levers.ts";
+import { analyse, renderAnalysis, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderLevers, renderQuality, renderRandomized, renderSpotChecks, type Logs } from "../core/analyse.ts";
 import { assignment, iso, MIN, T0, turn, turns, world } from "./world.ts";
 
 const at = (minutes: number): number => T0 + minutes * MIN;
@@ -95,6 +96,22 @@ function goldenLogs(): Logs {
   meter.push(child("runaway", 11, 155));
   outcomes.push(spawn("t-run", "runaway", "T1", {}, 154));
 
+  // levers lines (meter v2, M3b): f1 changed its levers before its first request (the earlier line is shadowed), infinite-context
+  // there (compaction levers inert); f2 refused one assignment; the v4 sessions show five thinking levels; one child
+  const lv = (sessionId: string, when: number, levers: Record<string, LeverState>, extra: Record<string, unknown> = {}): Record<string, unknown> =>
+    leversLine({ ts: iso(at(when)), sessionId, eligible: false, ...extra, levers }) as unknown as Record<string, unknown>;
+  const compaction = (enabled: boolean, s: "ext" | "fixed"): Record<string, LeverState> =>
+    ({ "pi.compaction.enabled": { v: enabled, s }, "pi.compaction.reserveTokens": { v: 16384, s: "fixed" } });
+  meter.push(
+    lv("f1", 199, { "pi.defaultThinkingLevel": { v: "medium", s: "fixed" } }, { arm: "++++++", eligible: true }),
+    lv("f1", 200, { "pi.defaultThinkingLevel": { v: "high", s: "pe", a: "high", rb: "confirmed", tier: "control" }, ...compaction(false, "ext"),
+      "pi.promptCache": { v: "long", s: "pe", a: "long", rb: "unverified", tier: "seed" } }, { arm: "++++++", eligible: true }),
+    lv("f2", 200, { "pi.defaultThinkingLevel": { v: "medium", s: "ext", a: "low", rb: "refused", tier: "control" }, ...compaction(true, "fixed"),
+      "pi.promptCache": { v: "short", s: "pe", a: "short", rb: "confirmed", tier: "seed" } }, { arm: "---", eligible: true }),
+    ...v4.map(([id, arm], i) => lv(id, 260 + 70 * i, { "pi.defaultThinkingLevel": { v: ["minimal", "low", "medium", "high", "xhigh"][i % 5], s: "fixed" } }, { arm, eligible: true })),
+    lv("kc0", 101, { "pi.defaultThinkingLevel": { v: "medium", s: "fixed" } }, { arm: "------", parentSessionId: "m3" }),
+  );
+
   // guards and assignments of sessions without meter lines
   guards.push({ v: 1, ts: iso(at(60)), sessionId: "ghost", arm: "++++++", event: "correction" });
   assignments.push(assignment("ghost2", "---", at(61)));
@@ -131,6 +148,7 @@ const a = analyse(goldenLogs(), PERIOD);
 const sections: Record<string, () => string> = {
   cost: () => renderCost(a.cost),
   cache: () => renderCache(a.cost.cache),
+  levers: () => renderLevers(a.levers),
   folds: () => renderFolds(a.cost.folds),
   experiment: () => renderExperiment(a.experiment.designs),
   "experiment-strata": () => renderExperiment(analyse(strataLogs()).experiment.designs),

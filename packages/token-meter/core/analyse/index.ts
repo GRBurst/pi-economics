@@ -1,4 +1,4 @@
-// On-demand analysis of pi's own logs: cost, experiment, delegation & routing, guards, data quality.
+// On-demand analysis of pi's own logs: cost, levers, experiment, delegation & routing, guards, data quality.
 // Pure; bin/pi-analyse.ts does the I/O. Reads the meter log, the task-router outcome log, experiments/assignments.jsonl
 // and guards/events.jsonl as plain JSON (packages do not import each other; <agentDir>/LOGS.md is the contract).
 import { nextState } from "../arms.ts";
@@ -9,6 +9,7 @@ import { experiment, type DesignResult } from "./experiment.ts";
 import { delegation, type DelegationSection } from "./delegation.ts";
 import { guards, type GuardsSection } from "./guards.ts";
 import { quality, type QualitySection } from "./quality.ts";
+import { levers, type LeversSection } from "./levers.ts";
 
 export { LOGS, inPeriod, versionOf, type FileInfo, type LogName, type Logs, type Period } from "./logs.ts";
 export { DESIGNS, designOf } from "./designs.ts";
@@ -18,9 +19,10 @@ export { type BalanceRow, type DesignResult, type Effect, type Objective, type S
 export { type Agreement, type DelegationSection, type MatrixCell, type ProfileTier, type ControlRows, type RandomRow, type Randomized, type Row, type RouterFactor, type Runaway, type SpotChecks } from "./delegation.ts";
 export { type GuardsSection } from "./guards.ts";
 export { type QualitySection } from "./quality.ts";
-export { renderAnalysis, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderQuality, renderRandomized, renderRouterFactors, renderSpotChecks, reportName } from "./render.ts";
+export { type LeverRow, type LeversSection } from "./levers.ts";
+export { renderAnalysis, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderLevers, renderQuality, renderRandomized, renderRouterFactors, renderSpotChecks, reportName } from "./render.ts";
 
-export type Analysis = { period: Period; cost: CostSection; experiment: { designs: DesignResult[] }; delegation: DelegationSection; guards: GuardsSection; quality: QualitySection };
+export type Analysis = { period: Period; cost: CostSection; levers: LeversSection; experiment: { designs: DesignResult[] }; delegation: DelegationSection; guards: GuardsSection; quality: QualitySection };
 
 export function analyse(all: Logs, period: Period = {}): Analysis {
   const logs = inPeriod(all, period);
@@ -30,6 +32,7 @@ export function analyse(all: Logs, period: Period = {}): Analysis {
   return {
     period,
     cost: cost(meter, logs.outcomes, flags, rowsBySession(all.assignments)),
+    levers: levers(all.meter, logs.meter, period),
     experiment: { designs },
     delegation: delegation(meter, logs.outcomes, all.routerSettings),
     guards: guards(designs, logs.outcomes, logs.guards, all.expSettings, rowsBySession(all.assignments)),

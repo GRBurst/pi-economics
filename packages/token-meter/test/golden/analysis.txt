@@ -106,6 +106,19 @@ By model:
 | --- | --- | --- | --- | --- | --- |
 | claude-opus | 2 | 13.8109 | 8.6798 | 5.1311 | 0% |
 
+## Levers
+
+43 sessions in the period, 11 with a levers line (eligible 10, children 1), 32 without one; per session its last levers line up to the period's end. Sources: pe = pi-economics assigned it, ext = an extension chose it, fixed = configuration or pi default. Infinite-context disables compaction (`pi.compaction.enabled` false, ext) in 1 of them: their other `pi.compaction.*` levers are inert, left out.
+
+| lever | sessions | values (sessions) | sources | assigned | refused | unverified | refusal rate |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `pi.compaction.enabled` | 2 | `false` 1, `true` 1 | ext 1, fixed 1 | 0 | 0 | 0 | – |
+| `pi.compaction.reserveTokens` | 1 | `16384` 1 | fixed 1 | 0 | 0 | 0 | – |
+| `pi.defaultThinkingLevel` | 11 | `medium` 4, `high` 2, `low` 2, `minimal` 2, +1 more | pe 1, ext 1, fixed 9 | 2 | 1 | 0 | 50% |
+| `pi.promptCache` | 2 | `long` 1, `short` 1 | pe 2 | 2 | 0 | 1 | 0% |
+
+Refusal rate = refused ÷ assigned (read-back, design §7.4); a factor refused in > 20% of its sessions points at a broken add-on.
+
 ## Experiment
 
 Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware means something else in v3 (a system-prompt paragraph): they are analysed in separate tables and never pooled; guard signals and the kill switch are per design too.
@@ -386,7 +399,7 @@ Period: 2026-10-05 – 2026-10-05; lines from 2026-10-05T10:00:00.000Z to 2026-1
 
 | log | lines | first | last | schema versions (v: lines) |
 | --- | --- | --- | --- | --- |
-| meter | 125 | 2026-10-05T10:00:00.000Z | 2026-10-05T23:50:00.000Z | v0: 8, v1: 117 |
+| meter | 137 | 2026-10-05T10:00:00.000Z | 2026-10-05T23:50:00.000Z | v0: 8, v1: 117, v2: 12 |
 | outcomes | 56 | 2026-10-05T11:01:00.000Z | 2026-10-05T12:34:00.000Z | v1: 56 |
 | assignments | 19 | 2026-10-05T09:59:00.000Z | 2026-10-05T23:39:00.000Z | v0: 2, v1: 17 |
 | guards | 6 | 2026-10-05T11:00:00.000Z | 2026-10-05T12:10:00.000Z | v1: 6 |
