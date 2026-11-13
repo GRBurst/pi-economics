@@ -603,7 +603,7 @@ How the Experiment section (and `meter-report --arms`) turns meter lines into ef
   **Context overflows** = count of lines with `errorKind = "context_overflow"` of the root ÷ its active hours, per arm.
   **Sensitivity (model switch)**: the effect again with each unit's objective over the requests whose billing class equals the class of
   the root's first main request; the report counts the units that used another class. A v1-engine design gets none of these.
-- **Per arm** (kill switch, posterior; `meter-report --arms`): pooled over the design's strata, $ per active hour; its fold and cold-resume columns are
+- **Per arm** (`meter-report --arms`): for the v1–v4 designs pooled over the design's strata and the input of the flat kill switch and posterior; for a v2 design the pooled table is descriptive, the kill switch and posterior are per stratum (one table per design and stratum in `meter-report --arms`); $ per active hour; its fold and cold-resume columns are
   the premium above (*Analysis: cache misses*), per event.
 
 ### Analysis: router observation

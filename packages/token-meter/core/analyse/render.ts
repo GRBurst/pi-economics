@@ -130,9 +130,9 @@ function renderV2(s: StratumResult): string {
   return [
     ...(s.refusal ? ["\nRefusal rate per factor (units whose lever was refused by its owner ÷ the units with a levers line that assigned it; above " + (REFUSAL_LIMIT * 100).toFixed(0) + "% the add-on is flagged in the last column):\n",
       table(["factor", "lever", "eligible (with levers line)", "refused", "rate", "flag", "without a levers line"], s.refusal.map((r) => [r.factor, `\`${r.lever}\``, String(r.eligible), String(r.refused), pc(r.rate), r.broken ? "broken add-on" : "ok", `${r.noLevers} without a levers line`]))] : []),
-    ...(s.perProtocol ? [`\nPer-protocol (non-randomized comparison): the ${s.perProtocol.units} units whose every factor lever was read back \`confirmed\` (${s.perProtocol.excluded} unverified or refused units left out). Units that kept the assignment are not a random sample of the assigned ones: this row can be confounded and is no causal estimate; the intention-to-treat table above is.\n`,
+    ...(s.perProtocol ? [`\nPer-protocol (non-randomized comparison): the ${s.perProtocol.units} units whose every factor lever was read back \`confirmed\` (${s.perProtocol.excluded} unverified or refused units left out). Units that kept the assignment are not a random sample of the assigned ones: this row can be confounded and is no causal estimate; the intention-to-treat table is.\n`,
       table(EFFECT_HEAD, effectRows(s.perProtocol.effects))] : []),
-    ...(s.sensitivity ? [`\nSensitivity (model switch): the objective over the requests billed as the unit's start class only (billing of its main's first request); ${s.sensitivity.switched} unit(s) used another billing class in a request. Same units and hours as the table above.\n`,
+    ...(s.sensitivity ? [`\nSensitivity (model switch): the objective over the requests billed as the unit's start class only (billing of its main's first request); ${s.sensitivity.switched} unit(s) used another billing class in a request. Same units and hours as the intention-to-treat table.\n`,
       table(EFFECT_HEAD, effectRows(s.sensitivity.effects))] : []),
     ...(s.overflow ? ["\nContext overflows (`errorKind = context_overflow`) per active hour and arm:\n",
       table(["arm", "units", "active h", "overflows", "per active h"], s.overflow.map((o) => [`\`${o.arm}\``, String(o.units), f2(o.hours), String(o.overflows), f2(o.perHour)]))] : []),
@@ -149,6 +149,7 @@ function renderStratum(s: StratumResult): string {
   const reasons = [...new Set(s.effects.flatMap((e) => ("notMeasurable" in e ? [e.notMeasurable] : [])))];
   return [
     `#### stratum ${s.stratum} (objective ${s.objective} per active hour)\n`,
+    ...(s.perProtocol ? ["Intention-to-treat (primary): every unit, by its assignment.\n"] : []),
     table(["factor", "low → high", "n low", "n high", "ratio low", "ratio high", "effect", "95% CI", "MDE"], s.effects.map((e) => "notMeasurable" in e
       ? [e.factor, "–", "–", "–", "–", "–", e.notMeasurable, "–", "–"]
       : [e.factor, `${e.a} → ${e.b}`, String(e.nA), String(e.nB), f2(e.ratioA), f2(e.ratioB), pp(e.effect), Number.isFinite(e.ci[0]) ? `${pp(e.ci[0])} – ${pp(e.ci[1])}` : "–", e.mde === 0 ? "n/a (zero variance)" : Number.isFinite(e.mde) ? `±${pp(e.mde).replace("+", "")}` : "–"])),
@@ -167,10 +168,10 @@ export function renderExperiment(ds: DesignResult[]): string {
   const pooled = ds.some((d) => d.design === "v2") && ds.some((d) => d.design === "v3");
   return (pooled ? "Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware means something else in v3 (a system-prompt paragraph): they are analysed in separate tables and never pooled; guard signals and the kill switch are per design too.\n\n" : "") + ds.map((d) => [
     `### Design ${d.design} (${d.factors.length} factors, baseline \`${d.baseline}\`, ${d.units} units with ≥ ${MIN_HOURS} active h)\n`,
-    "Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.\n",
+    (d.strata.some((s) => s.arms) ? "Per stratum (the stratum named by each root's assignment row; never pooled across strata)." : "Per stratum (the billing class of the provider of a root session's main; never pooled across strata).") + " Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.\n",
     ...(d.plansAbsent ? ["plans absent (token-meter's `plans` setting is missing or has no usable entry): every unit is counted in stratum api.\n"] : []),
     d.strata.map(renderStratum).join("\n\n"),
-    "\nPer arm (pooled over the design's strata: the arm statistics and posterior feed the kill switch and the arm posterior, not an effect estimate):\n",
+    d.strata.some((s) => s.arms) ? "\nPer arm (pooled over the design's strata, descriptive only: the kill switch and the posterior are per stratum, see Guards; not an effect estimate):\n" : "\nPer arm (pooled over the design's strata: the arm statistics and posterior feed the kill switch and the arm posterior, not an effect estimate):\n",
     table(["arm", "units", "active h", "$/h", "95% CI", "posterior reward", "sd", "P(best)"], d.arms.map((s) => {
       const p = d.posterior.find((x) => x.arm === s.arm);
       return [`\`${s.arm}\``, String(s.units), f2(s.activeHours), f2(s.costPerHour), ci({ lo: s.ci[0], hi: s.ci[1] }), p ? f2(p.mean) : "–", p ? f2(p.sd) : "–", p ? pc(p.pBest) : "–"];
@@ -261,6 +262,7 @@ export function renderGuards(g: GuardsSection): string {
   const l = g.limits;
   return [
     table(["design", "arm", "units", "peeks after mask /unit", "corrections /unit", "rating (n)", "accepted/judged"], g.perArm.map((a) => [a.design, `\`${a.arm}\``, String(a.units), per(a.peeks, a.units), per(a.corrections, a.units), rating(a.ratings), `${a.accepted}/${a.judged}`])),
+    ...(g.perStratum.length ? ["\nThe per-arm rows of a v2 design are pooled across its strata; its kill switch below is per stratum."] : []),
     `\nKill switch (baseline per design: ${Object.entries(g.baselines).map(([d, b]) => `${d} \`${b}\``).join(", ")}; ≥ ${l.minSessions} units; acceptance worse by > ${pc(l.threshold)}, peeks/corrections more by > ${l.peekThreshold}/${l.correctionThreshold} per unit, rating lower by > ${l.ratingThreshold}). Written to experiments/state.json only with \`pi-analyse --apply\`.\n`,
     Object.keys(g.kill).length || !g.perStratum.length ? (Object.keys(g.kill).length ? Object.entries(g.kill).map(([a, r]) => `- disable \`${a}\`: ${r}`).join("\n") : "- no arm would be disabled") : "",
     ...g.perStratum.map((x) => Object.keys(x.kill).length ? Object.entries(x.kill).map(([a, r]) => `- design ${x.design} stratum ${x.stratum}: disable \`${a}\`: ${r}`).join("\n") : `- design ${x.design} stratum ${x.stratum}: no arm would be disabled`),

@@ -215,3 +215,17 @@ test("review m1: the refusal denominator is the units with a levers line (as in 
   const q = analyse(l).quality.unjoinable.find((x) => x.what.startsWith("eligible units"));
   assert.equal(q?.n, 3);
 });
+
+test("review m2/m3: v2 designs' texts say what is per stratum and what is pooled; the primary table is titled intention-to-treat", () => {
+  const us = base();
+  const text = renderExperiment(analyse(logs(us.flatMap((u) => cloud(u.id, u.arm, u.usd)), us.map((u) => row(u.id, u.arm, "opus")))).experiment.designs);
+  assert.ok(text.includes("named by each root's assignment row"), text);
+  assert.ok(!text.includes("the billing class of the provider of a root session's main"), "a v2 stratum is no billing class");
+  assert.ok(text.includes("Per arm (pooled over the design's strata, descriptive only: the kill switch and the posterior are per stratum"), text);
+  assert.ok(!text.includes("feed the kill switch and the arm posterior"), text);
+  assert.ok(text.includes("Intention-to-treat (primary)"), text);
+  assert.ok(text.includes("as the intention-to-treat table"), text);
+  assert.ok(!text.includes("as the table above"), text);
+  const g = renderAnalysis(analyse(killWorld()), new Date(T0));
+  assert.ok(g.includes("rows of a v2 design are pooled across its strata"), g);
+});
