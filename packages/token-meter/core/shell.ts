@@ -2,6 +2,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Joiner } from "./join.ts";
+import { errorKindOf } from "./errorkind.ts";
 import { buildLine, monthFile, serialize } from "./line.ts";
 import type { LineInput, Usage } from "./line.ts";
 import { billingOf } from "./plans.ts";
@@ -50,11 +51,10 @@ export function install(pi: PiLike, deps: Deps): void {
   if (!settings.enabled) return;
   const now = deps.now ?? (() => new Date());
   const joiner = new Joiner();
-  const pending = new Map<string, Snapshot>(); // mirrors the Joiner's snapshots, so flushing never steals retries
   // pi 1.4's CacheWarmer can send a warm WHILE a long turn streams (its timer runs
   // from the turn's request start). A turn's own response always precedes its
   // assistant message_start, so between message_start and message_end every
-  // response is a warm's: it waits in `warms`, never in `pending` or the Joiner.
+  // response is a warm's: it waits in `warms`, never in the Joiner.
   const streaming = new Set<string>();
   const warms = new Map<string, Snapshot>();
   const lastModel = new Map<string, { provider: string; model: string }>();
@@ -63,9 +63,13 @@ export function install(pi: PiLike, deps: Deps): void {
   const sentAt = new Map<string, number>();
   /** The first provider_stream_event after that send (`ttftMs`). */
   const firstEvent = new Map<string, number>();
+  // D19, P18: pi's native retry. A failed attempt (error message_end, not a context overflow) waits in `failedAt`
+  // until the session's next send, which is its retry when nothing came between (pi resends after a backoff with no
+  // message in between; a settled run or a new message means no retry follows). `retryWait` holds that send's wait.
+  const failedAt = new Map<string, number>();
+  const retryWait = new Map<string, number>();
   const madeDirs = new Set<string>();
   let warned = false;
-  let retrySession: string | undefined;
 
   const write = (input: LineInput): void => {
     try {
@@ -96,7 +100,8 @@ export function install(pi: PiLike, deps: Deps): void {
 
   const sidOf = (ctx: any): string | undefined => safe(() => ctx.sessionManager.getSessionId());
 
-  const writeWarming = (sid: string, ctx: any, snap: Snapshot, taken: { retries: number; retryWaitMs: number }): void => {
+  /** A warm is never resent by pi's session retry: its line carries no `retries`/`retryWaitMs` (not observed). */
+  const writeWarming = (sid: string, ctx: any, snap: Snapshot): void => {
     const entries: any[] = safe(() => ctx.sessionManager.getEntries()) ?? [];
     const warm = [...entries].reverse().find((e) => e?.type === "usage" && e.kind === "cache_warm" && time(e.timestamp) >= snap.at);
     const who = (typeof warm?.provider === "string" && typeof warm?.model === "string" ? warm : undefined) ?? lastModel.get(sid) ?? { provider: "unknown", model: "unknown" };
@@ -104,7 +109,7 @@ export function install(pi: PiLike, deps: Deps): void {
     // session_shutdown), so the line's ts is the warm RESPONSE time (snap.at),
     // not the flush time.
     const input: LineInput = { ...common(sid, ctx), now: new Date(snap.at), provider: who.provider, model: who.model, kind: "warming",
-      status: snap.status, retries: taken.retries, retryWaitMs: taken.retryWaitMs, snap };
+      status: snap.status, snap };
     const usage = mapUsage(warm?.usage);
     if (usage) input.usage = usage;
     write(input);
@@ -116,22 +121,22 @@ export function install(pi: PiLike, deps: Deps): void {
     const warmSnap = warms.get(sid);
     if (warmSnap) {
       warms.delete(sid);
-      writeWarming(sid, ctx, warmSnap, { retries: 0, retryWaitMs: 0 }); // retries belong to turns
+      writeWarming(sid, ctx, warmSnap);
     }
-    const snap = pending.get(sid);
-    if (!snap || streaming.has(sid)) return; // a streaming turn's own response stays for its message_end
-    pending.delete(sid);
-    writeWarming(sid, ctx, snap, joiner.take(sid));
+    if (streaming.has(sid)) return; // a streaming turn's own response stays for its message_end
+    const { snap } = joiner.take(sid);
+    if (snap) writeWarming(sid, ctx, snap);
   };
 
-  pi.on("session_start", (_e, ctx) => {
-    retrySession = sidOf(ctx);
-  });
   pi.on("before_provider_request", (_e, ctx) => {
     const sid = sidOf(ctx);
     if (sid !== undefined && !streaming.has(sid)) {
-      sentAt.set(sid, now().getTime());
+      const t = now().getTime(), failed = failedAt.get(sid);
+      sentAt.set(sid, t);
       firstEvent.delete(sid);
+      failedAt.delete(sid);
+      if (failed === undefined) retryWait.delete(sid);
+      else retryWait.set(sid, Math.max(0, t - failed));
     }
     flushWarming(ctx); // returns nothing: the payload stays as it is
   });
@@ -139,19 +144,21 @@ export function install(pi: PiLike, deps: Deps): void {
     const sid = sidOf(ctx);
     if (sid !== undefined && sentAt.has(sid) && !firstEvent.has(sid)) firstEvent.set(sid, now().getTime());
   });
-  pi.on("agent_settled", (_e, ctx) => flushWarming(ctx));
+  pi.on("agent_settled", (_e, ctx) => {
+    const sid = sidOf(ctx);
+    if (sid !== undefined) failedAt.delete(sid); // the run ended: no retry follows
+    flushWarming(ctx);
+  });
   pi.on("session_shutdown", (_e, ctx) => flushWarming(ctx));
 
   pi.on("after_provider_response", (e, ctx) => {
     const sid = sidOf(ctx);
     if (sid === undefined) return;
-    retrySession ??= sid;
     const snap: Snapshot = { status: e?.status, headers: e?.headers ?? {}, at: now().getTime() };
     if (streaming.has(sid)) {
       warms.set(sid, snap);
       return;
     }
-    pending.set(sid, snap);
     joiner.onResponse(sid, snap);
   });
 
@@ -163,22 +170,20 @@ export function install(pi: PiLike, deps: Deps): void {
 
   pi.on("message_end", (e, ctx) => {
     const m = e?.message;
-    if (m?.role !== "assistant") return;
     const sid = sidOf(ctx);
     if (sid === undefined) return;
-    retrySession ??= sid;
+    if (m?.role !== "assistant") {
+      failedAt.delete(sid); // a user, custom or tool message starts other work: the next send is no retry
+      return;
+    }
     streaming.delete(sid);
-    pending.delete(sid);
-    // D8: pi-retry's `completed` lands AFTER the retried request's message_end,
-    // so close the open episodes on this non-error end — the line that actually
-    // waited for them. Error ends keep them open; the late `completed`/`cancelled`
-    // for closed ids is ignored by the Joiner.
-    if (m.stopReason !== "error") joiner.closeOpen(sid, now().getTime());
     const taken = joiner.take(sid);
     lastModel.set(sid, { provider: String(m.provider ?? "unknown"), model: String(m.model ?? "unknown") });
     const end = now();
+    const wait = retryWait.get(sid);
+    retryWait.delete(sid);
     const input: LineInput = { ...common(sid, ctx), now: end, provider: lastModel.get(sid)!.provider,
-      model: lastModel.get(sid)!.model, kind: "turn", status: 200, retries: taken.retries, retryWaitMs: taken.retryWaitMs };
+      model: lastModel.get(sid)!.model, kind: "turn", status: 200, retries: wait === undefined ? 0 : 1, retryWaitMs: wait ?? 0 };
     const sent = sentAt.get(sid), first = firstEvent.get(sid);
     sentAt.delete(sid);
     firstEvent.delete(sid);
@@ -188,6 +193,9 @@ export function install(pi: PiLike, deps: Deps): void {
     if (m.stopReason === "error") {
       input.status = "error";
       if (typeof m.errorMessage === "string") input.errorMessage = m.errorMessage;
+      // pi never retries a context overflow (it compacts instead): that resend is no retry.
+      if (errorKindOf("error", input.errorMessage ?? "") === "context_overflow") failedAt.delete(sid);
+      else failedAt.set(sid, end.getTime());
     } else {
       const usage = mapUsage(m.usage);
       if (usage) input.usage = usage;
@@ -195,19 +203,6 @@ export function install(pi: PiLike, deps: Deps): void {
     }
     write(input);
   });
-
-  // D1: pi-retry emits NUMERIC retryIds (emitRetryLifecycleEvent(event, retryId: number));
-  // accept number | string -- the key only needs to pair start with end.
-  const retry = (kind: "start" | "end") => (d: any) => {
-    const id = d?.retryId;
-    if (retrySession === undefined || (typeof id !== "string" && typeof id !== "number")) return;
-    const key = String(id);
-    if (kind === "start") joiner.onRetryStart(retrySession, key, now().getTime());
-    else joiner.onRetryEnd(retrySession, key, now().getTime());
-  };
-  pi.events?.on("pi-retry:started", retry("start"));
-  pi.events?.on("pi-retry:completed", retry("end"));
-  pi.events?.on("pi-retry:cancelled", retry("end"));
 }
 
 function safe<T>(f: () => T): T | undefined {

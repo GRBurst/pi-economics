@@ -106,7 +106,7 @@ function genInput(r: () => number): LineInput & { message: { content: string } }
       reasoning: opt(num), costUsd: opt(() => r()), cacheWrite1h: opt(num) })),
     status: r() < 0.5 ? "error" : 200 + Math.floor(r() * 400),
     errorMessage: opt(() => genString(r)),
-    retries: Math.floor(r() * 5), retryWaitMs: num(),
+    retries: opt(() => Math.floor(r() * 5)), retryWaitMs: opt(num),
     snap: opt(() => ({ status: 200, at: num(), headers })),
     message: { content: "MESSAGE-BODY-" + genString(r) },
   };
@@ -156,6 +156,7 @@ test("P-absent: every v2 field is present iff given, numbers as given (0 include
     if (r() < 0.3) Object.assign(i, { durationMs: 0, ttftMs: 0 });
     const l = buildLine(i) as Record<string, unknown>;
     const given: Record<string, unknown> = { design: i.design, billing: i.billing, durationMs: i.durationMs, ttftMs: i.ttftMs,
+      retries: i.retries, retryWaitMs: i.retryWaitMs,
       cacheWrite1h: i.usage?.cacheWrite1h };
     for (const [k, v] of Object.entries(given)) {
       assert.equal(k in l, v !== undefined, `${k}: given ${JSON.stringify(v)}, line ${JSON.stringify(l[k])}`);

@@ -43,6 +43,22 @@ test("per event and version: spawn tier, verdict value, v1 assignment design, ra
   assert.deepEqual(fields(check(w)).sort(), ["assignments.design", "guards.value", "meter.v", "outcomes.verdict", "outcomes.workerTier"]);
 });
 
+// Meter line v2 (M3a, design §5.2): `retries`/`retryWaitMs` are required up to v1 (the retry extension's counts) and optional
+// from v2 (present iff the meter observes native attempts); every v2 field is type-checked when present.
+test("meter v2: retries optional, v2 fields typed; v0/v1 lines still need retries", () => {
+  const w = world();
+  const v2 = { v: 2, ts: iso(T0), sessionId: "m9", provider: "p-local", model: "m", kind: "warming", status: 200,
+    input: 1, cacheRead: 2, cacheWrite: 3, output: 4, costUsd: 0 };
+  w.meter.push(v2, { ...v2, kind: "turn", retries: 1, retryWaitMs: 2000, billing: "local", durationMs: 900, ttftMs: 100, cacheWrite1h: 3, design: "d" });
+  w.meter.push({ ...v2, kind: "turn", status: "error", errorClass: "400", errorKind: "context_overflow" });
+  assert.deepEqual(check(w), [], "well-formed v2 lines");
+  w.meter.push({ ...v2, billing: "prepaid", durationMs: -1, ttftMs: "1", cacheWrite1h: 1.5, design: "", retries: "0", errorKind: "oops" });
+  const { v: _v, ...v0 } = turn("m1", T0, { arm: "-----" });
+  w.meter.push((({ retries, retryWaitMs, ...r }) => r)(turn("m1", T0, { arm: "-----" })), (({ retries, ...r }) => r)(v0));
+  assert.deepEqual(fields(check(w)).sort(), ["meter.billing", "meter.cacheWrite1h", "meter.design", "meter.durationMs", "meter.errorKind",
+    "meter.retries", "meter.retries", "meter.retryWaitMs", "meter.ttftMs"]);
+});
+
 test("usage is required on successful requests only", () => {
   const w = world();
   w.meter.push({ v: 1, ts: iso(T0), sessionId: "e", provider: "p", model: "m", kind: "turn", status: "error", retries: 1, retryWaitMs: 0, errorClass: "429" });

@@ -261,7 +261,8 @@ test("warm answered during a streaming turn: the turn keeps its own response, th
   assert.equal(turn.q5h, 9); assert.equal(turn.cacheRead, 100); assert.equal(turn.costUsd, 0.25);
   assert.equal(turn.ts, new Date(T0 + 400_000).toISOString());
   assert.equal(warm.q5h, 13); assert.equal(warm.cacheRead, 359_332); assert.equal(warm.output, 1);
-  assert.equal(warm.costUsd, 0.07); assert.equal(warm.retries, 0);
+  // M3a: a v2 warming line carries no `retries` (v1 had 0): pi's session retry never resends a warm
+  assert.equal(warm.costUsd, 0.07); assert.equal("retries" in warm, false);
   assert.equal(warm.ts, new Date(T0 + 280_000).toISOString());
 });
 
@@ -312,59 +313,70 @@ test("no pending snapshot → nothing flushed", () => {
   assert.deepEqual(lines(), []);
 });
 
-test("retries (started/completed/cancelled) are counted on the next turn line", () => {
+// D19, P18 (M3a): the retry extension is gone (M10); its bus events and their tests went with it. pi's native retry
+// resends a failed attempt after a backoff: the failed attempt reaches message_end (stopReason "error"), then pi sends
+// again with no message in between (agent-session _prepareRetry → agent.continue). The resent request's line carries
+// `retries: 1` and `retryWaitMs` = its send − the failed attempt's message_end.
+const failed = (errorMessage: string) => assistant({ stopReason: "error", errorMessage, usage: undefined });
+
+test("native retry: send, 429, resend after 2000 ms, success → the success line has retries 1, retryWaitMs 2000", () => {
   const { f, clock, lines } = setup();
   const ctx = fakeCtx("s1");
-  f.fire("session_start", {}, ctx);
-  f.emit("pi-retry:started", { retryId: "a" });
-  clock.t += 2000;
-  f.emit("pi-retry:completed", { retryId: "a" });
-  f.emit("pi-retry:started", { retryId: "b" });
-  clock.t += 500;
-  f.emit("pi-retry:cancelled", { retryId: "b" });
+  f.fire("before_provider_request", {}, ctx);
+  clock.t = T0 + 300;
+  f.fire("message_end", failed("429: rate limited"), ctx);
+  clock.t = T0 + 2300;
+  f.fire("before_provider_request", {}, ctx);
   f.fire("after_provider_response", resp, ctx);
+  clock.t = T0 + 3000;
   f.fire("message_end", assistant(), ctx);
-  assert.equal(lines()[0].retries, 2); assert.equal(lines()[0].retryWaitMs, 2500);
+  assert.deepEqual(lines().map((l) => [l.status, l.retries, l.retryWaitMs]), [["error", 0, 0], [200, 1, 2000]]);
 });
 
-// D1 (2026-10-03 live check, L4): pi-retry emits NUMBERS (retry.ts
-// emitRetryLifecycleEvent(event, retryId: number), also for children); the real
-// wire shape is { retryId: 1 }, not { retryId: "a" }.
-test("numeric retryId (pi-retry's real event shape) is counted on the next turn line", () => {
+test("native retry: a chain of failures puts each resend on its own line (Σ = attempts resent, Σ wait = backoff)", () => {
   const { f, clock, lines } = setup();
-  const ctx = fakeCtx("s1");
-  f.fire("session_start", {}, ctx);
-  f.emit("pi-retry:started", { retryId: 1 });
-  clock.t += 2000;
-  f.emit("pi-retry:completed", { retryId: 1 });
-  f.emit("pi-retry:started", { retryId: 2 });
-  clock.t += 1500;
-  f.emit("pi-retry:completed", { retryId: 2 });
-  f.fire("after_provider_response", resp, ctx);
-  f.fire("message_end", assistant(), ctx);
-  assert.equal(lines()[0].retries, 2);
-  assert.equal(lines()[0].retryWaitMs, 3500);
+  const ctx = fakeCtx("s1"), other = fakeCtx("s2");
+  const send = (at: number, c = ctx) => { clock.t = T0 + at; f.fire("before_provider_request", {}, c); };
+  const end = (at: number, m: unknown, c = ctx) => { clock.t = T0 + at; f.fire("message_end", m, c); };
+  send(0); end(100, failed("529 overloaded"));
+  send(1100); end(1200, failed("500 boom"));
+  send(5200, other); end(5300, assistant(), other); // another session in between
+  send(5200); end(6000, assistant());
+  assert.deepEqual(lines().map((l) => [l.sessionId, l.retries, l.retryWaitMs]),
+    [["s1", 0, 0], ["s1", 1, 1000], ["s2", 0, 0], ["s1", 1, 4000]]);
 });
 
-// D8 (2026-10-03 live check, L4): pi-retry emits `started` BEFORE the retried
-// request and `completed` only in its finally, i.e. AFTER the retried request's
-// message_end. The open episode must close on that (non-error) message_end — not
-// on the late `completed` — or the wait lands on an unrelated later line.
-test("D8: open retry closes on the retried request's ok message_end; late completed does not double-count", () => {
+test("native retry: a context overflow is no retry; nor is a send after the run settled or after a new message", () => {
   const { f, clock, lines } = setup();
   const ctx = fakeCtx("s1");
-  f.fire("session_start", {}, ctx);
-  f.fire("message_end", assistant({ stopReason: "error", errorMessage: "429: overloaded", usage: undefined }), ctx);
-  assert.equal(lines()[0].retries, 0);
-  f.emit("pi-retry:started", { retryId: 1 });
-  clock.t += 3000;
-  f.fire("after_provider_response", resp, ctx);
-  f.fire("message_end", assistant(), ctx); // the retried request succeeds; `completed` still pending
-  assert.equal(lines()[1].retries, 1);
-  assert.ok(lines()[1].retryWaitMs > 0);
-  f.emit("pi-retry:completed", { retryId: 1 }); // arrives after the message_end
-  f.fire("message_end", assistant(), ctx);
-  assert.equal(lines()[2].retries, 0); // the late completed must not double-count on the next line
+  const send = (at: number) => { clock.t = T0 + at; f.fire("before_provider_request", {}, ctx); };
+  send(0); f.fire("message_end", failed("400 prompt is too long: 9 tokens > 8 maximum"), ctx);
+  send(1000); f.fire("message_end", assistant(), ctx); // pi compacted and sent again: no retry
+  send(2000); f.fire("message_end", failed("429: daily cap"), ctx);
+  f.fire("agent_settled", {}, ctx); // no retry followed
+  send(60_000); f.fire("message_end", assistant(), ctx);
+  send(61_000); f.fire("message_end", failed("500 boom"), ctx);
+  f.fire("message_end", { message: { role: "user", content: "queued" } }, ctx); // a queued message starts the next run
+  send(62_000); f.fire("message_end", assistant(), ctx);
+  assert.deepEqual(lines().map((l) => [l.status, l.retries, l.retryWaitMs]),
+    [["error", 0, 0], [200, 0, 0], ["error", 0, 0], [200, 0, 0], ["error", 0, 0], [200, 0, 0]]);
+});
+
+test("native retry: warming lines carry no retries (pi's session retry never resends a warm: not observed, so absent)", () => {
+  const { f, lines } = setup();
+  const ctx = fakeCtx("s1");
+  f.fire("message_end", failed("429: x"), ctx);
+  f.fire("after_provider_response", resp, ctx); // a warm
+  f.fire("before_provider_request", {}, ctx);
+  const warm = lines().find((l) => l.kind === "warming");
+  assert.ok(warm);
+  assert.ok(!("retries" in warm) && !("retryWaitMs" in warm));
+});
+
+test("no bus listener: the meter subscribes to no pi.events channel (D19: the retry extension's events retired)", () => {
+  const names: string[] = [];
+  install({ on: () => {}, events: { on: (n: string) => void names.push(n) } }, { agentDir: mkdtempSync(join(tmpdir(), "token-meter-shell-")) });
+  assert.deepEqual(names, []);
 });
 
 test("arm comes from the experiments stub; absent → no arm key", () => {

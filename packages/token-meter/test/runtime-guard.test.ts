@@ -230,7 +230,7 @@ test("guardSingleCopy: an install that throws keeps its claim and goes inert: it
   guardSingleCopy(bad.pi, "cache-lifecycle", "/bad/index.ts", (p) => {
     p.on("session_start", () => void ran.push("held"));
     p.on("message_end" as "session_start", () => void ran.push("plain"));
-    p.events.on("pi-retry:x", () => void ran.push("bus"));
+    p.events.on("x-ext:x", () => void ran.push("bus"));
     throw new Error("no install");
   });
   let installed = false;
@@ -238,7 +238,7 @@ test("guardSingleCopy: an install that throws keeps its claim and goes inert: it
   await assert.rejects(bad.fire("session_start"), /no install/);
   await bad.fire("session_start"); // again on the same instance: inert, no second install, no throw
   await bad.fire("message_end");
-  b.emit("pi-retry:x", {});
+  b.emit("x-ext:x", {});
   assert.deepEqual(ran, [], "nothing the failed install registered runs");
   const { notes, ctx } = ui();
   await later.fire("session_start", ctx);

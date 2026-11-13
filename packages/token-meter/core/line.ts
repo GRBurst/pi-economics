@@ -14,17 +14,17 @@ export type Usage = { input: number; cacheRead: number; cacheWrite: number;
  */
 export type LineInput = { now: Date; sessionId: string; parentSessionId?: string; arm?: string; design?: string;
   provider: string; model: string; effort?: string; kind: "turn" | "warming" | "nested"; billing?: Billing;
-  usage?: Usage; status: number | "error"; retries: number; retryWaitMs: number; snap?: Snapshot;
+  usage?: Usage; status: number | "error"; retries?: number; retryWaitMs?: number; snap?: Snapshot;
   errorMessage?: string; durationMs?: number; ttftMs?: number };
 type LineBase = { ts: string; sessionId: string; parentSessionId?: string; arm?: string;
   provider: string; model: string; effort?: string; kind: LineInput["kind"];
   input?: number; cacheRead?: number; cacheWrite?: number; output?: number; reasoning?: number;
-  costUsd?: number; status: number | "error"; retries: number; retryWaitMs: number;
+  costUsd?: number; status: number | "error";
   errorClass?: string } & Omit<Quota, "raw"> & { rawRatelimit?: Record<string, string> };
-/** v0 (no `v`) and v1 lines: what readers find in logs written before M3a. */
-export type MeterLineV1 = LineBase & { v?: 1 };
-/** The line this writer emits (LOGS.md "Meter line v2"). */
-export type MeterLineV2 = LineBase & { v: 2; design?: string; billing?: Billing; cacheWrite1h?: number;
+/** v0 (no `v`) and v1 lines: what readers find in logs written before M3a (`retries` from the retry extension's bus events, D19). */
+export type MeterLineV1 = LineBase & { v?: 1; retries: number; retryWaitMs: number };
+/** The line this writer emits (LOGS.md "Meter line v2"); `retries` from pi's native retry, present iff observed. */
+export type MeterLineV2 = LineBase & { v: 2; retries?: number; retryWaitMs?: number; design?: string; billing?: Billing; cacheWrite1h?: number;
   durationMs?: number; ttftMs?: number; errorKind?: ErrorKind };
 export type MeterLine = MeterLineV1 | MeterLineV2;
 
@@ -57,8 +57,8 @@ export function buildLine(i: LineInput): MeterLineV2 {
     if (v !== undefined) l[k] = v;
   }
   l.status = i.status;
-  l.retries = i.retries;
-  l.retryWaitMs = i.retryWaitMs;
+  if (i.retries !== undefined) l.retries = i.retries;
+  if (i.retryWaitMs !== undefined) l.retryWaitMs = i.retryWaitMs;
   if (i.status === "error") {
     l.errorClass = errorClassOf(i.errorMessage);
     l.errorKind = errorKindOf(i.status, i.errorMessage ?? "");
