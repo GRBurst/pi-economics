@@ -102,7 +102,20 @@ export function install(pi: PiLike, deps: Deps): void {
 
   /** Every session's Assigned this runtime knows (mains, and children from their spawn events). */
   const known = new Map<string, Assigned>();
-  serve(pi.events, (sid) => known.get(sid));
+  /** A child's Assigned is its parent's but for sessionId and parentSessionId. */
+  const childOf = (p: Assigned, sessionId: string, parentSessionId: string): Assigned => ({ ...p, sessionId, parentSessionId });
+  /** Known, or (a resumed child) derived from the parent its session file names, up to an assigned root; cached. */
+  const lookup = (sid: string, depth = 0): Assigned | undefined => {
+    const hit = known.get(sid);
+    if (hit !== undefined || depth >= 64) return hit;
+    const parent = resolveParent(sid);
+    const p = parent === undefined || parent === sid ? undefined : lookup(parent, depth + 1);
+    if (p === undefined) return undefined;
+    const a = childOf(p, sid, parent!);
+    known.set(sid, a);
+    return a;
+  };
+  serve(pi.events, (sid) => lookup(sid));
   const adopt = (a: Assigned, legacy?: ApiArm): void => {
     known.set(a.sessionId, a);
     const arm = legacy ?? apiArm(a);
@@ -165,7 +178,13 @@ export function install(pi: PiLike, deps: Deps): void {
     if (off || !a) return;
     off = a.subscribe((e) => {
       if (e.type !== "spawn" || !e.childSessionId || main === undefined) return;
-      api.inherit(e.childSessionId, a.list().find((x) => x.name === e.parent)?.sessionId ?? main);
+      const parent = a.list().find((x) => x.name === e.parent)?.sessionId ?? main;
+      api.inherit(e.childSessionId, parent);
+      const p = lookup(parent);
+      if (p === undefined) return;
+      const c = childOf(p, e.childSessionId, parent);
+      known.set(c.sessionId, c);
+      publish(pi.events, c);
     });
   };
   connect();

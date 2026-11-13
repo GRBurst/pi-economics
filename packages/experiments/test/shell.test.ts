@@ -238,3 +238,41 @@ for (const { name, row } of legacy) {
     assert.deepEqual(h.rows().slice(1).map((r) => [r.v, r.design]), Array(8).fill([2, API.id]));
   });
 }
+
+import { query } from "../core/channel.ts";
+
+test("T5b1.5 children inherit via the actor's spawn events: a child's Assigned is its parent's but for sessionId and parentSessionId", () => {
+  for (const mode of ["explore", "off"] as const) {
+    const h = harness({ mode }, { agents: [{ name: "w1", sessionId: "s-w1" }] });
+    h.start("main-1");
+    const main = h.published[0];
+    h.emit({ type: "spawn", name: "w1", by: "main", parent: "main", childSessionId: "s-w1", ts: 1 });
+    h.emit({ type: "spawn", name: "w2", by: "w1", parent: "w1", childSessionId: "s-w2", ts: 2 });
+    h.emit({ type: "spawn", name: "w3", by: "main", parent: "main", ts: 3 }); // no session id yet: ignored
+    const w1 = { ...main, sessionId: "s-w1", parentSessionId: "main-1" };
+    const w2 = { ...main, sessionId: "s-w2", parentSessionId: "s-w1" };
+    assert.deepEqual(h.published, [main, w1, w2], mode);
+    assert.deepEqual([query(h.events, "s-w1"), query(h.events, "s-w2"), query(h.events, "s-w3")], [w1, w2, undefined], mode);
+    assert.equal(h.rows().length, 1, `${mode}: children get no row`);
+    assert.deepEqual(h.entries.map((e) => (e.data as Assigned).sessionId), ["main-1"], `${mode}: nor a custom entry`);
+  }
+});
+
+test("T5b1.5 a resumed child (no spawn event since the restart) is answered from its session file layout", () => {
+  const h = harness();
+  h.start("main-1");
+  const childDir = join(h.sessionDir, "subagents", "main-1");
+  mkdirSync(childDir, { recursive: true });
+  writeFileSync(join(childDir, "2026-10-03T12-00-00-000Z_s-child.jsonl"), "");
+  mkdirSync(join(h.sessionDir, "subagents", "s-child"), { recursive: true });
+  writeFileSync(join(h.sessionDir, "subagents", "s-child", "2026-10-03T12-00-01-000Z_s-grand.jsonl"), "");
+  assert.deepEqual(query(h.events, "s-child"), { ...h.published[0], sessionId: "s-child", parentSessionId: "main-1" });
+  assert.deepEqual(query(h.events, "s-grand"), { ...h.published[0], sessionId: "s-grand", parentSessionId: "s-child" });
+  assert.equal(query(h.events, "s-orphan"), undefined);
+});
+
+test("T5b1.5 a child's own runtime (experiments loaded in it) never draws and writes no row", () => {
+  const h = harness();
+  h.start("s-child", { file: join(h.sessionDir, "subagents", "main-1", "x_s-child.jsonl") });
+  assert.deepEqual([h.rows(), h.entries, h.published], [[], [], []]);
+});
