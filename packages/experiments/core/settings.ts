@@ -2,7 +2,9 @@
 // opt-in (spec D15): without it the extension is inert (plain `pi install`);
 // with it, every key it lacks takes its default.
 import { existsSync, readFileSync } from "node:fs";
-import type { Factor, FactorSpec } from "./design.ts";
+import type { Factor, FactorSpec, Level } from "./design.ts";
+// Type-only (plan P22): the import is erased at runtime, so the package ships without token-meter.
+import type { Billing, Plans } from "../../token-meter/core/plans.ts";
 
 export type Settings = {
   /** Arm selection mode; "off" always returns the baseline arm. */
@@ -91,4 +93,84 @@ export function loadSettings(file: string): Settings {
     if (typeof v === "boolean" || (allowed[k] ? allowed[k].includes(v as string) : typeof v === "string" || (Number.isFinite(v) && (v as number) >= 0))) out[k] = v;
   }
   return out as Settings;
+}
+
+/**
+ * What a stratum's experiment minimises per active hour (redesign §9.4): API-equivalent USD, cash USD, local cost,
+ * wall time, or the 5 h / 7 d quota points. Defined here (the experiments setting); the analyser imports the type.
+ */
+export type Objective = "apiUsd" | "cashUsd" | "localCost" | "wallMs" | "points5h" | "points7d";
+const OBJECTIVES: readonly Objective[] = ["apiUsd", "cashUsd", "localCost", "wallMs", "points5h", "points7d"];
+const BILLINGS: readonly Billing[] = ["subscription", "api", "free", "local"];
+
+/**
+ * A setup whose mains share one design (§7.3): it matches a main by billing class (from `plans`) and/or
+ * `<provider>/<id>` globs, every given condition must hold; an empty match matches every main.
+ */
+export type StratumSpec = { match: { billing?: Billing[]; models?: string[] }; objective: Objective; factors: FactorSpec[] };
+/** The strata in key order, and why a stratum was dropped or the setting ignored (to surface once per session). */
+export type Strata = { strata: Record<string, StratumSpec>; warnings: string[] };
+
+const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+const isLevel = (v: unknown): v is Level => typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v));
+const nonEmptyListOf = <T>(v: unknown, is: (x: unknown) => x is T): v is T[] => Array.isArray(v) && v.length > 0 && v.every(is);
+
+/**
+ * The `strata` setting. Absent (or of a wrong type, with a warning): plan P12's defaults, one stratum per billing
+ * class of `plans` and "api" (a provider without a plan bills as api), each named after its class; the cloud
+ * classes get `legacy` (the v4 factors) and objective apiUsd, "local" gets no factors (OQ3) and localCost. Given:
+ * each stratum as written, its objective defaulting to localCost for a local-only match and apiUsd otherwise; a
+ * malformed stratum is dropped whole (never repaired into a design nobody asked for) with a warning.
+ */
+export function parseStrata(raw: unknown, plans: Plans, legacy: readonly FactorSpec[]): Strata {
+  if (raw !== undefined && raw !== null && !isRecord(raw)) {
+    return { strata: defaultStrata(plans, legacy), warnings: ["experiments strata is not an object; the default strata apply"] };
+  }
+  if (!isRecord(raw)) return { strata: defaultStrata(plans, legacy), warnings: [] };
+  const strata: Record<string, StratumSpec> = {};
+  const warnings: string[] = [];
+  for (const [name, s] of Object.entries(raw)) {
+    const parsed = parseStratum(s);
+    if (typeof parsed === "string") warnings.push(`experiments stratum ${name} dropped: ${parsed}`);
+    else strata[name] = parsed;
+  }
+  return { strata, warnings };
+}
+
+function defaultStrata(plans: Plans, legacy: readonly FactorSpec[]): Record<string, StratumSpec> {
+  const present = new Set<Billing>(["api", ...Object.values(plans).map((p) => p.billing)]);
+  return Object.fromEntries(BILLINGS.filter((b) => present.has(b)).map((b): [string, StratumSpec] => [b, b === "local"
+    ? { match: { billing: [b] }, objective: "localCost", factors: [] }
+    : { match: { billing: [b] }, objective: "apiUsd", factors: [...legacy] }]));
+}
+
+/** A stratum, or why it is dropped. */
+function parseStratum(s: unknown): StratumSpec | string {
+  if (!isRecord(s)) return "not an object";
+  if (!isRecord(s.match)) return "match is not an object";
+  const match: StratumSpec["match"] = {};
+  if (s.match.billing !== undefined) {
+    if (!nonEmptyListOf(s.match.billing, (b): b is Billing => BILLINGS.includes(b as Billing))) return "match.billing is not a non-empty list of billing classes";
+    match.billing = [...s.match.billing];
+  }
+  if (s.match.models !== undefined) {
+    if (!nonEmptyListOf(s.match.models, (m): m is string => typeof m === "string")) return "match.models is not a non-empty list of strings";
+    match.models = [...s.match.models];
+  }
+  const local = match.billing?.every((b) => b === "local") ?? false;
+  const objective = s.objective ?? (local ? "localCost" : "apiUsd");
+  if (!OBJECTIVES.includes(objective as Objective)) return `objective ${String(objective)} is not one of ${OBJECTIVES.join(", ")}`;
+  const raw = s.factors ?? [];
+  if (!Array.isArray(raw)) return "factors is not a list";
+  const factors: FactorSpec[] = [];
+  for (const [i, f] of raw.entries()) {
+    if (!isRecord(f) || typeof f.name !== "string" || typeof f.lever !== "string" || !Array.isArray(f.levels) || f.levels.length !== 2 || !f.levels.every(isLevel)) {
+      return `factor ${i + 1} needs a name, a lever and two levels`;
+    }
+    if (factors.some((g) => g.name === f.name)) return `factor name ${f.name} repeated`;
+    if (factors.some((g) => g.lever === f.lever)) return `lever ${f.lever} repeated`;
+    factors.push({ name: f.name, lever: f.lever, levels: [f.levels[0], f.levels[1]] });
+  }
+  if (factors.length > 6) return `${factors.length} factors, at most 6`;
+  return { match, objective: objective as Objective, factors };
 }

@@ -1,5 +1,5 @@
 // Portability contract: the package can be copied into its
-// own repository unchanged. Generic: the same file is used by every package.
+// own repository and run unchanged. Generic: the same file is used by every package.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -21,20 +21,23 @@ function tsFiles(dir: string): string[] {
 const importRe =
   /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)|^\s*import\s+['"]([^'"]+)['"]/gm;
 
-function importsOf(file: string): string[] {
+// The declaration that ends a match (a match may start at "import" in a comment above it).
+const typeDecl = /(?:^|[\s;])(?:import|export)\s+type\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s*['"][^'"]+['"]$/;
+// `import type` / `export type`: erased at runtime (type stripping), so it may name a sibling package (plan P22).
+function importsOf(file: string): { spec: string; typeOnly: boolean }[] {
   const src = readFileSync(file, "utf8");
-  return [...src.matchAll(importRe)].map((m) => m[1] ?? m[2] ?? m[3]);
+  return [...src.matchAll(importRe)].map((m) => ({ spec: m[1] ?? m[2] ?? m[3], typeOnly: m[1] !== undefined && typeDecl.test(m[0]) }));
 }
 
-test("every import stays inside the package, node:* or pi's peer packages", () => {
+test("every import stays inside the package, node:* or pi's peer packages; only a type import leaves it", () => {
   const bad: string[] = [];
   for (const f of tsFiles(root)) {
-    for (const s of importsOf(f)) {
+    for (const { spec: s, typeOnly } of importsOf(f)) {
+      const relativeSpec = s.startsWith("./") || s.startsWith("../");
       const ok =
         s.startsWith("node:") ||
         s.startsWith("@earendil-works/") ||
-        ((s.startsWith("./") || s.startsWith("../")) &&
-          (resolve(dirname(f), s) + sep).startsWith(root + sep));
+        (relativeSpec && (typeOnly || (resolve(dirname(f), s) + sep).startsWith(root + sep)));
       if (!ok) bad.push(`${relative(root, f)}: ${s}`);
     }
   }

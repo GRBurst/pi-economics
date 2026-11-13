@@ -53,6 +53,13 @@
   # (redesign M5a) pi-bench's sources: packages/bench as bench/ with the
   # experiments' design module it imports (packages/bench/package.nix).
   benchSrc = self.packages.${pkgs.stdenv.hostPlatform.system}.bench.code.src;
+  # (redesign M5a, plan P22) The type-check copy of experiments: packages/experiments
+  # as experiments/ with token-meter's core/plans.ts, whose types core/settings.ts
+  # imports (`import type`, erased at runtime: the package ships without it).
+  experimentsTs = lib.fileset.toSource {
+    root = ../packages;
+    fileset = lib.fileset.unions [../packages/experiments ../packages/token-meter/core/plans.ts];
+  };
   # (M4.5) The provider of the globalThis API __subagentsApi_v1 (spec §5.3).
   subagentsProvider = {
     src = setupActorTs;
@@ -61,8 +68,8 @@
   };
   # (M4.7) The provider of the globalThis API __piExperimentsApi_v1 (spec §5.3).
   experimentsProvider = {
-    src = ../packages/experiments;
-    file = "core/api.ts";
+    src = experimentsTs;
+    file = "experiments/core/api.ts";
     type = "ExperimentsApiV1";
   };
   # (M6.4) The patched pi-infinite-context.
@@ -126,7 +133,7 @@ in {
   experiments = self.packages.${pkgs.stdenv.hostPlatform.system}.experiments;
   typecheck-experiments = typecheck.typecheck {
     name = "experiments";
-    src = ../packages/experiments;
+    src = experimentsTs;
   };
   # (M4.5, M4.6) The copies of __subagentsApi_v1 in cache-lifecycle and experiments (spec §5.3, §8.1).
   iface-subagents-cache-lifecycle = iface.compare {
@@ -142,8 +149,8 @@ in {
     name = "subagents-experiments";
     provider = subagentsProvider;
     consumer = {
-      src = ../packages/experiments;
-      file = "core/shell.ts";
+      src = experimentsTs;
+      file = "experiments/core/shell.ts";
       type = "SubagentsApi";
     };
   };
