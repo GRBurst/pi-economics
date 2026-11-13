@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { canonical, design, designFor, designId, type Arm, type Design, type DesignArm, type Factor, type FactorSpec, type Level } from "../core/design.ts";
+import { GENERATORS, canonical, design, designFor, designId, type Arm, type Design, type DesignArm, type Factor, type FactorSpec, type Level } from "../core/design.ts";
 
 const factors = (n: number): Factor[] =>
   Array.from({ length: n }, (_, i) => ({ name: `f${i + 1}`, values: ["off", "on"] as [string, string] }));
@@ -198,4 +198,50 @@ test("designFor k ≤ 3: the full 2^k factorial, no generators, every factor bal
     for (let i = 0; i < k; i++) assert.equal(dot(d, [i]), 0, `k=${k}: ${fs[i].name} is not balanced`);
     for (const p of pairs(k)) assert.equal(dot(d, p), 0, `k=${k}: ${p.map((i) => fs[i].name).join(", ")} are not orthogonal`);
   }
+});
+
+// Fractions for 4 ≤ k ≤ 6 from the fixed generator table (redesign §7.2): resolution IV at least (main effects
+// orthogonal to each other and to every two-factor interaction), k = 5 resolution V.
+const triples = (k: number): number[][] =>
+  Array.from({ length: k }, (_, i) => pairs(k).filter((p) => !p.includes(i)).map((p) => [i, ...p])).flat();
+
+test("designFor k = 4..6: 2^(k−g) arms from GENERATORS[k], balanced, main effects orthogonal, resolution ≥ IV", () => {
+  for (const k of [4, 5, 6] as const) {
+    const fs = specs(k);
+    const d = designFor("cloud", { factors: fs });
+    assert.deepEqual(d.generators, GENERATORS[k], `k=${k}: generators`);
+    assert.equal(d.id, designId(fs, GENERATORS[k]), `k=${k}: the id covers the generators`);
+    assert.equal(d.arms.length, 2 ** (k - GENERATORS[k].length), `k=${k}: arms`);
+    wellFormed(d);
+    for (let i = 0; i < k; i++) assert.equal(dot(d, [i]), 0, `k=${k}: ${fs[i].name} is not balanced`);
+    for (const p of pairs(k)) assert.equal(dot(d, p), 0, `k=${k}: main effects ${p.map((i) => fs[i].name).join(", ")} are aliased`);
+    for (const t of triples(k)) assert.equal(dot(d, t), 0, `k=${k}: main effect ${fs[t[0]].name} is aliased with ${fs[t[1]].name}×${fs[t[2]].name}`);
+  }
+});
+
+test("designFor k = 5 is resolution V: two-factor interactions are orthogonal to each other too", () => {
+  const d = designFor("cloud", { factors: specs(5) });
+  const ps = pairs(5);
+  for (let a = 0; a < ps.length; a++)
+    for (let b = a + 1; b < ps.length; b++) {
+      const sum = d.arms.reduce((s, arm) => s + [...ps[a], ...ps[b]].reduce((p, i) => p * coded(arm, d.factors[i]), 1), 0);
+      assert.equal(sum, 0, `interactions ${ps[a].join("×")} and ${ps[b].join("×")} are aliased`);
+    }
+});
+
+test("designFor: a generated factor is ± the product its generator names; the all-low arm (levels[0] everywhere) is an arm for every k ≤ 6", () => {
+  for (const k of [0, 1, 2, 3, 4, 5, 6]) {
+    const d = designFor("cloud", { factors: specs(k) });
+    for (const g of d.generators) {
+      const [target, word] = g.split("=");
+      const idx = [target, ...word].map((c) => "ABCDEF".indexOf(c));
+      const signs = new Set(d.arms.map((a) => idx.reduce((p, i) => p * coded(a, d.factors[i]), 1)));
+      assert.equal(signs.size, 1, `k=${k}: ${g} does not hold on every arm`);
+    }
+    assert.ok(d.arms.some((a) => d.factors.every((f) => a.levels[f.name] === f.levels[0])), `k=${k}: no all-low arm`);
+  }
+});
+
+test("designFor refuses more than 6 factors", () => {
+  assert.throws(() => designFor("cloud", { factors: specs(7) }), /cloud: 7 factors, at most 6/);
 });

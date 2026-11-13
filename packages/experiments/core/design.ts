@@ -51,8 +51,8 @@ export function design(factors: Factor[], maxArms: number): Arm[] {
   return arms;
 }
 
-// Design v5 (redesign §7.2): one design per stratum, named by a content id instead of v1…v4.
-// This file imports only node builtins: bench ships it alone (packages/bench/package.nix).
+// One design per stratum (redesign §7.2), named by a content id instead of v1…v4; the design() above stays the
+// runtime's until the engine moves to strata. This file imports only node builtins: bench ships it alone.
 
 /** A factor level: what the add-on sets on its lever (a range lever's level is a fraction q of the matched range, §7.4). */
 export type Level = string | number | boolean;
@@ -82,14 +82,33 @@ export function designId(factors: readonly FactorSpec[], generators: readonly st
 export type DesignArm = { name: string; levels: Record<string, Level> };
 export type Design = { id: string; stratum: string; factors: FactorSpec[]; generators: string[]; arms: DesignArm[] };
 
-/** The design of a stratum's factors: the full 2^k factorial (k ≤ 3). Arms in mask order, first factor fastest. */
+/** Generated columns per factor count: resolution IV (k = 4, 6) and V (k = 5); letters are factor positions (A = first). */
+export const GENERATORS: Readonly<Record<4 | 5 | 6, readonly string[]>> = { 4: ["D=ABC"], 5: ["E=ABCD"], 6: ["E=ABC", "F=BCD"] };
+const LETTERS = "ABCDEF";
+
+/**
+ * The design of a stratum's factors: the full 2^k factorial for k ≤ 3, else the basic factors' full factorial with the
+ * generated columns of GENERATORS[k]; k > 6 throws. A generated column is the signed product (−1)^(m+1) of the m
+ * factors its word names, so the all-low arm (levels[0] everywhere, today's behaviour) is an arm. Arms in mask order
+ * over the basic factors, first factor fastest.
+ */
 export function designFor(stratum: string, s: { factors: readonly FactorSpec[] }): Design {
   const factors = [...s.factors];
   const k = factors.length;
-  const generators: string[] = [];
+  if (k > 6) throw new Error(`experiments stratum ${stratum}: ${k} factors, at most 6`);
+  const generators = k <= 3 ? [] : [...GENERATORS[k as 4 | 5 | 6]];
+  const basic = k - generators.length;
+  const words = generators.map((g, i) => {
+    const [target, word] = g.split("=");
+    const idx = [...word].map((c) => LETTERS.indexOf(c));
+    if (target !== LETTERS[basic + i] || idx.some((j) => j < 0 || j >= basic)) throw new Error(`generator ${g}: not over the basic factors of ${k}`);
+    return idx;
+  });
   const arms: DesignArm[] = [];
-  for (let mask = 0; mask < 2 ** k; mask++) {
-    const bits = factors.map((_, j) => (mask & (1 << j) ? 1 : 0));
+  for (let mask = 0; mask < 2 ** basic; mask++) {
+    const signs: number[] = Array.from({ length: basic }, (_, j) => (mask & (1 << j) ? 1 : -1));
+    for (const w of words) signs.push((w.length % 2 ? 1 : -1) * w.reduce((p, j) => p * signs[j], 1));
+    const bits = signs.map((x) => (x > 0 ? 1 : 0));
     arms.push({ name: bits.join(""), levels: Object.fromEntries(factors.map((f, j) => [f.name, f.levels[bits[j]]])) });
   }
   return { id: designId(factors, generators), stratum, factors, generators, arms };
