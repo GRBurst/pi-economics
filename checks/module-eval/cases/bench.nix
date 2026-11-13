@@ -123,7 +123,7 @@ in
     in
       eq "without registry entries: the own two" (ext alone) (own (pe alone))
       ++ eq "with registry entries: theirs too" (ext reg) (own (pe reg) // lib.mapAttrs (_: e: e.path) registry)
-      ++ holds "every component: both registered names" (lib.all (n: lib.elem n (shared all)) ["actor-subagents" "task-router"])
+      ++ holds "every component: the registered names" (lib.all (n: lib.elem n (shared all)) ["actor-subagents" "task-router" "experiments"])
       ++ eq "every component: each name the registry holds is its path" (lib.genAttrs (shared all) (n: (ext all).${n})) (lib.genAttrs (shared all) (n: (pe all).extensions.${n}.path))
       ++ farm "alone" alone
       ++ farm "registry" reg

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from "node:path";
 import { loadArms } from "./config.ts";
 import { deblind, JUDGES, parseVerdicts, type Verdict } from "./judge.ts";
-import { sessionMetrics } from "./metrics.ts";
+import { meterMetrics, sessionMetrics } from "./metrics.ts";
 import { BOOTSTRAP_ITERS, bootstrapDiffCI, bootstrapMeanCI, cohenKappa, olsInteractions, type CI, type Fit } from "./stats.ts";
 import type { Paths, RunResult, Task } from "./types.ts";
 
@@ -13,6 +13,8 @@ export type Row = {
 	verdicts: Record<string, Verdict>;
 	pass?: number; // share of judges that say pass
 	score?: number; // pass 1, partial 0.5, fail 0, averaged over judges
+	/** The run's meter (token-meter v2 lines in its agent dir; absent without them): compactions and context overflows, active minutes, the cost the meter priced, levers read back confirmed / refused. */
+	compactions?: number; overflows?: number; activeMin?: number; meterCostUsd?: number; leversConfirmed?: number; leversRefused?: number;
 	[factor: string]: unknown; // the arm's factor levels (routing, delegation, t0Widened) for orchestrator arms
 };
 
@@ -56,6 +58,7 @@ export function loadRows(paths: Paths): Row[] {
 	};
 	return results.map(([run, r]) => {
 		const m = sessionMetrics(join(runsDir, run, "session"));
+		const mm = meterMetrics(join(runsDir, run, "agent"));
 		const verdicts: Record<string, Verdict> = {};
 		for (const j of Object.keys(JUDGES)) {
 			const v = perRun(r.id, run, j) ?? (r.rep === 1 ? verdictsOf(r.id)[j][r.arm] : undefined);
@@ -67,6 +70,7 @@ export function loadRows(paths: Paths): Row[] {
 			run, id: r.id, kind: tasks[r.id]?.kind ?? "?", arm: r.arm, rep: r.rep,
 			piexit: r.piexit, checkExit: r.checkExit, wallMin: r.wallSec / 60, files: r.filesChanged,
 			req: m.req, r429: m.req ? m.errors / m.req : 0, peakCtxK: m.peakCtx / 1000, folds: m.folds, costUsd: m.costUsd,
+			...(mm.requests > 0 ? { compactions: mm.compactions, overflows: mm.overflows, activeMin: mm.activeMin, meterCostUsd: +mm.costUsd.toFixed(3), leversConfirmed: mm.confirmed, leversRefused: mm.refused } : {}),
 			verdicts,
 			...(vs.length ? { pass: mean(vs.map((v) => (v === "pass" ? 1 : 0))), score: mean(vs.map((v) => SCORE[v])) } : {}),
 		};
@@ -91,7 +95,9 @@ const CONTRAST: ContrastMetric[] = ["pass", "score", "wallMin", "costUsd"];
 export type LevelStats = { level: string; n: number; metrics: Record<Metric, CI> };
 export type Contrast = { level: string; vs: string } & Record<ContrastMetric, CI>;
 export type FactorStats = { factor: string; levels: LevelStats[]; contrasts: Contrast[] };
-export type Report = { iters: number; n: number; factors: FactorStats[]; ols: Fit & { outcome: string; factors: string[] }; agreement: Agreement };
+/** Per arm, the meter figures of its runs that have them (process-scope levers, §10): sums of the counts, mean active minutes. */
+export type ProcessStats = { arm: string; runs: number; compactions: number; overflows: number; activeMin: number; confirmed: number; refused: number };
+export type Report = { iters: number; n: number; process?: ProcessStats[]; factors: FactorStats[]; ols: Fit & { outcome: string; factors: string[] }; agreement: Agreement };
 
 const values = (rows: Row[], m: Metric): number[] => rows.flatMap((r) => (typeof r[m] === "number" ? [r[m] as number] : []));
 
@@ -114,7 +120,13 @@ export function buildReport(rows: Row[], o: { factors?: string[]; seed?: number;
 	const judgedRows = rows.filter((r) => r.score !== undefined);
 	const fit = olsInteractions(judgedRows, "score", factors);
 	const [ja, jb] = Object.keys(JUDGES);
-	return { iters: opts.iters, n: rows.length, factors: stats, ols: { ...fit, outcome: "score", factors }, agreement: agreement(rows, ja, jb) };
+	const metered = rows.filter((r) => r.compactions !== undefined);
+	const process: ProcessStats[] = [...new Set(metered.map((r) => r.arm))].sort().map((arm) => {
+		const g = metered.filter((r) => r.arm === arm);
+		const sum = (k: "compactions" | "overflows" | "leversConfirmed" | "leversRefused") => g.reduce((s, r) => s + (r[k] ?? 0), 0);
+		return { arm, runs: g.length, compactions: sum("compactions"), overflows: sum("overflows"), activeMin: mean(g.map((r) => r.activeMin ?? 0)), confirmed: sum("leversConfirmed"), refused: sum("leversRefused") };
+	});
+	return { iters: opts.iters, n: rows.length, ...(process.length ? { process } : {}), factors: stats, ols: { ...fit, outcome: "score", factors }, agreement: agreement(rows, ja, jb) };
 }
 
 // --- markdown ------------------------------------------------------------------------------------
@@ -131,6 +143,11 @@ export function renderReport(r: Report): string {
 			out.push("", `Difference to ${f.contrasts[0].vs} (mean [95% CI]):`, "", "| level | pass | score | wall min | $ |", "|---|---|---|---|---|");
 			for (const c of f.contrasts) out.push(`| ${c.level} | ${CONTRAST.map((m) => ci(c[m])).join(" | ")} |`);
 		}
+		out.push("");
+	}
+	if (r.process) {
+		out.push("## Process levers", "", "From the runs' meter lines (token-meter v2): compactions and context overflows summed over an arm's runs, active minutes the mean per run, levers read back confirmed / refused summed. Local cost (active time × rate) is not computed here; it joins with the analyser's local cost (M11).", "", "| arm | runs | compactions | overflows | active min | confirmed | refused |", "|---|---|---|---|---|---|---|");
+		for (const p of r.process) out.push(`| ${p.arm} | ${p.runs} | ${p.compactions} | ${p.overflows} | ${f2(p.activeMin)} | ${p.confirmed} | ${p.refused} |`);
 		out.push("");
 	}
 	out.push("## Interactions", "", `OLS of ${r.ols.outcome} on ${r.ols.factors.join(" × ")} with two-way interactions (baseline = first level alphabetically). n = ${r.ols.n}, residual df = ${r.ols.df}, R² = ${f2(r.ols.r2)}.`, "", "| term | coef | se |", "|---|---|---|");

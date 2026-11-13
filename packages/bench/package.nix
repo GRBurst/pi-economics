@@ -17,12 +17,13 @@
   code = stdenvNoCC.mkDerivation {
     pname = "pi-bench-src";
     inherit (manifest) version;
-    # The bench with the experiments' design module (redesign §7.2), at the
+    # The bench with the experiments' design module (redesign §7.2) and the names of
+    # pi's process levers (core/process-levers.ts; M9), at the
     # repository's relative path: src/orch.ts imports
     # ../../experiments/core/design.ts (its package.json keeps it ESM).
     src = lib.fileset.toSource {
       root = ../.;
-      fileset = lib.fileset.unions [(lib.fileset.fromSource (lib.cleanSource ./.)) ../experiments/core/design.ts ../experiments/package.json];
+      fileset = lib.fileset.unions [(lib.fileset.fromSource (lib.cleanSource ./.)) ../experiments/core/design.ts ../experiments/core/process-levers.ts ../experiments/package.json];
     };
     sourceRoot = "source/bench";
     nativeBuildInputs = runtimeInputs;
@@ -42,6 +43,7 @@
       mkdir -p $out/share/experiments/core
       cp ../experiments/package.json $out/share/experiments/
       cp ../experiments/core/design.ts $out/share/experiments/core/
+      cp ../experiments/core/process-levers.ts $out/share/experiments/core/
       runHook postInstall
     '';
     # The installed tree resolves its imports (src/orch.ts imports the

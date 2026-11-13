@@ -21,6 +21,8 @@ export type Arm = {
 	extensions: string[]; // names under the extension directory; the consumer's are added at run time (src/extensions.ts)
 	/** Orchestrator factor levels (routing, delegation, t0Widened: "off" | "on"); set → the run gets its own agent dir. */
 	factors?: Record<string, string>;
+	/** A process-lever arm (a `pi.<lever>` factor) loads no infinite-context unless this is true (src/levers.ts). */
+	ic?: boolean;
 };
 
 export type Paths = {

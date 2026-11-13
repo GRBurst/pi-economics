@@ -154,14 +154,15 @@ in {
     # (M6.14) The extensions the bench loads by name (spec §7), one mkDefault
     # definition each: a consumer adds its own extensions beside them (for
     # `baseExtensions`, `orchExtensions`) and may replace one by name. This
-    # flake's own two from their packages; actor-subagents and task-router
-    # from the registry entry of that name, when there is one (router-extraction
-    # design §7.3: they come from other flakes).
+    # flake's own two from their packages; actor-subagents, task-router and
+    # experiments from the registry entry of that name, when there is one
+    # (router-extraction design §7.3: they come from other flakes; M9: an arm
+    # with a pi process lever loads experiments, which reads its assignment file).
     programs.piEconomics.bench.extensions = lib.mapAttrs (_: lib.mkDefault) ({
         infinite-context = "${pe.infiniteContext.package}/extensions/infinite-context";
         token-meter = "${pe.tokenMeter.package}";
       }
-      // lib.mapAttrs (_: e: e.path) (lib.filterAttrs (n: _: lib.elem n ["actor-subagents" "task-router"]) pe.extensions));
+      // lib.mapAttrs (_: e: e.path) (lib.filterAttrs (n: _: lib.elem n ["actor-subagents" "task-router" "experiments"]) pe.extensions));
     home.sessionVariables =
       {
         PI_BENCH_DATA = cfg.dataDir;

@@ -12,6 +12,7 @@ import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } fr
 import { join } from "node:path";
 import { designState, draw, eligibleFor, parseBlocks, stratumOf, type AssignmentV2, type BlockState } from "./assign.ts";
 import { CACHE_LIFECYCLE } from "../addons/cache-lifecycle.ts";
+import { piProcessLevers } from "../addons/pi-process.ts";
 import { createRegistry, sessionLevers } from "../addons/registry.ts";
 import type { Lever } from "../addons/types.ts";
 import { publish, serve, type Assigned, type Bus, type Levers } from "./channel.ts";
@@ -45,6 +46,7 @@ const readJson = (file: string): unknown => {
   try { return JSON.parse(readFileSync(file, "utf8")); } catch { return undefined; }
 };
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+const isLevel = (v: unknown): boolean => typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v));
 const safe = <T>(f: () => T): T | undefined => {
   try { return f(); } catch { return undefined; }
 };
@@ -111,7 +113,9 @@ export function install(pi: PiLike, deps: Deps): void {
   const lookup = (sid: string): Assigned | undefined => known.get(sid);
   // The add-ons (§7.4): a session's levers start when their target first asks the channel; their read-back states ride
   // on every publication and answer.
-  const registry = createRegistry(CACHE_LIFECYCLE);
+  // pi's process levers read back from the settings files (the project's under the checkout the session runs in).
+  let cwd = process.cwd();
+  const registry = createRegistry([...CACHE_LIFECYCLE, ...piProcessLevers(() => ({ global: readJson(join(deps.agentDir, "settings.json")), project: readJson(join(cwd, ".pi", "settings.json")) }))]);
   const tracked = new Map<string, ReturnType<typeof sessionLevers>>();
   /** A factor's levels in the design the session was assigned (another design under the same stratum: just its own). */
   const levelsOf = (a: Assigned) => (name: string): readonly Level[] => {
@@ -203,8 +207,23 @@ export function install(pi: PiLike, deps: Deps): void {
       console.warn(`experiments: cannot record the explore blocks: ${(err as Error).message}`);
     }
   };
+  /**
+   * The bench's assignment (<agentDir>/experiments/assignment.json, v 1, §10): the run's arm, adopted instead of a draw
+   * whatever the mode. A file that is no such assignment is named once and ignored (the session is drawn as usual).
+   */
+  const fromFile = (sid: string, ctx: Parameters<typeof warnOnce>[0]): AssignmentV2 | undefined => {
+    const f = readJson(join(dir, "assignment.json"));
+    if (f === undefined) return undefined;
+    const ok = isRecord(f) && f.v === 1 && typeof f.design === "string" && typeof f.stratum === "string" && typeof f.arm === "string"
+      && isRecord(f.factors) && Object.values(f.factors).every((x) => isRecord(x) && typeof x.lever === "string" && isLevel(x.assigned));
+    if (!ok) { warnOnce(ctx, "experiments:assignment-file", `experiments: ignores ${join(dir, "assignment.json")}: not a v 1 assignment (design, stratum, arm, factors of lever and assigned level)`); return undefined; }
+    const a = f as { design: string; stratum: string; arm: string; factors: AssignmentV2["factors"] };
+    return { v: 2, ts: new Date().toISOString(), sessionId: sid, design: a.design, mode: settings.mode, eligible: true, stratum: a.stratum, arm: a.arm, factors: a.factors };
+  };
   /** A new main's assignment: its stratum, and an arm when eligible (none left enabled: ineligible). */
   const assignNew = (sid: string, model: unknown, ctx: Parameters<typeof warnOnce>[0]): AssignmentV2 => {
+    const given = fromFile(sid, ctx);
+    if (given !== undefined) return given;
     const m = isRecord(model) && typeof model.provider === "string" && typeof model.id === "string" ? model : undefined;
     const stratum = m === undefined ? undefined : stratumOf(strata, plans, m.provider as string, m.id as string);
     const d = stratum === undefined ? undefined : designs.get(stratum);
@@ -267,6 +286,7 @@ export function install(pi: PiLike, deps: Deps): void {
     for (const w of warnings) warnOnce(ctx, `experiments:${w}`, w); // a dropped stratum (parseStrata says why)
     if (settings.legacy?.length) warnOnce(ctx, "experiments:legacy", `experiments: ignores the settings ${settings.legacy.join(", ")} (the v1 engine's): its factors come from strata (default: one stratum per billing class); baseline only labels the analyses of v1–v4 designs`);
     const main = ctx.sessionManager.getSessionId() as string;
+    cwd = safe(() => ctx.cwd as string | undefined) ?? cwd;
     // A child's runtime (experiments among the actor's childExtensions): never drawn, no row; its arm is its root's.
     const file = safe(() => ctx.sessionManager.getSessionFile() as string | undefined);
     const root = rootOf(main, file, safe(() => ctx.hasUI));

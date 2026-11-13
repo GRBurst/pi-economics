@@ -72,6 +72,23 @@ base, and the arm's keys over both, as `lib.recursiveUpdate` does (unset: the li
 (also from `arms.json`) get this treatment; other arms use the live agent dir as before. `bench-report --factors
 routing,delegation,t0Widened` reads the factor levels from the arm.
 
+### Process-scope levers and the assignment file
+
+A factor named `pi.<lever>` in an arm's `factors` (`arms.json`) is a pi setting of the run, written into its `settings.json`:
+`pi.compaction.enabled` (`"true"`/`"false"`), `pi.compaction.reserveTokens`, `pi.compaction.keepRecentTokens` (whole numbers, as
+strings like every factor level); another `pi.` name or a level of the wrong kind is an error. Such an arm loads **no
+infinite-context**, main or children, unless it sets `"ic": true` (infinite-context cancels every native compaction, so
+the lever would do nothing), and loads `experiments` (the registry must link it: `programs.piEconomics.experiments.enable`).
+
+Every factor arm's agent dir also gets `experiments/settings.json` (`{"mode":"off"}`, the opt-in: nothing is drawn) and
+`experiments/assignment.json` (`{v: 1, design, stratum: "bench", arm, factors}`, `assignmentOf`, `src/orch.ts`; documented
+in `packages/token-meter/LOGS.md`, "Bench assignment"). The experiments engine adopts it at the main session's first
+`session_start`: one assignments row, the `pi-economics:assignment` entry, the channel; the token-meter then writes
+`levers` lines with `s: "pe"` and `rb: "confirmed"` for the process levers once the effective settings (the checkout's
+`.pi/settings.json` over the run's) show the level. `bench-report` adds per-run compactions, context overflows, active
+minutes, meter cost and levers confirmed / refused from `agent/meter/*.jsonl`, and a "Process levers" table per arm.
+Local cost (active time × rate) is not computed by the bench; it comes with the analyser's local cost (M11).
+
 Caveat: a login extension that keeps its refresh lock in the agent dir does not see the lock of a run with another
 agent dir, so such runs do not exclude each other's token refresh. Start a batch with a fresh login (>1 h left) and keep `sched` parallelism small.
 

@@ -5,6 +5,7 @@
  * provider login, and PI_BENCH_ORCH_EXTENSIONS, loaded by the orchestrator factor arms and their children only, such
  * as a search tool.
  */
+import { withProcess } from "./levers.ts";
 import type { Arm, Paths } from "./types.ts";
 
 /** A list variable: comma-separated names, entries trimmed, empty ones dropped; unset is none. */
@@ -19,7 +20,7 @@ export const extensionsOf = (own: readonly string[], base: readonly string[], ex
 
 /** An arm's extensions: an orchestrator factor arm (one with `factors`) also loads the orchestrator's extras. */
 export const armExtensions = (arm: Arm, paths: Pick<Paths, "baseExtensions" | "orchExtensions">): string[] =>
-	extensionsOf(arm.extensions, paths.baseExtensions, arm.factors ? paths.orchExtensions : []);
+	extensionsOf(withProcess(arm.extensions, arm), paths.baseExtensions, arm.factors ? paths.orchExtensions : []);
 
 /** `-e <extDir>/<name>` per name. */
 export const extArgs = (names: readonly string[], extDir: string): string[] => names.flatMap((e) => ["-e", `${extDir}/${e}`]);

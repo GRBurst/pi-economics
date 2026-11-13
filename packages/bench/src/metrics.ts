@@ -47,3 +47,46 @@ export function sessionMetrics(sessionDir: string): Metrics {
 	m.costUsd = +m.costUsd.toFixed(3);
 	return m;
 }
+
+/** A run's meter (v2, `<agentDir>/meter/*.jsonl`), the figures the process-lever report reads (redesign §10, M9). */
+export type MeterMetrics = {
+	requests: number; costUsd: number; compactions: number; overflows: number;
+	/** Σ `durationMs` of the turn lines, in minutes: the active time a local rate is charged on (M11). */
+	activeMin: number;
+	/** The last levers line of each main session: states with read-back confirmed / refused, and the pe levers' effective values. */
+	confirmed: number; refused: number; pe: Record<string, string | number | boolean>;
+};
+
+/** A missing meter dir (a run without token-meter, an old run) reads as all zero; unreadable lines are skipped. */
+export function meterMetrics(agentDir: string): MeterMetrics {
+	const m: MeterMetrics = { requests: 0, costUsd: 0, compactions: 0, overflows: 0, activeMin: 0, confirmed: 0, refused: 0, pe: {} };
+	const dir = join(agentDir, "meter");
+	if (!existsSync(dir)) return m;
+	let ms = 0;
+	const last = new Map<string, Record<string, { v: string | number | boolean; s?: string; rb?: string }>>();
+	for (const f of readdirSync(dir).filter((n) => n.endsWith(".jsonl")).sort()) {
+		for (const line of readFileSync(join(dir, f), "utf8").split("\n")) {
+			let o: any;
+			try { o = JSON.parse(line); } catch { continue; }
+			if (o === null || typeof o !== "object") continue;
+			if (o.kind === "levers") {
+				if (o.parentSessionId === undefined && typeof o.sessionId === "string" && o.levers && typeof o.levers === "object") last.set(o.sessionId, o.levers);
+				continue;
+			}
+			m.requests++;
+			if (typeof o.costUsd === "number") m.costUsd += o.costUsd;
+			if (o.kind === "compaction") m.compactions++;
+			if (o.errorKind === "context_overflow") m.overflows++;
+			if (o.kind === "turn" && typeof o.durationMs === "number") ms += o.durationMs;
+		}
+	}
+	for (const levers of last.values()) {
+		for (const [id, st] of Object.entries(levers)) {
+			if (st.rb === "confirmed") m.confirmed++;
+			if (st.rb === "refused") m.refused++;
+			if (st.s === "pe") m.pe[id] = st.v;
+		}
+	}
+	m.activeMin = Math.round((ms / 60000) * 100) / 100;
+	return m;
+}

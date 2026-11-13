@@ -1,8 +1,9 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { halfFraction } from "../../experiments/core/design.ts";
+import { designId, halfFraction } from "../../experiments/core/design.ts";
 import { extensionsOf } from "./extensions.ts";
-import type { Factor } from "../../experiments/core/design.ts";
+import { isPiFactor, processLevel, processLevers, withProcess } from "./levers.ts";
+import type { Factor, FactorSpec, Level } from "../../experiments/core/design.ts";
 import type { Arm, Paths } from "./types.ts";
 
 /** The factors (README.md, "Orchestrator factor arms"): routing, delegation (handoff + nudge), t0Widened (pilot-derived limits). */
@@ -34,11 +35,44 @@ export function orchArms(): Record<string, Arm> {
 }
 
 /** pi settings of a run; retries are pi's native ones, from the checkout's project settings (RETRY_SETTINGS, workdir.ts). */
-const piSettings = () => ({
-	defaultThinkingLevel: "high",
-	enableInstallTelemetry: false,
-	warnings: { anthropicExtraUsage: false },
-});
+const piSettings = (arm: Arm) => {
+	const s: Record<string, unknown> = {
+		defaultThinkingLevel: "high",
+		enableInstallTelemetry: false,
+		warnings: { anthropicExtraUsage: false },
+	};
+	// Process-scope levers (src/levers.ts): a `pi.<lever>` factor is a pi setting of the run, typed.
+	for (const { path, level } of processLevers(arm)) {
+		let at = s;
+		for (const k of path.slice(0, -1)) at = (at[k] ??= {}) as Record<string, unknown>;
+		at[path[path.length - 1]] = level;
+	}
+	return s;
+};
+
+/** The lever a factor sets: a pi setting by its own id, a router factor as `task-router.<name>`. */
+const leverOf = (factor: string): string => (isPiFactor(factor) ? factor : `task-router.${factor}`);
+const levelOf = (factor: string, level: string): Level => (isPiFactor(factor) ? processLevel(factor, level) : level);
+
+/**
+ * The run's assignment (the engine reads it instead of drawing, §10): v 1, the design id over the factors' levers and
+ * the levels of every arm that has the factor (the router factors' own two levels too), stratum "bench", the arm's name.
+ */
+export function assignmentOf(name: string, arm: Arm, arms: Record<string, Arm> = {}): Record<string, unknown> {
+	const f = arm.factors ?? {};
+	const levels = (factor: string): Level[] => {
+		const seen = new Set<string>([f[factor], ...(FACTORS.find((x) => x.name === factor)?.values ?? []), ...Object.values(arms).flatMap((a) => (a.factors?.[factor] === undefined ? [] : [a.factors[factor]]))]);
+		return [...seen].sort().map((l) => levelOf(factor, l));
+	};
+	const specs = Object.keys(f).sort().map((n) => ({ name: n, lever: leverOf(n), levels: levels(n) }));
+	return {
+		v: 1,
+		design: designId(specs as unknown as FactorSpec[], []),
+		stratum: "bench",
+		arm: name,
+		factors: Object.fromEntries(Object.entries(f).map(([n, l]) => [n, { lever: leverOf(n), assigned: levelOf(n, l) }])),
+	};
+}
 
 const on = (v: string | undefined) => v !== "off";
 
@@ -89,7 +123,7 @@ export function routerBase(paths: Pick<Paths, "routerLive" | "router">): Record<
  * are symlinked, never copied (a login extension that seeds auth.json writes through the link). Meter and outcome logs
  * of the run end up in this dir.
  */
-export function materializeAgentDir(o: { dir: string; arm: Arm; paths: Paths }): void {
+export function materializeAgentDir(o: { dir: string; arm: Arm; paths: Paths; name?: string; arms?: Record<string, Arm> }): void {
 	const { dir, arm, paths } = o;
 	const f = arm.factors ?? {};
 	const routing = on(f.routing);
@@ -100,13 +134,16 @@ export function materializeAgentDir(o: { dir: string; arm: Arm; paths: Paths }):
 		writeFileSync(join(dir, rel), content);
 	};
 	mkdirSync(dir, { recursive: true });
-	put("settings.json", JSON.stringify(piSettings(), null, 2) + "\n");
+	put("settings.json", JSON.stringify(piSettings(arm), null, 2) + "\n");
+	// The engine's opt-in (mode off: it draws nothing) and the run's assignment, read instead of a draw (experiments core/shell.ts).
+	put("experiments/settings.json", JSON.stringify({ mode: "off" }) + "\n");
+	put("experiments/assignment.json", JSON.stringify(assignmentOf(o.name ?? "bench", arm, o.arms), null, 2) + "\n");
 	put("task-router/settings.json", JSON.stringify(recursiveUpdate(routerBase(paths), {
 		routing,
 		delegation: { nudge: on(f.delegation) ? "on" : "off" },
 		t0Limits: T0_LIMITS[on(f.t0Widened) ? "on" : "off"],
 	}), null, 2) + "\n");
-	put("actor-subagents/settings.json", JSON.stringify({ childExtensions: extensionsOf(CHILD_EXTENSIONS, paths.baseExtensions, paths.orchExtensions).map((n) => `${paths.extDir}/${n}`) }, null, 2) + "\n");
+	put("actor-subagents/settings.json", JSON.stringify({ childExtensions: extensionsOf(withProcess(CHILD_EXTENSIONS, arm), paths.baseExtensions, paths.orchExtensions).map((n) => `${paths.extDir}/${n}`) }, null, 2) + "\n");
 	copyFileSync(agents, join(dir, "AGENTS.md"));
 	const ic = join(paths.agentSrc, "infinite-context/settings.json");
 	if (existsSync(ic)) {

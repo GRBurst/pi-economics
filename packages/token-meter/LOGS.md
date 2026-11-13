@@ -379,6 +379,26 @@ stratum (`experiments/blocks.json`); exploit samples the design's posterior in i
 {"v":2,"ts":"2026-11-13T11:00:00.000Z","sessionId":"s-other","mode":"explore","eligible":false}
 ```
 
+### Bench assignment
+
+The bench (redesign §10, M9) writes `<agentDir>/experiments/assignment.json` into a factor arm's per-run agent dir: the run's
+arm, so the experiments engine adopts it at the main session's first `session_start` instead of drawing (whatever its mode).
+The engine turns it into the usual v2 row, entry and channel state (`stratum` `bench`); a file that is not a v 1
+assignment is ignored with a warning. Pi process levers named in `factors` are read back from the effective settings
+(`pi.compaction.enabled`, `pi.compaction.reserveTokens`, `pi.compaction.keepRecentTokens`; tier `seed`).
+
+| field | type | meaning |
+| --- | --- | --- |
+| `v` | `1` | schema version of this file |
+| `design` | string | 12 hex: the content id of the arm's levers and their levels over every arm of the bench |
+| `stratum` | `"bench"` | |
+| `arm` | string | the bench arm's name (`orch-+-+`, an `arms.json` name) |
+| `factors` | object | factor name → `{ "lever": "<target>.<name>", "assigned": <level> }` (router factors: `task-router.<name>`) |
+
+```json
+{"v":1,"design":"0123456789ab","stratum":"bench","arm":"orch-compact","factors":{"routing":{"lever":"task-router.routing","assigned":"on"},"pi.compaction.reserveTokens":{"lever":"pi.compaction.reserveTokens","assigned":8000}}}
+```
+
 ## guards/events.jsonl
 
 | field | type | required | meaning |

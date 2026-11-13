@@ -38,7 +38,7 @@ export async function runOne(o: RunOptions): Promise<RunResult> {
 	const env = runEnv(o.env, o.paths, needsDevenvShim(o.task), tmpDir);
 	if (arm.factors) { // orchestrator factor arm: own agent dir, so settings, AGENTS.md and meter/outcome logs are per run
 		const agentDir = join(R, "agent");
-		materializeAgentDir({ dir: agentDir, arm, paths: o.paths });
+		materializeAgentDir({ dir: agentDir, arm, paths: o.paths, name: o.arm, arms: loadArms(o.paths.data) });
 		env.PI_CODING_AGENT_DIR = agentDir;
 	}
 	const prompt = buildPrompt(o.task.kind, o.task.prompt);

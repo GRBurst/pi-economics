@@ -70,7 +70,7 @@ in {
     # actor-subagents and task-router from their registry entries, those the
     # registry holds (router-extraction design §7.3).
     ++ eq "PI_BENCH_EXT_DIR" all.home.sessionVariables.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" ((with' ["bench"]).programs.piEconomics.bench.extensions
-        // lib.mapAttrs (_: e: e.path) (lib.filterAttrs (n: _: lib.elem n ["actor-subagents" "task-router"]) all.programs.piEconomics.extensions))}"
+        // lib.mapAttrs (_: e: e.path) (lib.filterAttrs (n: _: lib.elem n ["actor-subagents" "task-router" "experiments"]) all.programs.piEconomics.extensions))}"
     # The bench reads the router's base at run time (router-extraction design §7.3).
     ++ holds "no PI_BENCH_ROUTER" (!(all.home.sessionVariables ? PI_BENCH_ROUTER))
     ++ eq "activation entries" (set (lib.attrNames all.home.activation)) (union (cfg: lib.attrNames cfg.home.activation))
