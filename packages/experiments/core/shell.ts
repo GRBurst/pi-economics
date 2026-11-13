@@ -11,8 +11,11 @@ import { appendFileSync, mkdirSync, readFileSync, readdirSync, renameSync, write
 import { join } from "node:path";
 import { createApi, type ApiArm } from "./api.ts";
 import { designState, draw, eligibleFor, parseBlocks, stratumOf, type AssignmentV2, type BlockState } from "./assign.ts";
-import { publish, serve, type Assigned, type Bus } from "./channel.ts";
-import { designFor, type Design } from "./design.ts";
+import { CACHE_LIFECYCLE } from "../addons/cache-lifecycle.ts";
+import { createRegistry, sessionLevers } from "../addons/registry.ts";
+import type { Lever } from "../addons/types.ts";
+import { publish, serve, type Assigned, type Bus, type Levers } from "./channel.ts";
+import { designFor, type Design, type Level } from "./design.ts";
 import { V4_FACTORS, defaults, loadOptIn, parseStrata, readPlans, type Settings } from "./settings.ts";
 import { actorMissing, hasSubagentsApiV1, warnOnce } from "./runtime-guard.ts";
 
@@ -116,12 +119,62 @@ export function install(pi: PiLike, deps: Deps): void {
     known.set(sid, a);
     return a;
   };
-  serve(pi.events, (sid) => lookup(sid));
+  // The add-ons (§7.4): a session's levers start when their target first asks the channel; their read-back states ride
+  // on every publication and answer.
+  const registry = createRegistry(CACHE_LIFECYCLE);
+  const tracked = new Map<string, ReturnType<typeof sessionLevers>>();
+  /** A factor's levels in the design the session was assigned (another design under the same stratum: just its own). */
+  const levelsOf = (a: Assigned) => (name: string): readonly Level[] => {
+    const d = a.stratum === undefined ? undefined : designs.get(a.stratum);
+    const spec = d?.id === a.design ? d?.factors.find((f) => f.name === name) : undefined;
+    return spec?.levels ?? (a.factors?.[name] === undefined ? [] : [a.factors[name].assigned]);
+  };
+  const trackerOf = (a: Assigned) => {
+    let t = tracked.get(a.sessionId);
+    if (t === undefined) {
+      t = sessionLevers(registry, a, { child: a.parentSessionId !== undefined }, levelsOf(a));
+      tracked.set(a.sessionId, t);
+      t.refresh();
+    }
+    return t;
+  };
+  const leversOf = (sid: string): Levers | undefined => {
+    const a = lookup(sid);
+    return a === undefined ? undefined : { ...a, levers: trackerOf(a).states() };
+  };
+  // A publication's listener may ask (a target loading) and so change the state mid-publication: the change goes out
+  // after it, so every listener's last payload is the current state.
+  const pending = new Set<string>();
+  let flushing = false;
+  const announce = (sid: string): void => {
+    pending.add(sid);
+    if (flushing) return;
+    flushing = true;
+    try {
+      for (const s of pending) {
+        pending.delete(s);
+        const l = leversOf(s);
+        if (l !== undefined) publish(pi.events, l);
+      }
+    } finally {
+      flushing = false;
+    }
+  };
+  serve(pi.events, (sid, target) => {
+    if (target !== undefined && registry.load(target)) for (const [s, t] of tracked) if (t.refresh()) announce(s);
+    return leversOf(sid);
+  });
+  const observeAt = (at: Lever["readBackAt"], e: unknown, ctx: any): void => {
+    const sid = safe(() => ctx.sessionManager.getSessionId() as string);
+    const t = sid === undefined ? undefined : tracked.get(sid);
+    if (t?.observe(at, { sessionId: sid!, event: e })) announce(sid!);
+  };
+  pi.on("before_agent_start", (e, ctx) => void observeAt("before_agent_start", e, ctx));
   const adopt = (a: Assigned, legacy?: ApiArm): void => {
     known.set(a.sessionId, a);
     const arm = legacy ?? apiArm(a);
     if (arm !== undefined) remember(a.sessionId, arm);
-    publish(pi.events, a);
+    announce(a.sessionId);
   };
 
   const rows = (): Row[] => {
@@ -198,7 +251,7 @@ export function install(pi: PiLike, deps: Deps): void {
         if (p === undefined) return;
         const c = childOf(p, e.childSessionId, parent);
         known.set(c.sessionId, c);
-        publish(pi.events, c);
+        announce(c.sessionId);
       } catch (err) {
         if (!spawnFailed) console.warn(`experiments: a child's assignment was not published: ${(err as Error).message}`);
         spawnFailed = true;
@@ -228,7 +281,10 @@ export function install(pi: PiLike, deps: Deps): void {
   const lastRole = new Map<string, string>();
   let correction: RegExp;
   try { correction = new RegExp(settings.correctionRegex, "i"); } catch { correction = new RegExp(defaults().correctionRegex, "i"); }
-  pi.on("message_end", (e, ctx) => void lastRole.set(ctx.sessionManager.getSessionId(), e.message?.role));
+  pi.on("message_end", (e, ctx) => {
+    lastRole.set(ctx.sessionManager.getSessionId(), e.message?.role);
+    observeAt("message_end", e, ctx);
+  });
   pi.on("input", (e, ctx) => {
     const sid = ctx.sessionManager.getSessionId() as string;
     if (e.source !== "extension" && lastRole.get(sid) === "assistant" && correction.test(e.text ?? "")) logGuard(sid, "correction");

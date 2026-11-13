@@ -38,7 +38,8 @@ function harness(over: Partial<Settings> = {}, opts: { agents?: any[]; plans?: u
   const sub = { list: () => opts.agents ?? [], subscribe: (l: any) => (listeners.push(l), () => {}) };
   const settings = { ...defaults(), ...over };
   const published: Assigned[] = [];
-  onAssigned(f.events, (a) => void published.push(a));
+  // The assignment part of each publication (the levers states are levers.test.ts's; no target asks here: always {}).
+  onAssigned(f.events, ({ levers: _levers, ...a }) => void published.push(a));
   install(f.pi, { agentDir, settings, rng: mulberry32(11), api: () => sub });
   const sessionDir = join(agentDir, "sessions");
   const notes: string[] = [];
@@ -252,7 +253,7 @@ test("T5b1.5 children inherit via the actor's spawn events: a child's Assigned i
     const w1 = { ...main, sessionId: "s-w1", parentSessionId: "main-1" };
     const w2 = { ...main, sessionId: "s-w2", parentSessionId: "s-w1" };
     assert.deepEqual(h.published, [main, w1, w2], mode);
-    assert.deepEqual([query(h.events, "s-w1"), query(h.events, "s-w2"), query(h.events, "s-w3")], [w1, w2, undefined], mode);
+    assert.deepEqual([query(h.events, "s-w1"), query(h.events, "s-w2"), query(h.events, "s-w3")], [{ ...w1, levers: {} }, { ...w2, levers: {} }, undefined], mode);
     assert.equal(h.rows().length, 1, `${mode}: children get no row`);
     assert.deepEqual(h.entries.map((e) => (e.data as Assigned).sessionId), ["main-1"], `${mode}: nor a custom entry`);
   }
@@ -266,8 +267,8 @@ test("T5b1.5 a resumed child (no spawn event since the restart) is answered from
   writeFileSync(join(childDir, "2026-10-03T12-00-00-000Z_s-child.jsonl"), "");
   mkdirSync(join(h.sessionDir, "subagents", "s-child"), { recursive: true });
   writeFileSync(join(h.sessionDir, "subagents", "s-child", "2026-10-03T12-00-01-000Z_s-grand.jsonl"), "");
-  assert.deepEqual(query(h.events, "s-child"), { ...h.published[0], sessionId: "s-child", parentSessionId: "main-1" });
-  assert.deepEqual(query(h.events, "s-grand"), { ...h.published[0], sessionId: "s-grand", parentSessionId: "s-child" });
+  assert.deepEqual(query(h.events, "s-child"), { ...h.published[0], sessionId: "s-child", parentSessionId: "main-1", levers: {} });
+  assert.deepEqual(query(h.events, "s-grand"), { ...h.published[0], sessionId: "s-grand", parentSessionId: "s-child", levers: {} });
   assert.equal(query(h.events, "s-orphan"), undefined);
 });
 
