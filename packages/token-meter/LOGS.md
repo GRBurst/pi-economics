@@ -120,7 +120,17 @@ The count is per request: a failed attempt is an `error` line of its own, and ea
 carries `retries: 1`, so Σ `retries` over lines is the number of resends (three failures
 before a success: four lines, `retries` 0, 1, 1, 1). pi does not retry a context overflow (it
 compacts), so the next request after one is no retry. v1 lines counted the retries of the
-pi-retry extension (its own backoff) on every line; the two counts are not comparable.
+pi-retry extension (its own backoff) and put an episode's total on its last line: Σ `retries`
+(and Σ `retryWaitMs`) over a period compares across v1 and v2, a single line's value does not.
+On v2 the final line of an episode that succeeds after retries carries 1, whatever the number
+of attempts; take the retry rate from Σ `retries`, never from "lines with `retries` > 0".
+
+`retries: 0` means no resend by pi's session (agent-level) retry was seen. Retries inside the
+provider client (pi's `retry.provider.maxRetries`, default 0) send one request as far as the
+meter sees and are not counted; with pi's `retry.enabled: false` every line has 0. One case is
+miscounted: an extension that continues the run (`continue` from `agent_before_settle`) right
+after a failed attempt that pi did not retry, with no message in between, makes that request
+count as a retry. A warm's send never ends a retry wait.
 
 `plans` (`token-meter/settings.json`) maps a provider name to `{ "billing", "windows", "rate" }`:
 `windows` (`5h`, `7d`) are a subscription's quota windows, `rate` (`{ "amount", "currency",
