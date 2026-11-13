@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { install as installMeter } from "../../packages/token-meter/core/shell.ts";
+import { SCHEMA_VERSION as METER_VERSION } from "../../packages/token-meter/core/line.ts";
 import { REASONS as CONTRACT_REASONS, ROLES as CONTRACT_ROLES, TRIGGERS as CONTRACT_TRIGGERS, TRIPS as CONTRACT_TRIPS } from "../../packages/token-meter/core/contract.ts";
 import { BRANCH_TYPE } from "../../packages/task-router/core/local/branches.ts";
 import { REASONS } from "../../packages/task-router/core/local/merge.ts";
@@ -202,10 +203,12 @@ const logs: Record<string, any[]> = {
   guards: dirLines(join(agentDir, "guards")),
 };
 const failures: string[] = [];
+// The meter writes line v2 (M3a, design §5.2); the other logs are at v1.
+const CURRENT: Record<string, number> = { meter: METER_VERSION, outcomes: 1, assignments: 1, guards: 1 };
 for (const [name, lines] of Object.entries(logs)) {
   if (lines.length === 0) failures.push(`${name}: the writer produced no lines`);
-  const old = lines.filter((l) => l.v !== 1);
-  if (old.length) failures.push(`${name}: ${old.length} line(s) without schema version v=1, e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
+  const old = lines.filter((l) => l.v !== CURRENT[name]);
+  if (old.length) failures.push(`${name}: ${old.length} line(s) without schema version v=${CURRENT[name]}, e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
 }
 for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force", "hint", "review", "merge", "gatebypass", "plan"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
 if (!logs.outcomes.some((l) => l.event === "spawn" && l.ticket === "steer")) failures.push("outcomes: no ticket spawn line");

@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { install } from "../core/shell.ts";
+import { parsePlans } from "../core/plans.ts";
 import { defaults } from "../core/settings.ts";
 import { fakeCtx, fakePi } from "./fake-pi.ts";
 
@@ -43,6 +44,22 @@ test("response + assistant message_end → one turn line with quota, usage, effo
   assert.equal(l.costUsd, 0.25); assert.equal(l.effort, "high");
   assert.equal(l.provider, "anthropic"); assert.equal(l.model, "opus");
   assert.equal(l.ts, new Date(T0).toISOString());
+});
+
+test("billing: the provider's plan class on turn and warming lines; a provider without a plan counts as api", () => {
+  const plans = parsePlans({ anthropic: { billing: "subscription", windows: ["5h"] }, "p-local": { billing: "local" } });
+  const { f, lines } = setup({ settings: { ...defaults(), plans } });
+  const ctx = fakeCtx("s1", { entries: [{ type: "usage", kind: "cache_warm", provider: "anthropic", model: "opus", timestamp: T0, usage }] });
+  f.fire("message_end", assistant(), ctx);
+  f.fire("message_end", assistant({ provider: "p-local" }), ctx);
+  f.fire("message_end", assistant({ provider: "p-other" }), ctx);
+  f.fire("after_provider_response", resp, ctx); // a warm
+  f.fire("agent_settled", {}, ctx);
+  assert.deepEqual(lines().map((l) => [l.kind, l.provider, l.billing]), [
+    ["turn", "anthropic", "subscription"], ["turn", "p-local", "local"], ["turn", "p-other", "api"], ["warming", "anthropic", "subscription"]]);
+  const plain = setup();
+  plain.f.fire("message_end", assistant(), fakeCtx("s2"));
+  assert.equal(plain.lines()[0].billing, "api", "no plans: every provider counts as api");
 });
 
 test("user message_end → no line", () => {

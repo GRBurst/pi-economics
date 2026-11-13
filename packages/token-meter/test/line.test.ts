@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildLine, monthFile, serialize } from "../core/line.ts";
 import type { LineInput, MeterLine } from "../core/line.ts";
+import type { Billing } from "../core/plans.ts";
+
+const BILLINGS: Billing[] = ["subscription", "api", "free", "local"];
 
 const P = "anthropic-ratelimit-";
 
@@ -20,14 +23,17 @@ const K_ALLOWED = new Set([
   "v", "ts", "sessionId", "parentSessionId", "arm", "provider", "model", "effort", "kind",
   "input", "cacheRead", "cacheWrite", "output", "reasoning", "costUsd", "status", "retries", "retryWaitMs",
   "q5h", "q5hReset", "q7d", "q7dReset", "overage", "claim", "fallback", "errorClass", "rawRatelimit",
+  // v2 (design §5.2)
+  "design", "billing", "cacheWrite1h", "durationMs", "ttftMs",
 ]);
 
 const now = new Date("2026-10-02T12:34:56.789Z");
 const base: LineInput = { now, sessionId: "s1", provider: "anthropic", model: "m", kind: "turn",
   status: 200, retries: 0, retryWaitMs: 0 };
 
+// v: 1 → 2 (M3a): the writer emits meter line v2 (design §5.2).
 test("buildLine: minimal input", () => {
-  assert.deepEqual(buildLine(base), { v: 1, ts: now.toISOString(), sessionId: "s1", provider: "anthropic",
+  assert.deepEqual(buildLine(base), { v: 2, ts: now.toISOString(), sessionId: "s1", provider: "anthropic",
     model: "m", kind: "turn", status: 200, retries: 0, retryWaitMs: 0 });
 });
 
@@ -85,9 +91,11 @@ function genInput(r: () => number): LineInput & { message: { content: string } }
     now: new Date(Math.floor(r() * 4e12)),
     sessionId: genString(r), parentSessionId: opt(() => genString(r)), arm: opt(() => genString(r)),
     provider: genString(r), model: genString(r), effort: opt(() => genString(r)),
+    design: opt(() => genString(r)), billing: opt(() => BILLINGS[Math.floor(r() * BILLINGS.length)]!),
+    durationMs: opt(num), ttftMs: opt(num),
     kind: (["turn", "warming", "nested"] as const)[Math.floor(r() * 3)],
     usage: opt(() => ({ input: num(), cacheRead: num(), cacheWrite: num(), output: num(),
-      reasoning: opt(num), costUsd: opt(() => r()) })),
+      reasoning: opt(num), costUsd: opt(() => r()), cacheWrite1h: opt(num) })),
     status: r() < 0.5 ? "error" : 200 + Math.floor(r() * 400),
     errorMessage: opt(() => genString(r)),
     retries: Math.floor(r() * 5), retryWaitMs: num(),
@@ -130,6 +138,27 @@ test("P-size: serialize < 4096 bytes with 200 raw headers and over generated inp
     assert.ok(out.endsWith("\n") && out.indexOf("\n") === out.length - 1);
     JSON.parse(out);
   }
+});
+
+// Absent = unknown, never 0 (design §5.2): a v2 field is on the line iff its input carries a measurement, with its value.
+test("P-absent: every v2 field is present iff given, numbers as given (0 included), over 300 generated inputs", () => {
+  const r = prng(11);
+  for (let n = 0; n < 300; n++) {
+    const i = genInput(r);
+    if (r() < 0.3) Object.assign(i, { durationMs: 0, ttftMs: 0 });
+    const l = buildLine(i) as Record<string, unknown>;
+    const given: Record<string, unknown> = { design: i.design, billing: i.billing, durationMs: i.durationMs, ttftMs: i.ttftMs,
+      cacheWrite1h: i.usage?.cacheWrite1h };
+    for (const [k, v] of Object.entries(given)) {
+      assert.equal(k in l, v !== undefined, `${k}: given ${JSON.stringify(v)}, line ${JSON.stringify(l[k])}`);
+      if (typeof v === "number" || k === "billing") assert.equal(l[k], v, k);
+    }
+  }
+});
+
+test("buildLine: billing and design as given", () => {
+  const l = buildLine({ ...base, billing: "local", design: "v4", arm: "+-+" });
+  assert.equal(l.billing, "local"); assert.equal(l.design, "v4");
 });
 
 test("serialize keeps small raw headers", () => {

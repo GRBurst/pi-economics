@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { Joiner } from "./join.ts";
 import { buildLine, monthFile, serialize } from "./line.ts";
 import type { LineInput, Usage } from "./line.ts";
+import { billingOf } from "./plans.ts";
 import type { Snapshot } from "./ratelimit.ts";
 import { defaults } from "./settings.ts";
 import type { Settings } from "./settings.ts";
@@ -62,7 +63,7 @@ export function install(pi: PiLike, deps: Deps): void {
 
   const write = (input: LineInput): void => {
     try {
-      const line = buildLine(input);
+      const line = buildLine({ ...input, billing: billingOf(settings.plans, input.provider) });
       if (!settings.rawRatelimit) delete line.rawRatelimit;
       const file = monthFile(deps.agentDir, input.now, settings.dir);
       if (!madeDirs.has(dirname(file))) {
