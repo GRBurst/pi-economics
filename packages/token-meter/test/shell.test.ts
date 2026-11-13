@@ -483,9 +483,25 @@ test("arm: lines carry armFor(sessionId).id from __piExperimentsApi_v1; children
     const [none, main, child, other] = lines();
     assert.ok(!("arm" in none) && !("arm" in other));
     assert.equal(main.arm, "+-+--"); assert.equal(child.arm, "+-+--");
-    // M3a T3a.9: the API's Arm is { id, flags } and names no design, so v2 lines carry no `design` until the engine's
-    // channel provides it (M5b.2).
+    // M3a T3a.9: `design` is written iff the API's arm names one (a v1-engine arm { id, flags } names none).
     assert.ok(!("design" in main) && !("design" in child));
+  } finally {
+    delete g.__piExperimentsApi_v1;
+  }
+});
+
+test("M5b.1 carry-over 1: an arm of the v2 engine names its design and stratum: request and levers lines carry them", () => {
+  const g = globalThis as { __piExperimentsApi_v1?: unknown };
+  try {
+    const { f, lines } = setup({ env: {} });
+    g.__piExperimentsApi_v1 = { version: 1, armFor: () => ({ id: "010", flags: {}, design: "b4d458675108", stratum: "api" }) };
+    const ctx = fakeCtx("s-v2");
+    agentStart(f, ctx);
+    f.fire("after_provider_response", resp, ctx);
+    f.fire("message_end", assistant(), ctx);
+    const [lev, req] = lines();
+    assert.deepEqual([lev.kind, lev.arm, lev.design, lev.stratum, lev.eligible], ["levers", "010", "b4d458675108", "api", true]);
+    assert.deepEqual([req.arm, req.design, "stratum" in req], ["010", "b4d458675108", false]); // no stratum on request lines
   } finally {
     delete g.__piExperimentsApi_v1;
   }

@@ -33,9 +33,11 @@ test("a user message right after an assistant turn that matches the regex is a c
   h.said("assistant");
   h.typed("No, that's wrong, revert it");
   const [r] = h.rows();
-  assert.deepEqual({ event: r.event, sessionId: r.sessionId, keys: Object.keys(r).sort() }, { event: "correction", sessionId: "s1", keys: ["arm", "event", "sessionId", "ts", "v"] });
+  assert.deepEqual({ event: r.event, sessionId: r.sessionId, keys: Object.keys(r).sort() }, { event: "correction", sessionId: "s1", keys: ["arm", "design", "event", "sessionId", "ts", "v"] });
   assert.equal(r.v, 1); // schema version of the guards log (LOGS.md)
   assert.match(r.arm, /^[01]{3}$/); // an arm of the default api stratum's design (v4's factors)
+  // carry-over (1): the engine's lines always carry the design (a 3-character arm would otherwise read as v4)
+  assert.equal(r.design, "b4d458675108");
 });
 
 test("no correction: not directly after an assistant turn, extension-injected input, or no match", () => {

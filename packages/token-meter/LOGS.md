@@ -113,7 +113,7 @@ largest (`rawRatelimit` is dropped first).
 | field | type | present | meaning |
 | --- | --- | --- | --- |
 | `billing` | `subscription` \| `api` \| `free` \| `local` | every line (`pi-analyse --check` requires it from v2) | billing class of the provider, from `plans` in `token-meter/settings.json` (Home Manager: `tokenMeter.plans`); a provider without a plan is `api` |
-| `design` | string | when the experiments extension names the session's design | the experiment design of `arm` (not written yet: the extension names none) |
+| `design` | string | when the experiments extension names the session's design | the experiment design of `arm`: the v2 engine's design id (a v1-engine arm names none) |
 | `cacheWrite1h` | number | when the provider reports the split (Anthropic) | the part of `cacheWrite` written with the 1-hour TTL |
 | `durationMs` | int (ms) | turn lines whose request the session sent | the session's last own provider request (a `before_provider_request` right after the agent loop's `context` event) to this `message_end`; a resend restarts it, a warm's or a compaction's send (no `context` event) does not |
 | `ttftMs` | int (ms) | when a stream event followed that request | the request to its first `provider_stream_event` |
@@ -187,7 +187,7 @@ before it. Every request reader skips these lines (`pi-analyse`, `meter-report`,
 | `kind` | `levers` | yes | |
 | `arm`, `design` | string | as on request lines | experiment arm and design |
 | `eligible` | boolean | yes | the session takes part in the experiment; until the engine names strata: a main session with an arm |
-| `stratum` | string | no | the experiment stratum (not written yet) |
+| `stratum` | string | with an arm of the v2 engine | the experiment stratum of the session (a child: its root's) |
 | `levers` | object | yes | lever id → state `{ v, s, a?, rb?, tier? }` |
 
 A state: `v` = the effective value, a level name, a number or a boolean (never free text); `s` = its source, `pe`

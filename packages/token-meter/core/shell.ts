@@ -25,12 +25,13 @@ export type Deps = {
   env?: Record<string, string | undefined>;
 };
 
-/** What token-meter reads of the experiments package's globalThis.__piExperimentsApi_v1; the type check compares it with the provider's ExperimentsApiV1 (spec §5.3). */
-export type ExperimentsApi = { armFor?(s: string): { id?: string } | undefined };
+/** What token-meter reads of the experiments package's globalThis.__piExperimentsApi_v1; the type check compares it with the provider's ExperimentsApiV1 (spec §5.3).
+ * The v2 engine's arms name their design and stratum (M5b.1); a v1-engine arm names neither. */
+export type ExperimentsApi = { armFor?(s: string): { id?: string; design?: string; stratum?: string } | undefined };
 
 /** The experiments package is optional and never imported: its process-global API, or nothing. */
-const experimentArm = (sid: string): string | undefined =>
-  (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1?.armFor?.(sid)?.id;
+const experimentOf = (sid: string): { id?: string; design?: string; stratum?: string } | undefined =>
+  (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1?.armFor?.(sid);
 
 /** pi usage → meter usage (cost.total → costUsd; pi 1.4's `cacheWrite1h` only where the provider reports it). */
 function mapUsage(u: any): Usage | undefined {
@@ -117,12 +118,21 @@ export function install(pi: PiLike, deps: Deps): void {
     }
   };
 
+  /** The session's arm and, iff the arm names them, its design and stratum (M3a T3a.9; M5b.1 carry-over 1: a v2 arm id
+   * alone may read as v4). */
+  const experiment = (sid: string): { arm: string; design?: string; stratum?: string } | undefined => {
+    const a = deps.arm ? { id: safe(() => deps.arm!(sid)) } : safe(() => experimentOf(sid));
+    if (typeof a?.id !== "string") return undefined;
+    return { arm: a.id, ...(typeof a.design === "string" ? { design: a.design } : {}), ...(typeof a.stratum === "string" ? { stratum: a.stratum } : {}) };
+  };
+
   const common = (sid: string, ctx: any) => {
-    const input: Pick<LineInput, "sessionId" | "parentSessionId" | "arm"> = { sessionId: sid };
+    const input: Pick<LineInput, "sessionId" | "parentSessionId" | "arm" | "design"> = { sessionId: sid };
     const parent = parentOf(safe(() => ctx.sessionManager.getSessionFile()));
     if (parent !== undefined) input.parentSessionId = parent;
-    const arm = safe(() => (deps.arm ?? experimentArm)(sid));
-    if (arm !== undefined) input.arm = arm;
+    const exp = experiment(sid);
+    if (exp?.arm !== undefined) input.arm = exp.arm;
+    if (exp?.design !== undefined) input.design = exp.design;
     return input;
   };
 
@@ -174,7 +184,8 @@ export function install(pi: PiLike, deps: Deps): void {
       const branch = safe(() => ctx.sessionManager.getBranch());
       Object.assign(levers, extensionLevers(Array.isArray(branch) ? branch : []));
       const at = now();
-      const line = leversLine({ ts: at.toISOString(), ...base, eligible: base.arm !== undefined && base.parentSessionId === undefined, levers });
+      const stratum = experiment(sid)?.stratum;
+      const line = leversLine({ ts: at.toISOString(), ...base, eligible: base.arm !== undefined && base.parentSessionId === undefined, ...(stratum === undefined ? {} : { stratum }), levers });
       const key = JSON.stringify({ ...line, ts: undefined });
       if (leversSeen.get(sid) === key) return;
       append(at, serializeLevers(line));

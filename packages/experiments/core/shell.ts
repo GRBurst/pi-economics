@@ -202,7 +202,9 @@ export function install(pi: PiLike, deps: Deps): void {
   const logGuard = (sessionId: string, event: string, value?: number): void => {
     try {
       mkdirSync(join(deps.agentDir, "guards"), { recursive: true });
-      appendFileSync(join(deps.agentDir, "guards", "events.jsonl"), JSON.stringify({ v: 1, ts: new Date().toISOString(), sessionId, arm: api.armFor(sessionId)?.id, event, ...(value === undefined ? {} : { value }) }) + "\n");
+      const arm = api.armFor(sessionId);
+      // The design id rides along (carry-over 1): a v2 arm id alone may look like a v1-engine one.
+      appendFileSync(join(deps.agentDir, "guards", "events.jsonl"), JSON.stringify({ v: 1, ts: new Date().toISOString(), sessionId, arm: arm?.id, ...(arm?.design === undefined ? {} : { design: arm.design }), event, ...(value === undefined ? {} : { value }) }) + "\n");
     } catch (err) {
       console.warn(`experiments: cannot record a guard event: ${(err as Error).message}`);
     }
