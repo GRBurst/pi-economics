@@ -110,14 +110,25 @@ test("meter-report (report and --arms) and pi-analyse (tables, --check) read v2 
 
 // M3b T3b.4: levers lines (design §5.3) share the meter log but are no request: every reader skips them
 // (core/analyse/logs.ts isRequestLine); only the meter log's line counts in the data-quality section see them.
-/** The v1 world plus, per session, the levers line the shell writes before its first request (same ts: spans unchanged). */
+/**
+ * The v1 world plus, per session, the levers line the shell writes before its first request (same ts: spans unchanged), and three
+ * sessions whose prompt was aborted before any request (a levers line only): an armed root, a root without an arm and a child of m1;
+ * m1 changes a lever 20 minutes after its last request (no activity: active hours unchanged).
+ */
 function withLevers(): Logs {
   const w = v1World();
   const first = new Map<string, any>();
   for (const l of [...w.meter].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))) if (!first.has(l.sessionId)) first.set(l.sessionId, l);
   const levers = [...first.values()].map((l) => leversLine({ ts: l.ts, sessionId: l.sessionId, parentSessionId: l.parentSessionId,
     arm: l.arm, eligible: typeof l.arm === "string" && l.parentSessionId === undefined, levers: effectiveSettings({}, {}) }));
-  return { ...w, meter: [...levers, ...w.meter] };
+  const arm = first.get("m1").arm, at = new Date(T0 + 30 * MIN).toISOString(), all = effectiveSettings({}, {});
+  const only = [
+    leversLine({ ts: at, sessionId: "lv-armed", arm, eligible: true, levers: all }),
+    leversLine({ ts: at, sessionId: "lv-bare", eligible: false, levers: all }),
+    leversLine({ ts: at, sessionId: "lv-child", parentSessionId: "m1", arm, eligible: false, levers: all }),
+    leversLine({ ts: new Date(T0 + 50 * MIN).toISOString(), sessionId: "m1", arm, eligible: true, levers: { ...all, "pi.transport": { v: "sse", s: "fixed" } } }),
+  ];
+  return { ...w, meter: [...levers, ...only, ...w.meter] };
 }
 /** The analysis without the meter log's line and version counts and without the Levers section (the one reader of levers lines). */
 const sansMeterCounts = (a: ReturnType<typeof analyse>) =>
@@ -132,7 +143,7 @@ test("levers lines: analyse, report, arms, quota regression and task costs read 
   assert.deepEqual(sansMeterCounts(a), sansMeterCounts(analyse(v1)));
   const meter = a.quality.logs.find((x) => x.log === "meter")!;
   assert.deepEqual([meter.lines, meter.versions["2"]], [lv.meter.length, n]);
-  assert.equal(a.levers.withLevers, n);
+  assert.equal(a.levers.withLevers, new Set(lv.meter.filter((l) => l.kind === "levers").map((l) => l.sessionId)).size);
   const req = lv.meter.filter(isRequestLine);
   assert.deepEqual(req, v1.meter);
   assert.deepEqual(aggregate(lv.meter), aggregate(v1.meter));
@@ -164,4 +175,17 @@ test("compaction lines: cost counts them as requests; the Cache section and the 
   assert.equal(withIt.cost.requests, without.cost.requests + 1);
   assert.deepEqual(withIt.cost.cache, without.cost.cache);
   assert.deepEqual(withIt.cost.folds, without.cost.folds);
+});
+
+// M3b review F6: a session with only a levers line made no request; data quality lists it among the sessions without meter lines.
+test("levers-only sessions: data quality reads them as sessions without meter lines", () => {
+  const v1 = v1World(), lv = withLevers();
+  const arm = v1.meter.find((l) => l.sessionId === "m1")!.arm;
+  const spawn = { v: 1, ts: new Date(T0 + 31 * MIN).toISOString(), event: "spawn", taskId: "t-lv", cardHash: "h", kind: "implement", workerTier: "qwen",
+    workerEffort: "high", base: "qwen", importance: "normal", reasons: [], arm, sessionId: "lv-child", parentSessionId: "m1" };
+  const guard = { v: 1, ts: new Date(T0 + 32 * MIN).toISOString(), sessionId: "lv-bare", arm: "------", event: "correction" };
+  const [a, b] = [v1, lv].map((w) => analyse({ ...w, outcomes: [...w.outcomes, spawn], guards: [...w.guards, guard] }).quality.unjoinable);
+  assert.deepEqual(b, a);
+  assert.ok(a.find((u) => u.what === "spawns whose child session has no meter line")!.examples.includes("lv-child"));
+  assert.ok(a.find((u) => u.what === "guard events of sessions without meter lines")!.examples.includes("lv-bare"));
 });

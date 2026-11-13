@@ -25,7 +25,7 @@ export function quality(all: Logs, logs: Logs, period: Period): QualitySection {
   const armedRoots = new Set(meter.filter((l) => typeof l.arm === "string" && l.arm).map((l) => l.parentSessionId ?? l.sessionId));
   const bare = rootUnits(meter).filter((u) => !armedRoots.has(u.root));
   const total = sum(meter.map((l) => apiUsd(l)));
-  const meterSessions = new Set(all.meter.map((l) => l?.sessionId));
+  const meterSessions = new Set(all.meter.filter(isRequestLine).map((l) => l?.sessionId)); // a levers line alone is no request (M3b)
   const spawnAll = all.outcomes.filter((e) => e?.event === "spawn");
   const spawnTasks = new Set(spawnAll.map((e) => e.taskId));
   const spawnParents = new Set(spawnAll.map((e) => e.parentSessionId));
