@@ -566,3 +566,19 @@ test("levers: unreadable settings read as pi's defaults; a ctx without model, cw
   assert.equal(l.levers["pi.compaction.reserveTokens"].v, 16384);
   assert.doesNotThrow(() => agentStart(f, {}));
 });
+
+test("levers: infinite-context's settings entry on the branch → pi.compaction.enabled {false, ext} (IC cancels pi's compaction)", () => {
+  const { f, clock, lines } = setup({ env: {} });
+  const IC = { type: "custom", id: "e1", customType: "infinite-context:settings", data: { nudgeAtTokens: 100000 } };
+  const opts: any = { branch: [{ type: "custom", customType: "other:settings", data: {} }, { type: "message", message: { role: "user" } }] };
+  const ctx = fakeCtx("s1", opts);
+  agentStart(f, ctx);
+  clock.t += 1000; opts.branch = [...opts.branch, IC]; agentStart(f, ctx);
+  agentStart(f, fakeCtx("s2", { branch: [IC] }));
+  const [before, after, other] = leversOf(lines());
+  assert.deepEqual(before.levers["pi.compaction.enabled"], { v: true, s: "fixed" });
+  assert.deepEqual(after.levers["pi.compaction.enabled"], { v: false, s: "ext" });
+  assert.deepEqual(other.levers["pi.compaction.enabled"], { v: false, s: "ext" });
+  // the other compaction levers are still recorded (inert while IC is loaded; the analyser skips them)
+  assert.deepEqual(after.levers["pi.compaction.reserveTokens"], { v: 16384, s: "fixed" });
+});

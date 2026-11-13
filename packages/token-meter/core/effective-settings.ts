@@ -131,3 +131,16 @@ export function effectiveSettings(global: unknown, project: unknown, env: Settin
   }
   return out;
 }
+
+/** infinite-context's record of its settings: on the branch whenever IC runs in the session (it appends one at session_start). */
+const IC_SETTINGS = "infinite-context:settings";
+
+/**
+ * The levers an extension decides, from the session branch (design §5.3, `s: "ext"`): with infinite-context loaded,
+ * pi.compaction.enabled = false (IC cancels every session_before_compact, D18); the other pi.compaction.* levers stay
+ * recorded but are inert, and the analyser does not read them.
+ */
+export function extensionLevers(branch: readonly unknown[]): Record<LeverId, LeverState> {
+  const ic = branch.some((e) => isObj(e) && e.type === "custom" && e.customType === IC_SETTINGS);
+  return ic ? { "pi.compaction.enabled": { v: false, s: "ext" } } : {};
+}

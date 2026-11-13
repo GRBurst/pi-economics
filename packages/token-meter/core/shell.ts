@@ -1,7 +1,7 @@
 // All extension logic, free of pi imports so it runs under node's test runner with test/fake-pi.ts.
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { effectiveSettings } from "./effective-settings.ts";
+import { effectiveSettings, extensionLevers } from "./effective-settings.ts";
 import { leversLine, serializeLevers } from "./levers.ts";
 import { Joiner } from "./join.ts";
 import { errorKindOf } from "./errorkind.ts";
@@ -167,6 +167,8 @@ export function install(pi: PiLike, deps: Deps): void {
         model: typeof model?.provider === "string" && typeof model?.id === "string" ? `${model.provider}/${model.id}` : undefined,
         cacheRetention: env.PI_CACHE_RETENTION,
       });
+      const branch = safe(() => ctx.sessionManager.getBranch());
+      Object.assign(levers, extensionLevers(Array.isArray(branch) ? branch : []));
       const at = now();
       const line = leversLine({ ts: at.toISOString(), ...base, eligible: base.arm !== undefined && base.parentSessionId === undefined, levers });
       const key = JSON.stringify({ ...line, ts: undefined });
