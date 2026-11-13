@@ -15,6 +15,8 @@
 //   two-factor interaction (aliased only with three-factor ones); two-factor
 //   interactions are aliased with each other (AB = CE, …).
 
+import { createHash } from "node:crypto";
+
 /** A two-level factor. `values[0]` is the "-" value, `values[1]` the "+". */
 export type Factor = { name: string; values: [string, string] };
 
@@ -47,4 +49,31 @@ export function design(factors: Factor[], maxArms: number): Arm[] {
     arms.push({ id: signs.map((s) => (s > 0 ? "+" : "-")).join(""), flags });
   }
   return arms;
+}
+
+// Design v5 (redesign §7.2): one design per stratum, named by a content id instead of v1…v4.
+// This file imports only node builtins: bench ships it alone (packages/bench/package.nix).
+
+/** A factor level: what the add-on sets on its lever (a range lever's level is a fraction q of the matched range, §7.4). */
+export type Level = string | number | boolean;
+/** A lever id, `<target>.<name>` (§7.1), e.g. "cache-lifecycle.mainCacheTtl". */
+export type LeverId = string;
+/** A two-level factor of a stratum: `levels[0]` is the low ("0") level, `levels[1]` the high ("1") one. */
+export type FactorSpec = { name: string; lever: LeverId; levels: readonly [Level, Level] };
+
+/** JSON with the keys of every object sorted and no whitespace; arrays keep their order. */
+export function canonical(x: unknown): string {
+  if (Array.isArray(x)) return `[${x.map((v) => canonical(v ?? null)).join(",")}]`;
+  if (x !== null && typeof x === "object") {
+    const o = x as Record<string, unknown>;
+    const keys = Object.keys(o).filter((k) => o[k] !== undefined).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(x);
+}
+
+/** The design id: the first 12 hex of sha256 over the canonical JSON of the levers, their levels and the generators (factor names are labels). */
+export function designId(factors: readonly FactorSpec[], generators: readonly string[]): string {
+  const content = { factors: factors.map(({ lever, levels }) => ({ lever, levels })), generators };
+  return createHash("sha256").update(canonical(content)).digest("hex").slice(0, 12);
 }

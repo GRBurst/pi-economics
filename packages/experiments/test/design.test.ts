@@ -3,7 +3,8 @@
 // pairs of distinct effects of order ≤ 2 in orthogonal columns (resolution V).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { design, type Arm, type Factor } from "../core/design.ts";
+import { createHash } from "node:crypto";
+import { canonical, design, designId, type Arm, type Factor, type FactorSpec, type Level } from "../core/design.ts";
 
 const factors = (n: number): Factor[] =>
   Array.from({ length: n }, (_, i) => ({ name: `f${i + 1}`, values: ["off", "on"] as [string, string] }));
@@ -103,4 +104,63 @@ test("k=6, maxArms 16: resolution IV — no main effect is aliased with another 
 test("k=6 with room for a half fraction (maxArms 32) keeps the single generator; k=6 with maxArms 64 is full", () => {
   assert.equal(design(factors(6), 32).length, 32);
   assert.equal(design(factors(6), 64).length, 64);
+});
+
+// Design ids (redesign §7.2): the first 12 hex of sha256 over the canonical JSON {factors: [{lever, levels}], generators}.
+// A changed lever, level or generator is a new design (never pooled with the old one); factor names and key order are
+// labels, not the design.
+const SPECS: FactorSpec[] = [
+  { name: "ttl", lever: "cache-lifecycle.mainCacheTtl", levels: ["5m", "1h"] },
+  { name: "nudge", lever: "infinite-context.nudgeAtTokens", levels: [0.25, 0.75] },
+  { name: "mask", lever: "cache-lifecycle.maskOnCold", levels: [false, true] },
+];
+
+test("canonical: JSON with keys sorted at every depth, no whitespace, array order kept", () => {
+  assert.equal(canonical({ b: 1, a: [{ d: true, c: "x y" }, 2.5, null] }), '{"a":[{"c":"x y","d":true},2.5,null],"b":1}');
+  const samples: unknown[] = [{ z: { y: [3, { b: "1", a: 1 }], x: false } }, [{ q: 0 }, "s"], "plain", 7, true, null, { factors: SPECS, generators: ["D=ABC"] }];
+  for (const x of samples) {
+    assert.deepEqual(JSON.parse(canonical(x)), x, `canonical loses data of ${JSON.stringify(x)}`);
+    assert.equal(canonical(x), JSON.stringify(JSON.parse(canonical(x))), "canonical text has whitespace");
+  }
+  const reversed = (x: unknown): unknown =>
+    Array.isArray(x) ? x.map(reversed) : x !== null && typeof x === "object" ? Object.fromEntries(Object.entries(x).reverse().map(([k, v]) => [k, reversed(v)])) : x;
+  for (const x of samples) assert.equal(canonical(reversed(x)), canonical(x), `key order changes canonical(${JSON.stringify(x)})`);
+});
+
+test("designId: 12 hex of sha256(canonical({factors: [{lever, levels}], generators}))", () => {
+  const want = createHash("sha256").update(canonical({ factors: SPECS.map(({ lever, levels }) => ({ lever, levels })), generators: ["D=ABC"] })).digest("hex").slice(0, 12);
+  assert.equal(designId(SPECS, ["D=ABC"]), want);
+  assert.match(designId(SPECS, []), /^[0-9a-f]{12}$/);
+});
+
+test("designId is stable: factor names and key order do not change it", () => {
+  const id = designId(SPECS, ["E=ABC", "F=BCD"]);
+  assert.equal(designId(SPECS.map((f, i) => ({ ...f, name: `renamed${i}` })), ["E=ABC", "F=BCD"]), id, "a factor name changed the id");
+  assert.equal(designId(SPECS.map(({ name, lever, levels }) => ({ levels, lever, name })), ["E=ABC", "F=BCD"]), id, "key order changed the id");
+});
+
+test("designId is sensitive: every lever, every level and every generator is part of the design", () => {
+  const gens = ["E=ABC", "F=BCD"];
+  const id = designId(SPECS, gens);
+  const seen = new Set([id]);
+  let changes = 0;
+  const differs = (what: string, other: string) => {
+    assert.notEqual(other, id, `${what} did not change the id`);
+    seen.add(other);
+    changes++;
+  };
+  SPECS.forEach((f, i) => {
+    const with_ = (g: FactorSpec) => SPECS.map((h, j) => (j === i ? g : h));
+    differs(`lever of ${f.name}`, designId(with_({ ...f, lever: `${f.lever}X` }), gens));
+    for (const j of [0, 1] as const) {
+      const levels = [...f.levels] as [Level, Level];
+      levels[j] = typeof levels[j] === "string" ? `${levels[j]}X` : typeof levels[j] === "number" ? (levels[j] as number) + 1 : !levels[j];
+      differs(`level ${j} of ${f.name}`, designId(with_({ ...f, levels }), gens));
+    }
+    if (typeof f.levels[0] !== "string") differs(`level type of ${f.name}`, designId(with_({ ...f, levels: [String(f.levels[0]), f.levels[1]] }), gens));
+  });
+  differs("a generator", designId(SPECS, ["E=ABC", "F=ABD"]));
+  differs("no generators", designId(SPECS, []));
+  differs("factor order", designId([...SPECS].reverse(), gens));
+  assert.equal(seen.size, 1 + changes, "two changes gave the same id");
 });
