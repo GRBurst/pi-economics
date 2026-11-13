@@ -42,8 +42,8 @@ in
     };
 
     # `pi-analyse [--since D] [--until D] [--agent-dir P] [--out DIR] [--check]
-    # [--apply]`: the on-demand analysis of every pi log (cost, experiment,
-    # delegation, guards, data quality) into <out>/<date>-<HHMM>-analysis.{md,json};
+    # [--apply]`: the on-demand analysis of every pi log (cost, levers,
+    # experiment, delegation, guards, data quality) into <out>/<date>-<HHMM>-analysis.{md,json};
     # LOGS.md documents the files it reads.
     passthru.analyse = writeShellApplication {
       name = "pi-analyse";

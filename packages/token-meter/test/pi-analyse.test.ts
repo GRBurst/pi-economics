@@ -39,7 +39,7 @@ test("pi-analyse writes <out>/<date>-<HHMM>-analysis.md and .json (UTC time of t
   const stamp = (f: string) => f.slice(0, 15).replace(/^(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})$/, "$1T$2:$3");
   assert.ok(stamp(files[1]) >= before && stamp(files[1]) <= after, `${files[1]} is not the UTC minute of the run (${before} – ${after})`);
   const md = readFileSync(join(out, files[1]), "utf8");
-  for (const h of ["## Cost", "## Experiment", "## Delegation & routing", "## Guards", "## Data quality"]) assert.ok(md.includes(h), h);
+  for (const h of ["## Cost", "## Levers", "## Experiment", "## Delegation & routing", "## Guards", "## Data quality"]) assert.ok(md.includes(h), h);
   assert.match(md, /2026-10\.jsonl 1/); // the torn line is reported
   const tables = JSON.parse(readFileSync(join(out, files[0]), "utf8"));
   assert.ok(Math.abs(tables.cost.totalUsd - 47.7) < 1e-9);

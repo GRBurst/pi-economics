@@ -118,7 +118,7 @@ kept and credentials are linked, never copied. See `packages/bench/README.md`.
 
 ```sh
 pi-analyse [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--agent-dir DIR] [--out DIR]
-           # → <agentDir>/reports/<YYYY-MM-DD>-<HHMM>-analysis.md + .json (UTC): cost, experiment (v1/v2 apart), delegation & routing (per profile × tier, randomized comparison, spot checks), guards, data quality
+           # → <agentDir>/reports/<YYYY-MM-DD>-<HHMM>-analysis.md + .json (UTC): cost, levers (value, source and refusal rate per lever), experiment (v1/v2 apart), delegation & routing (per profile × tier, randomized comparison, spot checks), guards, data quality
 pi-analyse --check   # data contract only: exit 1 and name every required field missing in the period's lines
 pi-analyse --apply   # as the full run + write the kill switch's disabled arms to experiments/state.json (only after the user agreed)
 ```

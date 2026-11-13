@@ -77,7 +77,7 @@ field does not bump it). `pi-analyse` reports the versions per log under *Data q
 | `arm` | string | when the root has an assignment | experiment arm id (`+`/`-` per factor) |
 | `provider`, `model` | string | yes | provider and model id |
 | `effort` | string | no | thinking level |
-| `kind` | `turn` \| `warming` \| `nested` | yes | an agent turn, a cache-warming request, a request made by an extension |
+| `kind` | `turn` \| `warming` \| `nested` \| `compaction` | yes | an agent turn, a cache-warming request, a request made by an extension, pi's compaction summary (*Compaction lines*); a `levers` line is no request and has fields of its own (*Levers lines*) |
 | `input`, `cacheRead`, `cacheWrite`, `output` | number | when `status` ≠ `error` | tokens |
 | `reasoning` | number | no | reasoning tokens (subset of output) |
 | `costUsd` | number | when `status` ≠ `error` | pi's API-price cost of the request |
@@ -113,6 +113,7 @@ largest (`rawRatelimit` is dropped first).
 | `cacheWrite1h` | number | when the provider reports the split (Anthropic) | the part of `cacheWrite` written with the 1-hour TTL |
 | `durationMs` | int (ms) | turn lines whose request the session sent | the session's last own provider request (a `before_provider_request` right after the agent loop's `context` event) to this `message_end`; a resend restarts it, a warm's or a compaction's send (no `context` event) does not |
 | `ttftMs` | int (ms) | when a stream event followed that request | the request to its first `provider_stream_event` |
+| `systemHash` | 16 hex digits | turn lines whose send ran pi's `context_with_system` (pi ≥ 1.4) | the first 16 hex digits of a sha256 over the system state the session sent: system prompt, prompt sections, tool list (name, description, parameters), replayed from that event's system messages as pi-ai does; a change between two requests of a branch is the cache-miss cause `prefix` (*Analysis: cache misses*). Neither the prompt nor the tools are written |
 | `errorKind` | `context_overflow` \| `rate_limit` \| `other` | `status: "error"` | class of the error message: `context_overflow` exactly when pi 1.4 takes it for one (pi-ai's overflow patterns, mirrored; throttling and rate-limit texts never are), then a leading 429, a throttling or a rate-limit text → `rate_limit`; else `other` (an overloaded server too). The message itself is never written |
 | `retries`, `retryWaitMs` | int, int (ms) | turn lines | pi's native retry: `retries` = 1 when this request is pi's resend of the session's previous request that failed (an `error` line, not a context overflow, with no other message and no end of the run in between), else 0; `retryWaitMs` = that failure's `message_end` to this request. Absent on warming lines (pi never resends a warm) |
 
@@ -141,12 +142,74 @@ A subscription turn on a 1-hour cache, a rate-limited attempt and its retry, a w
 context overflow and a local child turn:
 
 ```jsonl
-{"v":2,"ts":"2026-11-03T10:00:04.200Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":12,"cacheRead":48000,"cacheWrite":1500,"cacheWrite1h":1500,"output":420,"costUsd":0.06,"status":200,"retries":0,"retryWaitMs":0,"durationMs":4200,"ttftMs":900,"q5h":12,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
+{"v":2,"ts":"2026-11-03T10:00:04.200Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":12,"cacheRead":48000,"cacheWrite":1500,"cacheWrite1h":1500,"output":420,"costUsd":0.06,"status":200,"retries":0,"retryWaitMs":0,"durationMs":4200,"ttftMs":900,"systemHash":"3f9a0c2d71e4b856","q5h":12,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
 {"v":2,"ts":"2026-11-03T10:01:00.300Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"429","errorKind":"rate_limit","durationMs":300}
-{"v":2,"ts":"2026-11-03T10:01:07.400Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":30,"cacheRead":49500,"cacheWrite":800,"cacheWrite1h":800,"output":510,"costUsd":0.05,"status":200,"retries":1,"retryWaitMs":2000,"durationMs":5100,"ttftMs":1100,"q5h":13,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
+{"v":2,"ts":"2026-11-03T10:01:07.400Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":30,"cacheRead":49500,"cacheWrite":800,"cacheWrite1h":800,"output":510,"costUsd":0.05,"status":200,"retries":1,"retryWaitMs":2000,"durationMs":5100,"ttftMs":1100,"systemHash":"3f9a0c2d71e4b856","q5h":13,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
 {"v":2,"ts":"2026-11-03T10:55:37.000Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","kind":"warming","billing":"subscription","input":0,"cacheRead":50300,"cacheWrite":0,"output":1,"costUsd":0.03,"status":200}
 {"v":2,"ts":"2026-11-03T11:02:00.800Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"400","errorKind":"context_overflow","durationMs":800}
 {"v":2,"ts":"2026-11-03T11:10:21.000Z","sessionId":"s-child","parentSessionId":"s-main","arm":"-+-","provider":"llama","model":"qwen3.8","kind":"turn","billing":"local","input":2400,"cacheRead":0,"cacheWrite":0,"output":350,"costUsd":0,"status":200,"retries":0,"retryWaitMs":0,"durationMs":21000,"ttftMs":2600}
+```
+
+### Compaction lines
+
+pi's own compaction (at the threshold, after a context overflow, `/compact`) asks the model for a summary outside the
+agent loop: no `before_provider_request`, `after_provider_response` or `message_end` sees that request. Its
+`session_compact` event carries the compaction entry with the request's `usage` (pi 1.4), and the meter writes one
+`kind: "compaction"` line from it: `provider`/`model` = the session's model at that moment (`unknown` when an extension
+made the summary, `fromExtension`), `status` 200, tokens and `costUsd` from the entry; no `durationMs`, `ttftMs`,
+`retries` or quota fields (not observed). An entry without usage gets no line. With infinite-context loaded pi never
+compacts (it cancels every `session_before_compact`), so these lines come from sessions without it. The analysis counts them
+as requests (cost, *By model*); the *Cache* branches take turn and warming lines only.
+
+```jsonl
+{"v":2,"ts":"2026-11-03T12:30:10.000Z","sessionId":"s-bench","provider":"anthropic","model":"claude-opus-5-5","kind":"compaction","billing":"subscription","input":152000,"cacheRead":0,"cacheWrite":0,"output":2100,"costUsd":0.81,"status":200}
+```
+
+### Levers lines
+
+The value of each lever (a pi setting, an extension's or pi-economics' own control) a session ran with, who decided it
+and whether it was read back (design §5.3). One line per session at its first `before_agent_start`, then a new line only
+when a lever changed (the line without `ts` differs): a session's levers at any moment are those of its last levers line
+before it. Every request reader skips these lines (`pi-analyse`, `meter-report`, the request rules of `--check`).
+
+| field | type | required | meaning |
+| --- | --- | --- | --- |
+| `v` | `2` | yes | schema version |
+| `ts` | ISO time | yes | when the levers were read |
+| `sessionId` | string | yes | pi session id |
+| `parentSessionId` | string | children | as on request lines |
+| `kind` | `levers` | yes | |
+| `arm`, `design` | string | as on request lines | experiment arm and design |
+| `eligible` | boolean | yes | the session takes part in the experiment; until the engine names strata: a main session with an arm |
+| `stratum` | string | no | the experiment stratum (not written yet) |
+| `levers` | object | yes | lever id → state `{ v, s, a?, rb?, tier? }` |
+
+A state: `v` = the effective value, a level name, a number or a boolean (never free text); `s` = its source, `pe`
+(pi-economics assigned it), `ext` (an extension chose it: its default or its own experiment) or `fixed` (configuration or
+pi's default); `a` = the value pi-economics assigned and `rb` = the read-back, both present exactly when it assigned one:
+`confirmed` (`v` = `a`), `refused` (`v` ≠ `a`, `s` is `ext` or `fixed`) or `unverified` (no observer: `v` = `a` assumed);
+`tier` = how the add-on applied it (`seed`, `control`, `replace`, `shadow`). The writer refuses a state that breaks one of these
+rules and a line over 4 KiB (it then warns once and writes none).
+
+Observed today, all `s: "fixed"`: pi's settings as pi 1.4 merges them (`<agentDir>/settings.json`, overridden key by key by
+`<cwd>/.pi/settings.json` when the project is trusted, pi's defaults for unset keys; `defaultTools` lists of `+name`/`-name` modify
+the inherited selection): `pi.cacheWarming` (global only), `pi.promptCache` (`PI_CACHE_RETENTION`), `pi.compaction.{enabled,reserveTokens,keepRecentTokens}`
+(per-model overrides of the session's model), `pi.branchSummary.{reserveTokens,skipPrompt}`, `pi.codemode.{mode,inlineBudget}`,
+`pi.transport`, `pi.retry.{enabled,maxRetries,baseDelayMs,maxAgentDelayMs}`, `pi.retry.provider.{timeoutMs,maxRetries,maxRetryDelayMs}`,
+`pi.images.{autoResize,blockImages}`, `pi.thinkingBudgets.{minimal,low,medium,high}`, `pi.defaultThinkingLevel` and
+`pi.defaultTools.<tool>` (a boolean per pi tool: read, bash, powershell, edit, write, grep, find, ls, codemode, tool_search). A value pi
+would reject leaves its lever out (unknown); `cacheWarming` falls back to `streaming` as in pi. With infinite-context's settings entry on
+the session branch `pi.compaction.enabled` is `{ "v": false, "s": "ext" }` (it cancels every native compaction); the other
+`pi.compaction.*` levers are then inert and the analysis leaves them out. `pe`, `a`, `rb` and `tier` come with pi-economics'
+experiment add-ons.
+
+A main session's first line (complete), a later line of it as the add-ons will write it and a child line under
+infinite-context (both shortened: the writer always writes every lever):
+
+```jsonl
+{"v":2,"ts":"2026-11-03T09:59:58.100Z","sessionId":"s-main","kind":"levers","arm":"-+-","eligible":true,"levers":{"pi.cacheWarming":{"v":"streaming","s":"fixed"},"pi.promptCache":{"v":"short","s":"fixed"},"pi.compaction.enabled":{"v":true,"s":"fixed"},"pi.compaction.reserveTokens":{"v":16384,"s":"fixed"},"pi.compaction.keepRecentTokens":{"v":20000,"s":"fixed"},"pi.branchSummary.reserveTokens":{"v":16384,"s":"fixed"},"pi.branchSummary.skipPrompt":{"v":false,"s":"fixed"},"pi.codemode.mode":{"v":"on","s":"fixed"},"pi.codemode.inlineBudget":{"v":3000,"s":"fixed"},"pi.transport":{"v":"auto","s":"fixed"},"pi.retry.enabled":{"v":true,"s":"fixed"},"pi.retry.maxRetries":{"v":3,"s":"fixed"},"pi.retry.baseDelayMs":{"v":2000,"s":"fixed"},"pi.retry.maxAgentDelayMs":{"v":60000,"s":"fixed"},"pi.retry.provider.timeoutMs":{"v":300000,"s":"fixed"},"pi.retry.provider.maxRetries":{"v":0,"s":"fixed"},"pi.retry.provider.maxRetryDelayMs":{"v":60000,"s":"fixed"},"pi.images.autoResize":{"v":true,"s":"fixed"},"pi.images.blockImages":{"v":false,"s":"fixed"},"pi.thinkingBudgets.minimal":{"v":1024,"s":"fixed"},"pi.thinkingBudgets.low":{"v":2048,"s":"fixed"},"pi.thinkingBudgets.medium":{"v":8192,"s":"fixed"},"pi.thinkingBudgets.high":{"v":16384,"s":"fixed"},"pi.defaultThinkingLevel":{"v":"medium","s":"fixed"},"pi.defaultTools.read":{"v":true,"s":"fixed"},"pi.defaultTools.bash":{"v":true,"s":"fixed"},"pi.defaultTools.powershell":{"v":false,"s":"fixed"},"pi.defaultTools.edit":{"v":true,"s":"fixed"},"pi.defaultTools.write":{"v":true,"s":"fixed"},"pi.defaultTools.grep":{"v":false,"s":"fixed"},"pi.defaultTools.find":{"v":false,"s":"fixed"},"pi.defaultTools.ls":{"v":false,"s":"fixed"},"pi.defaultTools.codemode":{"v":false,"s":"fixed"},"pi.defaultTools.tool_search":{"v":false,"s":"fixed"}}}
+{"v":2,"ts":"2026-11-03T10:20:00.000Z","sessionId":"s-main","kind":"levers","arm":"-+-","eligible":true,"levers":{"pi.cacheWarming":{"v":"streaming","s":"pe","a":"streaming","rb":"unverified","tier":"seed"},"pi.promptCache":{"v":"short","s":"fixed","a":"long","rb":"refused","tier":"seed"},"pi.defaultThinkingLevel":{"v":"high","s":"pe","a":"high","rb":"confirmed","tier":"control"}}}
+{"v":2,"ts":"2026-11-03T11:10:00.000Z","sessionId":"s-child","parentSessionId":"s-main","kind":"levers","arm":"-+-","eligible":false,"levers":{"pi.compaction.enabled":{"v":false,"s":"ext"},"pi.compaction.reserveTokens":{"v":16384,"s":"fixed"},"pi.defaultThinkingLevel":{"v":"medium","s":"fixed"}}}
 ```
 
 ## task-router/outcomes/YYYY-MM.jsonl
@@ -318,6 +381,11 @@ table is; this is what a reader of the raw files needs to reproduce them).
   routing-quality figure.
 - **Randomized comparison.** See *Analysis: router observation*.
 - **Spot-check agreement.** See *Analysis: router observation*.
+- **Levers** (*Levers lines*). Units = the sessions with a meter line in the period, each with its last levers line up to the
+  period's end (one written before the period counts: levers lines are written on change only). Per lever: the sessions, the
+  distribution of `v` (the four most frequent values), the sources and the read-backs; refusal rate = refused ÷ assigned (a factor
+  refused in > 20 % of its sessions points at a broken add-on). In a session where infinite-context disables compaction
+  (`pi.compaction.enabled` `false`, `ext`) the other `pi.compaction.*` levers are inert and left out.
 
 ### Analysis: cache misses
 
@@ -333,12 +401,16 @@ request is no row of its own (it only refreshes the prefix).
 - **Miss** (prefix lost) = `max(0, min(cached_{i−1}, prompt_i) − cacheRead_i)` tokens: what the previous request left in the cache and this
   one did not read. Only a miss is avoidable. (The design's formula says `prompt_{i−1}`; that counts the previous input tail as lost every
   time: on the author's live log 79 808 of 79 846 steady-state steps would be "misses" of a few tokens.)
-- **Cause** of a miss, the first that holds: `ttl` — the gap since the previous request (warming included) is longer than the TTL in force
-  after it: 1 h if that line has `cacheWrite1h` > 0 or is a main session's in an arm with `mainCacheTtl` = `1h`, else 5 min; `fold` — the
-  prompt fell below 80 % of the previous request's (the fold rule of the other tables; real fold and compaction entries live in session
-  files, not in the meter log); `model` — the model changed (its own cache); `other` — a prefix change inside the TTL that the meter
-  lines do not show: typically a system-prompt or tool-list change, a small fold or mask, an injected agent message. A real cost (the lost
-  prefix is paid at the write price), not noise; the session files hold the reason, the meter line does not.
+- **Cause** of a miss, the first that holds: `ttl` — the gap is longer than the TTL in force after the previous request: it runs from
+  the latest send before the request (warming included) to the request's own send, a send being `ts − durationMs` (meter v2; `ts` on
+  lines without `durationMs`), so a long response does not age the prefix it read; the TTL is 1 h if that line has `cacheWrite1h` > 0
+  or is a main session's in an arm with `mainCacheTtl` = `1h`, else 5 min; `fold` — the prompt fell below 80 % of the previous
+  request's (the fold rule of the other tables; real fold and compaction entries live in session files, not in the meter log);
+  `model` — the model changed (its own cache); `prefix` — the system state changed: the line's `systemHash` differs from the last
+  one before it in the branch (system prompt, a prompt section or the tool list; v2 lines with `systemHash` only); `other` — a prefix
+  change inside the TTL that the meter lines do not show: a small fold or mask, an injected agent message, a system change on lines
+  without a `systemHash`. A real cost (the lost prefix is paid at the write price), not noise; the session files hold the reason, the
+  meter line does not.
 - **Fold and cold-resume events** (the rows *after folds* / *after cold resumes*): a **cold resume** is a turn request after a gap beyond
   the TTL in force (above); a **fold** is a turn request whose prompt fell below 80 % of the previous request's, unless the gap came
   first (a cold fold is a cold resume). An event's **window** is its request and the next two turn requests of the branch, cut short by
@@ -456,6 +528,9 @@ non-empty strings), and `spotcheck` is a known event. The repo check
 every report section has data.
 
 ## Known gaps
+
+- **Branch summaries** (`/tree` with a summary) are summary requests outside the agent loop like compactions; pi 1.4 keeps
+  their usage on the branch-summary entry, which the meter does not read yet: they are not metered.
 
 - A **resumed** child session does not inherit its arm again (inheritance happens on the
   spawn event only), so its later meter lines miss `arm` (seen 2026-10-03).
