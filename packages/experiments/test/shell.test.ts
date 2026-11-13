@@ -276,3 +276,30 @@ test("T5b1.5 a child's own runtime (experiments loaded in it) never draws and wr
   h.start("s-child", { file: join(h.sessionDir, "subagents", "main-1", "x_s-child.jsonl") });
   assert.deepEqual([h.rows(), h.entries, h.published], [[], [], []]);
 });
+
+test("T5b1.6 resume reuses the branch's pi-economics:assignment entry: no draw, no row, no second entry", () => {
+  const first = harness();
+  first.start("s1");
+  const [entry] = first.entries;
+  // A later process (another runtime) resumes s1: the branch holds the entry, assignments.jsonl is not consulted.
+  const h = harness();
+  const blocks = join(h.agentDir, "experiments", "blocks.json");
+  for (const reason of ["resume", "reload"]) {
+    h.start("s1", { reason, branch: [{ type: "custom", customType: "other", data: { sessionId: "s1", eligible: false } }, entry] });
+    assert.deepEqual(h.rows(), [], reason);
+    assert.equal(existsSync(blocks), false, `${reason}: no draw`);
+    assert.deepEqual(h.entries, [], reason);
+    assert.deepEqual(h.published.at(-1), entry.data, reason);
+  }
+  assert.equal(h.api().armFor("s1").id, (entry.data as Assigned).arm, "the global API serves the reused arm");
+});
+
+test("T5b1.6 a fork (the branch's entry names another session) is a new unit; a malformed entry is ignored", () => {
+  const h = harness();
+  h.start("s1");
+  const [entry] = h.entries;
+  h.start("s2", { reason: "fork", branch: [entry] });
+  h.start("s3", { branch: [{ type: "custom", customType: ENTRY, data: { sessionId: "s3", arm: "000" } }] }); // no eligible flag
+  assert.deepEqual(h.rows().map((r) => [r.sessionId, r.eligible]), [["s1", true], ["s2", true], ["s3", true]]);
+  assert.deepEqual(h.entries.map((e) => (e.data as Assigned).sessionId), ["s1", "s2", "s3"]);
+});

@@ -137,6 +137,15 @@ export function install(pi: PiLike, deps: Deps): void {
     const design = typeof r.design === "string" ? { design: r.design } : {};
     return { a: { sessionId: r.sessionId, eligible: true, arm: r.arm, ...design }, legacy: { id: r.arm, flags: r.flags, ...design } };
   };
+  /** The last ENTRY on the branch that is this session's (a well-formed Assigned). */
+  const fromBranch = (branch: unknown, sid: string): Assigned | undefined => {
+    if (!Array.isArray(branch)) return undefined;
+    for (const e of [...branch].reverse()) {
+      const d = isRecord(e) && e.type === "custom" && e.customType === ENTRY ? e.data : undefined;
+      if (isRecord(d) && d.sessionId === sid && typeof d.eligible === "boolean" && (d.arm === undefined || typeof d.arm === "string") && (d.factors === undefined || isRecord(d.factors))) return assignedOf(d as Assigned);
+    }
+    return undefined;
+  };
   /** Atomically (a reader never sees half a file); two processes drawing at once may each take the same arm (a slight imbalance, never a wrong arm). */
   const writeBlocks = (b: BlockState): void => {
     const file = join(dir, "blocks.json");
@@ -227,6 +236,10 @@ export function install(pi: PiLike, deps: Deps): void {
     // A child's runtime (experiments among the actor's childExtensions): never drawn, no row; its arm is its parent's.
     const file = safe(() => ctx.sessionManager.getSessionFile() as string | undefined);
     if (typeof file === "string" && parentOf(file) !== undefined) return;
+    // Resumed or reloaded: the branch's own entry (a fork's names the session it was forked from: a new unit), else the
+    // session's row (a v1 engine's included).
+    const entry = fromBranch(safe(() => ctx.sessionManager.getBranch()), main);
+    if (entry !== undefined) return adopt(entry);
     const prior = rows().find((r) => r.sessionId === main);
     const resumed = prior && fromRow(prior);
     if (resumed) return adopt(resumed.a, resumed.legacy);
