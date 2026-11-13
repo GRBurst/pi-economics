@@ -19,7 +19,8 @@ test("a child session named by a spawn event must carry parentSessionId", () => 
   assert.match(ps[0].example, /^c3 @ /);
 });
 
-test("arm is required from the root's assignment on, in meter lines, spawn events and guard events", () => {
+// M5b.2: a spawn event needs no arm any more (routers no longer read pi-economics; the analyses join the root's assignment).
+test("arm is required from the root's assignment on, in meter lines and guard events; a spawn event needs none", () => {
   const w = world();
   w.meter.push(turn("m3", T0 + 100 * MIN)); // no arm, after m3's assignment
   w.meter.push(turn("m3", T0 + 30 * MIN)); // no arm, before it: experiments not yet running
@@ -28,8 +29,8 @@ test("arm is required from the root's assignment on, in meter lines, spawn event
   w.guards.push({ ts: iso(T0 + 100 * MIN), sessionId: "m5", event: "correction" }); // m5 assigned at +119: not due
   w.guards.push({ ts: iso(T0 + 100 * MIN), sessionId: "m4", event: "correction" });
   const ps = check(w);
-  assert.deepEqual(fields(ps), ["meter.arm", "outcomes.arm", "guards.arm"]);
-  assert.deepEqual(ps.map((p) => p.count), [2, 1, 1]);
+  assert.deepEqual(fields(ps), ["meter.arm", "guards.arm"]);
+  assert.deepEqual(ps.map((p) => p.count), [2, 1]);
 });
 
 test("per event and version: spawn tier, verdict value, v1 assignment design, rating value, v type", () => {

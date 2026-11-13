@@ -64,7 +64,7 @@ eligible or not; see *experiments/assignments.jsonl*. Readers keep reading v0 an
   outcome event joins the spawn by `taskId` (the subagent's name).
 - **Arm.** `assignments.sessionId` is a root session; its `arm` holds for that session
   and every descendant from the assignment's `ts` on (v2: only an eligible row has one). `meter.arm`, `outcomes.arm` (on
-  spawn: the parent session's arm) and `guards.arm` are copies of it at write time.
+  spawn: the parent session's arm; routers before M5b.2 only, see *Join keys*) and `guards.arm` are copies of it at write time.
 - **Quota.** `q5h`/`q7d` are the whole Anthropic account's utilisation (pi and every other
   client) in 1 % steps; pi's share = the rise seen in pi's own lines over the rise of the
   account in the same windows. The account's rise is attributed to roots once, from one
@@ -252,7 +252,11 @@ its `docs/outcome-log.md`. This file keeps what the readers here need.
 - **Join keys**: `spawn.sessionId` is the child's session id (the `sessionId`
   of the child's lines in `meter/`), `parentSessionId` the spawner's; `arm` on
   a spawn is a copy, at write time, of the parent session's arm in
-  `experiments/assignments.jsonl`.
+  `experiments/assignments.jsonl`, written by routers before pi-economics
+  M5b.2 only: since M5b.2 no extension reads pi-economics, a spawn carries no
+  `arm`, and the analyses (`pi-analyse`, `meter-report --arms`) join the arm
+  of the spawner's root assignment (up the `parentSessionId` chain); a spawn
+  without one stays a task with no arm. `pi-analyse --check` requires none.
 - **Contract copy**: `core/contract.ts` is this package's copy of the
   vocabulary and the required fields. The router's `docs/outcome-log.md`
   wins; the copy is proven against the router's real writer by the flake check

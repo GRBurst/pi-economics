@@ -22,6 +22,37 @@ export function acceptance(events: any[]): Record<string, Guard> {
   return out;
 }
 
+const MAX_DEPTH = 64;
+const str = (x: unknown): x is string => typeof x === "string";
+
+/**
+ * (M5b.2) Spawn events with the experiment arm of the spawning session. Routers no longer copy it (the process-global experiments
+ * API is gone), so an arm-less spawn takes the arm of its parent session's root assignment: the first session up the parent chain
+ * (spawn events, meter lines) with an assignment row that has an arm, and a v2 row's design with it. A carried copy (routers before
+ * M5b.2) stays; a spawn without such a root stays as it is (unassigned: no arm, still a task). The input is not changed.
+ */
+export function withSpawnArms(outcomes: any[], meter: any[], assignments: any[]): any[] {
+  const parent = new Map<string, string>();
+  for (const e of outcomes) if (e?.event === "spawn" && str(e.sessionId) && str(e.parentSessionId)) parent.set(e.sessionId, e.parentSessionId);
+  for (const l of meter) if (str(l?.sessionId) && str(l.parentSessionId)) parent.set(l.sessionId, l.parentSessionId);
+  const armed = new Map<string, any>();
+  for (const r of assignments) if (str(r?.sessionId) && str(r.arm) && !armed.has(r.sessionId)) armed.set(r.sessionId, r);
+  const rootRow = (sid: unknown): any => {
+    const seen = new Set<string>();
+    for (let s = str(sid) ? sid : undefined, i = 0; s !== undefined && i < MAX_DEPTH && !seen.has(s); i++, s = parent.get(s)) {
+      seen.add(s);
+      if (armed.has(s)) return armed.get(s);
+    }
+    return undefined;
+  };
+  return outcomes.map((e) => {
+    if (e?.event !== "spawn" || str(e.arm)) return e;
+    const r = rootRow(e.parentSessionId);
+    if (r === undefined) return e;
+    return { ...e, arm: r.arm, ...(r.v === 2 && str(r.design) && !str(e.design) ? { design: r.design } : {}) };
+  });
+}
+
 const pct = (g: Guard) => `${Math.round((100 * g.accepted) / g.judged)}% (${g.accepted}/${g.judged})`;
 
 /** Per arm, from <agentDir>/guards/events.jsonl: peeks after masking and corrections counted, the last rating of each session. */

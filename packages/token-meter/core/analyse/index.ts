@@ -2,6 +2,7 @@
 // Pure; bin/pi-analyse.ts does the I/O. Reads the meter log, the task-router outcome log, experiments/assignments.jsonl
 // and guards/events.jsonl as plain JSON (packages do not import each other; <agentDir>/LOGS.md is the contract).
 import { nextState } from "../arms.ts";
+import { withSpawnArms } from "../guards.ts";
 import { inPeriod, isRequestLine, type Logs, type Period } from "./logs.ts";
 import { armInfo, rowsBySession } from "./designs.ts";
 import { cost, type CostSection } from "./cost.ts";
@@ -39,7 +40,7 @@ export function analyse(all: Logs, period: Period = {}): Analysis {
     levers: levers(all.meter, logs.meter, period),
     experiment: { designs },
     delegation: delegation(meter, logs.outcomes, all.routerSettings),
-    guards: guards(designs, logs.outcomes, logs.guards, all.expSettings, rowsBySession(all.assignments)),
+    guards: guards(designs, withSpawnArms(logs.outcomes, all.meter, all.assignments), logs.guards, all.expSettings, rowsBySession(all.assignments)),
     quality: quality(all, logs, period),
   };
 }

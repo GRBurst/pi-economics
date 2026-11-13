@@ -102,13 +102,18 @@ const jsonl = (dir: string, file: string, rows: unknown[]) => {
   writeFileSync(join(dir, file), rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
 };
 
-function agentDirWith(opts: { guards?: unknown; disabled?: string[]; events?: unknown[] } = {}) {
+function agentDirWith(opts: { guards?: unknown; disabled?: string[]; events?: unknown[]; armless?: boolean } = {}) {
   const agentDir = mkdtempSync(join(tmpdir(), "token-meter-arms-"));
   // baseline "-": cheap and well accepted; "+": costly and rejected (5 sessions each)
   const lines = ["a", "b", "c", "d", "e"].flatMap((x, i) => [...session("-", `m-${x}`, 3, 1 + i / 10), ...session("+", `p-${x}`, 3, 3 + i / 10)]);
   jsonl(join(agentDir, "meter"), "2026-10.jsonl", lines);
   const tasks = (arm: string, ok: number, bad: number) =>
-    Array.from({ length: ok + bad }, (_, i) => [{ event: "spawn", taskId: `${arm}${i}`, arm }, { event: "verdict", taskId: `${arm}${i}`, verdict: i < ok ? "accepted" : "rejected" }]).flat();
+    Array.from({ length: ok + bad }, (_, i) => [
+      // armless (routers since M5b.2): the spawn names its parent session, whose assignment row holds the arm
+      opts.armless ? { event: "spawn", taskId: `${arm}${i}`, parentSessionId: `${arm === "-" ? "m" : "p"}-${"abcde"[i % 5]}` } : { event: "spawn", taskId: `${arm}${i}`, arm },
+      { event: "verdict", taskId: `${arm}${i}`, verdict: i < ok ? "accepted" : "rejected" }]).flat();
+  if (opts.armless) jsonl(join(agentDir, "experiments"), "assignments.jsonl", ["a", "b", "c", "d", "e"].flatMap((x) => [
+    { ts: "2026-10-01T00:00:00.000Z", sessionId: `m-${x}`, arm: "-", mode: "explore", flags: {} }, { ts: "2026-10-01T00:00:00.000Z", sessionId: `p-${x}`, arm: "+", mode: "explore", flags: {} }]));
   jsonl(join(agentDir, "task-router", "outcomes"), "2026-10.jsonl", [...tasks("-", 9, 1), ...tasks("+", 3, 7)]);
   if (opts.events) jsonl(join(agentDir, "guards"), "events.jsonl", opts.events);
   mkdirSync(join(agentDir, "experiments"), { recursive: true });
@@ -125,6 +130,12 @@ test("--arms prints one row per arm: units, $/h with CI, event costs, acceptance
   assert.match(out, /\| \+ \| 5 \|.*\| 3\/10 \|/);
   assert.doesNotMatch(out, /## Per day/);
   assert.match(renderArms([], {}, {}), /\| arm \|/);
+});
+
+test("--arms (M5b.2): spawns without an arm count for their parent's assignment; the acceptance is the copy's", () => {
+  const out = agentDirWith({ armless: true }).run("--arms");
+  assert.match(out, /\| \+ \| 5 \|.*\| 3\/10 \|/);
+  assert.match(out, /\| - \| 5 \|.*\| 9\/10 \|/);
 });
 
 test("--posterior writes state.json atomically: posterior rewards (−$/h), the kill switch's disabled arm with its reason; existing disabled arms stay", () => {

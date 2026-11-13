@@ -142,7 +142,8 @@ export function check(logs: Logs, all: Logs = logs): Problem[] {
   const rules: Record<LogName, Rule[]> = {
     meter: [...METER, { field: "parentSessionId", why: "a spawn event names this session as a child", when: (l) => children.has(l.sessionId), ok: str },
       { ...arm, when: (l) => armDue(l.parentSessionId ?? l.sessionId, l.ts) || armDue(l.sessionId, l.ts) }],
-    outcomes: [...OUTCOMES, { ...arm, why: "spawn whose parent session has an experiment assignment", when: (l) => l.event === "spawn" && armDue(l.parentSessionId, l.ts) }],
+    // (M5b.2) A spawn needs no arm: routers no longer read pi-economics; the analyses join the root assignment (withSpawnArms).
+    outcomes: OUTCOMES,
     assignments: ASSIGNMENTS,
     guards: [...GUARDS, { ...arm, when: (l) => armDue(l.sessionId, l.ts) }],
   };

@@ -7,7 +7,7 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { armStats, nextState, renderArms, V2_SCOPE } from "../core/arms.ts";
-import { acceptance, killSwitch, signals } from "../core/guards.ts";
+import { acceptance, killSwitch, signals, withSpawnArms } from "../core/guards.ts";
 import { aggregate, render } from "../core/report.ts";
 import { taskCosts } from "../core/tasks.ts";
 import { isRequestLine } from "../core/analyse/logs.ts";
@@ -41,7 +41,7 @@ if (args.includes("--arms") || args.includes("--posterior")) {
   const flags: Record<string, Record<string, string>> = {};
   for (const r of readLines(exp)) if (typeof r?.arm === "string" && r.flags) flags[r.arm] = r.flags;
   const meter = readLines(dir).filter(isRequestLine); // levers lines record settings, no request
-  const outcomes = readLines(join(agentDir, "task-router", "outcomes"));
+  const outcomes = withSpawnArms(readLines(join(agentDir, "task-router", "outcomes")), meter, readLines(exp)); // spawn arms joined (M5b.2)
   const stats = armStats(meter, { flags });
   const acc = acceptance(outcomes);
   // Own defaults for experiments' `guards` (a package cannot import another's settings).

@@ -111,6 +111,8 @@ test("LOGS.md: the Levers lines describe the engine's add-ons, read-back changes
   for (const s of ["`pi-economics:levers:v1`", "read-back", "may start with a digit", "in-memory child"]) assert.ok(levers.includes(s), `Levers lines: ${s}`);
   assert.ok(!levers.includes("will write"), "Levers lines: the add-ons' line is still announced as future");
   assert.ok(!md.includes("__piExperimentsApi"), "LOGS.md names the removed global");
+  const keys = md.slice(md.indexOf("- **Join keys**"), md.indexOf("- **Contract copy**"));
+  assert.ok(keys.includes("root assignment") && keys.includes("since M5b.2"), "Join keys: a spawn's arm is joined from its root assignment since M5b.2");
 });
 
 test("LOGS.md: compaction line examples, v2 meter lines of kind compaction without timing or retries, passing the contract", () => {

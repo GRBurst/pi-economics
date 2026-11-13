@@ -1,7 +1,7 @@
 // Guard (verdict acceptance per arm, from the router's outcome log) and the kill switch.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { acceptance, killSwitch } from "../core/guards.ts";
+import { acceptance, killSwitch, withSpawnArms } from "../core/guards.ts";
 import type { ArmStat } from "../core/arms.ts";
 
 const spawn = (taskId: string, arm?: string) => ({ event: "spawn", taskId, ...(arm ? { arm } : {}) });
@@ -14,6 +14,38 @@ test("acceptance: accepted / judged per arm; the last verdict of a task counts; 
     verdict("t4", "partial"), verdict("t5", "accepted"), verdict("nobody", "accepted"), { event: "check", taskId: "t1", exit: 0 },
   ]);
   assert.deepEqual(acc, { "+": { accepted: 2, judged: 2 }, "-": { accepted: 0, judged: 1 } });
+});
+
+// M5b.2: routers no longer copy the arm onto spawn lines (the process-global experiments API is gone); the analyses join it.
+const v2row = (sessionId: string, arm?: string) => ({ v: 2, ts: "2026-11-13T09:00:00.000Z", sessionId, design: "b4d458675108", mode: "explore",
+  eligible: arm !== undefined, stratum: "api", ...(arm !== undefined ? { arm, factors: {} } : {}) });
+const sp = (taskId: string, parent: string, arm?: string) =>
+  ({ event: "spawn", ts: "2026-11-13T10:00:00.000Z", taskId, sessionId: `s-${taskId}`, parentSessionId: parent, ...(arm ? { arm } : {}) });
+
+test("withSpawnArms: an arm-less spawn takes its parent's root assignment's arm (and a v2 row's design); a carried copy stays; no root assignment → kept, unassigned", () => {
+  const assignments = [v2row("m1", "010"), v2row("m2"), { ts: "2026-11-13T09:00:00.000Z", sessionId: "m0", arm: "-----", mode: "explore", flags: {} }];
+  const meter = [{ sessionId: "c1", parentSessionId: "m1" }]; // a child's meter line names its parent
+  const outcomes = [
+    sp("t1", "m1"), sp("t2", "c1"), sp("t3", "m1", "111"), sp("t4", "m2"), sp("t5", "nobody"), sp("t6", "m0"),
+    sp("t7", "s-t1"), // spawned by t1's child: its parent is known from t1's spawn line only
+    verdict("t1", "accepted"),
+  ];
+  const before = JSON.stringify(outcomes);
+  const out = withSpawnArms(outcomes, meter, assignments);
+  assert.equal(JSON.stringify(outcomes), before, "the input is not changed");
+  assert.equal(out.length, outcomes.length, "nothing is dropped");
+  const by = Object.fromEntries(out.filter((e) => e.event === "spawn").map((e) => [e.taskId, [e.arm, e.design]]));
+  assert.deepEqual(by, {
+    t1: ["010", "b4d458675108"], t2: ["010", "b4d458675108"], t3: ["111", undefined], t4: [undefined, undefined],
+    t5: [undefined, undefined], t6: ["-----", undefined], t7: ["010", "b4d458675108"],
+  });
+  assert.deepEqual(out[3], outcomes[3], "an ineligible root: the spawn stays as it was");
+  assert.deepEqual(out.at(-1), outcomes.at(-1));
+});
+
+test("acceptance after the join: arm-less spawns count for their root's arm; a spawn without a root assignment is judged under no arm", () => {
+  const outcomes = [sp("t1", "m1"), sp("t2", "m1", "010"), sp("t3", "nobody"), verdict("t1", "accepted"), verdict("t2", "rejected"), verdict("t3", "accepted")];
+  assert.deepEqual(acceptance(withSpawnArms(outcomes, [], [v2row("m1", "010")])), { "010": { accepted: 1, judged: 2 } });
 });
 
 const stat = (arm: string, units: number) => ({ arm, units }) as ArmStat;

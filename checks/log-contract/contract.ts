@@ -28,7 +28,7 @@ import { fakeCtx as cacheCtx, fakePi as cachePi } from "../../packages/cache-lif
 import { asst, tool, user } from "../../packages/cache-lifecycle/test/msgs.ts";
 import { install as installExperiments } from "../../packages/experiments/core/shell.ts";
 import { defaults as expDefaults } from "../../packages/experiments/core/settings.ts";
-import { bus as expBus } from "../../packages/experiments/test/fake.ts";
+import { bus as expBus } from "../../packages/experiments/test/fake.ts"; // the shared pi.events of the runtime
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const BIN = resolve(here, "../../packages/token-meter/bin/pi-analyse.ts");
@@ -44,12 +44,16 @@ const clock = { t: Date.now() + MIN };
 const tick = (m = 2) => (clock.t += m * MIN);
 const settle = () => new Promise((r) => setImmediate(r));
 
-// --- experiments: assignment rows, correction + rating guards, arm inheritance via spawn events
+// One runtime's pi.events (M5b.2): experiments serves each session's assignment on the internal channel
+// pi-economics:levers:v1, the meter and cache-lifecycle read the arm there (no process-global API any more).
+const events = expBus();
+
+// --- experiments: assignment rows, correction + rating guards; a child's arm is its root's
 const tr = harness({ agentDir, extra: { run: async () => ({ exit: 0, output: "ok\n", timedOut: false }) } as never });
 tr.f.fire("session_start", {}, {}); // task_verdict is registered at the first session_start with the actor's API (plan T3.1)
 const exp = { handlers: new Map<string, Array<(e: any, ctx: any) => unknown>>(), commands: new Map<string, any>() };
 installExperiments(
-  { on: (n: string, h: any) => void exp.handlers.set(n, [...(exp.handlers.get(n) ?? []), h]), registerCommand: (n: string, c: any) => void exp.commands.set(n, c), appendEntry: () => {}, events: expBus() },
+  { on: (n: string, h: any) => void exp.handlers.set(n, [...(exp.handlers.get(n) ?? []), h]), registerCommand: (n: string, c: any) => void exp.commands.set(n, c), appendEntry: () => {}, events },
   { agentDir, settings: expDefaults(), rng: () => 0.5, api: () => tr.a.api as never },
 );
 // The main's model at session_start decides its stratum (M5b.1): anthropic without a plan = the api stratum, eligible.
@@ -58,25 +62,41 @@ const expFire = (n: string, e: unknown, sid: string) => (exp.handlers.get(n) ?? 
 
 // --- token-meter: turns with usage and quota headers; a child's session file names its parent
 const meter = meterPi();
-installMeter(meter.pi, { agentDir, now: () => new Date(clock.t) });
+installMeter({ ...meter.pi, events }, { agentDir, now: () => new Date(clock.t) });
 let q5h = 10;
-function turn(sid: string, parent?: string, model = "claude-opus-5-5", usd = 0.4): void {
+function turn(sid: string, parent?: string, model = "claude-opus-5-5", usd = 0.4, m = meter): void {
   const ctx = meterCtx(sid, { ...(parent ? { file: `/sessions/subagents/${parent}/${sid}.jsonl` } : {}), model: { provider: "anthropic", id: model } });
-  meter.fire("before_agent_start", { type: "before_agent_start", prompt: "go", systemPrompt: "s" }, ctx); // a levers line at the session's first start (M3b)
-  meter.fire("context", { type: "context", messages: [] }, ctx); // the agent loop's hook before the session's own send
-  meter.fire("context_with_system", { type: "context_with_system", messages: [{ role: "system", content: "s", timestamp: 0 }] }, ctx); // systemHash (M3b)
-  meter.fire("before_provider_request", {}, ctx);
-  meter.fire("after_provider_response", { type: "after_provider_response", status: 200,
+  m.fire("before_agent_start", { type: "before_agent_start", prompt: "go", systemPrompt: "s" }, ctx); // a levers line at the session's first start (M3b)
+  m.fire("context", { type: "context", messages: [] }, ctx); // the agent loop's hook before the session's own send
+  m.fire("context_with_system", { type: "context_with_system", messages: [{ role: "system", content: "s", timestamp: 0 }] }, ctx); // systemHash (M3b)
+  m.fire("before_provider_request", {}, ctx);
+  m.fire("after_provider_response", { type: "after_provider_response", status: 200,
     headers: { [P + "unified-5h-utilization"]: String(q5h++ / 100), [P + "unified-7d-utilization"]: "0.2" } }, ctx);
-  meter.fire("message_end", { type: "message_end", message: { role: "assistant", provider: "anthropic", model, stopReason: "stop", thinkingLevel: "high",
+  m.fire("message_end", { type: "message_end", message: { role: "assistant", provider: "anthropic", model, stopReason: "stop", thinkingLevel: "high",
     usage: { input: 10, output: 500, cacheRead: 20_000, cacheWrite: 2_000, totalTokens: 22_510, reasoning: 0,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: usd } } } }, ctx);
   tick();
 }
 
+// A child runs in a runtime of its own (pi builds in-process children with their own pi.events): experiments there derives its
+// root's assignment from the session file's directory (child mode, M5b.2), never draws, and serves it to the child's meter.
+function childRuntime(sid: string, parent: string): ReturnType<typeof meterPi> {
+  const events = expBus();
+  const handlers = new Map<string, Array<(e: any, ctx: any) => unknown>>();
+  installExperiments(
+    { on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]), registerCommand: () => {}, appendEntry: () => {}, events },
+    { agentDir, settings: expDefaults(), rng: () => 0.5, api: () => tr.a.api as never },
+  );
+  const file = `/sessions/subagents/${parent}/${sid}.jsonl`;
+  for (const h of handlers.get("session_start") ?? []) h({}, { ...expCtx(sid), sessionManager: { getSessionId: () => sid, getSessionFile: () => file } });
+  const m = meterPi();
+  installMeter({ ...m.pi, events }, { agentDir, now: () => new Date(clock.t) });
+  return m;
+}
+
 // --- cache-lifecycle: a cold context masks old tool output, then context_peek → peek-after-mask
 const cache = cachePi();
-installCache(cache.pi as never, { agentDir, settings: { ...cacheDefaults(), maskOnCold: "tools", protectedTailTokens: 3000 }, now: () => clock.t, api: () => undefined });
+installCache({ ...cache.pi, events } as never, { agentDir, settings: { ...cacheDefaults(), maskOnCold: "tools", protectedTailTokens: 3000 }, now: () => clock.t, api: () => undefined });
 const big = "x".repeat(12000);
 const coldMessages = () => [
   user("go"), asst("r1", [{ type: "toolCall", id: "c1", name: "bash", arguments: {} }]), tool("c1", "bash", big),
@@ -100,7 +120,8 @@ async function mainSession(sid: string, child: string, usd: number): Promise<voi
   const r = await tr.a.spawn({ name: child, task: card() }, { sessionId: sid });
   assert.ok(!("reject" in r), `${child}: spawn rejected`);
   tr.a.emit({ type: "spawn", name: child, by: "main", parent: "main", childSessionId: child, ts: clock.t });
-  for (let i = 0; i < 4; i++) turn(child, sid, "qwen3-coder");
+  const kid = childRuntime(child, sid);
+  for (let i = 0; i < 4; i++) turn(child, sid, "qwen3-coder", undefined, kid);
   tr.a.agents.splice(0, tr.a.agents.length, { name: child, parent: "main", sessionId: child, model: "x", thinkingLevel: "xhigh", state: "idle" } as never);
   tr.clock.t = clock.t;
   tr.a.emit({ type: "route", from: child, to: "main", preview: "done", buffered: false, ts: clock.t });

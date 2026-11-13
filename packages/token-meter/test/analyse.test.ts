@@ -244,6 +244,21 @@ test("guards: per arm corrections, peeks, ratings, acceptance", () => {
   assert.equal(arm["++++++"].units, 2);
 });
 
+// M5b.2: routers no longer copy the arm onto spawn lines; the analysis joins it from the parent's root assignment.
+test("guards: spawns without an arm (routers since M5b.2) count for their root's arm; a spawn without a root assignment stays a task", () => {
+  const w = world();
+  const perArm = (a: ReturnType<typeof analyse>) => a.guards.perArm.map((x) => [x.design, x.arm, x.accepted, x.judged]);
+  const withCopy = analyse(w);
+  const bare = { ...w, outcomes: w.outcomes.map((e: any) => (e.event === "spawn" ? (({ arm, ...r }) => r)(e) : e)) };
+  bare.outcomes.push({ v: 1, ts: iso(T0 + 61 * MIN), event: "spawn", taskId: "t9", kind: "implement", workerTier: "T1", workerEffort: "high", base: "T1",
+    importance: "normal", reasons: [], sessionId: "c9", parentSessionId: "nobody" });
+  bare.outcomes.push({ v: 1, ts: iso(T0 + 70 * MIN), event: "verdict", taskId: "t9", verdict: "rejected", note: "" });
+  const joined = analyse(bare);
+  assert.ok(withCopy.guards.perArm.some((x) => x.judged > 0), "the world judges tasks per arm");
+  assert.deepEqual(perArm(joined), perArm(withCopy));
+  assert.equal(joined.delegation.all.tasks, withCopy.delegation.all.tasks + 1, "the unassigned spawn is still a task");
+});
+
 test("guards: kill switch compares each arm with its own design's baseline", () => {
   const g = analyse({ ...world(), expSettings: limits }).guards;
   assert.deepEqual(Object.keys(g.kill), ["++++++"]);
