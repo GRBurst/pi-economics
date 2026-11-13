@@ -110,7 +110,7 @@ function agentDirWith(opts: { guards?: unknown; disabled?: string[]; events?: un
   const tasks = (arm: string, ok: number, bad: number) =>
     Array.from({ length: ok + bad }, (_, i) => [
       // armless (routers since M5b.2): the spawn names its parent session, whose assignment row holds the arm
-      opts.armless ? { event: "spawn", taskId: `${arm}${i}`, parentSessionId: `${arm === "-" ? "m" : "p"}-${"abcde"[i % 5]}` } : { event: "spawn", taskId: `${arm}${i}`, arm },
+      opts.armless ? { event: "spawn", ts: "2026-10-02T00:00:00.000Z", taskId: `${arm}${i}`, parentSessionId: `${arm === "-" ? "m" : "p"}-${"abcde"[i % 5]}` } : { event: "spawn", taskId: `${arm}${i}`, arm },
       { event: "verdict", taskId: `${arm}${i}`, verdict: i < ok ? "accepted" : "rejected" }]).flat();
   if (opts.armless) jsonl(join(agentDir, "experiments"), "assignments.jsonl", ["a", "b", "c", "d", "e"].flatMap((x) => [
     { ts: "2026-10-01T00:00:00.000Z", sessionId: `m-${x}`, arm: "-", mode: "explore", flags: {} }, { ts: "2026-10-01T00:00:00.000Z", sessionId: `p-${x}`, arm: "+", mode: "explore", flags: {} }]));

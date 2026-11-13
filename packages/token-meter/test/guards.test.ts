@@ -43,6 +43,20 @@ test("withSpawnArms: an arm-less spawn takes its parent's root assignment's arm 
   assert.deepEqual(out.at(-1), outcomes.at(-1));
 });
 
+// Review M1: the arm holds from the assignment's ts on (LOGS.md *Arm*). Real-data shape: a v1 root got its row when resumed at
+// 10:36, after it had spawned tasks the router could copy no arm onto; those stay unassigned (counted, no arm).
+test("withSpawnArms: only a row assigned at or before the spawn joins; a spawn before a resume-time row stays unassigned", () => {
+  const at = (h: string) => `2026-10-03T${h}:00.000Z`;
+  const assignments = [{ ts: at("10:36"), sessionId: "r", arm: "+--+-", mode: "explore", flags: {} }];
+  const spawnAt = (taskId: string, h: string, parent = "r") => ({ ...sp(taskId, parent), ts: at(h) });
+  const outcomes = [spawnAt("early", "08:14"), spawnAt("late", "10:40"), spawnAt("same", "10:36"), { ...spawnAt("nots", "10:40"), ts: undefined },
+    spawnAt("kid-early", "10:30", "s-early"), spawnAt("kid-late", "10:50", "s-early")];
+  const by = Object.fromEntries(withSpawnArms(outcomes, [], assignments).map((e) => [e.taskId, e.arm]));
+  assert.deepEqual(by, { early: undefined, late: "+--+-", same: "+--+-", nots: undefined, "kid-early": undefined, "kid-late": "+--+-" });
+  const acc = acceptance(withSpawnArms([...outcomes, verdict("early", "accepted"), verdict("late", "rejected")], [], assignments));
+  assert.deepEqual(acc, { "+--+-": { accepted: 0, judged: 1 } });
+});
+
 test("acceptance after the join: arm-less spawns count for their root's arm; a spawn without a root assignment is judged under no arm", () => {
   const outcomes = [sp("t1", "m1"), sp("t2", "m1", "010"), sp("t3", "nobody"), verdict("t1", "accepted"), verdict("t2", "rejected"), verdict("t3", "accepted")];
   assert.deepEqual(acceptance(withSpawnArms(outcomes, [], [v2row("m1", "010")])), { "010": { accepted: 1, judged: 2 } });

@@ -28,26 +28,30 @@ const str = (x: unknown): x is string => typeof x === "string";
 /**
  * (M5b.2) Spawn events with the experiment arm of the spawning session. Routers no longer copy it (the process-global experiments
  * API is gone), so an arm-less spawn takes the arm of its parent session's root assignment: the first session up the parent chain
- * (spawn events, meter lines) with an assignment row that has an arm, and a v2 row's design with it. A carried copy (routers before
- * M5b.2) stays; a spawn without such a root stays as it is (unassigned: no arm, still a task). The input is not changed.
+ * (spawn events, meter lines) with an assignment row that has an arm and was assigned at or before the spawn (the arm holds from the
+ * row's ts on, as `armDue` in contract.ts), and a v2 row's design with it. A carried copy (routers before M5b.2) stays; a spawn
+ * without such a root (or without a ts) stays as it is (unassigned: no arm, still a task). The input is not changed.
  */
 export function withSpawnArms(outcomes: any[], meter: any[], assignments: any[]): any[] {
   const parent = new Map<string, string>();
   for (const e of outcomes) if (e?.event === "spawn" && str(e.sessionId) && str(e.parentSessionId)) parent.set(e.sessionId, e.parentSessionId);
   for (const l of meter) if (str(l?.sessionId) && str(l.parentSessionId)) parent.set(l.sessionId, l.parentSessionId);
   const armed = new Map<string, any>();
-  for (const r of assignments) if (str(r?.sessionId) && str(r.arm) && !armed.has(r.sessionId)) armed.set(r.sessionId, r);
-  const rootRow = (sid: unknown): any => {
+  for (const r of assignments) if (str(r?.sessionId) && str(r.arm) && Number.isFinite(Date.parse(r.ts)) && !armed.has(r.sessionId)) armed.set(r.sessionId, r);
+  const rootRow = (sid: unknown, ts: unknown): any => {
+    const when = str(ts) ? Date.parse(ts) : NaN;
+    if (!Number.isFinite(when)) return undefined;
     const seen = new Set<string>();
     for (let s = str(sid) ? sid : undefined, i = 0; s !== undefined && i < MAX_DEPTH && !seen.has(s); i++, s = parent.get(s)) {
       seen.add(s);
-      if (armed.has(s)) return armed.get(s);
+      const r = armed.get(s);
+      if (r !== undefined && Date.parse(r.ts) <= when) return r;
     }
     return undefined;
   };
   return outcomes.map((e) => {
     if (e?.event !== "spawn" || str(e.arm)) return e;
-    const r = rootRow(e.parentSessionId);
+    const r = rootRow(e.parentSessionId, e.ts);
     if (r === undefined) return e;
     return { ...e, arm: r.arm, ...(r.v === 2 && str(r.design) && !str(e.design) ? { design: r.design } : {}) };
   });
