@@ -424,16 +424,19 @@ as "not measurable", never as a number.
   backlog item) would let the analyser drop them. A log in which no spawn carries `assigned` reads "ITT: not measurable". Acceptance
   and $/accepted of a row are over its judged tasks (bootstrap CI from 5 judged tasks on); unresolved cards and spot-check reviews are in no row.
 - **Router factors** (Q4). The router randomizes some levers itself (local-first settings, delegation rules). When its spawn lines carry the level
-  each task got, `factors`: an object factor → level (a string, a finite number or a boolean; anything else is ignored), the report has one
+  each task got, `factors` (the levers the router randomizes, nothing it pins): an object factor → level (a string, a finite number or a boolean; anything else is ignored), the report has one
   row per factor and level over the routed tasks that carry it: acceptance and $/accepted by assignment (intention to treat), labelled
   "randomized by the router (ext)". Nothing of it enters pi-economics' own experiment design. Without such lines the report says "router factors:
   not recorded". The router does not write `factors` yet (a router backlog item; the name is this reader's proposal).
 - **Spot-check agreement** (B7). `requested` = tasks with a `spotcheck` event; `reviewed` = those whose review child the parent judged
   (the verdict event of the review task, with `reviewOf` = the original task) while the original's verdict at the draw (the last one at or
-  before the `spotcheck` event) is judged; `pending` = requested without that. The **agreement** compares the original's verdict at the draw
-  with the **reviewer's own verdict on it**, the field `reviewerVerdict` (`accepted`, `partial`, `rejected`) of the review's verdict event:
-  agree = both accept or both do not, with Cohen's κ over the same two classes (undefined, shown "–", when one rater never varies: a spot
-  check is drawn from accepted tasks). The parent's verdict of the review child is no part of it (it is `accepted` for 55 of 55 reviews on the
+  before the `spotcheck` event) is judged, of which **drawn** = those that review a task with a `spotcheck` event (the others were not
+  drawn: the parent asked for them); `pending` = requested without a review. The **agreement** compares the original's verdict at the draw
+  with the **reviewer's own verdict on it**, the field `reviewerVerdict` (`accepted`, `partial`, `rejected`) of the review's verdict event (the spot-check reviewer's verdict on the child's diff; `verdict` on the same event stays the parent's verdict of the review child):
+  agree = both accept or both do not, with Cohen's κ over the same two classes, which is **not estimable** when one rater never varies:
+  a spot check is drawn from accepted tasks only, so the original is accepted at every draw and κ has no value on such a log (the report
+  says "not estimable: spot checks are drawn from accepted tasks only"). The figure that remains is how often the reviewer does not accept
+  an accepted original, shown beside the agreement. The parent's verdict of the review child is no part of it (it is `accepted` for 55 of 55 reviews on the
   author's log). The router does not write `reviewerVerdict` yet (a router backlog item; the name is this reader's proposal and changes here
   if the router names it differently): until it does the report says "agreement: not measurable", never a rate.
 - **Qwen share of tasks** is the share of routed tasks *planned* on `qwen`; the report states no target for it.

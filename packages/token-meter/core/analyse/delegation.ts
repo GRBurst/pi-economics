@@ -31,10 +31,12 @@ export type Randomized = { kinds: string[]; rows: RandomRow[]; otherBase: number
 /**
  * Does the reviewer agree with the original verdict (B7)? Only a reviewer's own verdict says so: `reviewerVerdict` on the review's verdict event
  * (a field the router does not write yet, read untyped); without it the answer is "not measurable", never a rate. `kappa` is Cohen's κ over
- * accepted / not accepted; NaN when one of the two raters never varies (spot checks are drawn from accepted tasks, so the originals usually do not).
+ * accepted / not accepted; NaN when one of the two raters never varies (spot checks are drawn from accepted tasks, so the originals usually do not);
+ * `accepted` = the originals that were accepted at the draw (n) and how many of them the reviewer did not accept: the figure that remains then.
  */
-export type Agreement = { measurable: false; reason: string } | { measurable: true; n: number; agree: number; kappa: number };
-export type SpotChecks = { requested: number; reviewed: number; pending: number; agreement: Agreement };
+export type Agreement = { measurable: false; reason: string } | { measurable: true; n: number; agree: number; kappa: number; accepted: { n: number; notAccepted: number } };
+/** `reviewed` = every review child the parent judged (of an original judged at the draw), `drawn` = those of them that review a task with a `spotcheck` event; `pending` = requested without one. */
+export type SpotChecks = { requested: number; reviewed: number; drawn: number; pending: number; agreement: Agreement };
 
 export type Runaway = { sessionId: string; taskId?: string; requests: number; usd: number; reason: string };
 /** How many of the routed tasks, by the tier the router planned and the model they ran on (B6). */
@@ -52,6 +54,7 @@ export type DelegationSection = { spawns: number; unresolved: number; reviewSpaw
   runaways: Runaway[]; limits: { requests: number; usd: number } };
 
 export const MIN_CI_N = 5; // judged tasks needed for a bootstrap CI of a group
+// `workerTier` values and `escalate.from` labels are the router's outcome-log vocabulary (the contract copy names them), not D9's route data.
 const TIER_RANK: Record<string, number> = { qwen: 0, haiku: 1, T1: 2, T2: 3 };
 /** The tier of an `escalate.from` route label (router 2026-10-17: the Qwen members' routes are `local` and `cloud`; `haiku`,
  *  `T1`, `T2` are their own tiers); anything else, `"?"` included, as written. */
@@ -189,12 +192,14 @@ export function spotCheckAgreement(outcomes: any[], spawns: any[]): SpotChecks {
   const covered = new Set<string>();
   const pairs: Array<[boolean, boolean]> = []; // (the original was accepted at the draw, the reviewer accepted it)
   let reviewed = 0;
+  let drawn = 0;
   let withField = 0;
   for (const v of lastReview.values()) {
     const orig = verdictAt(v.reviewOf, requested.get(v.reviewOf) ?? reviewSpawnTs.get(v.reviewOf));
     const origJudged = orig !== undefined && JUDGED.includes(orig);
     if (JUDGED.includes(v.verdict) && origJudged) {
       reviewed += 1;
+      if (requested.has(v.reviewOf)) drawn += 1;
       covered.add(v.reviewOf);
     }
     if (typeof v.reviewerVerdict === "string" && JUDGED.includes(v.reviewerVerdict)) {
@@ -202,7 +207,7 @@ export function spotCheckAgreement(outcomes: any[], spawns: any[]): SpotChecks {
       if (origJudged) pairs.push([orig === "accepted", v.reviewerVerdict === "accepted"]);
     }
   }
-  return { requested: requested.size, reviewed, pending: [...requested.keys()].filter((id) => !covered.has(id)).length, agreement: agreementOf(pairs, withField) };
+  return { requested: requested.size, reviewed, drawn, pending: [...requested.keys()].filter((id) => !covered.has(id)).length, agreement: agreementOf(pairs, withField) };
 }
 
 const NO_REVIEWER = "no review's verdict event carries `reviewerVerdict` (the reviewer's own verdict on the original task; the router does not write it yet): the parent's verdict of the review child says nothing of the original";
@@ -214,7 +219,8 @@ function agreementOf(pairs: Array<[boolean, boolean]>, withField: number): Agree
   const [po, p1, p2] = [agree / n, pairs.filter(([o]) => o).length / n, pairs.filter(([, r]) => r).length / n];
   const pe = p1 * p2 + (1 - p1) * (1 - p2);
   const varies = (p: number) => p > 0 && p < 1;
-  return { measurable: true, n, agree, kappa: varies(p1) && varies(p2) ? (po - pe) / (1 - pe) : NaN };
+  const orig = pairs.filter(([o]) => o);
+  return { measurable: true, n, agree, kappa: varies(p1) && varies(p2) ? (po - pe) / (1 - pe) : NaN, accepted: { n: orig.length, notAccepted: orig.filter(([, r]) => !r).length } };
 }
 
 /**

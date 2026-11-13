@@ -68,7 +68,8 @@ without the user's explicit approval.
   "not measurable" without `assigned` in the log. *Router factors*: acceptance and $/accepted per level
   of the levers the router randomizes itself (when its spawn lines record them; else "not recorded").
   *Spot checks*: how often the reviewer's own verdict on a spot-checked task agrees with the original
-  verdict, with Cohen's κ (a low rate = the parent's acceptance is too lenient); "not measurable" while
+  verdict, with how often the reviewer does not accept an accepted original (a high rate = the parent's acceptance is too lenient) and
+  Cohen's κ ("not estimable" on a log whose spot checks are drawn from accepted tasks only: the original never varies); "not measurable" while
   the router logs no reviewer verdict (never read the parent's verdict of the review child as
   agreement: it is always `accepted`). Review children are counted but left out of every routing
   figure; unresolved cards are in the $ only.

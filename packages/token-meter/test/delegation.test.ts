@@ -452,6 +452,18 @@ test("spot checks: requested, reviewed (the review child's verdict judged) and p
   assert.equal(s.requested, 6);
   assert.equal(s.reviewed, 4); // v1–v4 are judged; v5 unjudged; o6 has no review
   assert.equal(s.pending, 2);
+  assert.equal(s.drawn, 4); // every one of them reviews a task with a spotcheck event
+});
+
+// m4 (audit B7, "35 vs 52"): `reviewed` counted every judged review child, drawn or not; the drawn ones are the sample, the others the parent's own requests.
+test("m4: a review of a task nobody drew (no spotcheck event) is reviewed but not drawn; pending counts requested tasks only", () => {
+  const w = spotLogs();
+  const extra = logsOf([{ id: "o7", verdict: "accepted", tier: "qwen" }, { id: "v6", kind: "review", tier: "T2", verdict: "accepted", spawn: { reviewOf: "o7" }, verdictExtra: { reviewOf: "o7" } }]);
+  const s = analyse({ ...w, meter: [...w.meter, ...extra.meter], outcomes: [...w.outcomes, ...extra.outcomes] }).delegation.spotChecks;
+  assert.deepEqual([s.requested, s.reviewed, s.drawn, s.pending], [6, 5, 4, 2]);
+  const md = renderAnalysis(analyse({ ...w, meter: [...w.meter, ...extra.meter], outcomes: [...w.outcomes, ...extra.outcomes] }), new Date("2026-10-06T00:00:00Z"));
+  assert.match(md, /\| requested \| reviewed \(judged\) \| of which drawn \| pending \|/);
+  assert.match(md, /\| 6 \| 5 \| 4 \| 2 \|/);
 });
 
 // B7: the parent's verdict on a review child (accepted 55 of 55 on the author's log) is no reviewer's opinion of the original task. Agreement needs
@@ -470,7 +482,10 @@ test("B7: without a reviewer verdict in the log the agreement is not measurable,
 
 test("B7: with the reviewer's verdicts the agreement is computed: n, agreements, κ; a review without one, or an unjudged one, is left out", () => {
   const s = analyse(spotLogs(["accepted", "accepted", "rejected", "partial", undefined as unknown as string])).delegation.spotChecks;
-  assert.deepEqual(s.agreement, { measurable: true, n: 4, agree: 2, kappa: NaN }); // every original was accepted at the draw: one rater never varies, κ is undefined
+  assert.deepEqual(s.agreement, { measurable: true, n: 4, agree: 2, kappa: NaN, accepted: { n: 4, notAccepted: 2 } }); // every original was accepted at the draw: one rater never varies, κ is undefined
+  const md = renderAnalysis(analyse(spotLogs(["accepted", "accepted", "rejected", "partial", undefined as unknown as string])), new Date("2026-10-06T00:00:00Z"));
+  assert.match(md, /\| compared \(with reviewer verdict\) \| agreement \| reviewer does not accept an accepted original \| κ \|/);
+  assert.match(md, /\| 4 \| 50% \(2\/4\) \| 2\/4 \| not estimable: spot checks are drawn from accepted tasks only \|/); // m4: not a bare "–"
   const x = spotLogs(["accepted", "accepted", "rejected", "partial", "unjudged"]);
   assert.equal((analyse(x).delegation.spotChecks.agreement as { n: number }).n, 4);
 });
@@ -484,7 +499,15 @@ test("B7: κ over a mixed sample: 10 pairs, 7 agree, orig accepted 6, reviewer a
   assert.ok(a.measurable);
   if (a.measurable) { assert.deepEqual([a.n, a.agree], [10, 7]); close(a.kappa, 0.4); }
   const md = renderAnalysis(analyse(w), new Date("2026-10-06T00:00:00Z"));
-  assert.match(md, /\| 10 \| 70% \(7\/10\) \| 0\.40 \|/);
+  assert.match(md, /\| 10 \| 70% \(7\/10\) \| 2\/6 \| 0\.40 \|/); // 6 originals accepted at the draw, the reviewer did not accept 2 of them
+});
+
+test("m4: the reviewer who never varies on a mixed sample is 'not estimable' for that reason, not the drawn-from-accepted one", () => {
+  const origs: Task[] = [{ id: "o1", verdict: "accepted" }, { id: "o2", verdict: "partial" }, { id: "o3", verdict: "accepted" }];
+  const reviews: Task[] = origs.map((o, i) => ({ id: `v${i}`, kind: "review", tier: "T2", verdict: "accepted", spawn: { reviewOf: o.id }, verdictExtra: { reviewOf: o.id, reviewerVerdict: "accepted" } }));
+  const w = logsOf([...origs, ...reviews], origs.map((o, i) => ev("spotcheck", o.id, 30 + i, { requested: true })));
+  const md = renderAnalysis(analyse(w), new Date("2026-10-06T00:00:00Z"));
+  assert.match(md, /\| 3 \| 67% \(2\/3\) \| 0\/2 \| not estimable: the reviewer's verdict never varies \|/);
 });
 
 test("spot checks: none requested → nothing reviewed, agreement not measurable; the review children's verdicts do not enter the tier acceptance", () => {

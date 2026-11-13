@@ -138,14 +138,18 @@ export function renderRouterFactors(f: RouterFactor[]): string {
   ].join("\n");
 }
 
+/** κ, or why there is none: a rater that never varies (the originals: spot checks are drawn from accepted tasks only; else the reviewer). */
+const kappaText = (a: { n: number; kappa: number; accepted: { n: number } }): string =>
+  Number.isFinite(a.kappa) ? f2(a.kappa) : a.accepted.n === a.n ? "not estimable: spot checks are drawn from accepted tasks only" : "not estimable: the reviewer's verdict never varies";
+
 export function renderSpotChecks(s: SpotChecks): string {
   if (!s.requested && !s.reviewed) return "\n### Spot checks\n\n_no spot checks in the period_ (`spotcheck` events, `reviewOf` on spawn and verdict lines)";
   const a = s.agreement;
   return [
-    "\n### Spot checks\n\nAn accepted task re-judged by a review child. Agreement = the reviewer's own verdict (`reviewerVerdict`) and the original verdict at the draw both accept or both do not; κ = Cohen's κ over the same two classes, – when one of the two never varies (spot checks are drawn from accepted tasks). The parent's verdict of the review child is no part of it.\n",
-    table(["requested", "reviewed (judged)", "pending"], [[String(s.requested), String(s.reviewed), String(s.pending)]]),
+    "\n### Spot checks\n\nAn accepted task re-judged by a review child. Agreement = the reviewer's own verdict (`reviewerVerdict`) and the original verdict at the draw both accept or both do not; κ = Cohen's κ over the same two classes, not estimable when one of the two never varies: spot checks are drawn from accepted tasks only, so every drawn review has an accepted original, and what remains is how often the reviewer does not accept an accepted original. The parent's verdict of the review child is no part of it. Reviewed (judged) counts every review child the parent judged; drawn = those that review a task with a `spotcheck` event, the others were not drawn.\n",
+    table(["requested", "reviewed (judged)", "of which drawn", "pending"], [[String(s.requested), String(s.reviewed), String(s.drawn), String(s.pending)]]),
     a.measurable
-      ? "\n" + table(["compared (with reviewer verdict)", "agreement", "κ"], [[String(a.n), `${pc(a.agree / a.n)} (${a.agree}/${a.n})`, f2(a.kappa)]])
+      ? "\n" + table(["compared (with reviewer verdict)", "agreement", "reviewer does not accept an accepted original", "κ"], [[String(a.n), `${pc(a.agree / a.n)} (${a.agree}/${a.n})`, `${a.accepted.notAccepted}/${a.accepted.n}`, kappaText(a)]])
       : `\nagreement: not measurable — ${a.reason}`,
   ].join("\n");
 }

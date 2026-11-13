@@ -77,15 +77,15 @@ The router randomizes these levers itself and records each task's levels on its 
 
 ### Spot checks
 
-An accepted task re-judged by a review child. Agreement = the reviewer's own verdict (`reviewerVerdict`) and the original verdict at the draw both accept or both do not; κ = Cohen's κ over the same two classes, – when one of the two never varies (spot checks are drawn from accepted tasks). The parent's verdict of the review child is no part of it.
+An accepted task re-judged by a review child. Agreement = the reviewer's own verdict (`reviewerVerdict`) and the original verdict at the draw both accept or both do not; κ = Cohen's κ over the same two classes, not estimable when one of the two never varies: spot checks are drawn from accepted tasks only, so every drawn review has an accepted original, and what remains is how often the reviewer does not accept an accepted original. The parent's verdict of the review child is no part of it. Reviewed (judged) counts every review child the parent judged; drawn = those that review a task with a `spotcheck` event, the others were not drawn.
 
-| requested | reviewed (judged) | pending |
-| --- | --- | --- |
-| 3 | 2 | 1 |
+| requested | reviewed (judged) | of which drawn | pending |
+| --- | --- | --- | --- |
+| 3 | 2 | 2 | 1 |
 
-| compared (with reviewer verdict) | agreement | κ |
-| --- | --- | --- |
-| 2 | 50% (1/2) | – |
+| compared (with reviewer verdict) | agreement | reviewer does not accept an accepted original | κ |
+| --- | --- | --- | --- |
+| 2 | 50% (1/2) | 1/2 | not estimable: spot checks are drawn from accepted tasks only |
 
 ### Child models
 
