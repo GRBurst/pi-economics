@@ -75,7 +75,7 @@ at its empty default exports nothing, and the bench keeps its own default.
 | `dataDir` | `<home>/<agentDir>/bench` | `PI_BENCH_DATA` |
 | (agent source) | `<home>/<agentDir>`, not an option | `PI_BENCH_AGENT_SRC` |
 | `workDir` | `null` (the bench: `$XDG_RUNTIME_DIR/pi/tmp/bench`) | `PI_BENCH_WORK` |
-| `extensions` | the extensions the bench loads by name, one `mkDefault` each: the flake's `infinite-context`, `pi-retry`, `token-meter`, and `actor-subagents`, `task-router` at their `extensions.<name>.path` while the registry has them (see below) | `PI_BENCH_EXT_DIR`, a `linkFarm` of name → path |
+| `extensions` | the extensions the bench loads by name, one `mkDefault` each: the flake's `infinite-context`, `token-meter`, and `actor-subagents`, `task-router` at their `extensions.<name>.path` while the registry has them (see below) | `PI_BENCH_EXT_DIR`, a `linkFarm` of name → path |
 | `baseExtensions` | `[]` | `PI_BENCH_BASE_EXTENSIONS`, the names comma-separated: every run loads them (see below) |
 | `orchExtensions` | `[]` | `PI_BENCH_ORCH_EXTENSIONS`, the names comma-separated: the orchestrator factor arms and their children load them (see below) |
 | `router` | `{}` (the bench: the run-time base alone, see below) | `PI_BENCH_ROUTER`, a JSON file merged over the run-time base; an orch arm merges its `routing`, `delegation`, `t0Limits` over both as `lib.recursiveUpdate` does |

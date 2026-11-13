@@ -98,14 +98,13 @@ in
       eq "PI_BENCH_EXT_DIR" v.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" ((pe (on {})).bench.extensions // exts)}";
 
     # (M6.14) The default: the extensions the bench loads by name (spec §7).
-    # This flake's own three from their packages; actor-subagents and
+    # This flake's own two from their packages; actor-subagents and
     # task-router from the registry entry of that name, and absent without one
     # (router-extraction design §7.3). PI_BENCH_EXT_DIR links exactly these;
     # mkForce {} exports nothing.
     bench-extensions-default = let
       own = p: {
         infinite-context = "${p.infiniteContext.package}/extensions/infinite-context";
-        pi-retry = "${p.retry.package}";
         token-meter = "${p.tokenMeter.package}";
       };
       alone = on {};
@@ -115,14 +114,14 @@ in
       # router's flake add them.
       all = hm.eval {
         programs.piEconomics =
-          lib.genAttrs ["bench" "tokenMeter" "cacheLifecycle" "experiments" "infiniteContext" "retry"] (_: {enable = true;})
+          lib.genAttrs ["bench" "tokenMeter" "cacheLifecycle" "experiments" "infiniteContext"] (_: {enable = true;})
           // {extensions = registry;};
       };
       ext = c: (pe c).bench.extensions;
       shared = c: lib.intersectLists (lib.attrNames (ext c)) (lib.attrNames (pe c).extensions);
       farm = name: c: eq "PI_BENCH_EXT_DIR (${name})" c.home.sessionVariables.PI_BENCH_EXT_DIR "${pkgs.linkFarm "pi-bench-extensions" (ext c)}";
     in
-      eq "without registry entries: the own three" (ext alone) (own (pe alone))
+      eq "without registry entries: the own two" (ext alone) (own (pe alone))
       ++ eq "with registry entries: theirs too" (ext reg) (own (pe reg) // lib.mapAttrs (_: e: e.path) registry)
       ++ holds "every component: both registered names" (lib.all (n: lib.elem n (shared all)) ["actor-subagents" "task-router"])
       ++ eq "every component: each name the registry holds is its path" (lib.genAttrs (shared all) (n: (ext all).${n})) (lib.genAttrs (shared all) (n: (pe all).extensions.${n}.path))
@@ -260,8 +259,8 @@ in
   // {
     # (from review-m6; M5.13) A host's definition of one default name wins over
     # that name's mkDefault without a conflict and leaves the other defaults (spec
-    # §7): checked for every name the default holds, pi-retry and task-router
-    # among them.
+    # §7): checked for every name the default holds, actor-subagents and
+    # task-router among them.
     bench-extensions-override = let
       defaults = (pe (onRegistry {})).bench.extensions;
       one = name: let
@@ -272,6 +271,6 @@ in
         ++ eq "the other defaults stay (${name})" (removeAttrs got [name]) (removeAttrs defaults [name])
         ++ eq "failed assertions (${name})" (failed "" c) [];
     in
-      holds "the defaults hold pi-retry, actor-subagents and task-router" (defaults ? pi-retry && defaults ? actor-subagents && defaults ? task-router)
+      holds "the defaults hold actor-subagents and task-router" (defaults ? actor-subagents && defaults ? task-router)
       ++ lib.concatMap one (lib.attrNames defaults);
   }

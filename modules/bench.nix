@@ -57,8 +57,8 @@ in {
         the registry: the arms load extensions the registry does not hold, and
         leave out some it does. Exported as a directory of links
         (`PI_BENCH_EXT_DIR`). Defined by default, one `mkDefault` each, for the
-        extensions the bench loads by name: this flake's `infinite-context`,
-        `pi-retry` and `token-meter`, and `actor-subagents` and `task-router`
+        extensions the bench loads by name: this flake's `infinite-context`
+        and `token-meter`, and `actor-subagents` and `task-router`
         at the path of their entry in `programs.piEconomics.extensions` when
         it has one. A definition adds names or replaces one; `lib.mkForce {}`
         exports nothing, and the bench then looks the names up in
@@ -153,12 +153,11 @@ in {
     # (M6.14) The extensions the bench loads by name (spec §7), one mkDefault
     # definition each: a consumer adds its own extensions beside them (for
     # `baseExtensions`, `orchExtensions`) and may replace one by name. This
-    # flake's own three from their packages; actor-subagents and task-router
+    # flake's own two from their packages; actor-subagents and task-router
     # from the registry entry of that name, when there is one (router-extraction
     # design §7.3: they come from other flakes).
     programs.piEconomics.bench.extensions = lib.mapAttrs (_: lib.mkDefault) ({
         infinite-context = "${pe.infiniteContext.package}/extensions/infinite-context";
-        pi-retry = "${pe.retry.package}";
         token-meter = "${pe.tokenMeter.package}";
       }
       // lib.mapAttrs (_: e: e.path) (lib.filterAttrs (n: _: lib.elem n ["actor-subagents" "task-router"]) pe.extensions));
