@@ -1,0 +1,19 @@
+{
+  "description": "The router's route labels and tiers as the outcome lines named them before 2026-10-17 (spec D9): the models behind the labels, the levels on each ability's scale, and the reasons of a qwen chain. core/levels.ts reads this for a line older than `before` and for no other: since then the router writes the models and levels itself (workerModel, fromModel, toModel, workerLevel, fromLevel, toLevel). Old lines cannot change, so neither can this file.",
+  "before": "2026-10-17",
+  "models": {
+    "local": "llama/qwen3.8",
+    "cloud": "openrouter/qwen/qwen3.8-27b:free",
+    "T1": "anthropic/claude-sonnet-5-5",
+    "T2": "anthropic/claude-opus-5-5"
+  },
+  "levels": {
+    "write": { "local": 0, "cloud": 0, "qwen": 0, "T1": 1, "T2": 2 },
+    "read": { "local": 0, "cloud": 0, "qwen": 0, "T1": 2, "T2": 3 }
+  },
+  "chain": [
+    { "reason": "qwen chain: local", "route": "local" },
+    { "reason": "qwen chain: cloud", "route": "cloud" },
+    { "reason": "qwen chain → Sonnet:", "route": "T1", "startEffort": "high" }
+  ]
+}

@@ -189,7 +189,10 @@ rejected `request_merge`, a main branch moved outside the gate, and a plan appro
 ### Older lines: the old → new mapping
 
 Lines from before 2026-10-17 carry tiers and route labels only. Readers map them with `levelsOfLine`
-(`core/levels.ts`), which returns a line with the fields of the router's outcome log as written:
+(`core/levels.ts`), which returns a line with the fields of the router's outcome log as written. The tables below are
+data, `core/legacy-routes.json` (`before`, `models`, `levels`, `chain`), read for a line whose `ts` is older than 2026-10-17
+and for no other: a line from that day on yields the models and levels it carries (`workerModel`, `fromModel`, `toModel`,
+`workerLevel`, `fromLevel`, `toLevel`), or none, and is never mapped from a label.
 
 | old `spawn` | `ability` | `level` (from `base`) | `workerLevel` | `workerModel` |
 | --- | --- | --- | --- | --- |

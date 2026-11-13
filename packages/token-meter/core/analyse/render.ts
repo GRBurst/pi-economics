@@ -132,7 +132,7 @@ export function renderDelegation(d: DelegationSection): string {
   return [
     table(["metric", "value"], [
       ["spawned tasks (spot-check reviews; unresolved cards)", `${d.spawns} (${d.reviewSpawns}; ${d.unresolved})`], ["child sessions' share of $", pc(d.childUsdShare)], ["child sessions' share of requests", pc(d.childRequestShare)],
-      ["Qwen share of tasks (SC3: ≥ 30%)", pc(d.qwenShare)], ["escalations", String(sum(d.escalations.map((e) => e.n)))], ["correctives", String(d.correctives)],
+      ["Qwen share of tasks (planned)", pc(d.qwenShare)], ["escalations", String(sum(d.escalations.map((e) => e.n)))], ["correctives", String(d.correctives)],
       ["checks (failed)", `${d.checks.n} (${d.checks.failed})`], ["reroutes", String(sum(d.reroutes.map((r) => r.n)))],
       ["kinds", Object.entries(d.byKind).map(([k, n]) => `${k} ${n}`).join(", ") || "–"],
     ]),

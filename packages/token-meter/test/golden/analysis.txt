@@ -250,7 +250,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 | spawned tasks (spot-check reviews; unresolved cards) | 24 (2; 1) |
 | child sessions' share of $ | 15% |
 | child sessions' share of requests | 25% |
-| Qwen share of tasks (SC3: ≥ 30%) | 62% |
+| Qwen share of tasks (planned) | 62% |
 | escalations | 2 |
 | correctives | 1 |
 | checks (failed) | 3 (1) |

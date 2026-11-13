@@ -2,6 +2,7 @@
 // the router's 2026-10-17 fields is returned as written; an older line is mapped by the spec's tables, one case per row.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { levelsOfLine, type LevelsContext } from "../core/levels.ts";
 
 const LOCAL = "llama/qwen3.8";
@@ -10,8 +11,10 @@ const SONNET = "anthropic/claude-sonnet-5-5";
 const OPUS = "anthropic/claude-opus-5-5";
 
 type Line = Record<string, any>;
+// D9: the old route-label tables (core/legacy-routes.json) apply to the lines written before 2026-10-17 only; the fixtures of old lines carry OLD, those of new ones NEW.
+const OLD = "2026-10-05T10:00:00.000Z", NEW = "2026-10-17T00:00:00.000Z";
 const spawn = (taskId: string, kind: string, workerTier: string, rest: Line = {}): Line =>
-  ({ v: 1, event: "spawn", taskId, kind, workerTier, workerEffort: "xhigh", base: workerTier, reasons: [], ...rest });
+  ({ v: 1, ts: OLD, event: "spawn", taskId, kind, workerTier, workerEffort: "xhigh", base: workerTier, reasons: [], ...rest });
 const ctxOf = (lines: Line[]): LevelsContext => ({
   spawns: new Map(lines.filter((l) => l.event === "spawn").map((l) => [l.taskId, l])),
   lastReroute: new Map(lines.filter((l) => l.event === "reroute").map((l) => [l.taskId, l])),
@@ -22,13 +25,13 @@ const NONE = ctxOf([]);
 
 test("a spawn line with the router's fields is returned as written; ranModel is the last reroute's toModel", () => {
   const l = spawn("n1", "implement", "qwen", {
-    ability: "write", level: 0, draft: true, workerLevel: 0, reviewLevel: 1, workerMember: "haiku", workerModel: "anthropic/claude-haiku", startEffort: "medium", waitMs: 0,
+    ts: NEW, ability: "write", level: 0, draft: true, workerLevel: 0, reviewLevel: 1, workerMember: "haiku", workerModel: "anthropic/claude-haiku", startEffort: "medium", waitMs: 0,
     reasons: ["qwen chain: cloud"], // a stray old reason never overrides the written fields
   });
   assert.deepEqual(levelsOfLine(l, NONE), {
     ability: "write", level: 0, draft: true, workerLevel: 0, reviewLevel: 1, workerModel: "anthropic/claude-haiku", ranModel: "anthropic/claude-haiku", startEffort: "medium",
   });
-  const r = { event: "reroute", taskId: "n1", from: "haiku", to: "T1", fromModel: "anthropic/claude-haiku", toModel: SONNET };
+  const r = { ts: NEW, event: "reroute", taskId: "n1", from: "haiku", to: "T1", fromModel: "anthropic/claude-haiku", toModel: SONNET };
   assert.equal(levelsOfLine(l, ctxOf([l, r])).ranModel, SONNET);
 });
 
@@ -78,7 +81,7 @@ test("old ranModel: the last reroute's `to` mapped (local, cloud, T1, T2), else 
   const l = spawn("r1", "implement", "qwen", { reasons: ["qwen chain: cloud"] });
   assert.equal(levelsOfLine(l, NONE).ranModel, FREE);
   for (const [to, m] of [["local", LOCAL], ["cloud", FREE], ["T1", SONNET], ["T2", OPUS]]) {
-    const r = { event: "reroute", taskId: "r1", from: "cloud", to, reason: "x" };
+    const r = { ts: OLD, event: "reroute", taskId: "r1", from: "cloud", to, reason: "x" };
     assert.equal(levelsOfLine(l, ctxOf([l, r])).ranModel, m, to);
   }
 });
@@ -86,14 +89,14 @@ test("old ranModel: the last reroute's `to` mapped (local, cloud, T1, T2), else 
 // ---- escalate and reroute ------------------------------------------------------------------------
 
 test("an escalate line with the router's fields is returned as written", () => {
-  const e = { event: "escalate", taskId: "b", attemptOf: "a", from: "cloud", to: "T1", fromModel: FREE, toModel: SONNET, ability: "write", fromLevel: 0, toLevel: 1 };
+  const e = { ts: NEW, event: "escalate", taskId: "b", attemptOf: "a", from: "cloud", to: "T1", fromModel: FREE, toModel: SONNET, ability: "write", fromLevel: 0, toLevel: 1 };
   assert.deepEqual(levelsOfLine(e, NONE), { ability: "write", fromLevel: 0, toLevel: 1, fromModel: FREE, toModel: SONNET });
 });
 
 test("old escalate: ability of the spawn named by attemptOf; local/cloud → 0, T1 → 1 (read 2), T2 → 2 (read 3); models by label", () => {
   const w = spawn("a", "implement", "qwen"), s = spawn("sc", "scout", "qwen");
   const ctx = ctxOf([w, s]);
-  const esc = (attemptOf: string, from: string, to: string) => levelsOfLine({ event: "escalate", taskId: `${attemptOf}b`, attemptOf, from, to }, ctx);
+  const esc = (attemptOf: string, from: string, to: string) => levelsOfLine({ ts: OLD, event: "escalate", taskId: `${attemptOf}b`, attemptOf, from, to }, ctx);
   assert.deepEqual(esc("a", "local", "T1"), { ability: "write", fromLevel: 0, toLevel: 1, fromModel: LOCAL, toModel: SONNET });
   assert.deepEqual(esc("a", "cloud", "T2"), { ability: "write", fromLevel: 0, toLevel: 2, fromModel: FREE, toModel: OPUS });
   assert.deepEqual(esc("a", "T1", "T2"), { ability: "write", fromLevel: 1, toLevel: 2, fromModel: SONNET, toModel: OPUS });
@@ -103,16 +106,71 @@ test("old escalate: ability of the spawn named by attemptOf; local/cloud → 0, 
 
 test("old escalate from \"?\": fromLevel from the failed spawn's workerTier, fromModel unknown; no failed spawn → no ability, no levels", () => {
   const ctx = ctxOf([spawn("a", "implement", "T1"), spawn("sc", "review", "qwen")]);
-  assert.deepEqual(levelsOfLine({ event: "escalate", taskId: "ab", attemptOf: "a", from: "?", to: "T2" }, ctx), { ability: "write", fromLevel: 1, toLevel: 2, toModel: OPUS });
-  assert.deepEqual(levelsOfLine({ event: "escalate", taskId: "sb", attemptOf: "sc", from: "?", to: "T1" }, ctx), { ability: "read", fromLevel: 0, toLevel: 2, toModel: SONNET });
-  assert.deepEqual(levelsOfLine({ event: "escalate", taskId: "zb", attemptOf: "z", from: "cloud", to: "T1" }, ctx), { fromModel: FREE, toModel: SONNET });
+  assert.deepEqual(levelsOfLine({ ts: OLD, event: "escalate", taskId: "ab", attemptOf: "a", from: "?", to: "T2" }, ctx), { ability: "write", fromLevel: 1, toLevel: 2, toModel: OPUS });
+  assert.deepEqual(levelsOfLine({ ts: OLD, event: "escalate", taskId: "sb", attemptOf: "sc", from: "?", to: "T1" }, ctx), { ability: "read", fromLevel: 0, toLevel: 2, toModel: SONNET });
+  assert.deepEqual(levelsOfLine({ ts: OLD, event: "escalate", taskId: "zb", attemptOf: "z", from: "cloud", to: "T1" }, ctx), { fromModel: FREE, toModel: SONNET });
 });
 
 test("reroute: models only — as written when present, else by the label map", () => {
-  assert.deepEqual(levelsOfLine({ event: "reroute", taskId: "q", from: "cloud", to: "T1", reason: "x", fromModel: "a/b", toModel: "c/d" }, NONE), { fromModel: "a/b", toModel: "c/d" });
-  assert.deepEqual(levelsOfLine({ event: "reroute", taskId: "q", from: "local", to: "cloud", reason: "x" }, NONE), { fromModel: LOCAL, toModel: FREE });
+  assert.deepEqual(levelsOfLine({ ts: NEW, event: "reroute", taskId: "q", from: "cloud", to: "T1", reason: "x", fromModel: "a/b", toModel: "c/d" }, NONE), { fromModel: "a/b", toModel: "c/d" });
+  assert.deepEqual(levelsOfLine({ ts: OLD, event: "reroute", taskId: "q", from: "local", to: "cloud", reason: "x" }, NONE), { fromModel: LOCAL, toModel: FREE });
 });
 
 test("other events have no levels", () => {
   for (const event of ["check", "verdict", "corrective", "spotcheck"]) assert.deepEqual(levelsOfLine({ event, taskId: "t" }, NONE), {});
+});
+
+// ---- D9: the route-label tables are data, and apply to the lines written before 2026-10-17 only -----------------
+
+test("D9: the label → model and level tables are core/legacy-routes.json, not levels.ts", () => {
+  const src = readFileSync(new URL("../core/levels.ts", import.meta.url), "utf8");
+  for (const model of [LOCAL, FREE, SONNET, OPUS]) assert.ok(!src.includes(model), `levels.ts names ${model}`);
+  const data = JSON.parse(readFileSync(new URL("../core/legacy-routes.json", import.meta.url), "utf8"));
+  assert.equal(data.before, "2026-10-17");
+  assert.deepEqual(Object.values(data.models).sort(), [FREE, LOCAL, OPUS, SONNET].sort());
+  assert.deepEqual(Object.keys(data.levels).sort(), ["read", "write"]);
+});
+
+test("D9: the cutoff is 2026-10-17T00:00:00Z: a spawn a millisecond older is mapped through the tables, one at the cutoff is read as written", () => {
+  const rest = { reasons: ["qwen chain: local"] };
+  const old = levelsOfLine(spawn("b", "implement", "qwen", { ...rest, ts: "2026-10-16T23:59:59.999Z" }), NONE);
+  assert.deepEqual([old.workerModel, old.ranModel, old.ability, old.workerLevel], [LOCAL, LOCAL, "write", 0]);
+  assert.deepEqual(levelsOfLine(spawn("b", "implement", "qwen", { ...rest, ts: NEW }), NONE), {});
+});
+
+test("D9: a new unrouted spawn still names its model in its own reason; a new reroute and escalate without models name none", () => {
+  const u = spawn("u", "unrouted", "vendor/other", { ts: NEW, reasons: ["routing off", "model vendor/other"] });
+  assert.deepEqual(levelsOfLine(u, NONE), { workerModel: "vendor/other", ranModel: "vendor/other", startEffort: "xhigh" });
+  assert.deepEqual(levelsOfLine({ ts: NEW, event: "reroute", taskId: "q", from: "local", to: "T1", reason: "x" }, NONE), {});
+  assert.deepEqual(levelsOfLine({ ts: NEW, event: "escalate", taskId: "qb", attemptOf: "q", from: "T1", to: "T2" }, NONE), {});
+});
+
+const rng = (seed: number) => () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+test("D9 property: whatever the labels say, a line with ts ≥ 2026-10-17 yields the models and levels it carries, never one from the tables", () => {
+  const rand = rng(17);
+  const pick = <T>(xs: T[]): T => xs[Math.floor(rand() * xs.length)];
+  const labels = ["local", "cloud", "qwen", "haiku", "T1", "T2", "?"];
+  const reasons = [[], ["qwen chain: local"], ["qwen chain: cloud"], ["qwen chain → Sonnet: busy"], ["t2: auth"]];
+  const maybe = <T>(x: T): T | undefined => (rand() < 0.5 ? x : undefined);
+  const own = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+  for (let i = 0; i < 300; i++) {
+    const kind = pick(["implement", "scout", "review"]);
+    const ts = new Date(Date.parse(NEW) + Math.floor(rand() * 90) * 86_400_000).toISOString();
+    const s = spawn("t", kind, pick(labels), { ts, base: pick(labels), reasons: pick(reasons), ability: maybe(pick(["read", "write"])), level: maybe(1), workerLevel: maybe(2), workerModel: maybe("x/started") });
+    const r = maybe({ ts, event: "reroute", taskId: "t", from: pick(labels), to: pick(labels), reason: "x", fromModel: maybe("x/from"), toModel: maybe("x/to") });
+    const ctx = ctxOf(r ? [s, r] : [s]);
+    const got = levelsOfLine(s, ctx);
+    assert.equal(got.workerModel, s.workerModel, JSON.stringify(s));
+    assert.equal(got.workerLevel, s.workerLevel, JSON.stringify(s));
+    assert.equal(got.ranModel, r ? r.toModel : s.workerModel, JSON.stringify([s, r]));
+    const e = { ts, event: "escalate", taskId: "tb", attemptOf: "t", from: pick(labels), to: pick(labels), fromModel: maybe("x/from"), toModel: maybe("x/to"), ability: maybe("write"), fromLevel: maybe(0), toLevel: maybe(1) };
+    assert.deepEqual(levelsOfLine(e, ctx), own({ ability: e.ability, fromLevel: e.fromLevel, toLevel: e.toLevel, fromModel: e.fromModel, toModel: e.toModel }), JSON.stringify(e));
+    if (r) assert.deepEqual(levelsOfLine(r, ctx), own({ fromModel: r.fromModel, toModel: r.toModel }), JSON.stringify(r));
+  }
 });

@@ -206,6 +206,8 @@ test("render: the delegation section shows the profile × tier table, the random
   assert.match(sec, /\| random \| T1 \| 5 \| 5\/5 \| 100%/);
   assert.match(sec, /### Spot checks/);
   assert.match(sec, /agreement/);
+  assert.ok(!sec.includes("SC3"), "D9: the report names no target of the router's (SC3)");
+  assert.match(sec, /\| Qwen share of tasks \(planned\) \|/);
   const empty = renderAnalysis(analyse(logsOf([{ id: "a", verdict: "accepted" }])), new Date("2026-10-06T00:00:00Z")).split("\n## Delegation & routing\n")[1];
   assert.match(empty, /no randomized spawns/);
   assert.match(empty, /no spot checks/);

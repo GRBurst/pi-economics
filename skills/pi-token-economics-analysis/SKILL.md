@@ -51,7 +51,7 @@ without the user's explicit approval.
   (units, hours, excluded) and a power line; no interaction model. Per-arm $/h, posterior and P(best) pool the strata.
   An effect counts only when its CI excludes 0 *and* each level has several units.
 - **Delegation & routing**: share of tasks and $ in child sessions, tier mix, Qwen share
-  (target SC3: ≥ 30% of child tasks, acceptance not worse than Sonnet by > 10 points),
+  (of the planned tiers; the report states no target: the router's targets are the owner's),
   acceptance per tier, escalations, reroutes, runaway alerts. Per profile (card kind) × tier:
   tasks, accepted/partial/rejected/unjudged, $/accepted task (child subtree), escalations,
   check pass rate. *Randomized routing* (spawns the router sent to Qwen, run on a random tier):
@@ -87,8 +87,8 @@ without the user's explicit approval.
   the factor's setting in the repo's Home Manager config, then a rebuild by the user.
 - **Explore → exploit**: switch `experiments` `mode` to `exploit` once the posterior separates
   arms; keep `minExplore` > 0.
-- **Routing**: adjust the task-router's t0 limits / runaway limits when Qwen share or
-  acceptance per tier misses SC3, or runaways recur.
+- **Routing**: adjust the task-router's t0 limits / runaway limits when the Qwen share or
+  acceptance per tier misses the owner's targets, or runaways recur.
 - **Fix the logging** when the contract check reports missing fields (a writer bug).
 
 Never edit settings, state files or Nix code, and never run `--apply`, without an explicit
