@@ -8,7 +8,7 @@
 | $/active hour (95% CI) | 15.25 (11.96 – 18.27) |
 | q5h %/active hour | 0.32 |
 | q7d %/active hour | 0.00 |
-| $/accepted task, all routed tasks (accepted/tasks) | 1.59 (13/21) |
+| $/accepted task, all routed tasks, excl. – incl. unresolved cards' $ (accepted/tasks) | 1.59 (13/21) |
 
 ### By model
 

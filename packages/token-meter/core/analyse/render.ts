@@ -17,7 +17,7 @@ const ci = (c: { lo: number; hi: number }) => (Number.isFinite(c.lo) ? `${f2(c.l
 const table = (head: string[], rows: string[][]): string =>
   [`| ${head.join(" | ")} |`, "|" + " --- |".repeat(head.length), ...rows.map((r) => `| ${r.join(" | ")} |`)].join("\n");
 const NO_DATA = "_no data in the period_";
-/** $/accepted: one number, or lower – upper when unresolved cards leave the cost uncertain (B15). */
+/** $/accepted: one number, or excl. – incl. unresolved cards' $ (lower – upper) when unresolved cards leave the cost uncertain (B15). */
 const bounds = (c: CostPerAccepted): string => (!Number.isFinite(c.upper) ? "–" : c.lower === c.upper ? f2(c.upper) : `${f2(c.lower)} – ${f2(c.upper)}`);
 
 export function renderCost(c: CostSection): string {
@@ -26,7 +26,7 @@ export function renderCost(c: CostSection): string {
     table(["metric", "value"], [
       ["total $", f2(c.totalUsd)], ["requests (warming)", `${c.requests} (${c.warming})`], ["errors", String(c.errors)], ["root sessions", String(c.units)], ["active hours", f2(c.activeHours)],
       ["$/active hour (95% CI)", `${f2(c.usdPerHour.mean)} (${ci(c.usdPerHour)})`], ["q5h %/active hour", f2(c.q5hPerHour)], ["q7d %/active hour", f2(c.q7dPerHour)],
-      ["$/accepted task, all routed tasks (accepted/tasks)", `${bounds(c.perAccepted)} (${c.perAccepted.accepted}/${c.perAccepted.tasks})`],
+      ["$/accepted task, all routed tasks, excl. – incl. unresolved cards' $ (accepted/tasks)", `${bounds(c.perAccepted)} (${c.perAccepted.accepted}/${c.perAccepted.tasks})`],
     ]),
     "\n### By model\n", table(["model", "requests", "$", "share", "$/active h"], c.byModel.map((m) => [m.model, String(m.requests), f2(m.usd), pc(m.share), f2(m.perHour)])),
     "\n### Splits\n\nWarming = the cache-warming requests (kind warming). Folds and cold resumes are in the Cache section.\n",
@@ -161,11 +161,11 @@ export function renderDelegation(d: DelegationSection): string {
       ["kinds", Object.entries(d.byKind).map(([k, n]) => `${k} ${n}`).join(", ") || "–"],
     ]),
     "\n### By tier\n\nTier = the model the task ran on (the router's `workerModel`, after its last reroute; else the model of the child's last request), not the tier the router planned. Spot-check reviews are left out of every table below, and so are spawns whose card files did not resolve (`unresolved`), except for their $ (tier table and the first table): they say nothing about routing quality.\n",
-    table(["tier", "tasks", "share", "accepted/judged", "acceptance", "$", "of which unresolved $", "$/accepted (lower – upper)"], [
+    table(["tier", "tasks", "share", "accepted/judged", "acceptance", "$", "of which unresolved $", "$/accepted (excl. – incl. unresolved $)"], [
       ...d.byTier.map((t) => [t.tier, String(t.spawns), pc(t.share), `${t.accepted}/${t.judged}`, pc(t.acceptance), f2(t.cost.usd), f2(t.cost.unresolvedUsd), bounds(t.cost)]),
       ["all", String(d.all.tasks), pc(d.all.tasks ? 1 : NaN), `${d.all.accepted}/${d.all.judged}`, pc(d.all.acceptance), f2(d.all.cost.usd), f2(d.all.cost.unresolvedUsd), bounds(d.all.cost)],
     ]),
-    "\n$ = what the tier's tasks cost (every request of their child sessions), judged or not; $/accepted = that ÷ the accepted tasks. The cost of an unresolved card's child is in the $ column and in its own: the bounds leave it out (lower) or count it (upper), so a single number means there is none.\n",
+    "\n$ = what the tier's tasks cost (every request of their child sessions), judged or not; $/accepted = that ÷ the accepted tasks; a task nobody judged is cost with no yield (zero yield): in the $, never accepted, in both numbers. The cost of an unresolved card's child is in the $ column and in its own: the first number leaves it out (excl.), the second counts it (incl.), over the same accepted tasks, so a single number means there is none.\n",
     "\n### Planned → executed tier\n\nThe tier the router planned (`workerTier`) against the model the task ran on: a task counts under the model in every table here, so a planned qwen that ran another model is visible only in this matrix.\n",
     table(["planned", "ran on", "tasks"], d.matrix.map((c) => [c.planned, c.executed, String(c.n)])),
     "\n### By profile and tier\n\nProfile = the card kind; acceptance = accepted ÷ judged; $/accepted = subtree cost of the judged tasks ÷ accepted ones; escalations = re-spawns one level up (D7) from this cell's failed tasks; checks = the card's check ran after the child reported.\n",

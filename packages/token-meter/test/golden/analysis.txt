@@ -14,7 +14,7 @@ Generated 2026-10-06T08:30:00.000Z by pi-analyse; field meanings in <agentDir>/L
 | $/active hour (95% CI) | 15.25 (11.96 – 18.27) |
 | q5h %/active hour | 0.32 |
 | q7d %/active hour | 0.00 |
-| $/accepted task, all routed tasks (accepted/tasks) | 1.59 (13/21) |
+| $/accepted task, all routed tasks, excl. – incl. unresolved cards' $ (accepted/tasks) | 1.59 (13/21) |
 
 ### By model
 
@@ -262,14 +262,14 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 Tier = the model the task ran on (the router's `workerModel`, after its last reroute; else the model of the child's last request), not the tier the router planned. Spot-check reviews are left out of every table below, and so are spawns whose card files did not resolve (`unresolved`), except for their $ (tier table and the first table): they say nothing about routing quality.
 
-| tier | tasks | share | accepted/judged | acceptance | $ | of which unresolved $ | $/accepted (lower – upper) |
+| tier | tasks | share | accepted/judged | acceptance | $ | of which unresolved $ | $/accepted (excl. – incl. unresolved $) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | openrouter/qwen | 14 | 67% | 9/14 | 64% | 3.20 | 0.00 | 0.36 |
 | anthropic/claude-sonnet-5-5 | 5 | 24% | 2/4 | 50% | 14.00 | 0.00 | 7.00 |
 | anthropic/claude-opus-5-5 | 2 | 10% | 2/2 | 100% | 3.50 | 0.00 | 1.75 |
 | all | 21 | 100% | 13/20 | 65% | 20.70 | 0.00 | 1.59 |
 
-$ = what the tier's tasks cost (every request of their child sessions), judged or not; $/accepted = that ÷ the accepted tasks. The cost of an unresolved card's child is in the $ column and in its own: the bounds leave it out (lower) or count it (upper), so a single number means there is none.
+$ = what the tier's tasks cost (every request of their child sessions), judged or not; $/accepted = that ÷ the accepted tasks; a task nobody judged is cost with no yield (zero yield): in the $, never accepted, in both numbers. The cost of an unresolved card's child is in the $ column and in its own: the first number leaves it out (excl.), the second counts it (incl.), over the same accepted tasks, so a single number means there is none.
 
 
 ### Planned → executed tier

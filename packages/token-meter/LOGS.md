@@ -401,6 +401,11 @@ as "not measurable", never as a number.
   killed without a verdict is paid for by the accepted ones); **judged** = the routed tasks with a judged verdict (the cells of *By
   profile and tier*); **spot-check reviews** = the review children, a population of their own, never in the headline. A task without a child
   session has no cost and is in neither numerator nor denominator.
+  **The headline was redefined; it is not comparable with the reports written before.** The old headline took the judged tasks' $ over
+  the accepted ones, with spot-check reviews and unresolved cards in the population, so it read about the judged-only figure; a task
+  killed or never judged (28% of the routed tasks on the author's log) cost money and counted for nothing. On that log the old headline
+  read 4.13, the judged-only routed tasks give 4.21, and the new one reads 6.87 – 11.72 (357 accepted of 521 routed tasks): every routed
+  task is paid for by the accepted ones, unjudged tasks count as zero yield, and the range is the unresolved cards' $ (excl. – incl.).
 - **Unresolved cards** (B15): a spawn with `unresolved: true` (its card files did not resolve) says nothing about routing quality, so it is in
   no acceptance, profile or randomized figure and is never counted as accepted; but its child session cost real money. Its $ is in the
   **all** population's $ (the tier table, the headline) and shown in its own column, and `$/accepted` is a bound pair over the same

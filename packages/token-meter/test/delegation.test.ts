@@ -158,7 +158,7 @@ test("B5: the headline is not the judged-only ratio: a task killed without a ver
   close(a.cost.perAccepted.upper, 6);
   close(a.delegation.byTier[0].cost.upper, 6);
   const md = renderAnalysis(a, new Date("2026-10-06T00:00:00Z"));
-  assert.match(md, /\| \$\/accepted task, all routed tasks \(accepted\/tasks\) \| 6\.00 \(1\/2\) \|/);
+  assert.match(md, /\| \$\/accepted task, all routed tasks, excl\. – incl\. unresolved cards' \$ \(accepted\/tasks\) \| 6\.00 \(1\/2\) \|/);
   assert.match(md, /\| all \| 2 \| 100% \| 1\/1 \| 100% \| 6\.00 \| 0\.00 \| 6\.00 \|/);
 });
 
@@ -182,9 +182,13 @@ test("B15: the unresolved $ shows in the tier table's $ column, in its own colum
   assert.deepEqual([a.delegation.all.cost.usd, a.delegation.all.cost.unresolvedUsd, a.delegation.all.cost.lower, a.delegation.all.cost.upper], [6, 5, 1, 6]);
   assert.deepEqual(a.cost.perAccepted, a.delegation.all.cost);
   const md = renderAnalysis(a, new Date("2026-10-06T00:00:00Z"));
-  assert.match(md, /\| tier \| tasks \| share \| accepted\/judged \| acceptance \| \$ \| of which unresolved \$ \| \$\/accepted \(lower – upper\) \|/);
+  assert.match(md, /\| tier \| tasks \| share \| accepted\/judged \| acceptance \| \$ \| of which unresolved \$ \| \$\/accepted \(excl\. – incl\. unresolved \$\) \|/);
   assert.match(md, /\| all \| 1 \| 100% \| 1\/1 \| 100% \| 6\.00 \| 5\.00 \| 1\.00 – 6\.00 \|/);
-  assert.match(md, /\| \$\/accepted task, all routed tasks \(accepted\/tasks\) \| 1\.00 – 6\.00 \(1\/1\) \|/);
+  assert.match(md, /\| \$\/accepted task, all routed tasks, excl\. – incl\. unresolved cards' \$ \(accepted\/tasks\) \| 1\.00 – 6\.00 \(1\/1\) \|/);
+  // m1: what the range is, and that a task nobody judged is cost with no yield in both ends
+  assert.match(md, /the first number leaves it out \(excl\.\), the second counts it \(incl\.\), over the same accepted tasks/);
+  assert.match(md, /a task nobody judged is cost with no yield \(zero yield\): in the \$, never accepted, in both numbers/);
+  assert.ok(!md.includes("lower – upper"));
   assert.match(md, /\| \$ of spot-check reviews; of unresolved cards \| 0\.00; 5\.00 \|/);
 });
 

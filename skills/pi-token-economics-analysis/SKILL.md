@@ -88,6 +88,10 @@ without the user's explicit approval.
 - **Task-mix variance**: sessions differ in what was asked; an arm can look cheap because it
   got easy sessions. Effects need balanced, repeated sessions.
 - $ are pi's API-price estimates, not the subscription bill.
+- **The $/accepted headline was redefined** (Cost section, same function as the *all* row of the tier table): every routed task's
+  $ over the accepted tasks, an unjudged task counting as zero yield, as a range excl. – incl. the unresolved cards' $. It is not
+  comparable with reports written before: the old figure was about the judged-only one (author's log: old 4.13, judged-only 4.21, new
+  6.87 – 11.72). Compare two reports only if both are of the new kind; for a judged-only figure use the *By profile and tier* cells.
 - Resumed child sessions lose their arm (known gap in LOGS.md); such lines are unattributed.
 
 ## Decision menu (propose; apply only after the user approves)
