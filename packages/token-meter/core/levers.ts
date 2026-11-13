@@ -43,3 +43,33 @@ export function leverViolations(x: LeverState): string[] {
   if (x.rb === "unverified" && x.v !== x.a) out.push("unverified but v ≠ a (v is the assumed a)");
   return out;
 }
+
+export type LeversLine = {
+  v: 2; ts: string; sessionId: string; parentSessionId?: string; kind: "levers";
+  arm?: string; design?: string; eligible: boolean; stratum?: string;
+  levers: Record<LeverId, LeverState>;
+};
+
+/** The byte cap of a meter line (line.ts); a levers line over it is refused, not truncated. */
+const MAX_BYTES = 4096;
+
+export const serializeLevers = (l: LeversLine): string => JSON.stringify(l) + "\n";
+
+/** A levers line in key order; throws on a state that breaks §5.3 or a line over 4096 bytes. */
+export function leversLine(base: Omit<LeversLine, "v" | "kind">): LeversLine {
+  for (const [id, st] of Object.entries(base.levers)) {
+    const bad = leverViolations(st);
+    if (bad.length) throw new Error(`levers: ${id}: ${bad.join("; ")}`);
+  }
+  const l = { v: 2, ts: base.ts, sessionId: base.sessionId } as LeversLine;
+  if (base.parentSessionId !== undefined) l.parentSessionId = base.parentSessionId;
+  l.kind = "levers";
+  if (base.arm !== undefined) l.arm = base.arm;
+  if (base.design !== undefined) l.design = base.design;
+  l.eligible = base.eligible;
+  if (base.stratum !== undefined) l.stratum = base.stratum;
+  l.levers = base.levers;
+  const bytes = Buffer.byteLength(serializeLevers(l));
+  if (bytes > MAX_BYTES) throw new Error(`levers: line of ${bytes} bytes exceeds ${MAX_BYTES}`);
+  return l;
+}

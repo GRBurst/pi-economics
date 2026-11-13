@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { leverViolations } from "../core/levers.ts";
+import { leverViolations, leversLine, serializeLevers } from "../core/levers.ts";
 import type { LeverState } from "../core/levers.ts";
 
 // Design §5.3: the invariants of a lever state, as the spec states them (the oracle of the property below).
@@ -66,4 +66,35 @@ test("leverViolations: no text values — v and a are level names, finite number
   }
   assert.match(leverViolations({ v: 1, s: "nope" } as unknown as LeverState).join(";"), /source/);
   assert.match(leverViolations({ v: 1, s: "fixed", tier: "x" } as unknown as LeverState).join(";"), /tier/);
+});
+
+const BASE = { ts: "2026-10-02T12:00:00.000Z", sessionId: "s1", eligible: false };
+
+test("leversLine: accepts exactly the states leverViolations accepts, naming the lever in the error", () => {
+  for (const st of states()) {
+    const bad = leverViolations(st).length > 0;
+    let threw: unknown;
+    try {
+      const l = leversLine({ ...BASE, levers: { "pi.x": st } });
+      assert.deepEqual(l, { v: 2, kind: "levers", ...BASE, levers: { "pi.x": st } });
+    } catch (e) { threw = e; }
+    assert.equal(threw !== undefined, bad, JSON.stringify(st));
+    if (bad) assert.match(String(threw), /^Error: levers: pi\.x: /);
+  }
+});
+
+test("leversLine: optional keys only when given; serializeLevers is one JSON line", () => {
+  const l = leversLine({ ...BASE, parentSessionId: "p", arm: "B", design: "d1", stratum: "s", eligible: true, levers: {} });
+  assert.deepEqual(Object.keys(l), ["v", "ts", "sessionId", "parentSessionId", "kind", "arm", "design", "eligible", "stratum", "levers"]);
+  const plain = leversLine({ ...BASE, parentSessionId: undefined, arm: undefined, levers: {} });
+  assert.deepEqual(Object.keys(plain), ["v", "ts", "sessionId", "kind", "eligible", "levers"]);
+  const text = serializeLevers(l);
+  assert.ok(text.endsWith("}\n") && !text.slice(0, -1).includes("\n"));
+  assert.deepEqual(JSON.parse(text), l);
+});
+
+test("leversLine: a line over 4096 bytes is refused, never truncated", () => {
+  const levers: Record<string, LeverState> = {};
+  for (let i = 0; i < 200; i++) levers[`pi.lever${i}`] = { v: 16384, s: "fixed" };
+  assert.throws(() => leversLine({ ...BASE, levers }), /^Error: levers: line of \d+ bytes exceeds 4096/);
 });
