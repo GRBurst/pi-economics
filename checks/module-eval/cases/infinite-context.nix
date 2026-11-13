@@ -20,7 +20,7 @@
   fileAt = target: cfg: lib.findFirst (f: f.target == target) null (lib.attrValues cfg.home.file);
   settingsOf = dir: ic: (fileAt "${dir}/infinite-context/settings.json" (eval dir ic)).text;
   bare = hm.evalBare {};
-  # Example values: exact overrides for two models, a price for each.
+  # Example values: exact overrides for two models.
   exampleReminders = {
     overrides = {
       "example/model-a" = {
@@ -32,18 +32,14 @@
         everyTokens = 50000;
       };
     };
-    prices = {
-      "example/model-a" = {
-        w = 5;
-        r = 0.2;
-      };
-      "example/model-b" = {
-        w = 2.5;
-        r = 0.2;
-      };
-    };
   };
 in {
+  # The cache patch's options left with it (upstream rejected the fold hint).
+  infinite-context-removed = let
+    o = (hm.options {}).programs.piEconomics.infiniteContext.reminders;
+  in
+    eq "options of the dropped cache patch" (lib.filter (n: o ? ${n}) ["prices" "cacheTtlMinutes" "foldHint"]) [];
+
   # (M6.8) Off by default: no registry entry, no file.
   infinite-context-off = let
     c = eval ".pi/agent" null;
@@ -86,15 +82,13 @@ in {
   dirs;
 
   # (M6.9) The reminder options render as the host's piContextReminders did (spec §5.2):
-  # nulls are left out, prices, TTL and foldHint only when set.
+  # nulls are left out.
   infinite-context-reminders = let
     example = builtins.fromJSON (settingsOf ".pi/agent" {reminders = exampleReminders;});
     all = builtins.fromJSON (settingsOf ".pi/agent" {
       reminders = {
         default.startTokens = 150000;
         overrides.anthropic.everyTokens = 20000;
-        cacheTtlMinutes = 60;
-        foldHint = "fixed";
       };
     });
   in
@@ -103,15 +97,12 @@ in {
         default = {};
         inherit (exampleReminders) overrides;
       };
-      inherit (exampleReminders) prices;
     }
     ++ eq "every option" all {
       reminders = {
         default.startTokens = 150000;
         overrides.anthropic.everyTokens = 20000;
       };
-      cacheTtlMinutes = 60;
-      foldHint = "fixed";
     };
 
   # (M6.10) settings merge with lib.recursiveUpdate, the user's on the right:
@@ -139,7 +130,6 @@ in {
             };
           };
       };
-      inherit (exampleReminders) prices;
     })
   dirs;
 }

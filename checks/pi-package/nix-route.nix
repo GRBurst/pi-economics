@@ -37,10 +37,6 @@
             startTokens = 200000;
             everyTokens = 50000;
           };
-          prices."example/model-a" = {
-            w = 5;
-            r = 0.2;
-          };
         };
       };
       retry.enable = true;

@@ -2,7 +2,7 @@
 # session (explore/exploit assignment), recorded in
 # <agentDir>/experiments/assignments.jsonl and published as
 # globalThis.__piExperimentsApi_v1, whose factor flags cache-lifecycle,
-# token-meter, the task router and infinite-context read. Main session only:
+# token-meter and the task router read. Main session only:
 # children inherit their parent's arm from actor-subagents' spawn events. No
 # timer: the posterior update and the kill switch (token-meter's
 # `meter-report --arms --posterior`) run on demand.

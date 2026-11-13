@@ -1,7 +1,6 @@
 // Drives the patched index.ts through its event handlers, with pi's packages stubbed (see stubs/).
-// What is under test is this repository's part of it: the reminder thresholds per model, the
-// fold hint, the fold_timing prompt section, the settings record and warning, and the handoff
-// that replaces a request whose folds cannot be applied.
+// What is under test is this repository's part of it: the reminder thresholds per model and the
+// settings record and warning.
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,7 +19,6 @@ const owner = {
     default: {},
     overrides: { "anthropic/claude-opus-5-5": { startTokens: 400_000, everyTokens: 100_000 } },
   },
-  prices: { "anthropic/claude-opus-5-5": { w: 5, r: 0.2 } },
 };
 
 /** The extension on a fresh agent dir holding `settings` (a string is written as is; undefined: no file). */
@@ -124,45 +122,6 @@ test("a model without a rule keeps the window-relative policy: 75% of the window
   assert.deepEqual(none.notifications, []);
 });
 
-test("the fold hint: cold without a request, the payoff while warm, nothing in fixed mode", async () => {
-  const h = harness(owner);
-  await h.emit("session_start");
-  await h.turn(400_000);
-  assert.match(h.sent[0].content, /Fold hint: cache is cold: folding is free now\./);
-  await h.emit("after_provider_response", { status: 200 });
-  await h.turn(500_000);
-  assert.match(h.sent[1].content, /Fold hint: the cache is warm; folding the oldest 75% pays off after ≈ 8 more turns/);
-  assert.match(h.sent[1].content, /24 × K\/R/);
-  const fixed = harness({ ...owner, foldHint: "fixed" });
-  await fixed.emit("session_start");
-  await fixed.turn(400_000);
-  assert.doesNotMatch(fixed.sent[0].content, /Fold hint/);
-});
-
-test("fold_timing is a prompt section: set when cache-aware, removed when fixed, the experiments flag wins", async () => {
-  const sections = async (h: ReturnType<typeof harness>) => {
-    const event = { systemPromptOptions: { sections: { task_cards: "cards", fold_timing: "stale" } as Record<string, string> } };
-    assert.equal(await h.emit("before_agent_start", event), undefined);
-    return event.systemPromptOptions.sections;
-  };
-  const aware = harness(owner);
-  await aware.emit("session_start");
-  const first = await sections(aware);
-  assert.match(first.fold_timing, /^Fold timing: /);
-  assert.equal(first.task_cards, "cards");
-  const fixed = harness({ ...owner, foldHint: "fixed" });
-  await fixed.emit("session_start");
-  assert.deepEqual(await sections(fixed), { task_cards: "cards" });
-  (globalThis as any).__piExperimentsApi_v1 = { flag: (name: string) => (name === "foldHint" ? "fixed" : undefined) };
-  try {
-    const flagged = harness(owner);
-    await flagged.emit("session_start");
-    assert.deepEqual(await sections(flagged), { task_cards: "cards" });
-  } finally {
-    delete (globalThis as any).__piExperimentsApi_v1;
-  }
-});
-
 test("an invalid settings file is ignored as a whole with a warning, and the defaults apply", async () => {
   for (const bad of ["not json", JSON.stringify({ ...owner, extra: 1 }), JSON.stringify({ reminders: { default: { startTokens: 0 } } })]) {
     const h = harness(bad);
@@ -186,37 +145,5 @@ test("each branch records the effective settings once, and again when they chang
   assert.deepEqual(settingsRecords(h)[0].data, {
     nudgeAtPercent: 75,
     reminders: owner.reminders,
-    prices: owner.prices,
-    cacheTtlMinutes: 5,
-    foldHint: "cache-aware",
   });
-});
-
-// A branch the archive cannot represent: its first entry points to a parent the file lost.
-const lost = (): Entry => ({ ...user("u1", "one"), parentId: "gone" });
-const withFolds: Entry = {
-  type: "custom",
-  id: "snap",
-  customType: "infinite-context",
-  data: { version: 2, roots: [{ kind: "fold", id: "f1", summary: "s", children: [{ kind: "message", id: "u1" }] }] },
-};
-
-test("folds that cannot be applied abort the request with the handoff notice, never the raw transcript", async () => {
-  const h = harness(owner, [lost(), withFolds]);
-  await h.emit("session_start");
-  const request = [{ role: "user", content: "WHOLE-TRANSCRIPT-MARKER", timestamp: 1 }];
-  const result = await h.emit("context", { messages: request });
-  assert.equal(h.state.aborted, 1);
-  assert.equal(result.messages.length, 1);
-  assert.match(result.messages[0].content, /folds could not be applied .*start a handoff session/);
-  assert.ok(!JSON.stringify(result).includes("WHOLE-TRANSCRIPT-MARKER"));
-  assert.ok(h.notifications.some(([level, text]) => level === "error" && /folds could not be applied/.test(text)));
-});
-
-test("without saved folds the request goes out untouched, as before", async () => {
-  const h = harness(owner, [lost()]);
-  await h.emit("session_start");
-  const result = await h.emit("context", { messages: [{ role: "user", content: "x", timestamp: 1 }] });
-  assert.equal(result, undefined);
-  assert.equal(h.state.aborted, 0);
 });

@@ -1,6 +1,6 @@
 # pi-infinite-context (spec §2, §4, §5.2): folds ranges of the agent's own
-# conversation and unfolds them on demand. The upstream extension with two
-# local patches (packages/infinite-context/package.nix), linked through the
+# conversation and unfolds them on demand. The upstream extension with one
+# local patch (packages/infinite-context/package.nix), linked through the
 # registry for sessions and children, and its settings file, always written.
 {
   config,
@@ -32,19 +32,15 @@
   renderRule = rule: lib.filterAttrs (_: v: v != null) rule;
 
   # (M6.9) The reminder options as the extension reads them.
-  rendered =
-    {
-      reminders = {
-        default = renderRule r.default;
-        overrides = lib.mapAttrs (_: renderRule) r.overrides;
-      };
-    }
-    // lib.optionalAttrs (r.prices != {}) {inherit (r) prices;}
-    // lib.optionalAttrs (r.cacheTtlMinutes != null) {inherit (r) cacheTtlMinutes;}
-    // lib.optionalAttrs (r.foldHint != null) {inherit (r) foldHint;};
+  rendered = {
+    reminders = {
+      default = renderRule r.default;
+      overrides = lib.mapAttrs (_: renderRule) r.overrides;
+    };
+  };
 in {
   options.programs.piEconomics.infiniteContext = {
-    enable = lib.mkEnableOption "pi-infinite-context, folds of the agent's own conversation with cost-aware fold reminders";
+    enable = lib.mkEnableOption "pi-infinite-context, folds of the agent's own conversation with fold reminders per provider or model";
 
     src = lib.mkOption {
       type = lib.types.path;
@@ -65,47 +61,6 @@ in {
 
     # (M6.9) The host's piContextReminders (spec §5.2).
     reminders = {
-      prices = lib.mkOption {
-        type = lib.types.attrsOf (lib.types.submodule {
-          options = {
-            w = lib.mkOption {
-              type = lib.types.numbers.positive;
-              description = "Cache-write price (any unit; only w/r matters).";
-            };
-            r = lib.mkOption {
-              type = lib.types.numbers.positive;
-              description = "Cache-read price, same unit; at most w.";
-            };
-          };
-        });
-        default = {};
-        example = {
-          "anthropic/claude-opus-5-5" = {
-            w = 5;
-            r = 0.2;
-          };
-        };
-        description = ''
-          Prompt-cache prices per exact `provider/modelId` or provider. With a
-          price the fold reminder says after how many turns a fold pays off
-          (((w - r) / r) · K/R, 24·K/R on Opus 5.5); without one it carries no
-          cost hint. A cold cache always gets "folding is free now".
-        '';
-      };
-      cacheTtlMinutes = lib.mkOption {
-        type = lib.types.nullOr lib.types.ints.positive;
-        default = null;
-        description = "Prompt-cache lifetime the fold hint uses to tell warm from cold. null keeps the extension's 5 minutes.";
-      };
-      foldHint = lib.mkOption {
-        type = lib.types.nullOr (lib.types.enum ["fixed" "cache-aware"]);
-        default = null;
-        description = ''
-          "fixed": reminders carry no cost hint. "cache-aware": they carry the
-          fold hint. null keeps the extension's default (cache-aware). The
-          experiments package (factor foldHint) overrides this per session.
-        '';
-      };
       default = lib.mkOption {
         type = reminderRule;
         default = {};
@@ -139,8 +94,7 @@ in {
         Merged into `<agentDir>/infinite-context/settings.json` with
         `lib.recursiveUpdate`, on the right of what `reminders` renders: a
         nested key replaces only its own leaf. The extension accepts
-        `nudgeAtTokens`, `nudgeAtPercent`, `reminders`, `prices`,
-        `cacheTtlMinutes` and `foldHint`; an unknown key or an invalid value
+        `nudgeAtTokens`, `nudgeAtPercent` and `reminders`; an unknown key or an invalid value
         rejects the whole file with a warning at session start. `nudgeAtTokens`
         is a token count or a range `[min, max]`, from which each session draws
         one limit and records it (upstream since 9918c40).
