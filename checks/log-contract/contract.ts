@@ -60,6 +60,7 @@ installMeter(meter.pi, { agentDir, now: () => new Date(clock.t) });
 let q5h = 10;
 function turn(sid: string, parent?: string, model = "claude-opus-5-5", usd = 0.4): void {
   const ctx = meterCtx(sid, parent ? { file: `/sessions/subagents/${parent}/${sid}.jsonl` } : {});
+  meter.fire("context", { type: "context", messages: [] }, ctx); // the agent loop's hook before the session's own send
   meter.fire("before_provider_request", {}, ctx);
   meter.fire("after_provider_response", { type: "after_provider_response", status: 200,
     headers: { [P + "unified-5h-utilization"]: String(q5h++ / 100), [P + "unified-7d-utilization"]: "0.2" } }, ctx);
