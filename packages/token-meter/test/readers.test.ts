@@ -21,10 +21,15 @@ function v1World(): Logs {
   return w;
 }
 
-/** A line as the v2 writer would have written it: `v: 2`, the v2 fields, retries absent (unknown) on warming lines. */
+/**
+ * A line as the v2 writer would have written it: `v: 2`, the v2 fields, retries absent (unknown) on warming lines. A measured
+ * `cacheWrite1h` replaces the analyser's v1 inference (units.ts cacheWrite1hOf: a main line of a mainCacheTtl 1h arm wrote 1 h), so
+ * only a child line, which v1 also prices as 5-minute writes, carries `cacheWrite1h: 0`; a main line leaves the split unmeasured.
+ */
 function toV2(l: any): any {
   const { v, retries, retryWaitMs, ...rest } = l;
-  const v2: any = { ...rest, v: 2, billing: rest.provider === "openrouter" ? "subscription" : "api", durationMs: 1500, ttftMs: 300, cacheWrite1h: 0 };
+  const v2: any = { ...rest, v: 2, billing: rest.provider === "openrouter" ? "subscription" : "api", durationMs: 1500, ttftMs: 300 };
+  if (rest.parentSessionId !== undefined) v2.cacheWrite1h = 0;
   if (rest.kind !== "warming") Object.assign(v2, { retries, retryWaitMs });
   if (rest.status === "error") v2.errorKind = "rate_limit";
   return v2;
