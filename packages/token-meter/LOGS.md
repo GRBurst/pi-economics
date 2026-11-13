@@ -318,9 +318,7 @@ table is; this is what a reader of the raw files needs to reproduce them).
   model they ran on, with bootstrap CIs from 5 judged tasks on; the reference row is the
   router's own qwen tasks (`assigned` `router` or absent) of the same kinds. Only the random
   rows are comparable causally.
-- **Spot-check agreement.** For every review verdict (`reviewOf` = the original task) the
-  original's verdict at the draw (last one at or before the `spotcheck` event) is compared
-  with it: agree = both accept or both do not.
+- **Spot-check agreement.** See *Analysis: router observation*.
 
 ### Analysis: cache misses
 
@@ -408,6 +406,14 @@ as "not measurable", never as a number.
   no acceptance, profile or randomized figure and is never counted as accepted; but its child session cost real money. Its $ is in the
   **all** population's $ (the tier table, the headline) and shown in its own column, and `$/accepted` is a bound pair over the same
   accepted tasks: **lower** leaves the unresolved $ out, **upper** counts it. One number means no unresolved $.
+- **Spot-check agreement** (B7). `requested` = tasks with a `spotcheck` event; `reviewed` = those whose review child the parent judged
+  (the verdict event of the review task, with `reviewOf` = the original task) while the original's verdict at the draw (the last one at or
+  before the `spotcheck` event) is judged; `pending` = requested without that. The **agreement** compares the original's verdict at the draw
+  with the **reviewer's own verdict on it**, the field `reviewerVerdict` (`accepted`, `partial`, `rejected`) of the review's verdict event:
+  agree = both accept or both do not, with Cohen's κ over the same two classes (undefined, shown "–", when one rater never varies: a spot
+  check is drawn from accepted tasks). The parent's verdict of the review child is no part of it (it is `accepted` for 55 of 55 reviews on the
+  author's log). The router does not write `reviewerVerdict` yet (a router backlog item; the name is this reader's proposal and changes here
+  if the router names it differently): until it does the report says "agreement: not measurable", never a rate.
 - **Qwen share of tasks** is the share of routed tasks *planned* on `qwen`; the report states no target for it.
 
 ## Data contract (`pi-analyse --check`)

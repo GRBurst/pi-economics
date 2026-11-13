@@ -15,7 +15,7 @@ export { DESIGNS, designOf } from "./designs.ts";
 export { type CostSection, type Split } from "./cost.ts";
 export { type CacheSection, type CauseRow, type MissCause } from "./cache.ts";
 export { type BalanceRow, type DesignResult, type Effect, type Objective, type StratumResult, type Unit } from "./experiment.ts";
-export { type DelegationSection, type MatrixCell, type ProfileTier, type RandomRow, type Randomized, type Runaway, type SpotChecks } from "./delegation.ts";
+export { type Agreement, type DelegationSection, type MatrixCell, type ProfileTier, type RandomRow, type Randomized, type Runaway, type SpotChecks } from "./delegation.ts";
 export { type GuardsSection } from "./guards.ts";
 export { type QualitySection } from "./quality.ts";
 export { renderAnalysis, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderQuality, renderRandomized, renderSpotChecks, reportName } from "./render.ts";

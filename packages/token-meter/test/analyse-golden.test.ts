@@ -79,8 +79,8 @@ function goldenLogs(): Logs {
   // spot checks: c0 reviewed by r-c0 (agree), c1 by r-c1 (disagree), c3 requested but not reviewed (pending)
   const requested = (taskId: string, when: number): Record<string, unknown> => ({ v: 1, ts: iso(at(when)), event: "spotcheck", taskId });
   outcomes.push(requested("c0", 140), requested("c1", 140), requested("c3", 140));
-  outcomes.push(spawn("r-c0", "krc0", "T1", { reviewOf: "c0" }, 141), verdict("r-c0", "accepted", 145, { reviewOf: "c0" }));
-  outcomes.push(spawn("r-c1", "krc1", "T1", { reviewOf: "c1" }, 141), verdict("r-c1", "rejected", 145, { reviewOf: "c1" }));
+  outcomes.push(spawn("r-c0", "krc0", "T1", { reviewOf: "c0" }, 141), verdict("r-c0", "accepted", 145, { reviewOf: "c0", reviewerVerdict: "accepted" }));
+  outcomes.push(spawn("r-c1", "krc1", "T1", { reviewOf: "c1" }, 141), verdict("r-c1", "rejected", 145, { reviewOf: "c1", reviewerVerdict: "rejected" }));
   meter.push(child("krc0", 0.4, 142), child("krc1", 0.4, 143));
 
   // reroute, corrective, a failed check, an escalation whose spawn is unknown, a runaway child, task events without a spawn

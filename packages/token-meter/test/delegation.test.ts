@@ -314,28 +314,60 @@ test("randomized comparison: unresolved and review spawns are left out; no rando
 
 // ---- spot-check agreement ------------------------------------------------------------------------
 
-function spotLogs(): Logs {
+/** `reviewer`: the reviewer's own verdict on each original (v1–v4), written on the review's verdict event as `reviewerVerdict` (B7: a field the router does not write yet). */
+function spotLogs(reviewer: string[] = []): Logs {
   const orig = ["o1", "o2", "o3", "o4", "o5"].map((id) => ({ id, verdict: "accepted", tier: "qwen" }));
-  const review = (id: string, of: string, verdict?: string): Task => ({ id, kind: "review", tier: "T2", verdict, spawn: { reviewOf: of }, verdictExtra: { reviewOf: of } });
+  const review = (id: string, of: string, verdict?: string): Task => ({ id, kind: "review", tier: "T2", verdict, spawn: { reviewOf: of },
+    verdictExtra: { reviewOf: of, ...(reviewer[Number(id.slice(1)) - 1] === undefined ? {} : { reviewerVerdict: reviewer[Number(id.slice(1)) - 1] }) } });
   const w = logsOf([...orig, review("v1", "o1", "accepted"), review("v2", "o2", "accepted"), review("v3", "o3", "rejected"), review("v4", "o4", "partial"), review("v5", "o5", "unjudged")],
     [...["o1", "o2", "o3", "o4", "o5", "o6"].map((id, i) => ev("spotcheck", id, 30 + i, { requested: true })),
       ev("verdict", "o3", 60, { verdict: "rejected" })]); // the parent later changed its mind after the review: the verdict at the draw counts
   return w;
 }
 
-test("spot-check agreement: original (accepted at the draw) vs review verdict; unjudged reviews and requests without a review are pending", () => {
+test("spot checks: requested, reviewed (the review child's verdict judged) and pending, whatever the log says of the reviewer", () => {
   const s = analyse(spotLogs()).delegation.spotChecks;
   assert.equal(s.requested, 6);
   assert.equal(s.reviewed, 4); // v1–v4 are judged; v5 unjudged; o6 has no review
-  assert.equal(s.agree, 2);
-  close(s.rate, 0.5);
   assert.equal(s.pending, 2);
 });
 
-test("spot-check agreement: no spot checks → n 0 and a NaN rate; the review children's verdicts do not enter the tier acceptance", () => {
+// B7: the parent's verdict on a review child (accepted 55 of 55 on the author's log) is no reviewer's opinion of the original task. Agreement needs
+// the reviewer's own verdict, a field the router does not write yet; read untyped as `reviewerVerdict` on the review's verdict event.
+test("B7: without a reviewer verdict in the log the agreement is not measurable, never 100%", () => {
+  const s = analyse(spotLogs()).delegation.spotChecks;
+  assert.equal(s.agreement.measurable, false);
+  assert.match((s.agreement as { reason: string }).reason, /reviewerVerdict/);
+  const allAccepted = spotLogs(); // the parent accepts every review child, as it does in the real log
+  for (const e of allAccepted.outcomes) if (e.event === "verdict" && typeof e.reviewOf === "string") e.verdict = "accepted";
+  assert.equal(analyse(allAccepted).delegation.spotChecks.agreement.measurable, false);
+  const md = renderAnalysis(analyse(spotLogs()), new Date("2026-10-06T00:00:00Z"));
+  assert.match(md, /agreement: not measurable/);
+  assert.ok(!md.includes("agreement | 100%"));
+});
+
+test("B7: with the reviewer's verdicts the agreement is computed: n, agreements, κ; a review without one, or an unjudged one, is left out", () => {
+  const s = analyse(spotLogs(["accepted", "accepted", "rejected", "partial", undefined as unknown as string])).delegation.spotChecks;
+  assert.deepEqual(s.agreement, { measurable: true, n: 4, agree: 2, kappa: NaN }); // every original was accepted at the draw: one rater never varies, κ is undefined
+  const x = spotLogs(["accepted", "accepted", "rejected", "partial", "unjudged"]);
+  assert.equal((analyse(x).delegation.spotChecks.agreement as { n: number }).n, 4);
+});
+
+test("B7: κ over a mixed sample: 10 pairs, 7 agree, orig accepted 6, reviewer accepted 5 → po 0.7, pe 0.5, κ 0.4", () => {
+  const origs: Task[] = [..."123456"].map((i) => ({ id: `o${i}`, verdict: "accepted" })).concat([..."789"].map((i) => ({ id: `o${i}`, verdict: "partial" })), [{ id: "o10", verdict: "partial" }]);
+  const reviewer = ["accepted", "accepted", "accepted", "accepted", "rejected", "rejected", "accepted", "rejected", "partial", "rejected"]; // (acc,acc) ×4, (acc,not) ×2, (not,acc) ×1, (not,not) ×3
+  const reviews: Task[] = origs.map((o, i) => ({ id: `v${i}`, kind: "review", tier: "T2", verdict: "accepted", spawn: { reviewOf: o.id }, verdictExtra: { reviewOf: o.id, reviewerVerdict: reviewer[i] } }));
+  const w = logsOf([...origs, ...reviews], origs.map((o, i) => ev("spotcheck", o.id, 30 + i, { requested: true })));
+  const a = analyse(w).delegation.spotChecks.agreement;
+  assert.ok(a.measurable);
+  if (a.measurable) { assert.deepEqual([a.n, a.agree], [10, 7]); close(a.kappa, 0.4); }
+  const md = renderAnalysis(analyse(w), new Date("2026-10-06T00:00:00Z"));
+  assert.match(md, /\| 10 \| 70% \(7\/10\) \| 0\.40 \|/);
+});
+
+test("spot checks: none requested → nothing reviewed, agreement not measurable; the review children's verdicts do not enter the tier acceptance", () => {
   const s = analyse(logsOf([{ id: "a", verdict: "accepted" }])).delegation.spotChecks;
-  assert.deepEqual([s.requested, s.reviewed, s.agree, s.pending], [0, 0, 0, 0]);
-  assert.ok(Number.isNaN(s.rate));
+  assert.deepEqual([s.requested, s.reviewed, s.pending, s.agreement.measurable], [0, 0, 0, false]);
   const d = analyse(spotLogs()).delegation;
   assert.equal(d.byTier.find((t) => t.tier === EXEC.T2), undefined); // only review children ran on T2
 });

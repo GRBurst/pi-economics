@@ -57,8 +57,10 @@ without the user's explicit approval.
   check pass rate. *Randomized routing* (spawns the router sent to Qwen, run on a random tier):
   acceptance and $/accepted by actual tier with bootstrap CIs when n allows; **only the
   comparison within the random subset is causal**, the router row is a same-profile
-  reference. *Spot checks*: how often a review child re-judging an accepted task agrees with
-  the original verdict (a low rate = the parent's acceptance is too lenient). Spawns whose
+  reference. *Spot checks*: how often the reviewer's own verdict on a spot-checked task agrees with
+  the original verdict, with Cohen's κ (a low rate = the parent's acceptance is too lenient); "not
+  measurable" while the router logs no reviewer verdict (never read the parent's verdict of the review
+  child as agreement: it is always `accepted`). Spawns whose
   card files did not resolve (`unresolved`) and review children are counted but left out of
   the routing-quality figures.
 - **Guards**: per arm peeks-after-mask, corrections, `/rate` mean, acceptance; the arms the

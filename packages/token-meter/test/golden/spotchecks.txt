@@ -1,8 +1,12 @@
 
 ### Spot checks
 
-An accepted task re-judged by a review child: agreement = the original verdict (at the draw) and the review verdict both accept or both do not.
+An accepted task re-judged by a review child. Agreement = the reviewer's own verdict (`reviewerVerdict`) and the original verdict at the draw both accept or both do not; κ = Cohen's κ over the same two classes, – when one of the two never varies (spot checks are drawn from accepted tasks). The parent's verdict of the review child is no part of it.
 
-| requested | reviewed (judged) | agree | agreement | pending |
-| --- | --- | --- | --- | --- |
-| 3 | 2 | 1 | 50% | 1 |
+| requested | reviewed (judged) | pending |
+| --- | --- | --- |
+| 3 | 2 | 1 |
+
+| compared (with reviewer verdict) | agreement | κ |
+| --- | --- | --- |
+| 2 | 50% (1/2) | – |

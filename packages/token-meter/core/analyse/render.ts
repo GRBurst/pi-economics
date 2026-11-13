@@ -123,9 +123,13 @@ export function renderRandomized(r: Randomized): string {
 
 export function renderSpotChecks(s: SpotChecks): string {
   if (!s.requested && !s.reviewed) return "\n### Spot checks\n\n_no spot checks in the period_ (`spotcheck` events, `reviewOf` on spawn and verdict lines)";
+  const a = s.agreement;
   return [
-    "\n### Spot checks\n\nAn accepted task re-judged by a review child: agreement = the original verdict (at the draw) and the review verdict both accept or both do not.\n",
-    table(["requested", "reviewed (judged)", "agree", "agreement", "pending"], [[String(s.requested), String(s.reviewed), String(s.agree), pc(s.rate), String(s.pending)]]),
+    "\n### Spot checks\n\nAn accepted task re-judged by a review child. Agreement = the reviewer's own verdict (`reviewerVerdict`) and the original verdict at the draw both accept or both do not; κ = Cohen's κ over the same two classes, – when one of the two never varies (spot checks are drawn from accepted tasks). The parent's verdict of the review child is no part of it.\n",
+    table(["requested", "reviewed (judged)", "pending"], [[String(s.requested), String(s.reviewed), String(s.pending)]]),
+    a.measurable
+      ? "\n" + table(["compared (with reviewer verdict)", "agreement", "κ"], [[String(a.n), `${pc(a.agree / a.n)} (${a.agree}/${a.n})`, f2(a.kappa)]])
+      : `\nagreement: not measurable — ${a.reason}`,
   ].join("\n");
 }
 

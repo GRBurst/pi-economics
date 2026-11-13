@@ -15,7 +15,13 @@ export type ProfileTier = { kind: string; tier: string; tasks: number; accepted:
 /** A group of tasks: acceptance and $ per accepted task (child subtree), each with a bootstrap CI when there are enough judged tasks. */
 export type RandomRow = { assigned: "router" | "random"; tier: string; tasks: number; judged: number; accepted: number; acceptance: CI; perAccepted: CI };
 export type Randomized = { kinds: string[]; rows: RandomRow[]; otherBase: number };
-export type SpotChecks = { requested: number; reviewed: number; agree: number; rate: number; pending: number };
+/**
+ * Does the reviewer agree with the original verdict (B7)? Only a reviewer's own verdict says so: `reviewerVerdict` on the review's verdict event
+ * (a field the router does not write yet, read untyped); without it the answer is "not measurable", never a rate. `kappa` is Cohen's κ over
+ * accepted / not accepted; NaN when one of the two raters never varies (spot checks are drawn from accepted tasks, so the originals usually do not).
+ */
+export type Agreement = { measurable: false; reason: string } | { measurable: true; n: number; agree: number; kappa: number };
+export type SpotChecks = { requested: number; reviewed: number; pending: number; agreement: Agreement };
 
 export type Runaway = { sessionId: string; taskId?: string; requests: number; usd: number; reason: string };
 /** How many of the routed tasks, by the tier the router planned and the model they ran on (B6). */
@@ -149,12 +155,12 @@ function groupRow(assigned: "router" | "random", tier: string, tasks: Array<{ ve
 }
 
 /**
- * Spot checks (an accepted task re-judged by a review child): `requested` = tasks with a `spotcheck` event; a review is `reviewed` when its
- * verdict (`reviewOf` = the original task) and the original's verdict AT THE DRAW (the last one at or before the spotcheck event, else the
- * review spawn; the parent may change its mind afterwards) are both judged; they `agree` when both accept or both do not. `pending` =
- * requested tasks without a judged review.
+ * Spot checks (an accepted task re-judged by a review child): `requested` = tasks with a `spotcheck` event; a review is `reviewed` when the
+ * parent judged its child (`reviewOf` = the original task) and the original's verdict AT THE DRAW (the last one at or before the spotcheck
+ * event, else the review spawn; the parent may change its mind afterwards) is judged; `pending` = requested tasks without such a review. The
+ * agreement compares the reviewer's own verdict (`reviewerVerdict`) with the original's at the draw; never the parent's verdict of the review child.
  */
-function spotCheckAgreement(outcomes: any[], spawns: any[]): SpotChecks {
+export function spotCheckAgreement(outcomes: any[], spawns: any[]): SpotChecks {
   const at = (e: any) => Date.parse(e.ts);
   const requested = new Map<string, number>();
   for (const e of outcomes) if (e?.event === "spotcheck" && typeof e.taskId === "string" && !requested.has(e.taskId)) requested.set(e.taskId, at(e));
@@ -168,16 +174,34 @@ function spotCheckAgreement(outcomes: any[], spawns: any[]): SpotChecks {
   const lastReview = new Map<string, any>(); // review task → its last verdict event
   for (const v of verdicts) if (typeof v.reviewOf === "string") lastReview.set(v.taskId, v);
   const covered = new Set<string>();
-  let agree = 0;
+  const pairs: Array<[boolean, boolean]> = []; // (the original was accepted at the draw, the reviewer accepted it)
   let reviewed = 0;
+  let withField = 0;
   for (const v of lastReview.values()) {
     const orig = verdictAt(v.reviewOf, requested.get(v.reviewOf) ?? reviewSpawnTs.get(v.reviewOf));
-    if (!JUDGED.includes(v.verdict) || orig === undefined || !JUDGED.includes(orig)) continue;
-    reviewed += 1;
-    covered.add(v.reviewOf);
-    if ((orig === "accepted") === (v.verdict === "accepted")) agree += 1;
+    const origJudged = orig !== undefined && JUDGED.includes(orig);
+    if (JUDGED.includes(v.verdict) && origJudged) {
+      reviewed += 1;
+      covered.add(v.reviewOf);
+    }
+    if (typeof v.reviewerVerdict === "string" && JUDGED.includes(v.reviewerVerdict)) {
+      withField += 1;
+      if (origJudged) pairs.push([orig === "accepted", v.reviewerVerdict === "accepted"]);
+    }
   }
-  return { requested: requested.size, reviewed, agree, rate: reviewed ? agree / reviewed : NaN, pending: [...requested.keys()].filter((id) => !covered.has(id)).length };
+  return { requested: requested.size, reviewed, pending: [...requested.keys()].filter((id) => !covered.has(id)).length, agreement: agreementOf(pairs, withField) };
+}
+
+const NO_REVIEWER = "no review's verdict event carries `reviewerVerdict` (the reviewer's own verdict on the original task; the router does not write it yet): the parent's verdict of the review child says nothing of the original";
+function agreementOf(pairs: Array<[boolean, boolean]>, withField: number): Agreement {
+  if (!withField) return { measurable: false, reason: NO_REVIEWER };
+  if (!pairs.length) return { measurable: false, reason: "no review with a reviewer verdict has an original task with a judged verdict at the draw" };
+  const n = pairs.length;
+  const agree = pairs.filter(([o, r]) => o === r).length;
+  const [po, p1, p2] = [agree / n, pairs.filter(([o]) => o).length / n, pairs.filter(([, r]) => r).length / n];
+  const pe = p1 * p2 + (1 - p1) * (1 - p2);
+  const varies = (p: number) => p > 0 && p < 1;
+  return { measurable: true, n, agree, kappa: varies(p1) && varies(p2) ? (po - pe) / (1 - pe) : NaN };
 }
 
 export function delegation(meter: any[], outcomes: any[], routerSettings: any): DelegationSection {
