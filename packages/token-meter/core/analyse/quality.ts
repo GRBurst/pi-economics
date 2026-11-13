@@ -4,6 +4,7 @@ import { check, type Problem } from "../contract.ts";
 import { countBy, inPeriod, isLine, isRequestLine, LOGS, sum, versionOf, type FileInfo, type LogName, type Logs, type Period } from "./logs.ts";
 import { apiUsd } from "./units.ts";
 import { rowsBySession } from "./designs.ts";
+import { leverStates } from "./levers.ts";
 
 export type QualitySection = { period: Period & { first?: string; last?: string };
   logs: Array<{ log: LogName; lines: number; first?: string; last?: string; versions: Record<string, number> }>;
@@ -32,6 +33,8 @@ export function quality(all: Logs, logs: Logs, period: Period): QualitySection {
   const spawns = logs.outcomes.filter((e) => e?.event === "spawn");
   const inPer = inPeriod({ meter: [], outcomes: [], guards: all.assignments, assignments: [] }, period).guards;
   const item = (what: string, xs: any[], ex: (x: any) => string) => ({ what, n: xs.length, examples: [...new Set(xs.map(ex))].slice(0, 3) });
+  const states = leverStates(all.meter, period);
+  const noLevers = [...armedRoots].filter((r) => rows.get(r)?.v === 2 && !states.has(r)); // eligible v2 units: their refusal cannot be seen
   const sets: Record<LogName, any[]> = { meter: logs.meter, outcomes: logs.outcomes, assignments: inPer, guards: logs.guards };
   return {
     period: { ...period, first: span[0], last: span.at(-1) },
@@ -39,6 +42,7 @@ export function quality(all: Logs, logs: Logs, period: Period): QualitySection {
     files: all.files ?? [],
     withoutArm: { roots: bare.length, usd: sum(bare.map((u) => u.cost)), share: total ? sum(bare.map((u) => u.cost)) / total : NaN, assigned: bare.filter((u) => rows.has(u.root)).length, examples: bare.slice(0, 3).map((u) => u.root) },
     unjoinable: [
+      ...(noLevers.length ? [item("eligible units (v2 assignment) without a levers line (not in the refusal rates or per-protocol)", noLevers, (r) => String(r))] : []),
       item("meter child lines whose parent session is unknown", meter.filter((l) => typeof l.parentSessionId === "string" && !meterSessions.has(l.parentSessionId) && !spawnParents.has(l.parentSessionId)), (l) => l.parentSessionId),
       item("child sessions without a spawn event (their $ is in no tier)", unspawned, (s) => String(s)),
       item("spawns without a child session id", spawns.filter((e) => typeof e.sessionId !== "string"), (e) => e.taskId),

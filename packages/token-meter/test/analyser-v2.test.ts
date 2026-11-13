@@ -201,3 +201,17 @@ test("review M1: the posterior follows the stratum's objective: only apiUsd has 
   assert.equal(analyse(l).guards.perStratum.find((x) => x.stratum === "opus")!.objective, "wallMs");
   assert.deepEqual(s.designs[D].opus.disabled, [], "the kill switch (acceptance, signals) does not depend on the objective");
 });
+
+test("review m1: the refusal denominator is the units with a levers line (as in the Levers section); units without one are counted apart and in Data quality", () => {
+  const us = base().concat([{ id: "i", arm: "00", usd: 10 }, { id: "j", arm: "00", usd: 10 }]);
+  const noLine = ["g", "h", "j"]; // 3 of 10 units have no levers line
+  const lv = us.filter((u) => !noLine.includes(u.id)).map((u) => levers(u.id, u.arm, u.id === "a" || u.id === "c" ? { warmPolicy: "refused" } : {}));
+  const l = logs([...us.flatMap((u) => cloud(u.id, u.arm, u.usd)), ...lv], us.map((u) => row(u.id, u.arm)));
+  const w = stratumOf(l).refusal!.find((r) => r.factor === "warmPolicy")!;
+  assert.deepEqual([w.eligible, w.refused, w.noLevers, w.broken], [7, 2, 3, true]); // 2/7 = 29 % (2/10 would be 20 %: not flagged)
+  close(w.rate, 2 / 7);
+  const text = renderAnalysis(analyse(l), new Date(T0));
+  assert.ok(text.includes("3 without a levers line"), text);
+  const q = analyse(l).quality.unjoinable.find((x) => x.what.startsWith("eligible units"));
+  assert.equal(q?.n, 3);
+});

@@ -128,8 +128,8 @@ const EFFECT_HEAD = ["factor", "low → high", "n low", "n high", "ratio low", "
 function renderV2(s: StratumResult): string {
   if (!s.refusal && !s.perProtocol && !s.overflow && !s.sensitivity) return "";
   return [
-    ...(s.refusal ? ["\nRefusal rate per factor (units whose lever was refused by its owner ÷ the stratum's eligible units; above " + (REFUSAL_LIMIT * 100).toFixed(0) + "% the add-on is flagged in the last column):\n",
-      table(["factor", "lever", "eligible", "refused", "rate", "flag"], s.refusal.map((r) => [r.factor, `\`${r.lever}\``, String(r.eligible), String(r.refused), pc(r.rate), r.broken ? "broken add-on" : "ok"]))] : []),
+    ...(s.refusal ? ["\nRefusal rate per factor (units whose lever was refused by its owner ÷ the units with a levers line that assigned it; above " + (REFUSAL_LIMIT * 100).toFixed(0) + "% the add-on is flagged in the last column):\n",
+      table(["factor", "lever", "eligible (with levers line)", "refused", "rate", "flag", "without a levers line"], s.refusal.map((r) => [r.factor, `\`${r.lever}\``, String(r.eligible), String(r.refused), pc(r.rate), r.broken ? "broken add-on" : "ok", `${r.noLevers} without a levers line`]))] : []),
     ...(s.perProtocol ? [`\nPer-protocol (non-randomized comparison): the ${s.perProtocol.units} units whose every factor lever was read back \`confirmed\` (${s.perProtocol.excluded} unverified or refused units left out). Units that kept the assignment are not a random sample of the assigned ones: this row can be confounded and is no causal estimate; the intention-to-treat table above is.\n`,
       table(EFFECT_HEAD, effectRows(s.perProtocol.effects))] : []),
     ...(s.sensitivity ? [`\nSensitivity (model switch): the objective over the requests billed as the unit's start class only (billing of its main's first request); ${s.sensitivity.switched} unit(s) used another billing class in a request. Same units and hours as the table above.\n`,

@@ -36,8 +36,11 @@ export type Effect =
 export type BalanceRow = { arm: string; units: number; hours: number; excluded: number; unmeasured: number; timedLines: number; untimedLines: number };
 /** M5c (§7.5), v2-engine strata only. Per-protocol: units whose every factor lever is "confirmed" (a non-randomized comparison); `excluded` = the other measured units. */
 export type PerProtocol = { units: number; excluded: number; effects: Effect[] };
-/** Refusal rate of a factor's lever: units whose lever state is "refused" ÷ the stratum's eligible units; broken = above REFUSAL_LIMIT. */
-export type RefusalRow = { factor: string; lever: string; eligible: number; refused: number; rate: number; broken: boolean };
+/**
+ * Refusal rate of a factor's lever: units whose lever state is "refused" ÷ units whose last levers line holds the lever with an assigned value (`eligible`, as the Levers
+ * section); `noLevers` = the stratum's units without any levers line (token-meter off, older sessions), left out of the rate. broken = above REFUSAL_LIMIT.
+ */
+export type RefusalRow = { factor: string; lever: string; eligible: number; refused: number; noLevers: number; rate: number; broken: boolean };
 export type OverflowRow = { arm: string; units: number; hours: number; overflows: number; perHour: number };
 /** Effects with each unit's objective over the requests billed as its start class; `switched` = units with a request of another class. */
 export type Sensitivity = { switched: number; effects: Effect[] };
@@ -192,12 +195,13 @@ function factorLevers(rows: any[], design: string): Map<string, string> {
   return out;
 }
 
-/** Per factor: the stratum's units whose lever state is "refused" ÷ its units (every unit has an assignment row with an arm). */
+/** Per factor: the units whose lever state is "refused" ÷ those with an assigned state of the lever (see RefusalRow). */
 function refusalOf(units: Unit[], levers: Map<string, string>, states: LeverStates): RefusalRow[] {
   return [...levers].map(([factor, lever]) => {
-    const refused = units.filter((u) => states.get(u.sessionId)?.[lever]?.rb === "refused").length;
-    const rate = units.length ? refused / units.length : NaN;
-    return { factor, lever, eligible: units.length, refused, rate, broken: rate > REFUSAL_LIMIT };
+    const has = units.filter((u) => states.get(u.sessionId)?.[lever]?.a !== undefined);
+    const refused = has.filter((u) => states.get(u.sessionId)![lever].rb === "refused").length;
+    const rate = has.length ? refused / has.length : NaN;
+    return { factor, lever, eligible: has.length, refused, noLevers: units.filter((u) => !states.has(u.sessionId)).length, rate, broken: rate > REFUSAL_LIMIT };
   });
 }
 
