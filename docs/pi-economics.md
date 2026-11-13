@@ -50,10 +50,11 @@ Edits of pi's mutable `settings.json`, run by one activation entry,
 | `set` | the leaf becomes `value` | created | op skipped |
 | `ensureContains` | appends `value` unless an equal element exists | created, then `[]` | op skipped |
 | `removeWhere` | removes the elements equal to `value` | op skipped | op skipped |
+| `ensurePrefix` | the list `value` (one value if not a list) leads, in its order; equal elements elsewhere are removed, the others keep their order | created, then `[]` | op skipped |
 
 - `null` on the way or at the leaf counts as missing, except for
   `removeWhere`, which skips the op. `false` at the leaf of `ensureContains`
-  counts as missing too.
+  and `ensurePrefix` counts as missing too.
 - `false` on the way aborts the whole program: the file stays untouched.
 - Order: by `order`, then contributor key, then position in the list.
 - The entry runs only when `enable` is `true` and at least one op exists. It

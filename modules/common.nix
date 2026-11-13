@@ -50,11 +50,14 @@
   opModule = {
     options = {
       op = lib.mkOption {
-        type = lib.types.enum ["set" "ensureContains" "removeWhere"];
+        type = lib.types.enum ["set" "ensureContains" "removeWhere" "ensurePrefix"];
         description = ''
           `set`: the leaf becomes `value`. `ensureContains`: `value` is appended
           to the list at `path` unless an equal element is there. `removeWhere`:
-          the list's elements equal to `value` are removed.
+          the list's elements equal to `value` are removed. `ensurePrefix`:
+          the list `value` (a single value if not a list) stands at the front
+          of the list at `path`, in its order; equal elements elsewhere are
+          removed, the others keep their order.
         '';
       };
       path = lib.mkOption {
@@ -64,7 +67,7 @@
       };
       value = lib.mkOption {
         type = (pkgs.formats.json {}).type;
-        description = "The leaf (`set`) or the list element (`ensureContains`, `removeWhere`).";
+        description = "The leaf (`set`), the list element (`ensureContains`, `removeWhere`) or the list's prefix (`ensurePrefix`).";
       };
       order = lib.mkOption {
         type = lib.types.int;
@@ -95,8 +98,9 @@
   #  - an object on the way: `(<p> // {}) | type == "object"`. A missing key
   #    or null passes and is created; false passes and makes jq fail on the
   #    next key, so the whole file stays untouched; anything else skips the op.
-  #  - the leaf: ensureContains `(<p> // []) | type == "array"` (missing, null
-  #    and false become [value]); removeWhere an array, else the op is skipped.
+  #  - the leaf: ensureContains and ensurePrefix `(<p> // []) | type ==
+  #    "array"` (missing, null and false become [value] or value);
+  #    removeWhere an array, else the op is skipped.
   # jq's `and` short-circuits: no path after a failed guard is evaluated.
   access = path: "." + lib.concatMapStrings (k: "[${builtins.toJSON k}]") path;
   prefixes = path: map (n: lib.take n path) (lib.range 1 (lib.length path - 1));
@@ -105,6 +109,7 @@
     set = _: [];
     ensureContains = p: ["((${access p} // []) | type) == \"array\""];
     removeWhere = p: ["(${access p} | type) == \"array\""];
+    ensurePrefix = leafGuards.ensureContains;
   };
   edit = op: let
     a = access op.path;
@@ -113,6 +118,9 @@
       set = "if ${a} == ${v} then . else ${a} = ${v} end";
       ensureContains = "${a} |= ((. // []) | if any(.[]; . == ${v}) then . else . + [${v}] end)";
       removeWhere = "${a} |= map(select(. == ${v} | not))";
+      ensurePrefix = let
+        vs = builtins.toJSON (lib.toList op.value);
+      in "${a} |= (${vs} + ((. // []) | map(select(. as $x | ${vs} | any(.[]; . == $x) | not))))";
     };
   in
     edits.${op.op};

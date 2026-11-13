@@ -3,8 +3,9 @@
 #  1. ./ported-cases.sh: the host's cases, against today's ops (./today-ops.nix);
 #  2. ./differential.sh: for every file in ./corpus, the bytes of the legacy
 #     script (./legacy.nix), with and without ops.cacheLifecycle;
-#  3. ./op-table.sh: set, ensureContains and removeWhere on a nested path, for
-#     missing parents, wrong shapes, null and false.
+#  3. ./op-table.sh: set, ensureContains, removeWhere and ensurePrefix on a
+#     nested path, for missing parents, wrong shapes, null and false, and
+#     ensurePrefix's properties over generated lists.
 {
   lib,
   pkgs,
@@ -44,6 +45,20 @@
         path = ["r1" "x"];
         value = 1;
       }
+      {
+        op = "ensurePrefix";
+        path = ["p1" "x"];
+        value = [1];
+      }
+    ];
+  };
+  prefix = value: {
+    t = [
+      {
+        op = "ensurePrefix";
+        path = ["a" "b" "c"];
+        inherit value;
+      }
     ];
   };
   corpusCount = lib.length (lib.filter (lib.hasSuffix ".json") (lib.attrNames (builtins.readDir ./corpus)));
@@ -60,6 +75,8 @@ in
       ens=${exe (nested "ensureContains")}
       rem=${exe (nested "removeWhere")}
       mix=${exe mix}
+      pre=${exe (prefix [1 2])}
+      pre1=${exe (prefix 1)}
 
       mkdir part1 part2 part3
       (cd part1 && source ${./ported-cases.sh})
