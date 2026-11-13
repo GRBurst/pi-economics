@@ -2,7 +2,8 @@
 import { num, sum } from "./logs.ts";
 
 /**
- * API-equivalent dollars of one meter line: the one place the analyser turns a line into $ (M2a prices 1 h cache writes here).
+ * API-equivalent dollars of one meter line: the one place the core/analyse/* modules turn a line into $ (M2a prices 1 h cache
+ * writes here; arms.ts, tasks.ts and ledger.ts read costUsd themselves until M2a routes them through here).
  * Until then it is the line's costUsd (0 when absent or not finite).
  */
 export const apiUsd = (l: any): number => num(l.costUsd);

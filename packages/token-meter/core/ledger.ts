@@ -8,7 +8,7 @@
 
 const MIN = 60_000;
 const FOLD_SHRINK = 0.8; // same rule as arms.ts: a turn whose prompt fell below this share of the previous turn's is a fold
-/** Relative prices (Anthropic): read 0.1, 5-minute write 1.25, output 5 × input (the weights analyse.ts splits costs with). */
+/** Relative prices (Anthropic): read 0.1, 5-minute write 1.25, output 5 × input (the weights core/analyse/units.ts splits costs with). */
 const WEIGHT = { input: 1, cacheRead: 0.1, cacheWrite: 1.25, output: 5 } as const;
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);

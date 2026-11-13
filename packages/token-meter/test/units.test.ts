@@ -1,5 +1,6 @@
-// units.ts is the one place that turns a meter line into dollars (redesign M0.S, T0.5): every $ the analyser reads goes
-// through apiUsd(line), so a later price rule (M2a: 1 h cache writes) changes one function.
+// units.ts is the one place the core/analyse/* modules turn a meter line into dollars (redesign M0.S, T0.5): every $
+// they read goes through apiUsd(line), so a later price rule (M2a: 1 h cache writes) changes one function. arms.ts,
+// tasks.ts and ledger.ts, which analyse/* calls, still read costUsd themselves until M2a routes them through here.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -26,12 +27,17 @@ test("allocate: the token components of a line add up to apiUsd(line)", () => {
   }
 });
 
-test("seam: no analyser module but units.ts reads a line's costUsd (every $ goes through apiUsd)", () => {
+// The only mentions of costUsd in analyse/* outside units.ts: the TaskCost field (tasks.ts's result, not a meter line) and prose.
+const NOT_A_LINE = ["{ accepted: 0, judged: 0, costUsd: 0, perAccepted: NaN }", "usd: c?.costUsd ?? 0", "recovered from the lines' costUsd"];
+
+test("seam: no analyse/* module but units.ts mentions costUsd (a read as num(), Number(), ??, [\"costUsd\"] … goes through apiUsd)", () => {
   const dir = new URL("../core/analyse/", import.meta.url);
   const files = readdirSync(dir).filter((f) => f.endsWith(".ts"));
-  assert.ok(files.includes("units.ts") && files.includes("cost.ts") && files.includes("delegation.ts") && files.includes("quality.ts"), `analyser modules: ${files}`);
-  for (const f of files.filter((f) => f !== "units.ts")) {
-    const text = readFileSync(new URL(f, dir), "utf8");
-    assert.ok(!/\bnum\(\w+\.costUsd\)/.test(text), `${f} reads a line's costUsd directly`);
+  assert.ok(files.includes("units.ts") && files.includes("cost.ts") && files.includes("delegation.ts") && files.includes("quality.ts"), `analyse modules: ${files}`);
+  const texts = files.filter((f) => f !== "units.ts").map((f) => [f, readFileSync(new URL(f, dir), "utf8")] as const);
+  for (const [f, text] of texts) {
+    const rest = NOT_A_LINE.reduce((t, ok) => t.split(ok).join(""), text);
+    assert.ok(!rest.includes("costUsd"), `${f} reads a line's costUsd directly: ${rest.split("\n").find((l) => l.includes("costUsd"))?.trim().slice(0, 100)}`);
   }
+  for (const ok of NOT_A_LINE) assert.ok(texts.some(([, text]) => text.includes(ok)), `the allowance ${JSON.stringify(ok)} matches nothing: drop it`);
 });
