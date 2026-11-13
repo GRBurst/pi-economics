@@ -26,7 +26,7 @@ in
     installPhase = ''
       runHook preInstall
       mkdir -p $out
-      cp -r package.json index.ts core $out/
+      cp -r package.json index.ts core addons $out/
       if [ -d bin ]; then cp -r bin $out/; fi
       runHook postInstall
     '';
