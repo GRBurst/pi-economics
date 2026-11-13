@@ -326,3 +326,13 @@ test("compaction lines (M3b): kind compaction is a request line like a turn", ()
   w.meter.push({ ...c, kind: "summary" }, (({ costUsd, ...r }) => r)(c));
   assert.deepEqual(fields(check(w)), ["meter.kind", "meter.costUsd"]);
 });
+
+test("systemHash (M3b): optional on request lines, 16 hex digits when present", () => {
+  const w = world();
+  const t = { v: 2, ts: iso(T0), sessionId: "m9", provider: "anthropic", model: "opus", kind: "turn", billing: "api", status: 200,
+    input: 1, cacheRead: 2, cacheWrite: 3, output: 4, costUsd: 0.5 };
+  w.meter.push(t, { ...t, systemHash: "0123456789abcdef" });
+  assert.deepEqual(check(w), []);
+  w.meter.push({ ...t, systemHash: "xyz" }, { ...t, systemHash: 12 });
+  assert.deepEqual(check(w).map((p) => [`${p.log}.${p.field}`, p.count]), [["meter.systemHash", 2]]);
+});

@@ -614,3 +614,31 @@ test("compaction: an extension's summary has an unknown model; no usage → no l
   assert.deepEqual(ls.map((l) => [l.kind, l.provider, l.model]), [["compaction", "unknown", "unknown"], ["compaction", "anthropic", "opus"], ["turn", "anthropic", "opus"]]);
   assert.equal(ls[2].durationMs, 700);
 });
+
+// --- M3b: systemHash (M2a review carry-over: the `prefix` cause of a cache miss) ---
+test("systemHash: a turn line carries the hash of its last context_with_system; none without one; warming lines never", () => {
+  const { f, clock, lines } = setup();
+  const sysMsg = (content: string) => ({ role: "system", content, timestamp: 0 });
+  const ctx = fakeCtx("s1", { entries: [{ type: "usage", kind: "cache_warm", provider: "anthropic", model: "opus", timestamp: T0, usage }] });
+  const send = (content: string) => {
+    f.fire("context", { type: "context", messages: [] }, ctx);
+    assert.deepEqual(f.fireAll("context_with_system", { type: "context_with_system", messages: [sysMsg(content), { role: "user", content: "x" }] }, ctx), [undefined]);
+    f.fire("before_provider_request", {}, ctx);
+  };
+  send("A"); f.fire("message_end", assistant(), ctx);
+  send("A"); f.fire("after_provider_response", resp, ctx); f.fire("message_end", assistant(), ctx);
+  send("B"); f.fire("message_end", assistant(), ctx);
+  clock.t += 1000;
+  f.fire("after_provider_response", resp, ctx); // a warm
+  turnSend(f, ctx); // a send without context_with_system (an older pi): unknown
+  f.fire("message_end", assistant(), ctx);
+  const [a1, a2, b, warm, none] = lines();
+  assert.equal(warm.kind, "warming");
+  assert.match(a1.systemHash, /^[0-9a-f]{16}$/);
+  assert.equal(a2.systemHash, a1.systemHash);
+  assert.notEqual(b.systemHash, a1.systemHash);
+  assert.ok(!("systemHash" in warm) && !("systemHash" in none));
+  // other sessions keep their own
+  f.fire("message_end", assistant(), fakeCtx("s2"));
+  assert.ok(!("systemHash" in lines().at(-1)));
+});

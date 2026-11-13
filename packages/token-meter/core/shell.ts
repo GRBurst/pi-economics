@@ -3,6 +3,7 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { effectiveSettings, extensionLevers } from "./effective-settings.ts";
 import { leversLine, serializeLevers } from "./levers.ts";
+import { systemHash } from "./system-hash.ts";
 import { Joiner } from "./join.ts";
 import { errorKindOf } from "./errorkind.ts";
 import { buildLine, monthFile, serialize } from "./line.ts";
@@ -82,6 +83,9 @@ export function install(pi: PiLike, deps: Deps): void {
   // message in between; a settled run or a new message means no retry follows). `retryWait` holds that send's wait.
   const failedAt = new Map<string, number>();
   const retryWait = new Map<string, number>();
+  // M3b: the system state of the session's last own send (context_with_system, which pi 1.4 runs for those only),
+  // for its message_end (`systemHash`, the analyser's `prefix` cause).
+  const sysHash = new Map<string, string>();
   const madeDirs = new Set<string>();
   let warned = false;
 
@@ -197,6 +201,13 @@ export function install(pi: PiLike, deps: Deps): void {
     const sid = sidOf(ctx);
     if (sid !== undefined) turnSend.add(sid); // returns nothing: the messages stay as they are
   });
+  pi.on("context_with_system", (e, ctx) => {
+    const sid = sidOf(ctx);
+    if (sid === undefined) return;
+    const h = safe(() => systemHash(e?.messages));
+    if (h === undefined) sysHash.delete(sid);
+    else sysHash.set(sid, h); // returns nothing: the transcript stays as it is
+  });
   pi.on("before_provider_request", (_e, ctx) => {
     const sid = sidOf(ctx);
     if (sid !== undefined && turnSend.delete(sid) && !streaming.has(sid)) {
@@ -260,6 +271,9 @@ export function install(pi: PiLike, deps: Deps): void {
     if (sent !== undefined) input.durationMs = Math.max(0, end.getTime() - sent);
     if (sent !== undefined && first !== undefined) input.ttftMs = Math.max(0, first - sent);
     if (typeof m.thinkingLevel === "string") input.effort = m.thinkingLevel;
+    const h = sysHash.get(sid);
+    sysHash.delete(sid);
+    if (h !== undefined) input.systemHash = h;
     if (m.stopReason === "error") {
       input.status = "error";
       if (typeof m.errorMessage === "string") input.errorMessage = m.errorMessage;

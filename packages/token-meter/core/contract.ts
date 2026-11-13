@@ -49,7 +49,8 @@ const METER: Rule[] = [
     // Meter line v2 (design §5.2): the retry extension's counts were on every line up to v1; native ones are present iff observed.
     ...every({ retries: numb, retryWaitMs: numb }, "every meter line up to v1", (l) => !(Number.isInteger(l.v) && l.v >= 2)),
     ...every({ billing: oneOf("subscription", "api", "free", "local") }, "every meter line from v2", (l) => Number.isInteger(l.v) && l.v >= 2),
-    ...optional({ retries: int0, retryWaitMs: (v) => numb(v) && v >= 0, design: str, cacheWrite1h: int0, durationMs: int0, ttftMs: int0, errorKind: oneOf("context_overflow", "rate_limit", "other") }, "meter line v2"),
+    ...optional({ retries: int0, retryWaitMs: (v) => numb(v) && v >= 0, design: str, cacheWrite1h: int0, durationMs: int0, ttftMs: int0, errorKind: oneOf("context_overflow", "rate_limit", "other"),
+      systemHash: (v) => typeof v === "string" && /^[0-9a-f]{16}$/.test(v) }, "meter line v2"),
     ...every({ input: numb, cacheRead: numb, cacheWrite: numb, output: numb, costUsd: numb }, "usage of a successful request", (l) => l.status !== "error"),
   ]),
   ...every({ v: (v) => v === 2, ts: time, sessionId: str, eligible: bool, levers: leverStates }, "levers line (design §5.3: v2, every lever state valid)", isLevers),
