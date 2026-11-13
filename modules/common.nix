@@ -124,12 +124,22 @@
     };
   in
     edits.${op.op};
+  # (M6) A skipped op says so on stderr (the script prefixes the file), but
+  # for removeWhere with nothing to remove (missing, null or false there).
   guarded = op: let
-    guards = map objectGuard (prefixes op.path) ++ leafGuards.${op.op} op.path;
+    all = lib.concatStringsSep " and ";
+    onTheWay = map objectGuard (prefixes op.path);
+    guards = onTheWay ++ leafGuards.${op.op} op.path;
+    msg = "skipped ${op.op} at ${builtins.toJSON op.path}: a value there or on the way has another type\n";
+    skip = "(${builtins.toJSON msg} | stderr | empty), .";
+    otherwise =
+      if op.op == "removeWhere"
+      then "if ${all (onTheWay ++ leafGuards.ensureContains op.path)} then . else ${skip} end"
+      else skip;
   in
     if guards == []
     then edit op
-    else "if ${lib.concatStringsSep " and " guards} then ${edit op} else . end";
+    else "if ${all guards} then ${edit op} else ${otherwise} end";
   program = let
     n = lib.length sortedOps;
   in
@@ -142,9 +152,12 @@
 
   # (M0.14) The host's script, with the program in a file and without the
   # positional `idle` flag (now ops.cacheLifecycle). Missing file: created as
-  # {} (with its directory, mode 644 as pi writes it) when ops exist, since
-  # nothing else loads the registry's links (M6, redesign §7.6); a dangling
-  # link is left as it is, with a notice; without ops, no-op.
+  # {} (with its directory, its mode from the umask as pi writes it) when ops
+  # exist, since nothing else loads the registry's links (M6, redesign §7.6);
+  # a dangling link is left as it is, with a notice; without ops, no-op. A
+  # link to a file: the target is edited in its own directory, the link stays.
+  # What cannot be created or written: a notice, untouched, exit 0 (the
+  # activation never fails). An op skipped for a wrong shape: a notice.
   # jq failure (invalid JSON, false on the way): untouched, exit 0. Equal as
   # JSON: untouched, so the owners' bytes and formatting survive.
   script = pkgs.writeShellApplication {
@@ -153,6 +166,10 @@
     text =
       ''
         f=''${1:?usage: pi-settings-migrate <settings.json>}
+        note() { echo "pi-settings-migrate: $*" >&2; }
+        if [ -L "$f" ] && [ -e "$f" ]; then
+          f=$(readlink -f -- "$f")
+        fi
       ''
       + (
         if sortedOps == []
@@ -162,27 +179,48 @@
         else ''
           if [ ! -e "$f" ]; then
             if [ -L "$f" ]; then
-              echo "pi-settings-migrate: $f is a link to a missing file, left as it is" >&2
+              note "$f is a link to a missing file, left as it is"
               exit 0
             fi
-            mkdir -p "$(dirname "$f")"
-            new=$(mktemp "$f.XXXXXX")
+            d=$(dirname -- "$f")
+            if ! mkdir -p -- "$d" 2>/dev/null; then
+              note "cannot create $d, $f left missing"
+              exit 0
+            fi
+            if ! new=$(mktemp "$f.XXXXXX" 2>/dev/null); then
+              note "cannot write in $d, $f left missing"
+              exit 0
+            fi
+            trap 'rm -f -- "$new"' EXIT
             echo '{}' >"$new"
-            chmod 644 "$new"
-            # Never over a file that appeared meanwhile.
-            mv -n "$new" "$f" || true
-            rm -f "$new"
-            echo "pi-settings-migrate: created $f" >&2
+            chmod "$(printf '%o' $((0666 & ~$(umask))))" "$new"
+            # A hard link: never over a file that appeared meanwhile.
+            if ln -- "$new" "$f" 2>/dev/null; then
+              note "created $f"
+            elif [ ! -e "$f" ]; then
+              note "cannot create $f, left missing"
+              exit 0
+            fi
+            rm -f -- "$new"
+            trap - EXIT
           fi
         ''
       )
       + ''
 
-        tmp=$(mktemp "$f.XXXXXX")
-        trap 'rm -f "$tmp"' EXIT
-
-        if ! jq -f ${pkgs.writeText "pi-settings-migrate.jq" program} "$f" >"$tmp" 2>/dev/null; then
+        d=$(dirname -- "$f")
+        if ! tmp=$(mktemp "$f.XXXXXX" 2>/dev/null); then
+          note "cannot write in $d, $f left as it is"
           exit 0
+        fi
+        trap 'rm -f -- "$tmp"' EXIT
+
+        # The skipped ops' notices come on jq's stderr; on a jq failure, none.
+        if ! notes=$(jq -f ${pkgs.writeText "pi-settings-migrate.jq" program} "$f" 2>&1 >"$tmp"); then
+          exit 0
+        fi
+        if [ -n "$notes" ]; then
+          while IFS= read -r l; do note "$f: $l"; done <<<"$notes"
         fi
 
         # Equal as JSON: keep the owners' bytes.
@@ -190,10 +228,12 @@
           exit 0
         fi
 
-        chmod --reference="$f" "$tmp"
-        mv -f "$tmp" "$f"
+        if ! chmod --reference="$f" "$tmp" || ! mv -f -- "$tmp" "$f"; then
+          note "cannot replace $f, left as it is"
+          exit 0
+        fi
         trap - EXIT
-        echo "pi-settings-migrate: migrated $f" >&2
+        note "migrated $f"
       '';
   };
 

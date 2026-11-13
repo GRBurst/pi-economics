@@ -70,24 +70,83 @@ t "mix remove false aborts" "$mix" '{"packages":["s"],"r1":false}' UNTOUCHED
 t "mix prefix false aborts" "$mix" '{"packages":["s"],"p1":false}' UNTOUCHED
 
 # A missing file (M6: pi does not discover the registry's links, settings.json
-# lists them): with ops, created as {} with its directory, mode 644 (as pi
-# writes it), then the ops run; a dangling link stays as it is, with a notice;
-# without ops ($none), nothing is created.
-"$pre" new/dir/s.json 2>/dev/null
-jq -e '. == {"a":{"b":{"c":[1,2]}}}' new/dir/s.json >/dev/null || { echo "FAIL missing file: expected it created with the ops, got $(cat new/dir/s.json 2>&1)" >&2; exit 1; }
-[ "$(stat -c %a new/dir/s.json)" = 644 ] || { echo "FAIL missing file: mode $(stat -c %a new/dir/s.json), expected 644" >&2; exit 1; }
-[ "$(ls -A new/dir)" = s.json ] || { echo "FAIL missing file: left $(ls -A new/dir)" >&2; exit 1; }
+# lists them): with ops, created as {} with its directory, its mode from the
+# umask (as pi writes it), then the ops run; a dangling link stays as it is,
+# with a notice; without ops ($none), nothing is created. A link to a file:
+# the target is edited in its own directory, the link stays. Whatever cannot
+# be created or written: a notice, the file as it was, exit 0 (the activation
+# never fails). An op skipped for a wrong shape: a notice.
+fail() {
+  echo "FAIL $*" >&2
+  exit 1
+}
+run() { # script, file: exit 0, stderr in n.txt
+  "$1" "$2" 2>n.txt || fail "$2: exit $?, $(cat n.txt)"
+}
+notice() { # label, expected stderr
+  [ "$(cat n.txt)" = "$2" ] || fail "$1: notice \"$(cat n.txt)\", expected \"$2\""
+}
+P12='{"a":{"b":{"c":[1,2]}}}'
+run "$pre" new/dir/s.json
+jq -e --argjson want "$P12" '. == $want' new/dir/s.json >/dev/null || fail "missing file: expected it created with the ops, got $(cat new/dir/s.json 2>&1)"
+[ "$(stat -c %a new/dir/s.json)" = 644 ] || fail "missing file: mode $(stat -c %a new/dir/s.json) under umask $(umask), expected 644"
+[ "$(ls -A new/dir)" = s.json ] || fail "missing file: left $(ls -A new/dir)"
+notice "missing file" "pi-settings-migrate: created new/dir/s.json
+pi-settings-migrate: migrated new/dir/s.json"
+(umask 077 && run "$pre" new077/s.json)
+[ "$(stat -c %a new077/s.json)" = 600 ] || fail "missing file: mode $(stat -c %a new077/s.json) under umask 077, expected 600"
 echo "ok missing file created, then the ops"
 ln -s nowhere/s.json dangling.json
-"$pre" dangling.json 2>notice.txt
+run "$pre" dangling.json
 [ -L dangling.json ] && [ "$(readlink dangling.json)" = nowhere/s.json ] && [ ! -e nowhere ] ||
-  { echo "FAIL dangling link: expected it left as it is" >&2; exit 1; }
-[ "$(cat notice.txt)" = "pi-settings-migrate: dangling.json is a link to a missing file, left as it is" ] ||
-  { echo "FAIL dangling link: notice $(cat notice.txt)" >&2; exit 1; }
+  fail "dangling link: expected it left as it is"
+notice "dangling link" "pi-settings-migrate: dangling.json is a link to a missing file, left as it is"
 echo "ok dangling link left, with a notice"
-"$none" absent.json
-[ ! -e absent.json ] && [ ! -L absent.json ] || { echo "FAIL no ops: created absent.json" >&2; exit 1; }
+run "$none" absent.json
+[ ! -e absent.json ] && [ ! -L absent.json ] || fail "no ops: created absent.json"
 echo "ok no ops, no file"
+
+mkdir dots
+printf '{"t":1}' >dots/s.json
+chmod 640 dots/s.json
+ln -s dots/s.json linked.json
+run "$pre" linked.json
+[ -L linked.json ] && [ "$(readlink linked.json)" = dots/s.json ] || fail "link: replaced by $(ls -l linked.json)"
+jq -e --argjson want '{"t":1,"a":{"b":{"c":[1,2]}}}' '. == $want' dots/s.json >/dev/null || fail "link: target $(cat dots/s.json)"
+[ "$(stat -c %a dots/s.json)" = 640 ] || fail "link: target mode $(stat -c %a dots/s.json), expected 640"
+[ "$(ls -A dots)" = s.json ] || fail "link: left $(ls -A dots)"
+echo "ok link to a file: the target edited, the link kept"
+
+mkdir ro rod
+printf '{}' >ro/s.json
+ln -s ro/s.json rolink.json
+chmod 555 ro rod
+run "$pre" rolink.json
+[ -L rolink.json ] && [ "$(cat ro/s.json)" = '{}' ] || fail "unwritable target directory: changed"
+notice "unwritable target directory" "pi-settings-migrate: cannot write in $PWD/ro, $PWD/ro/s.json left as it is"
+run "$pre" ro/s.json
+[ "$(cat ro/s.json)" = '{}' ] || fail "unwritable directory: changed"
+notice "unwritable directory" "pi-settings-migrate: cannot write in ro, ro/s.json left as it is"
+run "$pre" rod/s.json
+[ ! -e rod/s.json ] || fail "unwritable directory: created rod/s.json"
+notice "missing file, unwritable directory" "pi-settings-migrate: cannot write in rod, rod/s.json left missing"
+printf x >afile
+run "$pre" afile/sub/s.json
+notice "missing file under a file" "pi-settings-migrate: cannot create afile/sub, afile/sub/s.json left missing"
+ln -s nowhere dpar
+run "$pre" dpar/s.json
+[ -L dpar ] && [ ! -e nowhere ] || fail "missing file under a dangling link: changed"
+notice "missing file under a dangling link" "pi-settings-migrate: cannot create dpar, dpar/s.json left missing"
+chmod 755 ro rod
+echo "ok what cannot be written: a notice, exit 0"
+
+printf '{"a":{"b":{"c":"s"}}}' >sk.json
+run "$pre" sk.json
+notice "skipped op" 'pi-settings-migrate: sk.json: skipped ensurePrefix at ["a","b","c"]: a value there or on the way has another type'
+printf '{}' >rm.json
+run "$rem" rm.json
+notice "nothing to remove" ""
+echo "ok a skipped op says so, nothing to remove says nothing"
 
 # ensurePrefix's properties, for every list of length 0 to 4 over
 # [1, 2, 3, "-builtin:mcp"] with $pre's values [1,2]: the values come first in

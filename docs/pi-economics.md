@@ -70,10 +70,13 @@ Edits of pi's mutable `settings.json`, run by one activation entry,
 - `false` on the way aborts the whole program: the file stays untouched.
 - Order: by `order`, then contributor key, then position in the list.
 - The entry runs only when `enable` is `true` and at least one op exists. It
-  creates an absent file as `{}` (and its directory; mode 644, as pi writes
-  it) before the ops, since nothing else loads the registry; a dangling link
-  stays as it is, with a notice. It never fails the activation, and rewrites
-  an existing file only when its JSON changes.
+  creates an absent file as `{}` (and its directory; its mode from the umask,
+  as pi writes it) before the ops, since nothing else loads the registry; a
+  dangling link stays as it is, with a notice. A link to a file: the target
+  is edited in its own directory, the link stays. What it cannot create or
+  write, and an op skipped for another type there or on the way (but
+  `removeWhere` with nothing to remove), it names in a notice. It never fails
+  the activation, and rewrites an existing file only when its JSON changes.
 
 ## Components
 
