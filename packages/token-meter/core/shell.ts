@@ -87,16 +87,16 @@ export function install(pi: PiLike, deps: Deps): void {
   // for its message_end (`systemHash`, the analyser's `prefix` cause).
   const sysHash = new Map<string, string>();
   const madeDirs = new Set<string>();
-  let warned = false;
+  const warned = new Set<string>(); // once per kind of line: a levers failure must not hide a request line failure
 
   const env = deps.env ?? process.env;
   /** Per session, the last levers line written (without its ts): a new one only on change. */
   const leversSeen = new Map<string, string>();
 
-  const warn = (err: unknown): void => {
-    if (!warned) {
-      warned = true;
-      console.error("token-meter: cannot write meter line:", err instanceof Error ? err.message : err);
+  const warn = (err: unknown, what = "meter"): void => {
+    if (!warned.has(what)) {
+      warned.add(what);
+      console.error(`token-meter: cannot write ${what} line:`, err instanceof Error ? err.message : err);
     }
   };
   const append = (at: Date, text: string): void => {
@@ -180,7 +180,7 @@ export function install(pi: PiLike, deps: Deps): void {
       append(at, serializeLevers(line));
       leversSeen.set(sid, key);
     } catch (err) {
-      warn(err);
+      warn(err, "levers");
     }
   });
 

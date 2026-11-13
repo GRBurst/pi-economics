@@ -642,3 +642,14 @@ test("systemHash: a turn line carries the hash of its last context_with_system; 
   f.fire("message_end", assistant(), fakeCtx("s2"));
   assert.ok(!("systemHash" in lines().at(-1)));
 });
+
+test("levers: a levers line that cannot be written warns once on its own; a later meter line failure still warns (M3b review F8)", (t) => {
+  const errors = t.mock.method(console, "error", () => {});
+  const { f, agentDir } = setup({ env: {} });
+  writeFileSync(join(agentDir, "meter"), "not a directory");
+  const ctx = fakeCtx("s1", { model: { provider: "anthropic", id: "opus" } });
+  agentStart(f, ctx); agentStart(f, ctx);
+  turnSend(f, ctx); f.fire("message_end", assistant(), ctx);
+  turnSend(f, ctx); f.fire("message_end", assistant(), ctx);
+  assert.deepEqual(errors.mock.calls.map((c) => String(c.arguments[0])), ["token-meter: cannot write levers line:", "token-meter: cannot write meter line:"]);
+});
