@@ -44,7 +44,7 @@ in {
     ++ holds "checkPath is the source's index.ts (${dir})" (lib.hasSuffix "/packages/token-meter/index.ts" (toString e.checkPath))
     ++ eq "derivations behind checkPath (${dir})"
     (lib.filter (v: v ? outputs) (lib.attrValues (builtins.getContext (toString e.checkPath)))) []
-    ++ holds "link target (${dir})" (lib.elem "${dir}/extensions/token-meter" (targets c))
+    ++ holds "link target (${dir})" (lib.elem "${dir}/pi-economics/extensions/token-meter" (targets c))
     ++ eq "failed assertions (${dir})" (failed "" c) []
     ++ eq "warnings (${dir})" c.warnings bare.warnings)
   dirs;
@@ -65,7 +65,7 @@ in {
     logs = fileAt "${dir}/LOGS.md" c;
   in
     eq "home.file targets (${dir})" (lib.sort lib.lessThan (targets c))
-    (lib.sort lib.lessThan (targets bare ++ ["${dir}/extensions/token-meter" "${dir}/LOGS.md"]))
+    (lib.sort lib.lessThan (targets bare ++ ["${dir}/pi-economics/extensions/token-meter" "${dir}/LOGS.md"]))
     ++ eq "LOGS.md source (${dir})" (
       if logs == null
       then null
@@ -204,6 +204,6 @@ in {
       };
     };
   in
-    eq "childExtensions" (pe c).childExtensions ["/home/u/.pi/agent/extensions/token-meter"]
+    eq "childExtensions" (pe c).childExtensions ["/home/u/.pi/agent/pi-economics/extensions/token-meter"]
     ++ eq "no actor-subagents/settings.json here" (fileAt ".pi/agent/actor-subagents/settings.json" c) null;
 }

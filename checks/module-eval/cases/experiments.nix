@@ -50,7 +50,7 @@ in {
     ++ holds "checkPath is the source's index.ts (${dir})" (lib.hasSuffix "/packages/experiments/index.ts" (toString e.checkPath))
     ++ eq "derivations behind checkPath (${dir})"
     (lib.filter (v: v ? outputs) (lib.attrValues (builtins.getContext (toString e.checkPath)))) []
-    ++ holds "link target (${dir})" (lib.elem "${dir}/extensions/experiments" (targets c))
+    ++ holds "link target (${dir})" (lib.elem "${dir}/pi-economics/extensions/experiments" (targets c))
     ++ eq "systemd user units (${dir})" (units c) (units bare)
     ++ eq "failed assertions (${dir})" (failed "" c) []
     ++ eq "warnings (${dir})" c.warnings bare.warnings)
@@ -72,7 +72,7 @@ in {
     f = fileAt "${dir}/experiments/settings.json" c;
   in
     eq "home.file targets (${dir})" (sorted (targets c))
-    (sorted (targets bare ++ ["${dir}/extensions/experiments" "${dir}/experiments/settings.json"]))
+    (sorted (targets bare ++ ["${dir}/pi-economics/extensions/experiments" "${dir}/experiments/settings.json"]))
     ++ eq "settings file (${dir})" (
       if f == null
       then null
@@ -216,13 +216,14 @@ in {
         piSettings.enable = false;
       };
     };
-    kids = ["/home/u/.pi/agent/extensions/cache-lifecycle" "/home/u/.pi/agent/extensions/token-meter"];
+    kids = ["/home/u/.pi/agent/pi-economics/extensions/cache-lifecycle" "/home/u/.pi/agent/pi-economics/extensions/token-meter"];
   in
     eq "childExtensions" (pe c).childExtensions kids
     ++ eq "no actor-subagents/settings.json here" (fileAt ".pi/agent/actor-subagents/settings.json" c) null
-    ++ eq "links" (sorted (lib.filter (lib.hasPrefix ".pi/agent/extensions/") (targets c)))
-    (map (n: ".pi/agent/extensions/${n}") ["actor-subagents" "cache-lifecycle" "experiments" "token-meter"])
+    ++ eq "links" (sorted (lib.filter (lib.hasPrefix ".pi/agent/pi-economics/extensions/") (targets c)))
+    (map (n: ".pi/agent/pi-economics/extensions/${n}") ["actor-subagents" "cache-lifecycle" "experiments" "token-meter"])
     ++ holds "no piSettingsMigrate entry" (!(c.home.activation ? piSettingsMigrate))
     ++ eq "failed assertions" (failed "" c) []
-    ++ eq "warnings" c.warnings bare.warnings;
+    # (M6) The registry is no longer auto-discovered: one warning.
+    ++ eq "new warnings" (lib.subtractLists bare.warnings c.warnings) ["pi-economics: piSettings.enable is false, so nothing lists the registry in settings.json's `extensions`, and pi does not auto-discover its links in .pi/agent/pi-economics/extensions: put programs.piEconomics.loadOrder at the front of `extensions` yourself"];
 }

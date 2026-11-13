@@ -35,6 +35,14 @@
     pe = c.programs.piEconomics;
     skill = pe.analysisSkill.path;
     t = pe.tokenMeter.package;
+    # (M6) Every home.file under the agent directory, linked under $TMPDIR/h
+    # as Home Manager links it.
+    links =
+      lib.concatMapStrings (f: ''
+        mkdir -p "$TMPDIR/h/$(dirname ${lib.escapeShellArg f.target})"
+        ln -s ${f.source} "$TMPDIR/h/"${lib.escapeShellArg f.target}
+      '')
+      (lib.filter (f: lib.hasPrefix "${dir}/" f.target) (lib.attrValues c.home.file));
   in ''
     echo "== ${dir}"
     # tokenMeter: the extension pi loads, LOGS.md, the two commands.
@@ -64,9 +72,19 @@
     # cacheLifecycle's op and the load order (M6), through the script the
     # activation entry runs: the registry first, the owner's entries after it
     # in their order.
-    printf '{"theme":"dark","extensions":["-builtin:mcp","extensions/token-meter","/x/own"]}\n' >"$TMPDIR/settings.json"
+    printf '{"theme":"dark","extensions":["-builtin:mcp","pi-economics/extensions/token-meter","/x/own"]}\n' >"$TMPDIR/settings.json"
     ${lib.getExe pe.piSettings.package} "$TMPDIR/settings.json" 2>/dev/null
-    jq -e '. == {theme: "dark", cacheWarming: "idle", extensions: (["experiments", "token-meter", "cache-lifecycle", "infinite-context", "actor-subagents"] | map("extensions/" + .)) + ["-builtin:mcp", "/x/own"]}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the ops: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }
+    jq -e '. == {theme: "dark", cacheWarming: "idle", extensions: (["experiments", "token-meter", "cache-lifecycle", "infinite-context", "actor-subagents"] | map("pi-economics/extensions/" + .)) + ["-builtin:mcp", "/x/own"]}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the ops: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }
+    # (M6) The links: none in the auto-discovered extensions/ (pi would load
+    # them in directory order, redesign §7.6), and each entry settings.json
+    # lists resolves from the agent directory, as pi resolves it, to an
+    # extension.
+    ${links}
+    agent="$TMPDIR/h/${dir}"
+    if [ -e "$agent/extensions" ]; then echo "FAIL ${dir}: links in the auto-discovered extensions/: $(ls "$agent/extensions")" >&2; exit 1; fi
+    for e in $(jq -r '.extensions[:5][]' "$TMPDIR/settings.json"); do
+      [ -f "$agent/$e/index.ts" ] || { echo "FAIL ${dir}: settings.json lists $e, which does not resolve from the agent directory to an extension" >&2; exit 1; }
+    done
     # (M6.16) infiniteContext: the extension pi loads, and the rendered file
     # read by the extension's own parser without loss: it drops an invalid
     # value silently (fail-open per field), so every rendered key must come

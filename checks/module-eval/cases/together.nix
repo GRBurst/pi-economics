@@ -59,7 +59,8 @@ in {
     eq "children" childNames ["cache-lifecycle" "infinite-context" "token-meter"]
     ++ holds "no activation entry" (!(c.home.activation ? piSettingsMigrate))
     ++ eq "failed assertions" (failed "" c) []
-    ++ eq "warnings" c.warnings (hm.evalBare {}).warnings;
+    # (M6) The registry is no longer auto-discovered: one warning.
+    ++ eq "new warnings" (lib.subtractLists (hm.evalBare {}).warnings c.warnings) ["pi-economics: piSettings.enable is false, so nothing lists the registry in settings.json's `extensions`, and pi does not auto-discover its links in .pi/agent/pi-economics/extensions: put programs.piEconomics.loadOrder at the front of `extensions` yourself"];
 
   components-together =
     eq "home.file targets" (set (targets all)) (union targets)

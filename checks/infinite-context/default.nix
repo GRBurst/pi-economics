@@ -1,5 +1,5 @@
 # Runs the tests of the PATCHED pi-infinite-context (the exact source
-# ~/.pi/agent/extensions/infinite-context links to). A patch that no longer
+# ~/.pi/agent/pi-economics/extensions/infinite-context links to). A patch that no longer
 # applies fails this build in applyPatches.
 #
 # Two runs:

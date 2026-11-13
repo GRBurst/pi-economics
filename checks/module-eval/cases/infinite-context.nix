@@ -96,7 +96,7 @@ in {
   # upstream's defaults.
   infinite-context-files = lib.concatMap (dir:
     eq "home.file targets (${dir})" (sorted (targets (eval dir {})))
-    (sorted (targets bare ++ ["${dir}/extensions/infinite-context" "${dir}/infinite-context/settings.json"]))
+    (sorted (targets bare ++ ["${dir}/pi-economics/extensions/infinite-context" "${dir}/infinite-context/settings.json"]))
     ++ eq "settings text (${dir})" (settingsOf dir {}) "{}")
   dirs;
 

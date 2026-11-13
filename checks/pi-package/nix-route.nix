@@ -3,7 +3,10 @@
 # actor and the task router as pi-setup and the router's flake add them
 # (registry entries of the pi-setup and pi-task-router inputs' packages;
 # router-extraction design §7.3), each
-# `home.file` under it linked as Home Manager links it, then `pi -p x` offline
+# `home.file` under it linked as Home Manager links it, its settings script run
+# on a seeded settings.json as the activation entry runs it (M6: the registry
+# loads from settings.json's `extensions`, its links are not auto-discovered),
+# then `pi -p x` offline
 # with the probe (./probe.ts). Every registry entry loads (pi prints each
 # extension's factory under PI_TIMING=1; a factory that throws prints none),
 # no load error, no duplicate or missing-actor warning of pi-economics or of
@@ -61,6 +64,8 @@ in
   pkgs.runCommand "nix-route-smoke" {nativeBuildInputs = [pkgs.pi-coding-agent pkgs.jq pkgs.coreutils pkgs.gnugrep];} ''
     export HOME=$PWD/home PI_CODING_AGENT_DIR=$PWD/home/${dir} PI_OFFLINE=1 PI_TIMING=1 PROBE_OUT=$PWD/probe.json
     ${links}
+    printf '{}\n' >"$PI_CODING_AGENT_DIR/settings.json"
+    ${lib.getExe c.programs.piEconomics.piSettings.package} "$PI_CODING_AGENT_DIR/settings.json"
     fail() {
       echo "nix-route-smoke: $*" >&2
       cat run.all >&2
@@ -79,7 +84,7 @@ in
     if grep -qF 'loaded twice' run.all; then fail "a pi-economics component is loaded twice"; fi
     if grep -qF 'needs pi-actor-subagents' run.all; then fail "a component misses the actor's API"; fi
     for n in ${lib.escapeShellArgs names}; do
-      grep -F "$PI_CODING_AGENT_DIR/extensions/$n/" run.all | grep -qF ' factory: ' || fail "the extension $n did not load"
+      grep -F "$PI_CODING_AGENT_DIR/pi-economics/extensions/$n/" run.all | grep -qF ' factory: ' || fail "the extension $n did not load"
     done
     [ -f probe.json ] || fail "the probe wrote nothing"
     jq -e '.tools | index("task_verdict") != null' probe.json >/dev/null || fail "no task_verdict among the tools: $(cat probe.json)"

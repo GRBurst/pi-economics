@@ -20,13 +20,16 @@ sets this option.
 
 `extensions.<name> = { path; checkPath ? path; input ? null; forChildren; description; }`.
 
-- Each entry is linked as `<agentDir>/extensions/<name>` → `path`. Home
-  Manager rejects a second link of the same name.
+- Each entry is linked as `<agentDir>/pi-economics/extensions/<name>` →
+  `path`, outside pi's auto-discovered `<agentDir>/extensions`: pi loads it
+  from `settings.json`'s `extensions` (`loadOrder`). Home Manager rejects a
+  second link of the same name.
 - An assertion requires `checkPath` to exist. For a patched source, point it
   at the unpatched input's entry file (probing a build output would be
   import-from-derivation); its message names `input`.
 - `forChildren` selects the extensions actor-subagents children load: their
-  link paths `<home>/<agentDir>/extensions/<name>`, sorted by name, are the
+  link paths `<home>/<agentDir>/pi-economics/extensions/<name>`, sorted by
+  name, are the
   internal option `childExtensions`, which pi-setup's economics bridge hands
   to its `programs.pi.actorSubagents` for `actor-subagents/settings.json`.
 - An entry named `actor-subagents` (pi-setup's patched actor, forwarded by
@@ -39,7 +42,8 @@ The registry's links relative to the agent directory, in load order:
 `experiments`, `token-meter`, `cache-lifecycle`, `infinite-context`, then
 the other entries by name. While the registry is not empty, `piSettings`
 puts them at the front of `settings.json`'s `extensions` (contributor
-`loadOrder`, op `ensurePrefix`, order 2000).
+`loadOrder`, op `ensurePrefix`, order 2000). While `piSettings.enable` is
+`false`, nothing lists them and a warning says so.
 
 ### `piSettings`
 
@@ -230,7 +234,7 @@ sessions and children load it (`forChildren = true`).
 
 | Option | Default | Effect |
 |---|---|---|
-| `enable` | `false` | registry entry `infinite-context` (link `<agentDir>/extensions/infinite-context` → the package's `extensions/infinite-context`) and the settings file |
+| `enable` | `false` | registry entry `infinite-context` (link `<agentDir>/pi-economics/extensions/infinite-context` → the package's `extensions/infinite-context`) and the settings file |
 | `package` | the flake's `packages/infinite-context` | the patched source |
 | `reminders.default`, `reminders.overrides` | `{}` | `{ nudgeAtTokens; nudgeAtPercent; }` (each `null` = inherit): `nudgeAtTokens` a positive integer or a range `[min, max]` with min < max, `nudgeAtPercent` a share of the model window in (0, 100]. `default` is the file's top level, `overrides` keyed by pi provider or exact `provider/modelId`. Each field resolves on its own: exact model, then provider, then `default`, then the extension's 150000 tokens / 75 %. Nulls and empty rules are left out of the file |
 | `settings` | `{}` | merged into the file with `lib.recursiveUpdate`, on the right of what `reminders` renders (`nudgeAtTokens`, `nudgeAtPercent`, `overrides`) |

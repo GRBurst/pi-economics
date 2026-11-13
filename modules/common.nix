@@ -17,7 +17,7 @@
     options = {
       path = lib.mkOption {
         type = lib.types.path;
-        description = "What `<agentDir>/extensions/<name>` links to: the extension's directory.";
+        description = "What `<agentDir>/pi-economics/extensions/<name>` links to: the extension's directory.";
       };
       checkPath = lib.mkOption {
         type = lib.types.path;
@@ -177,8 +177,10 @@
     names = lib.attrNames cfg.extensions;
   in
     lib.filter (n: lib.elem n names) firstNames ++ lib.subtractLists firstNames names;
-  # An entry's link, relative to the agent directory.
-  linkRel = n: "extensions/${n}";
+  # An entry's link, relative to the agent directory: not in pi's
+  # auto-discovered extensions/, which loads in directory order after what
+  # settings.json lists (redesign §7.6).
+  linkRel = n: "pi-economics/extensions/${n}";
 
   # (M0.17)
   absFile =
@@ -204,9 +206,11 @@ in {
       default = {};
       description = ''
         The extension registry, keyed by install name. Each entry is linked as
-        `<agentDir>/extensions/<name>` (Home Manager rejects a second link of
-        the same name) and its `checkPath` must exist. Components add
-        themselves; a host adds its own extensions.
+        `<agentDir>/pi-economics/extensions/<name>` (Home Manager rejects a
+        second link of the same name), which pi does not auto-discover: pi
+        loads it from settings.json's `extensions` (`loadOrder`). Its
+        `checkPath` must exist. Components add themselves; a host adds its
+        own extensions.
       '';
     };
 
@@ -217,7 +221,7 @@ in {
       readOnly = true;
       internal = true;
       description = ''
-        The link path `<home>/<agentDir>/extensions/<name>` of every registry
+        The link path `<home>/<agentDir>/pi-economics/extensions/<name>` of every registry
         entry with `forChildren`, sorted by name: what actor-subagents loads
         into each child (its settings file's `childExtensions`).
       '';
@@ -313,12 +317,12 @@ in {
     # (M2.5) Link paths, not store paths: the extension resolves them in a child
     # process, and a reader can take each name from the last path component.
     programs.piEconomics.childExtensions =
-      map (n: "${config.home.homeDirectory}/${cfg.agentDir}/extensions/${n}")
+      map (n: "${config.home.homeDirectory}/${cfg.agentDir}/${linkRel n}")
       (lib.filter (n: cfg.extensions.${n}.forChildren) (lib.attrNames cfg.extensions));
 
     # (M0.8)
     home.file = lib.mapAttrs' (name: e:
-      lib.nameValuePair "${cfg.agentDir}/extensions/${name}" {source = e.path;})
+      lib.nameValuePair "${cfg.agentDir}/${linkRel name}" {source = e.path;})
     cfg.extensions;
 
     # (M0.9) An upstream rename breaks evaluation instead of leaving a link
@@ -335,6 +339,9 @@ in {
           );
       })
       cfg.extensions;
+
+    # (M6) Nothing else loads the registry's links.
+    warnings = lib.optional (!cfg.piSettings.enable && orderedNames != []) "pi-economics: piSettings.enable is false, so nothing lists the registry in settings.json's `extensions`, and pi does not auto-discover its links in ${cfg.agentDir}/pi-economics/extensions: put programs.piEconomics.loadOrder at the front of `extensions` yourself";
 
     # (M0.17) The name the host's checks read (spec §5.4, "Activation").
     home.activation = lib.mkIf (cfg.piSettings.enable && sortedOps != []) {

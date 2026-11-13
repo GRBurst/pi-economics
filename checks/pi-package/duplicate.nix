@@ -1,6 +1,7 @@
 # The duplicate guard (AC7, plan T4.1): the package installed AND every own
-# component linked into <agentDir>/extensions/<c> as the Nix route links it
-# (a built package: a different path, the same component). The first copy
+# component linked into the auto-discovered <agentDir>/extensions/<c>, as the
+# Nix route linked it before M6 (a built package: a different path, the same
+# component). The first copy
 # pi starts wins; each other copy stays inert and says so once. The analysis
 # skill is duplicated the same way: pi's loader reports a collision (`pi -p`
 # prints no skill diagnostics, so ./skill-collision.mjs asks the loader).

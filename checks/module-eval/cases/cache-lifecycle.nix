@@ -50,7 +50,7 @@ in {
     ++ holds "checkPath is the source's index.ts (${dir})" (lib.hasSuffix "/packages/cache-lifecycle/index.ts" (toString e.checkPath))
     ++ eq "derivations behind checkPath (${dir})"
     (lib.filter (v: v ? outputs) (lib.attrValues (builtins.getContext (toString e.checkPath)))) []
-    ++ holds "link target (${dir})" (lib.elem "${dir}/extensions/cache-lifecycle" (targets c))
+    ++ holds "link target (${dir})" (lib.elem "${dir}/pi-economics/extensions/cache-lifecycle" (targets c))
     ++ eq "failed assertions (${dir})" (failed "" c) []
     ++ eq "warnings (${dir})" c.warnings bare.warnings)
   dirs;
@@ -66,7 +66,7 @@ in {
   # (M4.9) Files: the link only; no settings file while settings = {}.
   cache-lifecycle-files = lib.concatMap (dir:
     eq "home.file targets (${dir})" (sorted (targets (eval dir {} {})))
-    (sorted (targets bare ++ ["${dir}/extensions/cache-lifecycle"])))
+    (sorted (targets bare ++ ["${dir}/pi-economics/extensions/cache-lifecycle"])))
   dirs;
 
   # (M4.10) settings: written as given under agentDir (the host's check value,

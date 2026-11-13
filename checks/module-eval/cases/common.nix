@@ -72,11 +72,15 @@ in {
         };
       };
     };
-    under = lib.filterAttrs (_: f: lib.hasPrefix "${dir}/extensions/" f.target) c.home.file;
+    under = lib.filterAttrs (_: f: lib.hasPrefix "${dir}/pi-economics/extensions/" f.target) c.home.file;
   in
     eq "links under ${dir}"
     (lib.mapAttrs' (_: f: lib.nameValuePair f.target (toString f.source)) under)
-    (lib.mapAttrs' (n: e: lib.nameValuePair "${dir}/extensions/${n}" (toString e.path)) (pe c).extensions)
+    (lib.mapAttrs' (n: e: lib.nameValuePair "${dir}/pi-economics/extensions/${n}" (toString e.path)) (pe c).extensions)
+    # (M6) pi auto-discovers <agentDir>/extensions and loads it in directory
+    # order; the registry is listed in settings.json instead (load-order).
+    ++ holds "no link in the auto-discovered ${dir}/extensions"
+    (!lib.any (f: lib.hasPrefix "${dir}/extensions/" f.target) (lib.attrValues c.home.file))
     ++ eq "failed assertions (${dir})" (failed "" c) [])
   [".pi/agent" "custom/agent"];
 
@@ -108,7 +112,7 @@ in {
 
   # (M0.10) Home Manager rejects a second link (spec §5.1).
   registry-double-link-key = let
-    key = ".pi/agent/extensions/ext-a";
+    key = ".pi/agent/pi-economics/extensions/ext-a";
     c = hm.eval {
       programs.piEconomics.extensions.ext-a = extA;
       home.file.${key}.source = extB.path;
@@ -121,13 +125,13 @@ in {
     c = hm.eval {
       programs.piEconomics.extensions.ext-a = extA;
       home.file.other-ext-a = {
-        target = ".pi/agent/extensions/ext-a";
+        target = ".pi/agent/pi-economics/extensions/ext-a";
         source = extB.path;
       };
     };
   in
     holds "Home Manager's conflicting-target assertion fires"
-    (lib.any (lib.hasPrefix "Conflicting managed target files: .pi/agent/extensions/ext-a") (failed "" c));
+    (lib.any (lib.hasPrefix "Conflicting managed target files: .pi/agent/pi-economics/extensions/ext-a") (failed "" c));
 
   # (M2.5) The registry's children: link paths of the forChildren entries,
   # sorted by name, whatever else the registry holds; pi-setup's economics
@@ -147,7 +151,7 @@ in {
     kids = (pe c).childExtensions;
     targets = map (f: f.target) (lib.attrValues c.home.file);
   in
-    eq "childExtensions (${dir})" kids ["/home/u/${dir}/extensions/alpha" "/home/u/${dir}/extensions/zeta"]
+    eq "childExtensions (${dir})" kids ["/home/u/${dir}/pi-economics/extensions/alpha" "/home/u/${dir}/pi-economics/extensions/zeta"]
     ++ holds "every child is a link the registry renders (${dir})"
     (lib.all (p: lib.elem p (map (t: "${c.home.homeDirectory}/${t}") targets)) kids)
     ++ eq "names from the last path component (${dir})" (map (p: lib.last (lib.splitString "/" p)) kids) ["alpha" "zeta"])
@@ -159,7 +163,7 @@ in {
   # resolves them. The op runs after the default-order ones; without a
   # registry entry there is none.
   load-order = let
-    rel = n: "extensions/${n}";
+    rel = n: "pi-economics/extensions/${n}";
     reg = names: lib.genAttrs names (_: extA);
     c = hm.eval {programs.piEconomics.extensions = reg ["zeta" "infinite-context" "alpha" "token-meter" "cache-lifecycle" "experiments"];};
     some = hm.eval {programs.piEconomics.extensions = reg ["zeta" "token-meter" "alpha"];};
@@ -176,8 +180,29 @@ in {
       }
     ]
     ++ holds "an activation entry runs it" (activation c != null)
+    ++ eq "warnings" c.warnings (hm.evalBare {}).warnings
     ++ eq "no registry entry: loadOrder" (pe none).loadOrder []
     ++ holds "no registry entry: no op" (!((pe none).piSettings.ops ? loadOrder));
+
+  # (M6) Without piSettings nothing lists the registry, and pi does not
+  # discover its links: one warning, naming the agent directory; none
+  # without a registry entry.
+  load-order-pisettings-disabled = lib.concatMap (dir: let
+    c = hm.eval {
+      programs.piEconomics = {
+        agentDir = dir;
+        extensions.ext-a = extA;
+        piSettings.enable = false;
+      };
+    };
+    empty = hm.eval {programs.piEconomics.piSettings.enable = false;};
+    bare = hm.evalBare {};
+  in
+    eq "new warnings (${dir})" (lib.subtractLists bare.warnings c.warnings) [
+      "pi-economics: piSettings.enable is false, so nothing lists the registry in settings.json's `extensions`, and pi does not auto-discover its links in ${dir}/pi-economics/extensions: put programs.piEconomics.loadOrder at the front of `extensions` yourself"
+    ]
+    ++ eq "no registry entry: warnings (${dir})" empty.warnings bare.warnings)
+  [".pi/agent" "custom/agent"];
 
   # (M0.11; the ops and order lines: M0.12)
   pisettings-defaults = let
