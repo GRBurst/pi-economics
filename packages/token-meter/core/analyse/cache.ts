@@ -97,3 +97,43 @@ export function cacheSection(lines: readonly any[], flags: Flags = {}): CacheSec
   out.missShare = out.writeTokens > 0 ? misses.reduce((s, m) => s + m.tokens, 0) / out.writeTokens : 0;
   return out;
 }
+
+// ---- B4: what a fold or a cold resume costs over reading the same tokens ----
+
+/** `events` of one kind and their premium API-eq $ (misses in the event's window × (write − read price)); `baselineUsd` and `netUsd` = premium − baseline. */
+export type FoldPremium = { events: number; premiumUsd: number; baselineUsd: number; netUsd: number };
+export type EventKind = "fold" | "coldResume";
+const N_AFTER = 3; // requests an event is charged with: its own and the next two
+
+/**
+ * Per event kind over the session branches: a **cold resume** is a turn request after a gap beyond the TTL in force (\`ttlMs\` of the
+ * previous request, warming included); a **fold** is a turn request after which \`eventBetween(previous, this)\` holds (not itself cold: P8,
+ * the gap wins). An event's window is its request and the next two turn requests of the branch, cut short by the next event: every request
+ * is in at most one window. premium_e = Σ over the window of miss_j × (w_j − r) × p_j (the line's write weight w, read weight r, input
+ * price p): the extra cost over reading the tokens the cache lost.
+ */
+export function foldPremiums(branches: Iterable<readonly any[]>, ttlMs: (l: any) => number, eventBetween: (a: any, b: any) => boolean, flags: Flags = {}): Record<EventKind, FoldPremium> {
+  const out: Record<EventKind, FoldPremium> = { fold: { events: 0, premiumUsd: 0, baselineUsd: 0, netUsd: 0 }, coldResume: { events: 0, premiumUsd: 0, baselineUsd: 0, netUsd: 0 } };
+  for (const branch of branches) {
+    const steps = cacheSteps(branch, ttlMs, eventBetween);
+    const premium = steps.map((s) => {
+      const l = branch[s.i];
+      const long = cacheWrite1hOf(l, l.parentSessionId === undefined, flags[l.arm]);
+      return s.miss * (writeWeight(l, long) - WEIGHT.cacheRead) * pIn(l, long);
+    });
+    const events: Array<{ at: number; kind: EventKind }> = [];
+    steps.forEach((s, k) => {
+      if (s.i === 0) return;
+      const prev = branch[s.i - 1], l = branch[s.i];
+      if (Date.parse(l.ts) - Date.parse(prev.ts) > ttlMs(prev)) events.push({ at: k, kind: "coldResume" });
+      else if (eventBetween(prev, l)) events.push({ at: k, kind: "fold" });
+    });
+    events.forEach((e, n) => {
+      const end = Math.min(e.at + N_AFTER, events[n + 1]?.at ?? Infinity, steps.length);
+      out[e.kind].events += 1;
+      for (let k = e.at; k < end; k++) out[e.kind].premiumUsd += premium[k];
+    });
+  }
+  for (const e of Object.values(out)) e.netUsd = e.premiumUsd - e.baselineUsd;
+  return out;
+}

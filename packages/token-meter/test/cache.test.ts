@@ -2,7 +2,7 @@
 // because the cache lost the prefix (miss), and why. From synthetic request sequences.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { branchesOf, cacheSection, cacheSteps, shrinkFold, ttlMsOf } from "../core/analyse/cache.ts";
+import { branchesOf, cacheSection, cacheSteps, foldPremiums, shrinkFold, ttlMsOf } from "../core/analyse/cache.ts";
 import { mulberry32 } from "../core/stats.ts";
 
 const MIN = 60_000;
@@ -200,4 +200,70 @@ test("cacheSection: a fold shows as cause fold (the 80% rule on the lines); a lo
   const t = Date.now();
   assert.equal(cacheSection(long).requests, n);
   assert.ok(Date.now() - t < 5_000, `${Date.now() - t} ms`);
+});
+
+// ---- B4: what a fold or a cold resume costs over reading the same tokens (T2a.5: premium) ----
+
+/** A main session that grows to 10 400 tokens, folds to 5 000 at minute 3 (rewriting `R` = 2000 of them: it read 3000), then grows again. */
+const folding = (sessionId = "f", extra: Record<string, unknown> = {}, ww = 1.25) => [
+  C(sessionId, 0, 0, 10_000, extra, ww), C(sessionId, 1, 10_000, 200, extra, ww), C(sessionId, 2, 10_200, 200, extra, ww),
+  C(sessionId, 3, 3_000, 2_000, extra, ww), C(sessionId, 4, 5_000, 100, extra, ww), C(sessionId, 5, 5_100, 100, extra, ww),
+];
+const premiums = (meter: any[], flags = {}) => foldPremiums(branchesOf(meter).values(), ttlMsOf(flags), shrinkFold, flags);
+
+test("B4: a fold whose next request rewrites R tokens costs R·(w − r)·p exactly; one fold event, no cold resume", () => {
+  const { fold, coldResume } = premiums(folding());
+  assert.equal(fold.events, 1);
+  close(fold.premiumUsd, 2000 * (1.25 - 0.1) * P);
+  assert.equal(coldResume.events, 0);
+  assert.deepEqual([coldResume.premiumUsd, coldResume.baselineUsd, coldResume.netUsd], [0, 0, 0]);
+});
+
+test("B4: a session without an event: no events, premium 0", () => {
+  const steady = [C("s", 0, 0, 10_000), C("s", 1, 10_000, 200), C("s", 2, 10_200, 200), C("s", 3, 10_400, 100)];
+  const { fold, coldResume } = premiums(steady);
+  assert.deepEqual([fold.events, fold.premiumUsd, coldResume.events, coldResume.premiumUsd], [0, 0, 0, 0]);
+});
+
+test("B4: a fold in a 1h-arm main rewrites at 2.0 × p; a cold resume (gap beyond the TTL) costs the prefix it lost at the write premium", () => {
+  const h = premiums(folding("f", { arm: "+" }, 2.0), H);
+  close(h.fold.premiumUsd, 2000 * (2.0 - 0.1) * P);
+  // 6 minutes at 5m: the cache is cold, the request rewrites everything it had (10 400)
+  const cold = [C("s", 0, 0, 10_000), C("s", 1, 10_000, 400), C("s", 7, 0, 10_400), C("s", 8, 10_400, 100), C("s", 9, 10_500, 100)];
+  const c = premiums(cold);
+  assert.equal(c.coldResume.events, 1);
+  close(c.coldResume.premiumUsd, 10_400 * (1.25 - 0.1) * P);
+  assert.equal(c.fold.events, 0);
+});
+
+test("B4: an event's window is its request and the next two, each request counted once: a later misses in the window add to the premium, a following event cuts it", () => {
+  // the fold request misses 2000, the next one misses 100 again (cached prefix lost: it read 4 900 of 5 000), the third reads everything
+  const again = [...folding().slice(0, 4), C("f", 4, 4_900, 200), C("f", 5, 5_100, 100)];
+  close(premiums(again).fold.premiumUsd, (2000 + 100) * (1.25 - 0.1) * P);
+  // a cold resume right after the fold: the fold's window ends before it; both events keep their own request
+  const both = [...folding().slice(0, 4), C("f", 12, 0, 5_000), C("f", 13, 5_000, 100)];
+  const b = premiums(both);
+  assert.deepEqual([b.fold.events, b.coldResume.events], [1, 1]);
+  close(b.fold.premiumUsd, 2000 * (1.25 - 0.1) * P);
+  close(b.coldResume.premiumUsd, 5_000 * (1.25 - 0.1) * P);
+});
+
+test("property (B4): premium ≥ 0 and every request is counted in at most one window, over random branches", () => {
+  const rng = mulberry32(9);
+  for (let k = 0; k < 100; k++) {
+    let cachedTokens = 0;
+    const lines: any[] = [];
+    for (let i = 0, at = 0; i < 40; i++) {
+      at += rng() < 0.2 ? 6 : 1;
+      const shrink = rng() < 0.1, add = Math.floor(rng() * 500);
+      const read = rng() < 0.15 ? 0 : cachedTokens;
+      lines.push(C("p", at, read, add + (shrink ? 0 : Math.max(0, cachedTokens - read))));
+      cachedTokens = shrink ? Math.floor(cachedTokens * 0.5) : cachedTokens + add;
+    }
+    const { fold, coldResume } = premiums(lines);
+    for (const e of [fold, coldResume]) assert.ok(e.premiumUsd >= 0 && e.events >= 0);
+    const steps = cacheSteps(branchesOf(lines).get("p")!, ttlMsOf(), shrinkFold);
+    const everyMiss = steps.reduce((s, x) => s + x.miss * (1.25 - 0.1) * P, 0);
+    assert.ok(fold.premiumUsd + coldResume.premiumUsd <= everyMiss + 1e-12, "windows do not overlap: no request is paid twice");
+  }
 });
