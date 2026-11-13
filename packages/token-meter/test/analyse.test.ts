@@ -202,9 +202,11 @@ test("delegation: task share, tier mix, Qwen share, acceptance per tier, escalat
   assert.equal(d.spawns, 3);
   close(d.qwenShare, 1 / 3);
   close(d.childUsdShare, 3.2 / 47.7);
+  // B6: the tier is the model the child ran on (the world's old spawns: provider/model of the child's lines, T1 and T2 by the old route labels)
   const tier = Object.fromEntries(d.byTier.map((t) => [t.tier, t]));
-  assert.deepEqual([tier.qwen.accepted, tier.qwen.judged, tier.T1.accepted, tier.T1.judged, tier.T2.accepted], [1, 1, 0, 1, 1]);
-  close(tier.T2.perAccepted, 2);
+  const [qwen, sonnet, opus] = ["openrouter/qwen", "anthropic/claude-sonnet-5-5", "anthropic/claude-opus-5-5"];
+  assert.deepEqual([tier[qwen].accepted, tier[qwen].judged, tier[sonnet].accepted, tier[sonnet].judged, tier[opus].accepted], [1, 1, 0, 1, 1]);
+  close(tier[opus].perAccepted, 2);
   assert.deepEqual(d.escalations, [{ from: "qwen", to: "T2", n: 1 }]);
   assert.equal(d.checks.n, 1); assert.equal(d.checks.failed, 0);
   assert.deepEqual(d.runaways, []);

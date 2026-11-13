@@ -6,8 +6,7 @@ Spawns whose router base was qwen, by the tier they actually ran on (implement);
 | assigned | actual tier | tasks | accepted/judged | acceptance (95% CI) | $/accepted (95% CI) |
 | --- | --- | --- | --- | --- | --- |
 | router | qwen | 9 | 6/9 | 67% (33% – 89%) | 0.40 (0.24 – 0.88) |
-| random | qwen | 4 | 2/4 | 50% | 0.20 |
-| random | haiku | 2 | 1/2 | 50% | 0.60 |
-| random | T1 | 2 | 2/2 | 100% | 0.90 |
+| random | openrouter/qwen | 6 | 3/6 | 50% (17% – 83%) | 0.33 (0.15 – 1.20) |
+| random | anthropic/claude-sonnet-5-5 | 2 | 2/2 | 100% | 0.90 |
 
 1 randomized spawn(s) with another router base are not compared.

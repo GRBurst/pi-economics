@@ -307,7 +307,7 @@ table is; this is what a reader of the raw files needs to reproduce them).
   Counterfactual by construction: each fold is valued alone, as if nothing else changed
   (output, tool use and the task path stay the same; the unfolded prompt would have been read at r).
   Folds of one session overlap in `n`; the sums are therefore a per-fold ledger, not a total saving.
-- **Delegation per profile × tier.** Profile = `spawn.kind`, tier = `spawn.workerTier`.
+- **Delegation per profile × tier.** Profile = `spawn.kind`, tier = the model the task ran on (*Analysis: router observation*).
   Verdicts, checks and escalations join the spawn by `taskId` (an `escalate` event counts
   for the tier it escalated from and the kind of the spawn named by `attemptOf`); $ per
   accepted task = the child subtree's cost (`parentSessionId` chain) of the judged tasks ÷
@@ -315,7 +315,7 @@ table is; this is what a reader of the raw files needs to reproduce them).
   (`reviewOf` on the spawn or its verdict) are counted but left out of every
   routing-quality figure.
 - **Randomized comparison.** Spawns with `assigned: "random"` and `routeBase: "qwen"`, by the
-  tier they ran on, with bootstrap CIs from 5 judged tasks on; the reference row is the
+  model they ran on, with bootstrap CIs from 5 judged tasks on; the reference row is the
   router's own qwen tasks (`assigned` `router` or absent) of the same kinds. Only the random
   rows are comparable causally.
 - **Spot-check agreement.** For every review verdict (`reviewOf` = the original task) the
@@ -381,6 +381,24 @@ How the Experiment section (and `meter-report --arms`) turns meter lines into ef
 - **Balance table**: per stratum and arm, units over `MIN_HOURS`, their active hours, the units excluded, units without an objective.
 - **Per arm** (kill switch, posterior; `meter-report --arms`): pooled over the design's strata, $ per active hour; its fold and cold-resume columns are
   the premium above (*Analysis: cache misses*), per event.
+
+### Analysis: router observation
+
+The *Delegation & routing* section reads the router's outcome log (a spawn, its reroutes, checks, verdicts) and the meter lines of the
+child sessions. It observes the router and decides nothing; the vocabulary of the outcome log (`workerTier`, `assigned`, `routeBase`, …)
+is the router's, `core/contract.ts` its copy. A field the router does not write yet is read untyped and guarded: its absence is reported
+as "not measurable", never as a number.
+
+- **Task rows.** One per spawn (the last spawn of a `taskId`). A spawn with `reviewOf` (or whose verdict has `reviewOf`) is a **spot-check
+  review**, one with `unresolved: true` an **unresolved** card; the others are **routed tasks**. Cost of a task = the `apiUsd` of its child
+  session and every session below it (`parentSessionId` chain), warming included; a task without a child session id has no cost.
+- **Tier = the model the task ran on** (B6), not the tier the router planned (`workerTier`, which the router keeps for its planned leg). The
+  model is the router's own account, `ranModel`: `workerModel` (the model the child started on), replaced by the last `reroute`'s
+  `toModel` (`levelsOfLine`, *Older lines*); else the model of the child's last request in the meter (`provider/model`, warming and error
+  lines aside); else `(unknown)`. The report orders the models by the planned tier most of their tasks had (qwen, haiku, T1, T2), then by name.
+- **Planned → executed matrix**: the routed tasks counted by (`workerTier`, model it ran on); a planned qwen that ran on another model is
+  visible there only.
+- **Qwen share of tasks** is the share of routed tasks *planned* on `qwen`; the report states no target for it.
 
 ## Data contract (`pi-analyse --check`)
 

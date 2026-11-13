@@ -3,17 +3,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { analyse, renderAnalysis, type Logs } from "../core/analyse.ts";
+import { executedTier } from "../core/analyse/delegation.ts";
 import { iso, MIN, T0, turn } from "./world.ts";
 
 const close = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
 
-type Task = { id: string; kind?: string; tier?: string; cost?: number; verdict?: string; spawn?: Record<string, unknown>; verdictExtra?: Record<string, unknown> };
+/** The model a child of each planned tier runs on in these fixtures (B6: the tier of a task is the model it ran on). The old lines' route labels map to the same names. */
+const RAN: Record<string, [provider: string, model: string]> = { qwen: ["llama", "qwen3.8"], haiku: ["p-api", "haiku"], T1: ["anthropic", "claude-sonnet-5-5"], T2: ["anthropic", "claude-opus-5-5"] };
+const EXEC = Object.fromEntries(Object.entries(RAN).map(([tier, [p, m]]) => [tier, `${p}/${m}`])) as Record<"qwen" | "haiku" | "T1" | "T2", string>;
+
+type Task = { id: string; kind?: string; tier?: string; /** The provider and model of the child's meter lines, if not the planned tier's. */ ran?: [string, string]; cost?: number; verdict?: string; spawn?: Record<string, unknown>; verdictExtra?: Record<string, unknown> };
 /** Spawn events (+ one child meter line of `cost` $ each, + a verdict when given) of the tasks, one minute apart; extra events appended. */
 function logsOf(tasks: Task[], events: Record<string, unknown>[] = [], meter: Record<string, unknown>[] = []): Logs {
   const outcomes: Record<string, unknown>[] = [];
   tasks.forEach((t, i) => {
     const at = T0 + i * MIN;
-    meter.push(turn(`c-${t.id}`, at, { parentSessionId: "root", costUsd: t.cost ?? 1 }));
+    const [provider, model] = t.ran ?? RAN[t.tier ?? "qwen"];
+    meter.push(turn(`c-${t.id}`, at, { parentSessionId: "root", costUsd: t.cost ?? 1, provider, model }));
     outcomes.push({ v: 1, ts: iso(at), event: "spawn", taskId: t.id, kind: t.kind ?? "implement", workerTier: t.tier ?? "qwen", workerEffort: "high", sessionId: `c-${t.id}`, parentSessionId: "root", ...t.spawn });
     if (t.verdict) outcomes.push({ v: 1, ts: iso(at + 10_000), event: "verdict", taskId: t.id, verdict: t.verdict, ...t.verdictExtra });
   });
@@ -41,7 +47,7 @@ const cell = (d: ReturnType<typeof analyse>["delegation"], kind: string, tier: s
 
 test("profile × tier: tasks, accepted/partial/rejected/unjudged, $ per accepted task over the subtree, escalations, check pass rate", () => {
   const d = analyse(tierLogs()).delegation;
-  const q = cell(d, "implement", "qwen");
+  const q = cell(d, "implement", EXEC.qwen);
   assert.deepEqual([q.tasks, q.accepted, q.partial, q.rejected, q.unjudged], [4, 1, 1, 1, 1]);
   close(q.usd, 1.5 + 2 + 0.5); // judged tasks only; q1's grandchild included
   close(q.perAccepted, 4);
@@ -49,12 +55,50 @@ test("profile × tier: tasks, accepted/partial/rejected/unjudged, $ per accepted
   assert.equal(q.escalations, 1); // q3b escalated away from qwen; the original's kind is looked up by attemptOf
   assert.deepEqual([q.checks.n, q.checks.passed], [3, 2]);
   close(q.passRate, 2 / 3);
-  const t = cell(d, "implement", "T2");
+  const t = cell(d, "implement", EXEC.T2);
   assert.deepEqual([t.tasks, t.accepted, t.escalations, t.checks.n], [2, 2, 0, 1]);
   close(t.perAccepted, 4);
-  assert.deepEqual([cell(d, "scout", "qwen").tasks, cell(d, "scout", "qwen").checks.n], [1, 0]);
-  assert.ok(Number.isNaN(cell(d, "scout", "qwen").passRate));
-  assert.deepEqual(d.profileTiers.map((c) => `${c.kind}/${c.tier}`), ["implement/qwen", "implement/T2", "scout/qwen"]); // sorted; no review, no unresolved
+  assert.deepEqual([cell(d, "scout", EXEC.qwen).tasks, cell(d, "scout", EXEC.qwen).checks.n], [1, 0]);
+  assert.ok(Number.isNaN(cell(d, "scout", EXEC.qwen).passRate));
+  assert.deepEqual(d.profileTiers.map((c) => `${c.kind}/${c.tier}`), [`implement/${EXEC.qwen}`, `implement/${EXEC.T2}`, `scout/${EXEC.qwen}`]); // sorted; no review, no unresolved
+});
+
+// ---- B6: the tier of a task is the model it ran on ---------------------------------------------------
+
+const AFTER_ROUTER_MODELS = "2026-10-20T10:00:00.000Z"; // lines from 2026-10-17 on carry their models (D9)
+
+test("executedTier: the model the router says the child ran on; else the model of the child's last request (provider/model); else unknown", () => {
+  const l = (at: number, extra: Record<string, unknown>) => turn("k", T0 + at * MIN, { provider: "p-a", model: "m1", ...extra });
+  const lines = [l(2, { provider: "p-b", model: "m2" }), l(1, {}), l(3, { kind: "warming", model: "m3" }), l(4, { status: "error", model: "m4" })];
+  assert.equal(executedTier({ ranModel: "x/y" }, lines), "x/y");
+  assert.equal(executedTier({}, lines), "p-b/m2");
+  assert.equal(executedTier({}, []), "(unknown)");
+});
+
+test("B6: a task planned on qwen that ran on another model counts under the model it ran on; the matrix has the cell (qwen → that model) = 1", () => {
+  const d = analyse(logsOf(
+    [
+      { id: "a", verdict: "accepted", cost: 2, spawn: { ts: AFTER_ROUTER_MODELS, workerModel: "p-api/large" } }, // the router wrote the model it started on
+      { id: "b", verdict: "accepted", cost: 1 }, // an old line, rerouted to T1 (Sonnet) below
+      { id: "c", verdict: "rejected", cost: 1, ran: ["p-api", "other"], spawn: { ts: AFTER_ROUTER_MODELS } }, // no model on the line: the meter lines' model
+      { id: "d", verdict: "accepted", cost: 1 }, // ran as planned
+    ],
+    [ev("reroute", "b", 5, { from: "local", to: "T1", reason: "offline" })],
+  )).delegation;
+  assert.deepEqual(d.byTier.map((t) => t.tier).sort(), [EXEC.T1, EXEC.qwen, "p-api/large", "p-api/other"]);
+  assert.deepEqual(d.matrix, [
+    { planned: "qwen", executed: EXEC.T1, n: 1 }, { planned: "qwen", executed: EXEC.qwen, n: 1 }, { planned: "qwen", executed: "p-api/large", n: 1 }, { planned: "qwen", executed: "p-api/other", n: 1 },
+  ]);
+  assert.deepEqual(d.profileTiers.map((c) => `${c.tier}:${c.tasks}:${c.accepted}`).sort(), [`${EXEC.T1}:1:1`, `${EXEC.qwen}:1:1`, "p-api/large:1:1", "p-api/other:1:0"]);
+  close(d.byTier.find((t) => t.tier === "p-api/large")!.usd, 2);
+  assert.equal(d.qwenShare, 1); // the share of PLANNED qwen is still 4/4: it names what the router planned
+});
+
+test("B6 property: every routed task is in exactly one matrix cell and one tier row; spot-check reviews and unresolved cards are in neither", () => {
+  const d = analyse(tierLogs()).delegation;
+  assert.equal(d.matrix.reduce((n, c) => n + c.n, 0), 7);
+  assert.equal(d.byTier.reduce((n, t) => n + t.spawns, 0), 7);
+  assert.deepEqual(d.matrix.filter((c) => c.planned === "T2").map((c) => [c.executed, c.n]), [[EXEC.T2, 2]]);
 });
 
 // RG9 (review-g4 Low 4): since 2026-10-17 `escalate.from` is a route label (`local`, `cloud`, `haiku`, `T1`, `T2`; `"?"` when
@@ -71,11 +115,12 @@ test("RG9: escalations count in the failed task's cell (kind × workerTier), not
       ev("escalate", "x2b", 24, { from: "?", to: "T1", attemptOf: "typo" }),
     ],
   )).delegation;
-  assert.deepEqual(d.profileTiers.map((c) => `${c.kind}/${c.tier}:${c.escalations}`), ["(unknown)/qwen:1", "(unknown)/?:1", "implement/qwen:2", "implement/T1:1"]);
+  assert.deepEqual(d.profileTiers.map((c) => `${c.kind}/${c.tier}:${c.escalations}`), [`(unknown)/${EXEC.qwen}:1`, "(unknown)/?:1", `implement/${EXEC.qwen}:2`, `implement/${EXEC.T1}:1`]);
 });
 
-// RF3 (review-g5 plant MP4): both Qwen routes map to the tier `qwen`, `cloud` as well as `local`.
-test("RF3: without its spawn, an escalation from cloud counts in (unknown)/qwen like one from local", () => {
+// RF3 (review-g5 plant MP4) counted both Qwen routes in the tier `qwen`; since B6 the tier is the model, and the old route labels map to a model
+// each (legacy-routes.json): local and cloud are two models, so two rows.
+test("RF3: without its spawn, an escalation counts under the model it left: an old `local` and `cloud` route are two rows", () => {
   const d = analyse(logsOf(
     [{ id: "q1", verdict: "rejected" }],
     [
@@ -83,7 +128,7 @@ test("RF3: without its spawn, an escalation from cloud counts in (unknown)/qwen 
       ev("escalate", "x2b", 21, { from: "cloud", to: "T1", attemptOf: "gone2" }),
     ],
   )).delegation;
-  assert.deepEqual(d.profileTiers.map((c) => `${c.kind}/${c.tier}:${c.escalations}`), ["(unknown)/qwen:2", "implement/qwen:0"]);
+  assert.deepEqual(d.profileTiers.map((c) => `${c.kind}/${c.tier}:${c.escalations}`), [`(unknown)/${EXEC.qwen}:1`, "(unknown)/openrouter/qwen/qwen3.8-27b:free:1", `implement/${EXEC.qwen}:0`]);
 });
 
 test("unresolved cards are counted and kept out of every routing-quality statistic; spot-check reviews are counted apart", () => {
@@ -91,10 +136,10 @@ test("unresolved cards are counted and kept out of every routing-quality statist
   assert.equal(d.unresolved, 1);
   assert.equal(d.reviewSpawns, 1);
   assert.equal(d.spawns, 9);
-  assert.equal(d.byTier.find((t) => t.tier === "qwen")!.spawns, 5); // q1–q4 and s1, not u1
-  assert.equal(d.byTier.find((t) => t.tier === "T2")!.spawns, 2); // not the review child
+  assert.equal(d.byTier.find((t) => t.tier === EXEC.qwen)!.spawns, 5); // q1–q4 and s1, not u1
+  assert.equal(d.byTier.find((t) => t.tier === EXEC.T2)!.spawns, 2); // not the review child
   close(d.qwenShare, 5 / 7);
-  close(d.byTier.find((t) => t.tier === "qwen")!.usd, 1.5 + 2 + 0.5 + 0.2);
+  close(d.byTier.find((t) => t.tier === EXEC.qwen)!.usd, 1.5 + 2 + 0.5 + 0.2);
 });
 
 test("profile × tier: property — the cells' tasks sum to the routed spawns, outcomes sum to tasks", () => {
@@ -124,19 +169,19 @@ const row = (d: ReturnType<typeof analyse>["delegation"], assigned: string, tier
 test("randomized comparison: acceptance and $/accepted by actual tier for random vs router-assigned qwen of the same profiles", () => {
   const d = analyse(randomLogs()).delegation;
   assert.deepEqual(d.randomized.kinds, ["mechanical"]);
-  assert.deepEqual(d.randomized.rows.map((r) => `${r.assigned}/${r.tier}`), ["router/qwen", "random/qwen", "random/T1", "random/T2"]);
+  assert.deepEqual(d.randomized.rows.map((r) => `${r.assigned}/${r.tier}`), ["router/qwen", `random/${EXEC.qwen}`, `random/${EXEC.T1}`, `random/${EXEC.T2}`]);
   const ctl = row(d, "router", "qwen"); // the 3 router + 2 old lines of kind mechanical; "debug" is another profile
   assert.deepEqual([ctl.tasks, ctl.judged, ctl.accepted], [5, 5, 4]);
   close(ctl.acceptance.mean, 4 / 5);
   close(ctl.perAccepted.mean, 5 / 4);
-  const q = row(d, "random", "qwen");
+  const q = row(d, "random", EXEC.qwen);
   assert.deepEqual([q.tasks, q.accepted], [6, 3]);
   close(q.acceptance.mean, 0.5);
   close(q.perAccepted.mean, 2);
-  const t1 = row(d, "random", "T1");
+  const t1 = row(d, "random", EXEC.T1);
   close(t1.acceptance.mean, 1);
   close(t1.perAccepted.mean, 3);
-  const t2 = row(d, "random", "T2");
+  const t2 = row(d, "random", EXEC.T2);
   close(t2.perAccepted.mean, 8);
   assert.equal(d.randomized.otherBase, 1); // the randomized spawn whose router base was T1 is counted, not compared
 });
@@ -155,7 +200,7 @@ test("randomized comparison: unresolved and review spawns are left out; no rando
   const w = randomLogs();
   const extra = logsOf([{ id: "xu", kind: "mechanical", tier: "T1", verdict: "rejected", spawn: { assigned: "random", routeBase: "qwen", unresolved: true } }, { id: "xr", kind: "mechanical", tier: "T1", verdict: "rejected", spawn: { assigned: "random", routeBase: "qwen", reviewOf: "rq0" } }]);
   const d = analyse({ ...w, meter: [...w.meter, ...extra.meter], outcomes: [...w.outcomes, ...extra.outcomes] }).delegation;
-  assert.deepEqual([row(d, "random", "T1").tasks, row(d, "random", "T1").accepted], [5, 5]);
+  assert.deepEqual([row(d, "random", EXEC.T1).tasks, row(d, "random", EXEC.T1).accepted], [5, 5]);
   assert.deepEqual(analyse(logsOf([{ id: "a", verdict: "accepted" }])).delegation.randomized.rows, []);
 });
 
@@ -184,7 +229,7 @@ test("spot-check agreement: no spot checks → n 0 and a NaN rate; the review ch
   assert.deepEqual([s.requested, s.reviewed, s.agree, s.pending], [0, 0, 0, 0]);
   assert.ok(Number.isNaN(s.rate));
   const d = analyse(spotLogs()).delegation;
-  assert.equal(d.byTier.find((t) => t.tier === "T2"), undefined); // only review children ran on T2
+  assert.equal(d.byTier.find((t) => t.tier === EXEC.T2), undefined); // only review children ran on T2
 });
 
 // ---- old data and rendering ----------------------------------------------------------------------
@@ -203,7 +248,9 @@ test("render: the delegation section shows the profile × tier table, the random
   assert.match(sec, /\| profile \| tier \| tasks \| accepted \| partial \| rejected \| unjudged \| acceptance \| \$\/accepted \| escalations \| checks passed \|/);
   assert.match(sec, /### Randomized routing \(spawns the router sent to qwen\)/);
   assert.match(sec, /Causal only for the random subset/);
-  assert.match(sec, /\| random \| T1 \| 5 \| 5\/5 \| 100%/);
+  assert.match(sec, new RegExp(`\\| random \\| ${EXEC.T1} \\| 5 \\| 5/5 \\| 100%`));
+  assert.match(sec, /### Planned → executed tier/);
+  assert.match(sec, new RegExp(`\\| T1 \\| ${EXEC.T1} \\| 5 \\|`));
   assert.match(sec, /### Spot checks/);
   assert.match(sec, /agreement/);
   assert.ok(!sec.includes("SC3"), "D9: the report names no target of the router's (SC3)");
@@ -213,7 +260,7 @@ test("render: the delegation section shows the profile × tier table, the random
   assert.match(empty, /no spot checks/);
 });
 
-test("T4.5 TIER_RANK: haiku sorts between qwen and T1 (qwen, haiku, T1, T2)", () => {
+test("T4.5: models sort by the planned tier most of their tasks had: haiku between qwen and T1 (qwen, haiku, T1, T2)", () => {
   const d = analyse(logsOf([{ id: "a", tier: "T2" }, { id: "b", tier: "T1" }, { id: "c", tier: "haiku" }, { id: "d", tier: "qwen" }])).delegation;
-  assert.deepEqual(d.profileTiers.map((c) => c.tier), ["qwen", "haiku", "T1", "T2"]);
+  assert.deepEqual(d.profileTiers.map((c) => c.tier), [EXEC.qwen, EXEC.haiku, EXEC.T1, EXEC.T2]);
 });

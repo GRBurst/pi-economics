@@ -12,14 +12,25 @@
 
 ### By tier
 
-Spot-check reviews and spawns whose card files did not resolve (`unresolved`) are left out of every table below: they say nothing about routing quality.
+Tier = the model the task ran on (the router's `workerModel`, after its last reroute; else the model of the child's last request), not the tier the router planned. Spot-check reviews and spawns whose card files did not resolve (`unresolved`) are left out of every table below: they say nothing about routing quality.
 
 | tier | tasks | share | accepted/judged | acceptance | $ | $/accepted |
 | --- | --- | --- | --- | --- | --- | --- |
-| qwen | 13 | 62% | 8/13 | 62% | 2.80 | 0.35 |
-| T1 | 4 | 19% | 2/3 | 67% | 2.80 | 1.40 |
-| T2 | 2 | 10% | 2/2 | 100% | 3.50 | 1.75 |
-| haiku | 2 | 10% | 1/2 | 50% | 0.60 | 0.60 |
+| openrouter/qwen | 14 | 67% | 9/14 | 64% | 3.20 | 0.36 |
+| anthropic/claude-sonnet-5-5 | 5 | 24% | 2/4 | 50% | 3.00 | 1.50 |
+| anthropic/claude-opus-5-5 | 2 | 10% | 2/2 | 100% | 3.50 | 1.75 |
+
+### Planned → executed tier
+
+The tier the router planned (`workerTier`) against the model the task ran on: a task counts under the model in every table here, so a planned qwen that ran another model is visible only in this matrix.
+
+| planned | ran on | tasks |
+| --- | --- | --- |
+| qwen | anthropic/claude-sonnet-5-5 | 1 |
+| qwen | openrouter/qwen | 12 |
+| haiku | openrouter/qwen | 2 |
+| T1 | anthropic/claude-sonnet-5-5 | 4 |
+| T2 | anthropic/claude-opus-5-5 | 2 |
 
 ### By profile and tier
 
@@ -27,11 +38,10 @@ Profile = the card kind; acceptance = accepted ÷ judged; $/accepted = subtree c
 
 | profile | tier | tasks | accepted | partial | rejected | unjudged | acceptance | $/accepted | escalations | checks passed |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| (unknown) | qwen | 0 | 0 | 0 | 0 | 0 | – | – | 1 | – |
-| implement | qwen | 13 | 8 | 1 | 4 | 0 | 62% | 0.35 | 0 | 1/2 (50%) |
-| implement | haiku | 2 | 1 | 1 | 0 | 0 | 50% | 0.60 | 0 | – |
-| implement | T1 | 4 | 2 | 0 | 1 | 1 | 67% | 1.40 | 0 | – |
-| implement | T2 | 2 | 2 | 0 | 0 | 0 | 100% | 1.75 | 1 | – |
+| (unknown) | openrouter/qwen/qwen3.8-27b:free | 0 | 0 | 0 | 0 | 0 | – | – | 1 | – |
+| implement | openrouter/qwen | 14 | 9 | 2 | 3 | 0 | 64% | 0.36 | 0 | 1/1 (100%) |
+| implement | anthropic/claude-sonnet-5-5 | 5 | 2 | 0 | 2 | 1 | 50% | 1.50 | 0 | 0/1 (0%) |
+| implement | anthropic/claude-opus-5-5 | 2 | 2 | 0 | 0 | 0 | 100% | 1.75 | 1 | – |
 
 ### Randomized routing (spawns the router sent to qwen)
 
@@ -40,9 +50,8 @@ Spawns whose router base was qwen, by the tier they actually ran on (implement);
 | assigned | actual tier | tasks | accepted/judged | acceptance (95% CI) | $/accepted (95% CI) |
 | --- | --- | --- | --- | --- | --- |
 | router | qwen | 9 | 6/9 | 67% (33% – 89%) | 0.40 (0.24 – 0.88) |
-| random | qwen | 4 | 2/4 | 50% | 0.20 |
-| random | haiku | 2 | 1/2 | 50% | 0.60 |
-| random | T1 | 2 | 2/2 | 100% | 0.90 |
+| random | openrouter/qwen | 6 | 3/6 | 50% (17% – 83%) | 0.33 (0.15 – 1.20) |
+| random | anthropic/claude-sonnet-5-5 | 2 | 2/2 | 100% | 0.90 |
 
 1 randomized spawn(s) with another router base are not compared.
 
