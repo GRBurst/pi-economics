@@ -154,21 +154,12 @@ in {
       type = "SubagentsApi";
     };
   };
-  # (M4.7, M4.8) The copies of __piExperimentsApi_v1 in token-meter and cache-lifecycle.
+  # (M4.7) The copy of __piExperimentsApi_v1 in token-meter.
   iface-experiments-token-meter = iface.compare {
     name = "experiments-token-meter";
     provider = experimentsProvider;
     consumer = {
       src = ../packages/token-meter;
-      file = "core/shell.ts";
-      type = "ExperimentsApi";
-    };
-  };
-  iface-experiments-cache-lifecycle = iface.compare {
-    name = "experiments-cache-lifecycle";
-    provider = experimentsProvider;
-    consumer = {
-      src = ../packages/cache-lifecycle;
       file = "core/shell.ts";
       type = "ExperimentsApi";
     };

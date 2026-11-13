@@ -9,7 +9,14 @@ export function fakePi() {
     pi: {
       on(name: string, h: Handler) { handlers.set(name, [...(handlers.get(name) ?? []), h]); },
       appendEntry(type: string, data: unknown) { appended.push({ type, data }); },
-      events: { on(name: string, h: (d: any) => void) { bus.set(name, [...(bus.get(name) ?? []), h]); } },
+      // pi 1.4 runs a bus handler synchronously inside emit; `on` returns the unsubscribe.
+      events: {
+        on(name: string, h: (d: any) => void) {
+          bus.set(name, [...(bus.get(name) ?? []), h]);
+          return () => void bus.set(name, (bus.get(name) ?? []).filter((x) => x !== h));
+        },
+        emit(name: string, d: unknown) { for (const h of bus.get(name) ?? []) h(d); },
+      },
     },
     fire(name: string, e: unknown, ctx: unknown) { for (const h of handlers.get(name) ?? []) h(e, ctx); },
     /** Like fire, but returns the last handler result that is not undefined. */

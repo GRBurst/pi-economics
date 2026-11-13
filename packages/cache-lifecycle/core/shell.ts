@@ -5,7 +5,7 @@ import { isCold } from "./cold.ts";
 import { planMasks, type Include, type MaskSet } from "./mask.ts";
 import { applyMasks, entriesOf } from "./messages.ts";
 import { registerIdentityShim } from "./identity.ts";
-import type { SubagentsApiV1 } from "./api.ts";
+import { LEVERS, LEVERS_QUERY, type Levers, type LeversQuery, type SubagentsApiV1 } from "./api.ts";
 import { actorMissing, hasSubagentsApiV1, warnOnce } from "./runtime-guard.ts";
 import { applyTtl } from "./ttl.ts";
 import { decideWarm } from "./warm.ts";
@@ -15,6 +15,8 @@ type Ctx = { sessionManager: { getSessionId(): string; getBranch(): unknown[] };
 export type PiLike = {
   on(name: string, handler: (event: any, ctx: Ctx) => unknown): void;
   appendEntry(customType: string, data: unknown): void;
+  /** pi.events: emit runs the handlers synchronously; `on` returns the unsubscribe. */
+  events: { emit(channel: string, data: unknown): void; on(channel: string, handler: (data: any) => unknown): () => void };
 };
 
 export type Deps = {
@@ -26,8 +28,6 @@ export type Deps = {
   api?: () => Pick<SubagentsApiV1, "list" | "subscribe"> | undefined;
 };
 
-/** What cache-lifecycle reads of the experiments package's globalThis.__piExperimentsApi_v1; the type check compares it with the provider's ExperimentsApiV1 (spec §5.3). */
-export type ExperimentsApi = { flag(n: string, d: string, s?: string): string; armFor?(s: string): { id?: string } | undefined };
 
 const MASKS = "cache-lifecycle/masks";
 const MIN = 60_000;
@@ -39,18 +39,32 @@ export function install(pi: PiLike, deps: Deps) {
   const now = deps.now ?? Date.now;
   const { settings } = deps;
   const api = deps.api ?? (() => (globalThis as { __subagentsApi_v1?: SubagentsApiV1 }).__subagentsApi_v1);
-  // The one seam for the factors the experiments package switches: its arm's value, else the own setting.
-  const experiments = () => (globalThis as { __piExperimentsApi_v1?: ExperimentsApi }).__piExperimentsApi_v1;
+  // The one seam for the factors the experiments package switches: the level its engine assigned the session, read from
+  // the internal channel (redesign §7.7) as the lever target, else the own setting. Asking as the target is what makes
+  // the engine set and record these levers (§7.4: a lever of a target that is not loaded stays inert).
+  const TARGET = "cache-lifecycle";
+  const assigned = (sid: string): Levers | undefined => {
+    let answer: Levers | undefined;
+    const q: LeversQuery = { sessionId: sid, target: TARGET, reply: (a) => void (answer ??= a) };
+    pi.events.emit(LEVERS_QUERY, q);
+    return answer;
+  };
+  // An engine that starts after this extension publishes the assignment first: ask then, so its levers start at once.
+  pi.events.on(LEVERS, (l: Levers) => {
+    if (Object.values(l?.factors ?? {}).some((f) => f.lever.startsWith(`${TARGET}.`))) assigned(l.sessionId);
+  });
   const flag = (name: "warmPolicy" | "mainCacheTtl" | "maskOnCold", sid: string): string => {
     const own = settings[name];
-    const v = experiments()?.flag(name, own, sid) ?? own;
+    const f = Object.values(assigned(sid)?.factors ?? {}).find((x) => x.lever === `${TARGET}.${name}`);
+    const v = f === undefined ? own : String(f.assigned);
     // The factor's "on" level: the own masking level, or tools+thinking when that is off.
     return name === "maskOnCold" && v === "on" ? (own === "off" ? "tools+thinking" : own) : v;
   };
   // actor-subagents' list() carries a `main` record with the main session id
   // (the name is unique -- the singleton is added before any child can spawn),
   // and it is not a child. Excluded here and in the warming decision below.
-  const isChild = (sid: string) => api()?.list().some((a) => a.name !== "main" && a.sessionId === sid) ?? false;
+  // An in-process child's own runtime knows it from its Assigned before the actor attaches it (redesign M5b.2).
+  const isChild = (sid: string) => (api()?.list().some((a) => a.name !== "main" && a.sessionId === sid) ?? false) || assigned(sid)?.parentSessionId !== undefined;
   const ttlFor = (sid: string) => (!isChild(sid) && flag("mainCacheTtl", sid) === "1h" ? "1h" : "5m");
   const lastRequest = new Map<string, number>();
   const masks = new Map<string, MaskSet>();
@@ -64,6 +78,7 @@ export function install(pi: PiLike, deps: Deps) {
 
   pi.on("session_start", (_e, ctx) => {
     rebuild(ctx);
+    assigned(ctx.sessionManager.getSessionId());
     // spec D5: without the patched actor only the warming of sessions that wait on children is off (below).
     if (!hasSubagentsApiV1(api())) warnOnce(ctx, "actor:cache-lifecycle", actorMissing("cache-lifecycle", "sessions waiting on their children are not kept warm"));
   });
@@ -131,9 +146,10 @@ export function install(pi: PiLike, deps: Deps) {
     const sid = ctx.sessionManager.getSessionId();
     if (!deps.agentDir || e.toolName !== "context_peek" || !masks.get(sid)?.size) return undefined;
     try {
-      const arm = experiments()?.armFor?.(sid)?.id;
+      const { arm, design } = assigned(sid) ?? {};
       mkdirSync(join(deps.agentDir, "guards"), { recursive: true });
-      appendFileSync(join(deps.agentDir, "guards", "events.jsonl"), JSON.stringify({ v: 1, ts: new Date(now()).toISOString(), sessionId: sid, ...(arm ? { arm } : {}), event: "peek-after-mask" }) + "\n");
+      // The design id rides along, as on experiments' guard lines (a v2 arm id alone may look like a v1-engine one).
+      appendFileSync(join(deps.agentDir, "guards", "events.jsonl"), JSON.stringify({ v: 1, ts: new Date(now()).toISOString(), sessionId: sid, ...(arm ? { arm } : {}), ...(arm && design ? { design } : {}), event: "peek-after-mask" }) + "\n");
     } catch { /* a guard log must never block the tool */ }
     return undefined;
   });

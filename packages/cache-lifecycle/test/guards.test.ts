@@ -1,6 +1,6 @@
 // Guards: `context_peek` use after masking is logged as `peek-after-mask` to <agentDir>/guards/events.jsonl
 // (the file format meter-report --arms reads; no prompt text, no tool arguments).
-import { test, afterEach } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,8 +10,6 @@ import { defaults } from "../core/settings.ts";
 import { fakeCtx, fakePi } from "./fake-pi.ts";
 import { asst, tool, user } from "./msgs.ts";
 
-type G = { __piExperimentsApi_v1?: unknown };
-afterEach(() => void delete (globalThis as G).__piExperimentsApi_v1);
 
 const MIN = 60_000;
 const big = "x".repeat(12000); // ~3000 tokens: c1 falls outside the protected tail below, c2 stays inside
@@ -45,13 +43,14 @@ test("a context_peek call after a masking event on its session is logged (no arg
   assert.deepEqual(rows(), [{ v: 1, ts: new Date(clock.now).toISOString(), sessionId: "s1", event: "peek-after-mask" }]);
 });
 
-test("the line carries the session's experiment arm when the API is there", () => {
+test("the line carries the session's experiment arm and design from the internal channel", () => {
   const { f, rows } = setup();
-  (globalThis as G).__piExperimentsApi_v1 = { flag: (_n: string, d: string) => d, armFor: (s: string) => (s === "s1" ? { id: "+-+--" } : undefined) };
+  f.pi.events.on("pi-economics:levers-query:v1", (q: any) => q.sessionId === "s1" && q.reply({ sessionId: "s1", eligible: true, arm: "+-+--", design: "0123456789ab", levers: {} }));
   const ctx = fakeCtx("s1");
   f.call("context", { messages: msgs() }, ctx);
   f.fire("tool_call", peek, ctx);
   assert.equal(rows()[0].arm, "+-+--");
+  assert.equal(rows()[0].design, "0123456789ab");
 });
 
 test("a resumed session whose branch holds masks counts too; without maskOnCold and masks nothing is logged", () => {
