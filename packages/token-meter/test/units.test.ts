@@ -33,8 +33,8 @@ test("allocate: the token components of a line add up to apiUsd(line)", () => {
   }
 });
 
-// The only mentions of costUsd in analyse/* outside units.ts: the TaskCost field (tasks.ts's result, not a meter line) and prose.
-const NOT_A_LINE = ["{ accepted: 0, judged: 0, costUsd: 0, perAccepted: NaN }", "usd: c?.costUsd ?? 0"];
+// The mentions of costUsd in analyse/* outside units.ts that are no read of a meter line (none since B5: the $/accepted result is `usd`).
+const NOT_A_LINE: string[] = [];
 
 test("seam: no analyse/* module but units.ts mentions costUsd (a read as num(), Number(), ??, [\"costUsd\"] … goes through apiUsd)", () => {
   const dir = new URL("../core/analyse/", import.meta.url);

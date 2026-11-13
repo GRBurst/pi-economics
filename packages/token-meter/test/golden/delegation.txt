@@ -17,8 +17,9 @@ Tier = the model the task ran on (the router's `workerModel`, after its last rer
 | tier | tasks | share | accepted/judged | acceptance | $ | $/accepted |
 | --- | --- | --- | --- | --- | --- | --- |
 | openrouter/qwen | 14 | 67% | 9/14 | 64% | 3.20 | 0.36 |
-| anthropic/claude-sonnet-5-5 | 5 | 24% | 2/4 | 50% | 3.00 | 1.50 |
+| anthropic/claude-sonnet-5-5 | 5 | 24% | 2/4 | 50% | 14.00 | 7.00 |
 | anthropic/claude-opus-5-5 | 2 | 10% | 2/2 | 100% | 3.50 | 1.75 |
+| all | 21 | 100% | 13/20 | 65% | 20.70 | 1.59 |
 
 ### Planned → executed tier
 

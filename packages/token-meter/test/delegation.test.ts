@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { analyse, renderAnalysis, type Logs } from "../core/analyse.ts";
-import { executedTier } from "../core/analyse/delegation.ts";
+import { costPerAccepted, executedTier, taskRows } from "../core/analyse/delegation.ts";
 import { iso, MIN, T0, turn } from "./world.ts";
 
 const close = (a: number, b: number, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
@@ -90,7 +90,7 @@ test("B6: a task planned on qwen that ran on another model counts under the mode
     { planned: "qwen", executed: EXEC.T1, n: 1 }, { planned: "qwen", executed: EXEC.qwen, n: 1 }, { planned: "qwen", executed: "p-api/large", n: 1 }, { planned: "qwen", executed: "p-api/other", n: 1 },
   ]);
   assert.deepEqual(d.profileTiers.map((c) => `${c.tier}:${c.tasks}:${c.accepted}`).sort(), [`${EXEC.T1}:1:1`, `${EXEC.qwen}:1:1`, "p-api/large:1:1", "p-api/other:1:0"]);
-  close(d.byTier.find((t) => t.tier === "p-api/large")!.usd, 2);
+  close(d.byTier.find((t) => t.tier === "p-api/large")!.cost.usd, 2);
   assert.equal(d.qwenShare, 1); // the share of PLANNED qwen is still 4/4: it names what the router planned
 });
 
@@ -99,6 +99,66 @@ test("B6 property: every routed task is in exactly one matrix cell and one tier 
   assert.equal(d.matrix.reduce((n, c) => n + c.n, 0), 7);
   assert.equal(d.byTier.reduce((n, t) => n + t.spawns, 0), 7);
   assert.deepEqual(d.matrix.filter((c) => c.planned === "T2").map((c) => [c.executed, c.n]), [[EXEC.T2, 2]]);
+});
+
+// ---- B5: one $/accepted function for the headline and the tier table ---------------------------------
+
+const rng = (seed: number) => () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+/** Seeded fixture: routed tasks on every tier with every verdict (or none), a few spot-check reviews, unresolved cards, tasks without a child session, reroutes. */
+function generated(seed: number): Logs {
+  const rand = rng(seed);
+  const pick = <T>(xs: T[]): T => xs[Math.floor(rand() * xs.length)];
+  const tasks: Task[] = Array.from({ length: 12 + Math.floor(rand() * 20) }, (_, i) => {
+    const kind = rand();
+    const t: Task = { id: `g${i}`, tier: pick(["qwen", "haiku", "T1", "T2"]), cost: Math.round(rand() * 400) / 100, verdict: pick(["accepted", "accepted", "partial", "rejected", undefined as unknown as string]) };
+    if (kind < 0.12) return { ...t, kind: "review", spawn: { reviewOf: "g0" }, verdictExtra: { reviewOf: "g0" } };
+    if (kind < 0.24) return { ...t, spawn: { unresolved: true } };
+    if (kind < 0.3) return { ...t, spawn: { sessionId: undefined } };
+    return t;
+  });
+  const reroutes = tasks.filter(() => rand() < 0.2).map((t, i) => ev("reroute", t.id, 50 + i, { from: "local", to: pick(["cloud", "T1", "T2"]), reason: "x" }));
+  return logsOf(tasks, reroutes);
+}
+const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
+
+test("B5: costPerAccepted: the numerator is every cost of the population's tasks, judged or not, the denominator its accepted tasks; reviews are another population", () => {
+  const w = logsOf([
+    { id: "a", verdict: "accepted", cost: 1 }, { id: "b", verdict: "rejected", cost: 2 }, { id: "c", cost: 4 }, { id: "d", verdict: "accepted", cost: 1 }, // c: killed without a verdict
+    { id: "e", verdict: "accepted", cost: 9, spawn: { sessionId: undefined } }, // no child session: no cost, so in neither numerator nor denominator
+    { id: "r", kind: "review", tier: "T2", verdict: "accepted", cost: 3, spawn: { reviewOf: "a" }, verdictExtra: { reviewOf: "a" } },
+  ]);
+  const rows = taskRows(w.meter, w.outcomes);
+  const all = costPerAccepted(rows, "all");
+  assert.deepEqual([all.usd, all.accepted, all.lower, all.upper], [8, 2, 4, 4]); // (1 + 2 + 4 + 1) / 2, not the judged (1 + 2 + 1) / 2
+  const judged = costPerAccepted(rows, "judged");
+  assert.deepEqual([judged.usd, judged.accepted, judged.upper], [4, 2, 2]);
+  const reviews = costPerAccepted(rows, "spotCheckReviews");
+  assert.deepEqual([reviews.usd, reviews.accepted, reviews.upper], [3, 1, 3]);
+  const none = costPerAccepted(taskRows(w.meter, w.outcomes.filter((e) => e.verdict !== "accepted")), "all");
+  assert.ok(Number.isNaN(none.upper) && Number.isNaN(none.lower), "no accepted task: no ratio");
+});
+
+test("B5 property: the headline $/accepted is the tier table's 'all' row, and the tier rows' $ add up to it", () => {
+  for (const seed of SEEDS) {
+    const a = analyse(generated(seed));
+    assert.deepEqual(a.cost.perAccepted, a.delegation.all.cost, `seed ${seed}`);
+    close(a.delegation.byTier.reduce((n, t) => n + t.cost.usd, 0), a.delegation.all.cost.usd);
+    assert.equal(a.delegation.byTier.reduce((n, t) => n + t.cost.accepted, 0), a.delegation.all.cost.accepted, `seed ${seed}`);
+  }
+});
+
+test("B5: the headline is not the judged-only ratio: a task killed without a verdict is paid for by the accepted ones", () => {
+  const a = analyse(logsOf([{ id: "a", verdict: "accepted", cost: 1 }, { id: "c", cost: 5 }]));
+  close(a.cost.perAccepted.upper, 6);
+  close(a.delegation.byTier[0].cost.upper, 6);
+  const md = renderAnalysis(a, new Date("2026-10-06T00:00:00Z"));
+  assert.match(md, /\| \$\/accepted task, all routed tasks \(accepted\/tasks\) \| 6\.00 \(1\/2\) \|/);
+  assert.match(md, /\| all \| 2 \| 100% \| 1\/1 \| 100% \| 6\.00 \| 6\.00 \|/);
 });
 
 // RG9 (review-g4 Low 4): since 2026-10-17 `escalate.from` is a route label (`local`, `cloud`, `haiku`, `T1`, `T2`; `"?"` when
@@ -139,7 +199,7 @@ test("unresolved cards are counted and kept out of every routing-quality statist
   assert.equal(d.byTier.find((t) => t.tier === EXEC.qwen)!.spawns, 5); // q1–q4 and s1, not u1
   assert.equal(d.byTier.find((t) => t.tier === EXEC.T2)!.spawns, 2); // not the review child
   close(d.qwenShare, 5 / 7);
-  close(d.byTier.find((t) => t.tier === EXEC.qwen)!.usd, 1.5 + 2 + 0.5 + 0.2);
+  close(d.byTier.find((t) => t.tier === EXEC.qwen)!.cost.usd, 1.5 + 2 + 0.5 + 0.3 + 0.2); // B5: q4, unjudged, is paid for too
 });
 
 test("profile × tier: property — the cells' tasks sum to the routed spawns, outcomes sum to tasks", () => {

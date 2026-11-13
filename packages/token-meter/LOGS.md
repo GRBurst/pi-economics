@@ -398,6 +398,12 @@ as "not measurable", never as a number.
   lines aside); else `(unknown)`. The report orders the models by the planned tier most of their tasks had (qwen, haiku, T1, T2), then by name.
 - **Planned → executed matrix**: the routed tasks counted by (`workerTier`, model it ran on); a planned qwen that ran on another model is
   visible there only.
+- **$ per accepted task** (B5), one function for the headline in *Cost* and every row of the tier table: the numerator is what the tasks of
+  a population cost (the subtree of each, all its requests), whatever came of them; the denominator is the accepted tasks of the same
+  population. Populations: **all** = every routed task, judged or not (the report's headline and the *all* row of the tier table; a task
+  killed without a verdict is paid for by the accepted ones); **judged** = the routed tasks with a judged verdict (the cells of *By
+  profile and tier*); **spot-check reviews** = the review children, a population of their own, never in the headline. A task without a child
+  session has no cost and is in neither numerator nor denominator.
 - **Qwen share of tasks** is the share of routed tasks *planned* on `qwen`; the report states no target for it.
 
 ## Data contract (`pi-analyse --check`)

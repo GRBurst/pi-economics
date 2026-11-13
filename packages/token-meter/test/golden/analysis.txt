@@ -14,7 +14,7 @@ Generated 2026-10-06T08:30:00.000Z by pi-analyse; field meanings in <agentDir>/L
 | $/active hour (95% CI) | 15.25 (11.96 – 18.27) |
 | q5h %/active hour | 0.32 |
 | q7d %/active hour | 0.00 |
-| $/accepted task (accepted/judged) | 0.75 (14/22) |
+| $/accepted task, all routed tasks (accepted/tasks) | 1.59 (13/21) |
 
 ### By model
 
@@ -264,8 +264,9 @@ Tier = the model the task ran on (the router's `workerModel`, after its last rer
 | tier | tasks | share | accepted/judged | acceptance | $ | $/accepted |
 | --- | --- | --- | --- | --- | --- | --- |
 | openrouter/qwen | 14 | 67% | 9/14 | 64% | 3.20 | 0.36 |
-| anthropic/claude-sonnet-5-5 | 5 | 24% | 2/4 | 50% | 3.00 | 1.50 |
+| anthropic/claude-sonnet-5-5 | 5 | 24% | 2/4 | 50% | 14.00 | 7.00 |
 | anthropic/claude-opus-5-5 | 2 | 10% | 2/2 | 100% | 3.50 | 1.75 |
+| all | 21 | 100% | 13/20 | 65% | 20.70 | 1.59 |
 
 ### Planned → executed tier
 

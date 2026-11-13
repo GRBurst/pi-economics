@@ -1,16 +1,16 @@
 // (a) cost: $, requests, active hours, quota per active hour, splits by model, the cache (cache.ts), warming, folds and cold resumes.
 import { attributeQuota, isError, MIN_HOURS, push, rootUnits } from "../arms.ts";
 import { type LedgerSection } from "../ledger.ts";
-import { taskCosts, type TaskCost } from "../tasks.ts";
 import { bootstrapRatioCI, type CI } from "../stats.ts";
 import { byTs, isLine, num, sum } from "./logs.ts";
 import { allocate, apiUsd, cacheWrite1hOf, type Component } from "./units.ts";
 import { foldsOf } from "./folds.ts";
 import { cacheSection, type CacheSection } from "./cache.ts";
+import { costPerAccepted, taskRows, type CostPerAccepted } from "./delegation.ts";
 
 export type Split = { name: string; n: number; usd: number; share: number; perHour: number };
 export type CostSection = { totalUsd: number; requests: number; errors: number; warming: number; units: number; activeHours: number;
-  usdPerHour: CI; q5hPerHour: number; q7dPerHour: number; perAccepted: TaskCost;
+  usdPerHour: CI; q5hPerHour: number; q7dPerHour: number; perAccepted: CostPerAccepted;
   byModel: Array<{ model: string; requests: number; usd: number; share: number; perHour: number }>;
   splits: Split[]; components: Record<Component, number>; cache: CacheSection; folds: LedgerSection };
 
@@ -51,11 +51,10 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
   }
   const warm = lines.filter((l) => l.kind === "warming");
   const split = (name: string, n: number, usd: number): Split => ({ name, n, usd, share: totalUsd ? usd / totalUsd : NaN, perHour: perHour(usd) });
-  const all = taskCosts(lines, outcomes.map((e) => (e?.event === "spawn" ? { ...e, arm: "all" } : e))).all;
   return {
     totalUsd, requests: lines.filter((l) => l.kind !== "warming" && !isError(l)).length, errors: lines.filter((l) => l.kind !== "warming" && isError(l)).length, warming: warm.length, units: units.length, activeHours, usdPerHour,
     q5hPerHour: perHour(quotaShare(lines, "q5h").pi), q7dPerHour: perHour(quotaShare(lines, "q7d").pi),
-    perAccepted: all ?? { accepted: 0, judged: 0, costUsd: 0, perAccepted: NaN },
+    perAccepted: costPerAccepted(taskRows(lines, outcomes), "all"), // the tier table's "all" row (B5)
     byModel: [...models].map(([model, m]) => ({ model, ...m, share: totalUsd ? m.usd / totalUsd : NaN, perHour: perHour(m.usd) })).sort((a, b) => b.usd - a.usd),
     splits: [split("warming", warm.length, sum(warm.map((l) => apiUsd(l))))],
     components, cache: cacheSection(lines, flags), folds: foldsOf(lines, flags, rows),

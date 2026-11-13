@@ -3,7 +3,7 @@
 import { isError, push } from "../arms.ts";
 import { acceptance } from "../guards.ts";
 import { levelsOfLine, type LevelsContext } from "../levels.ts";
-import { taskCosts, taskRecords } from "../tasks.ts";
+import { taskRecords } from "../tasks.ts";
 import { bootstrapRatioCI, type CI } from "../stats.ts";
 import { byTs, countBy, isLine, sum } from "./logs.ts";
 import { apiUsd } from "./units.ts";
@@ -22,7 +22,9 @@ export type Runaway = { sessionId: string; taskId?: string; requests: number; us
 export type MatrixCell = { planned: string; executed: string; n: number };
 export type DelegationSection = { spawns: number; unresolved: number; reviewSpawns: number; qwenShare: number; childUsdShare: number; childRequestShare: number;
   profileTiers: ProfileTier[]; matrix: MatrixCell[]; randomized: Randomized; spotChecks: SpotChecks;
-  byTier: Array<{ tier: string; spawns: number; share: number; accepted: number; judged: number; acceptance: number; usd: number; perAccepted: number }>;
+  byTier: Array<{ tier: string; spawns: number; share: number; accepted: number; judged: number; acceptance: number; cost: CostPerAccepted }>;
+  /** The "all" row of the tier table: every routed task; `cost` is the report's headline $/accepted. */
+  all: { tasks: number; accepted: number; judged: number; acceptance: number; cost: CostPerAccepted };
   byKind: Record<string, number>; childModels: Array<{ model: string; requests: number; usd: number }>;
   escalations: Array<{ from: string; to: string; n: number }>; correctives: number;
   reroutes: Array<{ from: string; to: string; reason: string; n: number }>; checks: { n: number; failed: number };
@@ -86,6 +88,29 @@ export function taskRows(lines: any[], outcomes: any[]): TaskRow[] {
     rows.set(e.taskId, row);
   }
   return [...rows.values()];
+}
+
+/** Which tasks a $/accepted ratio is taken over. */
+export type Population = "all" | "judged" | "spotCheckReviews";
+/**
+ * $ per accepted task of a population (B5): `usd` = what the population's tasks cost, whatever came of them (all their child requests),
+ * `accepted` = the accepted ones among them. A task without a child session has no cost and is in neither.
+ */
+export type CostPerAccepted = { tasks: number; usd: number; accepted: number; unresolvedUsd: number; lower: number; upper: number };
+
+/**
+ * The one $/accepted function of the report (B5): the headline and every row of the tier table. Populations: `all` = every routed task, judged
+ * or not (what it cost is paid for by the accepted ones); `judged` = the routed tasks with a judged verdict; `spotCheckReviews` = the review
+ * children, apart from routing.
+ */
+export function costPerAccepted(tasks: readonly TaskRow[], pop: Population): CostPerAccepted {
+  const inPop = (t: TaskRow): boolean => t.cost !== undefined &&
+    (pop === "all" ? t.cls === "routed" : pop === "judged" ? t.cls === "routed" && t.verdict !== undefined && JUDGED.includes(t.verdict) : t.cls === "review");
+  const ts = tasks.filter(inPop);
+  const usd = sum(ts.map((t) => t.cost!));
+  const unresolvedUsd = sum(ts.filter((t) => t.cls === "unresolved").map((t) => t.cost!));
+  const accepted = ts.filter((t) => t.cls !== "unresolved" && t.verdict === "accepted").length;
+  return { tasks: ts.length, usd, accepted, unresolvedUsd, lower: accepted ? (usd - unresolvedUsd) / accepted : NaN, upper: accepted ? usd / accepted : NaN };
 }
 
 /**
@@ -188,10 +213,9 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   const profileTiers: ProfileTier[] = [...cells.values()].sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : order(a.tier, b.tier))).map((c) => {
     const g = groupRow("router", c.tier, c.es.map(task));
     const count = (v: string) => c.es.filter((e) => task(e).verdict === v).length;
-    const costed = c.es.map(task).filter((t) => t.verdict !== undefined && JUDGED.includes(t.verdict) && t.cost !== undefined);
-    const acceptedCosted = costed.filter((t) => t.verdict === "accepted").length;
+    const judged = costPerAccepted(c.es.map((e) => rowOf.get(e.taskId)!), "judged"); // the judged tasks only, as the cell's acceptance
     return { kind: c.kind, tier: c.tier, tasks: c.es.length, accepted: g.accepted, partial: count("partial"), rejected: count("rejected"), unjudged: c.es.length - g.judged, acceptance: g.acceptance.mean,
-      usd: sum(costed.map((t) => t.cost!)), perAccepted: acceptedCosted ? sum(costed.map((t) => t.cost!)) / acceptedCosted : NaN,
+      usd: judged.usd, perAccepted: judged.upper,
       escalations: c.escalations, checks: { n: c.checks, passed: c.passed }, passRate: c.checks ? c.passed / c.checks : NaN };
   });
   const cmp = (x: string, y: string): number => (x < y ? -1 : x > y ? 1 : 0);
@@ -209,7 +233,6 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   };
   const spotChecks = spotCheckAgreement(outcomes, allSpawns);
   const acc = acceptance(asTier);
-  const costs = taskCosts(lines, asTier);
   const tiers = countBy(spawns, ranOn);
   const children = lines.filter((l) => typeof l.parentSessionId === "string");
   const total = sum(lines.map((l) => apiUsd(l)));
@@ -238,6 +261,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
     if (why.length) runaways.push({ sessionId: sid, taskId: taskOf.get(sid), requests: r, usd, reason: why.join("; ") });
   }
   const checks = outcomes.filter((e) => e?.event === "check");
+  const totalAccepted = sum(Object.values(acc).map((g) => g.accepted)), totalJudged = sum(Object.values(acc).map((g) => g.judged));
   return {
     spawns: allSpawns.length, unresolved: unresolved.length, reviewSpawns: allSpawns.filter((e) => reviewIds.has(e.taskId)).length,
     profileTiers, matrix, randomized, spotChecks, qwenShare: routed.length ? routed.filter((r) => r.planned === "qwen").length / routed.length : NaN,
@@ -245,9 +269,9 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
     childRequestShare: requests(lines) ? requests(children) / requests(lines) : NaN,
     byTier: Object.entries(tiers).sort((a, b) => b[1] - a[1] || order(a[0], b[0])).map(([tier, n]) => {
       const a = acc[tier] ?? { accepted: 0, judged: 0 };
-      const c = costs[tier];
-      return { tier, spawns: n, share: n / spawns.length, accepted: a.accepted, judged: a.judged, acceptance: a.judged ? a.accepted / a.judged : NaN, usd: c?.costUsd ?? 0, perAccepted: c?.perAccepted ?? NaN };
+      return { tier, spawns: n, share: n / spawns.length, accepted: a.accepted, judged: a.judged, acceptance: a.judged ? a.accepted / a.judged : NaN, cost: costPerAccepted(rows.filter((r) => r.executed === tier), "all") };
     }),
+    all: { tasks: routed.length, accepted: totalAccepted, judged: totalJudged, acceptance: totalJudged ? totalAccepted / totalJudged : NaN, cost: costPerAccepted(rows, "all") },
     byKind: countBy(spawns, (e) => String(e.kind)),
     childModels: [...models].map(([model, m]) => ({ model, ...m })).sort((a, b) => b.usd - a.usd),
     escalations: group(outcomes.filter((e) => e?.event === "escalate"), ["from", "to"]),

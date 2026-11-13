@@ -71,7 +71,8 @@ test("cost: splits by model, warming, folds; $ per accepted task", () => {
   assert.ok(!("after folds" in split) && !("after cold resumes" in split), "events are in the Cache section, with a premium and a baseline (B4)");
   assert.ok(c.cache.events.fold.events >= 0 && c.cache.events.coldResume.events > 0, "the world's mains resume after gaps of 10 minutes");
   // t1 (0.2) accepted, t2 (1.0) rejected, t3 (2.0) accepted: (0.2 + 1 + 2) / 2
-  close(c.perAccepted.perAccepted, 1.6);
+  close(c.perAccepted.upper, 1.6);
+  close(c.perAccepted.lower, 1.6);
   assert.equal(c.perAccepted.accepted, 2);
 });
 
@@ -206,7 +207,7 @@ test("delegation: task share, tier mix, Qwen share, acceptance per tier, escalat
   const tier = Object.fromEntries(d.byTier.map((t) => [t.tier, t]));
   const [qwen, sonnet, opus] = ["openrouter/qwen", "anthropic/claude-sonnet-5-5", "anthropic/claude-opus-5-5"];
   assert.deepEqual([tier[qwen].accepted, tier[qwen].judged, tier[sonnet].accepted, tier[sonnet].judged, tier[opus].accepted], [1, 1, 0, 1, 1]);
-  close(tier[opus].perAccepted, 2);
+  close(tier[opus].cost.upper, 2);
   assert.deepEqual(d.escalations, [{ from: "qwen", to: "T2", n: 1 }]);
   assert.equal(d.checks.n, 1); assert.equal(d.checks.failed, 0);
   assert.deepEqual(d.runaways, []);
