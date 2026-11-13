@@ -15,6 +15,23 @@ const prompt = (l: any): number => num(l.input) + cached(l);
 /** A fold between two consecutive requests as the meter lines show it (arms.ts, ledger.ts): the prompt fell below 80% of the previous one's. */
 export const shrinkFold = (a: any, b: any): boolean => prompt(b) < FOLD_SHRINK * prompt(a);
 
+/** When a request was sent (it reads the cached prefix then): ts − durationMs (meter v2); a line without durationMs at its ts. */
+const sentAt = (l: any): number => Date.parse(l.ts) - (typeof l.durationMs === "number" && l.durationMs > 0 ? l.durationMs : 0);
+
+/**
+ * Per request of a branch, how long the cache sat idle before it (plan D7): its send time − the latest send before it (a warm sent while
+ * a turn streamed touched the cache after that turn's send); NaN for the first. Response time does not age a prefix: a long response
+ * is no gap, a long previous one is. For v1 lines (no durationMs) the gap between consecutive ts.
+ */
+export function idleMs(branch: readonly any[]): number[] {
+  let last = -Infinity;
+  return branch.map((l, i) => {
+    const t = sentAt(l), idle = i === 0 ? NaN : t - last;
+    last = Math.max(last, t);
+    return idle;
+  });
+}
+
 /**
  * The steps of one session branch: its request lines (kind turn or warming, no error lines) in ts order. Only turn lines are outcomes
  * (a warming request refreshes the prefix, it is no step of its own), but every line is the "previous request" of the next one.
@@ -22,8 +39,8 @@ export const shrinkFold = (a: any, b: any): boolean => prompt(b) < FOLD_SHRINK *
  *   growth_i = min(cacheWrite_i, max(0, cached_i − cached_{i−1}))      the context that was added (i = 0: all of cacheWrite_0)
  *   miss_i   = max(0, min(cached_{i−1}, prompt_i) − cacheRead_i)       prefix the previous request left in the cache and this one did not read (i = 0: 0)
  * so cacheWrite_i = growth_i + the rewrite (≈ miss_i). The previous request's uncached input tail is not part of the cache, so it is no miss.
- * A miss has a cause, the first that holds (P8: a gap beyond the TTL loses the prefix whatever else happened): `ttl` when the gap since the
- * previous request outlived the TTL in force there (`ttlMs(previous)`; a warming request is a previous request: it refreshed the prefix),
+ * A miss has a cause, the first that holds (P8: a gap beyond the TTL loses the prefix whatever else happened): `ttl` when the idle time
+ * before the request (idleMs: send to send) outlived the TTL in force after the previous request (`ttlMs(previous)`; a warming request is a previous request: it refreshed the prefix),
  * `fold` when `eventBetween(previous, this)` (a fold or compaction), `model` when the model changed, `prefix` when the request's
  * `systemHash` (meter v2, M3b) differs from the last one the branch showed before it (the system prompt, a section or the tool list
  * changed), else `other`: a prefix change inside the TTL that the lines do not show (a small fold or mask, an injected agent message,
@@ -32,6 +49,7 @@ export const shrinkFold = (a: any, b: any): boolean => prompt(b) < FOLD_SHRINK *
 export function cacheSteps(branch: readonly any[], ttlMs: (l: any) => number, eventBetween: (a: any, b: any) => boolean): CacheStep[] {
   const steps: CacheStep[] = [];
   let known: string | undefined; // the last systemHash before request i
+  const idle = idleMs(branch);
   branch.forEach((l, i) => {
     const before = known;
     if (typeof l.systemHash === "string") known = l.systemHash;
@@ -42,7 +60,7 @@ export function cacheSteps(branch: readonly any[], ttlMs: (l: any) => number, ev
     const growth = Math.min(num(l.cacheWrite), Math.max(0, cached(l) - cached(prev)));
     const miss = Math.max(0, Math.min(cached(prev), prompt(l)) - num(l.cacheRead));
     const step: CacheStep = { sessionId, i, growth, miss };
-    if (miss > 0) step.cause = Date.parse(l.ts) - Date.parse(prev.ts) > ttlMs(prev) ? "ttl" : eventBetween(prev, l) ? "fold" : l.model !== prev.model ? "model"
+    if (miss > 0) step.cause = idle[i] > ttlMs(prev) ? "ttl" : eventBetween(prev, l) ? "fold" : l.model !== prev.model ? "model"
       : before !== undefined && typeof l.systemHash === "string" && l.systemHash !== before ? "prefix" : "other";
     steps.push(step);
   });
@@ -119,7 +137,7 @@ export type EventKind = "fold" | "coldResume";
 const N_AFTER = 3; // requests an event is charged with: its own and the next two
 
 /**
- * Per event kind over the session branches: a **cold resume** is a turn request after a gap beyond the TTL in force (`ttlMs` of the
+ * Per event kind over the session branches: a **cold resume** is a turn request after an idle time (idleMs) beyond the TTL in force (`ttlMs` of the
  * previous request, warming included); a **fold** is a turn request after which `eventBetween(previous, this)` holds (not itself cold: P8,
  * the gap wins). An event's window is its request and the next two turn requests of the branch, cut short by the next event: every request
  * is in at most one window. premium_e = Σ over the window of miss_j × (w_j − r) × p_j (the line's write weight w, read weight r, input
@@ -137,10 +155,11 @@ export function foldPremiums(branches: Iterable<readonly any[]>, ttlMs: (l: any)
       return s.miss * (w - WEIGHT.cacheRead) * p;
     });
     const events: Array<{ at: number; kind: EventKind }> = [];
+    const idle = idleMs(branch);
     steps.forEach((s, k) => {
       if (s.i === 0) return;
       const prev = branch[s.i - 1], l = branch[s.i];
-      if (Date.parse(l.ts) - Date.parse(prev.ts) > ttlMs(prev)) events.push({ at: k, kind: "coldResume" });
+      if (idle[s.i] > ttlMs(prev)) events.push({ at: k, kind: "coldResume" });
       else if (eventBetween(prev, l)) events.push({ at: k, kind: "fold" });
     });
     const inWindow = new Array<boolean>(steps.length).fill(false);

@@ -348,3 +348,31 @@ test("property (B4): net = premium − baseline; premium and baseline are not ne
     }
   }
 });
+
+// ---- M3b (M2a review carry-over, plan D7): the cache's idle time is send to send, not response end to response end ----
+// A request reads the prefix when it is sent (ts − durationMs, meter v2); the cache was last touched when the requests before it were
+// sent (a warm included). A line without durationMs (v1, warming) was sent at its ts, so v1 branches keep their gaps.
+const D = (at: number, read: number, write: number, durMin: number, extra: Record<string, unknown> = {}) => R(at, read, write, { durationMs: durMin * MIN, ...extra });
+
+test("D7: a long response does not age the cache it read: 7 minutes end to end, but sent 3 minutes after the previous send → not ttl", () => {
+  const steps = cacheSteps([D(0, 0, 1000, 0.5), D(7, 0, 1000, 4)], ttl5m, noEvent);
+  assert.equal(steps[1].cause, "other");
+});
+
+test("D7: a long previous response does age it: 1 minute end to end, but sent 6.5 minutes after the previous send → ttl", () => {
+  const steps = cacheSteps([D(7, 0, 1000, 6), D(8, 0, 1000, 0.5)], ttl5m, noEvent);
+  assert.equal(steps[1].cause, "ttl");
+});
+
+test("D7: a warm sent while a turn streamed touched the cache last: the idle time runs from the latest send before the request", () => {
+  // turn A sent at 0; turn B sent at 3, ends at 6; a warm answered at 4.9; C sent at 9 → idle 4.1 since the warm, not 6 since B's send
+  const branch = [D(0.5, 0, 1000, 0.5), R(4.9, 1000, 0, { kind: "warming" }), D(6, 0, 1000, 3), D(9, 0, 1000, 0)];
+  assert.deepEqual(cacheSteps(branch, ttl5m, noEvent).map((s) => s.cause), [undefined, "other", "other"]);
+});
+
+test("D7: cold resumes (B4) use the same send-to-send idle time", () => {
+  const sentSoon = [D(0, 0, 10_000, 0), D(1, 10_000, 400, 0), D(7, 0, 10_400, 4), D(8, 10_400, 100, 0)];
+  assert.equal(premiums(sentSoon).coldResume.events, 0);
+  const sentLate = [D(0, 0, 10_000, 0), D(7, 10_000, 400, 6.5), D(8, 0, 10_400, 0.5), D(9, 10_400, 100, 0)];
+  assert.equal(premiums(sentLate).coldResume.events, 1);
+});
