@@ -229,7 +229,9 @@ for (const { name, row } of legacy) {
     assert.deepEqual(h.api().armFor("old"), { id: row.arm, flags: row.flags, ...("design" in row ? { design: row.design } : {}) });
     assert.equal(h.api().flag("delegationRule", "off", "old"), (row.flags as Record<string, string>).delegationRule ?? "off");
     assert.deepEqual(h.rows(), [row]);
-    assert.deepEqual(h.published, [{ sessionId: "old", eligible: true, arm: row.arm, ...("design" in row ? { design: row.design } : {}) }]);
+    // The add-ons read factors: the row's flags of the v4 factors, over their levers (M5b.2).
+    const factors = Object.fromEntries(V4_FACTORS.filter((f) => f.name in row.flags).map((f) => [f.name, { lever: f.lever, assigned: (row.flags as Record<string, string>)[f.name] }]));
+    assert.deepEqual(h.published, [{ sessionId: "old", eligible: true, arm: row.arm, ...("design" in row ? { design: row.design } : {}), factors }]);
     const seen = new Set<string>();
     for (let i = 0; i < 8; i++) {
       h.start(`n${i}`);

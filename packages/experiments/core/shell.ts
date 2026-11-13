@@ -108,10 +108,38 @@ export function install(pi: PiLike, deps: Deps): void {
   const known = new Map<string, Assigned>();
   /** A child's Assigned is its parent's but for sessionId and parentSessionId. */
   const childOf = (p: Assigned, sessionId: string, parentSessionId: string): Assigned => ({ ...p, sessionId, parentSessionId });
+  /**
+   * Child mode: this runtime is a child's (experiments among the actor's childExtensions, its own bus); `root` is the
+   * main session whose row it runs. It never draws: its Assigned is derived from the root's row, once found.
+   */
+  let child: { sid: string; root: string } | undefined;
+  /**
+   * The root a session runs under, or undefined for a main. A session file decides by its place (the actor keeps every
+   * child, nested ones too, in <sessionDir>/subagents/<root>/); an in-memory session (no file) is a child when the
+   * actor lists it, or reserves a record for the child it is creating (sessionId "": its session_start runs inside the
+   * actor's createSession), beside a main record of another session.
+   */
+  const rootOf = (sid: string, file: string | undefined): string | undefined => {
+    if (typeof file === "string") return parentOf(file);
+    const agents = safe(() => subagents()?.list()) ?? [];
+    const root = agents.find((x) => x.name === "main")?.sessionId;
+    if (!root || root === sid) return undefined;
+    return agents.some((x) => x.name !== "main" && (x.sessionId === sid || x.sessionId === "")) ? root : undefined;
+  };
+  const deriveChild = (c: { sid: string; root: string }): Assigned | undefined => {
+    const r = rows().find((x) => x.sessionId === c.root);
+    const p = r === undefined ? undefined : fromRow(r)?.a;
+    return p === undefined ? undefined : childOf(p, c.sid, c.root);
+  };
   /** Known, or (a resumed child) derived from the parent its session file names, up to an assigned root; cached. */
   const lookup = (sid: string, depth = 0): Assigned | undefined => {
     const hit = known.get(sid);
     if (hit !== undefined || depth >= 64) return hit;
+    if (child?.sid === sid) {
+      const a = deriveChild(child);
+      if (a !== undefined) known.set(sid, a);
+      return a;
+    }
     const parent = resolveParent(sid);
     const p = parent === undefined || parent === sid ? undefined : lookup(parent, depth + 1);
     if (p === undefined) return undefined;
@@ -189,7 +217,9 @@ export function install(pi: PiLike, deps: Deps): void {
     if (r.v === 2) return typeof r.eligible === "boolean" ? { a: assignedOf(r as Row & { eligible: boolean }) } : undefined;
     if (typeof r.arm !== "string" || !isRecord(r.flags)) return undefined;
     const design = typeof r.design === "string" ? { design: r.design } : {};
-    return { a: { sessionId: r.sessionId, eligible: true, arm: r.arm, ...design }, legacy: { id: r.arm, flags: r.flags, ...design } };
+    // Its flags by factor name as factors over the v4 levers (an add-on reads factors; a flag of no v4 factor reached no reader).
+    const factors = Object.fromEntries(V4_FACTORS.flatMap((f) => (typeof r.flags![f.name] === "string" ? [[f.name, { lever: f.lever, assigned: r.flags![f.name] }]] : [])));
+    return { a: { sessionId: r.sessionId, eligible: true, ...design, arm: r.arm, factors }, legacy: { id: r.arm, flags: r.flags, ...design } };
   };
   /** The last ENTRY on the branch that is this session's (a well-formed Assigned). */
   const fromBranch = (branch: unknown, sid: string): Assigned | undefined => {
@@ -269,6 +299,7 @@ export function install(pi: PiLike, deps: Deps): void {
 
   // Guards: corrections and the end-of-session rating go to <agentDir>/guards/events.jsonl; only the fact, never text.
   const logGuard = (sessionId: string, event: string, value?: number): void => {
+    if (child !== undefined) return; // a guard is the main session's user's (a child's input is its parent's message)
     try {
       mkdirSync(join(deps.agentDir, "guards"), { recursive: true });
       const arm = api.armFor(sessionId);
@@ -308,9 +339,14 @@ export function install(pi: PiLike, deps: Deps): void {
     if (settings.legacy?.length) warnOnce(ctx, "experiments:legacy", `experiments: ignores the settings ${settings.legacy.join(", ")} (the v1 engine's): its factors come from strata (default: one stratum per billing class); baseline only labels the analyses of v1–v4 designs`);
     main = ctx.sessionManager.getSessionId() as string;
     sessionDir = safe(() => ctx.sessionManager.getSessionDir() as string | undefined);
-    // A child's runtime (experiments among the actor's childExtensions): never drawn, no row; its arm is its parent's.
+    // A child's runtime (experiments among the actor's childExtensions): never drawn, no row; its arm is its root's.
     const file = safe(() => ctx.sessionManager.getSessionFile() as string | undefined);
-    if (typeof file === "string" && parentOf(file) !== undefined) return;
+    const root = rootOf(main, file);
+    child = root === undefined ? undefined : { sid: main, root };
+    if (child !== undefined) {
+      const a = lookup(main);
+      return a === undefined ? undefined : announce(a.sessionId);
+    }
     // Resumed or reloaded: the branch's own entry (a fork's names the session it was forked from: a new unit), else the
     // session's row (a v1 engine's included).
     const entry = fromBranch(safe(() => ctx.sessionManager.getBranch()), main);
