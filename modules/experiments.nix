@@ -87,7 +87,7 @@ in {
 
     # (redesign M5a) A stratum's design is the full 2^k factorial or a
     # fraction from the generator table of core/design.ts, which ends at six;
-    # its factors have two levels each (redesign §7.2).
+    # its factors have two different levels each (redesign §7.2).
     assertions = lib.concatLists (lib.mapAttrsToList (name: fs:
       [
         {
@@ -96,8 +96,12 @@ in {
         }
       ]
       ++ map (f: {
-        assertion = lib.isList (f.levels or null) && lib.length f.levels == 2;
-        message = "pi-economics: experiments factor ${toString (f.name or "?")} in stratum ${name} needs exactly two levels";
+        assertion = lib.isList (f.levels or null) && lib.length f.levels == 2 && lib.elemAt f.levels 0 != lib.elemAt f.levels 1;
+        message = "pi-economics: experiments factor ${
+          if lib.isString (f.name or null)
+          then f.name
+          else "?"
+        } in stratum ${name} needs exactly two levels";
       })
       fs)
     strata);

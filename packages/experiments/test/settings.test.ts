@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { canonical, design, designFor } from "../core/design.ts";
+import { canonical, design, designFor, designId } from "../core/design.ts";
 import { V4_FACTORS, defaults, loadSettings, parseStrata, type StratumSpec } from "../core/settings.ts";
 import type { Billing, Plans } from "../../token-meter/core/plans.ts";
 
@@ -152,11 +152,23 @@ test("strata: a malformed stratum is dropped whole, never repaired, and each dro
     seven: [{ match: {}, factors: ["a", "b", "c", "d", "e", "f", "g"].map((n) => f(n)) }, "7 factors, at most 6"],
     sameName: [{ match: {}, factors: [f("a", "x.a"), f("a", "x.b")] }, "factor name a repeated"],
     sameLever: [{ match: {}, factors: [f("a", "x.a"), f("b", "x.a")] }, "lever x.a repeated"],
+    equalLevels: [{ match: {}, factors: [f("a", "x.a", ["a", "a"])] }, "factor 1 has two equal levels"],
+    unknownKey: [{ match: {}, factor: [f("a")] }, "unknown key factor"],
+    unknownMatchKey: [{ match: { model: ["a/*"] } }, "unknown key match.model"],
+    unknownFactorKey: [{ match: {}, factors: [{ ...f("a"), level: 1 }] }, "factor 1: unknown key level"],
   };
   const raw = { ok, ...Object.fromEntries(Object.entries(bad).map(([n, [s]]) => [n, s])) };
   const got = parseStrata(raw, PLANS, V4_FACTORS);
   assert.deepEqual(got.strata, { ok: { ...ok, objective: "apiUsd" } });
   assert.deepEqual(got.warnings, Object.entries(bad).map(([n, [, why]]) => `experiments stratum ${n} dropped: ${why}`));
+});
+
+test("strata: a stratum named __proto__ is an own key like any other (review NIT)", () => {
+  const got = parseStrata(JSON.parse('{"__proto__": {"match": {"billing": ["api"]}}}'), {}, V4_FACTORS);
+  assert.equal(Object.getPrototypeOf(got.strata), Object.prototype);
+  assert.deepEqual(Object.keys(got.strata), ["__proto__"]);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(got.strata, "__proto__")?.value, { match: { billing: ["api"] }, objective: "apiUsd", factors: [] });
+  assert.deepEqual(got.warnings, []);
 });
 
 test("strata of a wrong type are ignored with a warning: the defaults apply", () => {
@@ -165,6 +177,11 @@ test("strata of a wrong type are ignored with a warning: the defaults apply", ()
     assert.deepEqual(got.strata, { api: cloud("api") });
     assert.deepEqual(got.warnings, ["experiments strata is not an object; the default strata apply"]);
   }
+});
+
+test("pinned: the default cloud stratum's design id (stored with every unit; a new formula would pool nothing)", () => {
+  assert.equal(designId(V4_FACTORS, []), "b4d458675108");
+  assert.equal(designFor("api", parseStrata(undefined, {}, V4_FACTORS).strata.api).id, "b4d458675108");
 });
 
 test("the default cloud stratum's design has v4's 8 arms (P5a.4)", () => {

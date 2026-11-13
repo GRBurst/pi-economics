@@ -22,7 +22,7 @@
     # ../../experiments/core/design.ts (its package.json keeps it ESM).
     src = lib.fileset.toSource {
       root = ../.;
-      fileset = lib.fileset.unions [./. ../experiments/core/design.ts ../experiments/package.json];
+      fileset = lib.fileset.unions [(lib.fileset.fromSource (lib.cleanSource ./.)) ../experiments/core/design.ts ../experiments/package.json];
     };
     sourceRoot = "source/bench";
     nativeBuildInputs = runtimeInputs;

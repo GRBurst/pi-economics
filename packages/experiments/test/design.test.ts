@@ -245,3 +245,13 @@ test("designFor: a generated factor is ± the product its generator names; the a
 test("designFor refuses more than 6 factors", () => {
   assert.throws(() => designFor("cloud", { factors: specs(7) }), /cloud: 7 factors, at most 6/);
 });
+
+test("pinned: the generator table and the arm names of k = 4, 5, 6 (stored with every unit)", () => {
+  assert.deepEqual(GENERATORS, { 4: ["D=ABC"], 5: ["E=ABCD"], 6: ["E=ABC", "F=BCD"] });
+  const names = (k: number) => designFor("s", { factors: specs(k) }).arms.map((a) => a.name);
+  assert.deepEqual(names(4), ["0000", "1001", "0101", "1100", "0011", "1010", "0110", "1111"]);
+  assert.deepEqual(names(5), ["00000", "10001", "01001", "11000", "00101", "10100", "01100", "11101",
+                              "00011", "10010", "01010", "11011", "00110", "10111", "01111", "11110"]);
+  assert.deepEqual(names(6), ["000000", "100010", "010011", "110001", "001011", "101001", "011000", "111010",
+                              "000101", "100111", "010110", "110100", "001110", "101100", "011101", "111111"]);
+});

@@ -156,6 +156,51 @@ in {
       "pi-economics: experiments factor one in stratum cloud needs exactly two levels"
     ];
 
+  # (redesign M5a review) Two equal levels, no levels or a non-list are not two
+  # levels; a factor whose name is no string still gets the message.
+  experiments-strata-bad-levels = let
+    c =
+      eval ".pi/agent" {
+        settings.strata = {
+          cloud.factors = [
+            {
+              name = "same";
+              lever = "t.a";
+              levels = ["a" "a"];
+            }
+            {
+              name = "none";
+              lever = "t.b";
+            }
+            {
+              name = "text";
+              lever = "t.c";
+              levels = "ab";
+            }
+            {
+              name = "ok";
+              lever = "t.d";
+              levels = ["a" "b"];
+            }
+          ];
+          named.factors = [
+            {
+              name = {x = 1;};
+              lever = "t.e";
+              levels = ["a"];
+            }
+          ];
+        };
+      }
+      withActor;
+  in
+    eq "equal, missing and non-list levels; a set as name" (failed "pi-economics:" c) [
+      "pi-economics: experiments factor ? in stratum named needs exactly two levels"
+      "pi-economics: experiments factor none in stratum cloud needs exactly two levels"
+      "pi-economics: experiments factor same in stratum cloud needs exactly two levels"
+      "pi-economics: experiments factor text in stratum cloud needs exactly two levels"
+    ];
+
   # (M4.16) The host's combination from W3 on (spec §9.1): M2–M4's extension
   # components, piSettings off (the host's own script runs until W6). Children
   # load cache-lifecycle and token-meter, not experiments: the list pi-setup's
