@@ -1,6 +1,6 @@
 // Arm assignment (properties P-off, P-balance, P-floor).
 // Pure: all randomness comes in as `rng`, so tests seed it deterministically.
-import type { Arm } from "./design.ts";
+import type { Arm, Design } from "./design.ts";
 import type { StratumSpec } from "./settings.ts";
 // Type-only (plan P22): the import is erased at runtime, so the package ships without token-meter.
 import type { Billing, Plans } from "../../token-meter/core/plans.ts";
@@ -24,6 +24,34 @@ export function stratumOf(strata: Record<string, StratumSpec>, plans: Plans, pro
 
 /** §7.3: only a main (never a child) whose model falls in a stratum takes part, and only while the mode is not off. */
 export const eligibleFor = (isChild: boolean, stratum: string | undefined, mode: Mode): boolean => !isChild && stratum !== undefined && mode !== "off";
+
+/**
+ * The explore queues, persisted in <agentDir>/experiments/blocks.json: the arm names left in the current block, by
+ * blockKey. Two strata with the same factors share a design id but never a queue (strata are never pooled, Q1).
+ */
+export type BlockState = Record<string, { queue: string[] }>;
+/** `<design id>/<stratum>`: the id is 12 hex, so the first slash separates them. */
+export const blockKey = (d: Design): string => `${d.id}/${d.stratum}`;
+
+/**
+ * Explore (§7.3): permuted blocks. The next arm of the design's queue; an empty queue is refilled with a Fisher–Yates
+ * shuffle of the enabled arms, so after m·|arms| draws every arm was drawn exactly m times. A disabled arm is skipped,
+ * also when it was queued before it was disabled; none enabled: no arm. Pure: `state` is not changed.
+ */
+export function nextArm(state: BlockState, d: Design, rand: () => number, disabled: readonly string[] = []): { arm: string | undefined; state: BlockState } {
+  const enabled = d.arms.map((a) => a.name).filter((n) => !disabled.includes(n));
+  if (enabled.length === 0) return { arm: undefined, state };
+  const key = blockKey(d);
+  let queue = (state[key]?.queue ?? []).filter((n) => enabled.includes(n));
+  if (queue.length === 0) {
+    queue = [...enabled];
+    for (let i = queue.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1)) % (i + 1);
+      [queue[i], queue[j]] = [queue[j], queue[i]];
+    }
+  }
+  return { arm: queue[0], state: { ...state, [key]: { queue: queue.slice(1) } } };
+}
 
 export type State = {
   /** Assignments made per arm id so far (this session set; the extension persists it). */

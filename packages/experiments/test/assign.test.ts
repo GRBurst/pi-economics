@@ -123,3 +123,61 @@ test("T5b1.1 eligibleFor: a main (not a child) with a stratum, mode not off", ()
   ];
   for (const [isChild, stratum, mode, want] of table) assert.equal(eligibleFor(isChild, stratum, mode), want, `child=${isChild} stratum=${stratum} mode=${mode}`);
 });
+
+import { blockKey, nextArm, type BlockState } from "../core/assign.ts";
+import { designFor } from "../core/design.ts";
+import { V4_FACTORS } from "../core/settings.ts";
+
+test("T5b1.2 nextArm: permuted blocks, so after m·|arms| draws of one design every arm is drawn exactly m times", () => {
+  for (const factors of [V4_FACTORS, V4_FACTORS.slice(0, 1), []]) {
+    const d = designFor("api", { factors });
+    for (const seed of [1, 42, 977]) {
+      const rand = mulberry32(seed);
+      let state: BlockState = {};
+      const counts: Record<string, number> = {};
+      for (let m = 1; m <= 5; m++) {
+        for (let i = 0; i < d.arms.length; i++) {
+          const before = structuredClone(state);
+          const r = nextArm(state, d, rand);
+          assert.deepEqual(state, before, "nextArm is pure: the old state is not changed");
+          assert.ok(r.arm !== undefined, "an enabled arm exists");
+          counts[r.arm] = (counts[r.arm] ?? 0) + 1;
+          state = r.state;
+        }
+        for (const a of d.arms) assert.equal(counts[a.name], m, `seed ${seed}, ${factors.length} factors: arm "${a.name}" after ${m}·${d.arms.length} draws`);
+      }
+    }
+  }
+});
+
+test("T5b1.2 nextArm: one queue per design and stratum (strata never pooled, Q1); disabled arms are skipped", () => {
+  const a = designFor("api", { factors: V4_FACTORS });
+  const s = designFor("subscription", { factors: V4_FACTORS });
+  assert.equal(a.id, s.id, "two default cloud strata share the design id");
+  assert.notEqual(blockKey(a), blockKey(s));
+  const rand = mulberry32(5);
+  let state: BlockState = {};
+  const counts: Record<string, Record<string, number>> = { api: {}, subscription: {} };
+  for (let i = 0; i < 3 * a.arms.length; i++) {
+    for (const d of i % 3 === 0 ? [a, s, s] : [a]) { // unequal traffic: each stratum must still be balanced on its own
+      const r = nextArm(state, d, rand);
+      counts[d.stratum][r.arm!] = (counts[d.stratum][r.arm!] ?? 0) + 1;
+      state = r.state;
+    }
+  }
+  for (const arm of a.arms) assert.equal(counts.api[arm.name], 3, `api arm ${arm.name}`);
+  for (const arm of s.arms) assert.equal(counts.subscription[arm.name], 2, `subscription arm ${arm.name}`);
+
+  // A disabled arm is never drawn, also when it was queued before it was disabled; the others stay balanced.
+  const disabled = [a.arms[2].name, a.arms[5].name];
+  const seen: Record<string, number> = {};
+  state = { [blockKey(a)]: { queue: a.arms.map((x) => x.name) } };
+  for (let i = 0; i < 4 * 6; i++) {
+    const r = nextArm(state, a, rand, disabled);
+    assert.ok(r.arm !== undefined && !disabled.includes(r.arm), `draw ${i}: ${r.arm}`);
+    seen[r.arm] = (seen[r.arm] ?? 0) + 1;
+    state = r.state;
+  }
+  for (const arm of a.arms) assert.equal(seen[arm.name] ?? 0, disabled.includes(arm.name) ? 0 : 4, `arm ${arm.name}`);
+  assert.equal(nextArm({}, a, rand, a.arms.map((x) => x.name)).arm, undefined, "every arm disabled: no arm");
+});
