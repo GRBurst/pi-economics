@@ -147,3 +147,68 @@ test("T2c: the five factors of design v1 are estimated per stratum as well", () 
   assert.equal(d.design, "v1");
   assert.equal(d.strata[0].effects.length, 5);
 });
+
+// ---- review fixes (m2, m3, m5, N2, N3) ----
+
+test("m2: when every unit of a stratum is under MIN_HOURS the reason says so, not 'no cost'", () => {
+  const l = logs([turns("a", T0, 2, { arm: "---", costUsd: 3 }, 0.6), turns("b", T0, 2, { arm: "+--", costUsd: 3 }, 0.6)]);
+  const e = effect(l, "api");
+  assert.ok("notMeasurable" in e);
+  if ("notMeasurable" in e) assert.ok(e.notMeasurable.includes("under 0.05 active h"), e.notMeasurable);
+});
+
+test("m3: localCost and wallMs both sum the lines that have durationMs; a unit with some untimed lines stays, the balance table shows the timing coverage", () => {
+  const unit = (id: string, arm: string, ms: number) => { const ls = localV2(id, arm, ms); delete (ls[3] as any).durationMs; return ls; }; // 3 timed + 1 untimed line
+  const l = logs([unit("l1", "---", 1_200_000), unit("l2", "+--", 2_400_000)], PLANS);
+  const s = stratum(l, "local");
+  const e = s.effects[0];
+  assert.ok(!("notMeasurable" in e));
+  if ("notMeasurable" in e) return;
+  assert.equal(e.nA, 1);
+  close(e.ratioA, ((3 * 1_200_000) / 3_600_000 * 2) / 0.5); // 3 timed lines of 20 min at 2 EUR/h over 0.5 active h
+  assert.deepEqual(s.balance.map((b) => [b.arm, b.timedLines, b.untimedLines]), [["+--", 3, 1], ["---", 3, 1]]);
+  assert.equal(s.balance[0].unmeasured, 0);
+  const wall = stratum(logs([unit("l1", "---", 1_200_000), unit("l2", "+--", 2_400_000)], { llama: { billing: "local", windows: [] } }), "local");
+  assert.equal(wall.objective, "wallMs");
+  assert.deepEqual(wall.balance.map((b) => [b.timedLines, b.untimedLines]), [[3, 1], [3, 1]]);
+  assert.ok(renderExperiment([design(l)]).includes("untimed"));
+});
+
+test("m5a: a v2 line's own billing decides its stratum over plans; legacy lines use plans", () => {
+  const v2 = (id: string, arm: string) => turns(id, T0, 4, { v: 2, arm, provider: "llama", model: "qwen", costUsd: 0, durationMs: 900_000, billing: "local" });
+  const l = logs([v2("l1", "---"), v2("l2", "+--"), cloud("a", "---", 10), cloud("b", "+--", 20)], PLANS_UNRELATED);
+  assert.deepEqual(design(l).strata.map((s) => s.stratum), ["api", "local"]);
+});
+const PLANS_UNRELATED = { other: { billing: "free", windows: [] as ("5h" | "7d")[] } } as const;
+
+test("m5b: the plans-absent note shows whenever no usable plan entry remains (plans {} too)", () => {
+  const meter = [cloud("a", "---", 10), cloud("b", "+--", 20)];
+  assert.equal(design(logs(meter, {})).plansAbsent, true);
+  assert.equal(design(logs(meter, PLANS)).plansAbsent, false);
+});
+
+test("N2: dropped (non-finite) bootstrap draws are counted and shown", () => {
+  const zero = { ...cloud("z", "---", 0)[0] }; void zero;
+  const l = logs([cloud("a1", "---", 0), cloud("a2", "---", 8), cloud("b1", "+--", 20), cloud("b2", "+--", 24)]);
+  const e = effect(l, "api");
+  assert.ok(!("notMeasurable" in e));
+  if ("notMeasurable" in e) return;
+  assert.ok(e.dropped > 0, `dropped ${e.dropped}`);
+  assert.ok(renderExperiment([design(l)]).includes("non-finite bootstrap draws dropped"));
+});
+
+test("N3: zero variance gives an MDE of 'n/a (zero variance)', no perfect power", () => {
+  const l = logs([cloud("a1", "---", 10), cloud("a2", "---", 10), cloud("b1", "+--", 20), cloud("b2", "+--", 20)]);
+  const text = renderExperiment([design(l)]);
+  assert.ok(text.includes("n/a (zero variance)"));
+  assert.ok(!text.includes("±0%"));
+});
+
+test("m4: a local stratum's report says its objective leaves out the unit's requests to other providers", () => {
+  const l = logs([localV2("l1", "---", 900_000), localV2("l2", "+--", 1_800_000)], PLANS);
+  assert.ok(renderExperiment([design(l)]).includes("requests to other providers"));
+});
+
+test("m1: the report says the effects are marginal per factor (no interaction model)", () => {
+  assert.ok(renderExperiment([design(logs([cloud("a", "---", 10), cloud("b", "+--", 20)]))]).includes("marginal per factor"));
+});

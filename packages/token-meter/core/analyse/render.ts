@@ -70,18 +70,23 @@ const pp = (n: number): string => (Number.isFinite(n) ? `${n >= 0 ? "+" : ""}${(
 
 function renderStratum(s: StratumResult): string {
   const measurable = s.effects.flatMap((e) => ("notMeasurable" in e ? [] : [e]));
-  const mdes = measurable.filter((e) => Number.isFinite(e.mde));
+  const mdes = measurable.filter((e) => Number.isFinite(e.mde) && e.mde > 0);
+  const flat = measurable.some((e) => e.mde === 0);
+  const dropped = measurable.filter((e) => e.dropped > 0);
+  const timed = s.objective === "wallMs" || s.objective === "localCost";
   const lo = mdes.reduce((m, e) => (e.mde < m.mde ? e : m), mdes[0]), hi = mdes.reduce((m, e) => (e.mde > m.mde ? e : m), mdes[0]);
   const reasons = [...new Set(s.effects.flatMap((e) => ("notMeasurable" in e ? [e.notMeasurable] : [])))];
   return [
     `#### stratum ${s.stratum} (objective ${s.objective} per active hour)\n`,
     table(["factor", "low → high", "n low", "n high", "ratio low", "ratio high", "effect", "95% CI", "MDE"], s.effects.map((e) => "notMeasurable" in e
       ? [e.factor, "–", "–", "–", "–", "–", e.notMeasurable, "–", "–"]
-      : [e.factor, `${e.a} → ${e.b}`, String(e.nA), String(e.nB), f2(e.ratioA), f2(e.ratioB), pp(e.effect), Number.isFinite(e.ci[0]) ? `${pp(e.ci[0])} – ${pp(e.ci[1])}` : "–", Number.isFinite(e.mde) ? `±${pp(e.mde).replace("+", "")}` : "–"])),
+      : [e.factor, `${e.a} → ${e.b}`, String(e.nA), String(e.nB), f2(e.ratioA), f2(e.ratioB), pp(e.effect), Number.isFinite(e.ci[0]) ? `${pp(e.ci[0])} – ${pp(e.ci[1])}` : "–", e.mde === 0 ? "n/a (zero variance)" : Number.isFinite(e.mde) ? `±${pp(e.mde).replace("+", "")}` : "–"])),
     "\nBalance (units with ≥ " + MIN_HOURS + " active h; shorter ones are excluded from the estimate and counted here):\n",
-    table(["arm", "units", "active h", "excluded (< " + MIN_HOURS + " h)", "no objective"], s.balance.map((b) => [`\`${b.arm}\``, String(b.units), f2(b.hours), String(b.excluded), String(b.unmeasured)])),
+    table(["arm", "units", "active h", "excluded (< " + MIN_HOURS + " h)", "no objective", ...(timed ? ["request lines timed / untimed"] : [])], s.balance.map((b) => [`\`${b.arm}\``, String(b.units), f2(b.hours), String(b.excluded), String(b.unmeasured), ...(timed ? [`${b.timedLines} / ${b.untimedLines}`] : [])])),
+    ...(timed ? ["\nA line without `durationMs` (a compaction or nested request, a v1 line) adds no time to the objective: untimed lines make a unit's objective an undercount. " + (s.objective === "localCost" ? "The objective counts local-provider requests only; the unit's requests to other providers (cloud children) are left out (secondary column: M8)." : "The objective counts the main session's requests only; children are left out.")] : []),
     mdes.length ? `\nPower: at the current n the smallest detectable effect (α .05 two-sided, power .8) is ${pp(lo.mde).replace("+", "±")} (${lo.factor}), the largest ${pp(hi.mde).replace("+", "±")} (${hi.factor}); a smaller true effect is not distinguishable from noise.`
-      : measurable.length ? "\nPower: not estimable (fewer than 2 units at a level of every factor)." : reasons.length ? `\nPower: not estimable (${reasons[0]}).` : "",
+      : flat ? "\nPower: n/a (zero variance: every unit of a level has the same ratio)." : measurable.length ? "\nPower: not estimable (fewer than 2 units at a level of every factor)." : reasons.length ? `\nPower: not estimable (${reasons[0].replace(/^not measurable: /, "")}).` : "",
+    dropped.length ? `\n${dropped.map((e) => `${e.factor} ${e.dropped}`).join(", ")} non-finite bootstrap draws dropped (of 2000; a resample with a zero low ratio or no hours).` : "",
   ].join("\n");
 }
 
@@ -90,7 +95,7 @@ export function renderExperiment(ds: DesignResult[]): string {
   const pooled = ds.some((d) => d.design === "v2") && ds.some((d) => d.design === "v3");
   return (pooled ? "Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware means something else in v3 (a system-prompt paragraph): they are analysed in separate tables and never pooled; guard signals and the kill switch are per design too.\n\n" : "") + ds.map((d) => [
     `### Design ${d.design} (${d.factors.length} factors, baseline \`${d.baseline}\`, ${d.units} units with ≥ ${MIN_HOURS} active h)\n`,
-    "Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. A negative effect of a cost objective is cheaper.\n",
+    "Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.\n",
     ...(d.plansAbsent ? ["plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.\n"] : []),
     d.strata.map(renderStratum).join("\n\n"),
     "\nPer arm (pooled over the design's strata: the arm statistics and posterior feed the kill switch and the arm posterior, not an effect estimate):\n",

@@ -1,6 +1,6 @@
 ### Design v4 (3 factors, baseline `---`, 12 units with ≥ 0.05 active h)
 
-Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. A negative effect of a cost objective is cheaper.
+Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
 #### stratum subscription (objective apiUsd per active hour)
 
@@ -19,6 +19,7 @@ Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estima
 
 Power: at the current n the smallest detectable effect (α .05 two-sided, power .8) is ±60% (warmPolicy), the largest ±60% (warmPolicy); a smaller true effect is not distinguishable from noise.
 
+
 #### stratum api (objective apiUsd per active hour)
 
 | factor | low → high | n low | n high | ratio low | ratio high | effect | 95% CI | MDE |
@@ -36,6 +37,7 @@ Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estima
 
 Power: not estimable (fewer than 2 units at a level of every factor).
 
+
 #### stratum local (objective localCost per active hour)
 
 | factor | low → high | n low | n high | ratio low | ratio high | effect | 95% CI | MDE |
@@ -46,12 +48,15 @@ Power: not estimable (fewer than 2 units at a level of every factor).
 
 Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estimate and counted here):
 
-| arm | units | active h | excluded (< 0.05 h) | no objective |
-| --- | --- | --- | --- | --- |
-| `+--` | 2 | 1.00 | 0 | 0 |
-| `---` | 2 | 1.00 | 0 | 0 |
+| arm | units | active h | excluded (< 0.05 h) | no objective | request lines timed / untimed |
+| --- | --- | --- | --- | --- | --- |
+| `+--` | 2 | 1.00 | 0 | 0 | 8 / 0 |
+| `---` | 2 | 1.00 | 0 | 0 | 8 / 0 |
+
+A line without `durationMs` (a compaction or nested request, a v1 line) adds no time to the objective: untimed lines make a unit's objective an undercount. The objective counts local-provider requests only; the unit's requests to other providers (cloud children) are left out (secondary column: M8).
 
 Power: at the current n the smallest detectable effect (α .05 two-sided, power .8) is ±41% (warmPolicy), the largest ±41% (warmPolicy); a smaller true effect is not distinguishable from noise.
+
 
 Per arm (pooled over the design's strata: the arm statistics and posterior feed the kill switch and the arm posterior, not an effect estimate):
 

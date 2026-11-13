@@ -111,7 +111,7 @@ Designs v2 and v3 have the same factors and arm ids, but foldHint = cache-aware 
 
 ### Design v1 (5 factors, baseline `-----`, 2 units with ≥ 0.05 active h)
 
-Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. A negative effect of a cost objective is cheaper.
+Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
 plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
 
@@ -134,6 +134,7 @@ Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estima
 
 Power: not estimable (fewer than 2 units at a level of every factor).
 
+
 Per arm (pooled over the design's strata: the arm statistics and posterior feed the kill switch and the arm posterior, not an effect estimate):
 
 | arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
@@ -143,7 +144,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 ### Design v2 (6 factors, baseline `------`, 5 units with ≥ 0.05 active h)
 
-Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. A negative effect of a cost objective is cheaper.
+Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
 plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
 
@@ -167,6 +168,7 @@ Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estima
 
 Power: at the current n the smallest detectable effect (α .05 two-sided, power .8) is ±210% (warmPolicy), the largest ±210% (warmPolicy); a smaller true effect is not distinguishable from noise.
 
+
 Per arm (pooled over the design's strata: the arm statistics and posterior feed the kill switch and the arm posterior, not an effect estimate):
 
 | arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
@@ -176,7 +178,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 ### Design v3 (6 factors, baseline `------`, 1 units with ≥ 0.05 active h)
 
-Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. A negative effect of a cost objective is cheaper.
+Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
 plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
 
@@ -197,7 +199,8 @@ Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estima
 | --- | --- | --- | --- | --- |
 | `------` | 1 | 0.50 | 0 | 0 |
 
-Power: not estimable (not measurable: no unit at level orchestrator-aware).
+Power: not estimable (no unit at level orchestrator-aware).
+
 
 Per arm (pooled over the design's strata: the arm statistics and posterior feed the kill switch and the arm posterior, not an effect estimate):
 
@@ -207,7 +210,7 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 ### Design v4 (3 factors, baseline `---`, 9 units with ≥ 0.05 active h)
 
-Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. A negative effect of a cost objective is cheaper.
+Per stratum (the billing class of the provider of a root session's main; never pooled across strata). Effect = ratio(high level) ÷ ratio(low level) − 1 with ratio = Σ objective ÷ Σ active hours of the stratum's units at the level (ratio of sums); 95% CI from 2000 bootstrap resamples of the units of each level (seed 1); MDE = 2.80 × the bootstrap sd of the effect. Effects are marginal per factor (unadjusted: no interaction model, the other factors vary freely across the arms). A negative effect of a cost objective is cheaper.
 
 plans absent (token-meter's `plans` setting was not read): every unit is counted in stratum api.
 
@@ -229,6 +232,7 @@ Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estima
 | `---` | 3 | 1.37 | 0 | 0 |
 
 Power: at the current n the smallest detectable effect (α .05 two-sided, power .8) is ±66% (maskOnCold), the largest ±82% (mainCacheTtl); a smaller true effect is not distinguishable from noise.
+
 
 Per arm (pooled over the design's strata: the arm statistics and posterior feed the kill switch and the arm posterior, not an effect estimate):
 

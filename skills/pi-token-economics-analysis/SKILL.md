@@ -46,8 +46,9 @@ without the user's explicit approval.
   request had to write again) by cause (ttl, fold, model, other), and the premium of folds and cold resumes over a baseline
   (net of what an ordinary request misses).
 - **Experiment** (per design: v1 = 5 factors / 5-character arms, v2 and v3 = 6 factors incl.
-  `delegationRule`, v4 = 3 factors `warmPolicy`, `mainCacheTtl`, `maskOnCold`): per-factor effect on $/active hour with a bootstrap CI, OLS with
-  two-way interactions (aliased terms listed), per-arm $/h, posterior and P(best).
+  `delegationRule`, v4 = 3 factors `warmPolicy`, `mainCacheTtl`, `maskOnCold`): per **stratum** (billing class of the main's provider, never pooled) the marginal per-factor effect
+  ratio(high) ÷ ratio(low) − 1 of the objective per active hour (a ratio of sums), with a bootstrap CI and minimum detectable effect, a balance table
+  (units, hours, excluded) and a power line; no interaction model. Per-arm $/h, posterior and P(best) pool the strata.
   An effect counts only when its CI excludes 0 *and* each level has several units.
 - **Delegation & routing**: share of tasks and $ in child sessions, tier mix, Qwen share
   (target SC3: ≥ 30% of child tasks, acceptance not worse than Sonnet by > 10 points),

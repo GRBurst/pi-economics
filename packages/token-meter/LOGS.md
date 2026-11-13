@@ -359,20 +359,22 @@ request is no row of its own (it only refreshes the prefix).
 
 How the Experiment section (and `meter-report --arms`) turns meter lines into effects.
 
-- **Unit and stratum.** A unit is a root session (above) of an armed design. Its **stratum** is the billing class (`plans` in
-  `token-meter/settings.json`: `subscription`, `api`, `free`, `local`; a provider without a plan is `api`) of the provider of the root's
-  first main-session request. A child's provider does not decide. Without a `plans` setting every unit is in `api` and the report says so.
+- **Unit and stratum.** A unit is a root session (above) of an armed design. Its **stratum** is the billing class of the root's first main-session
+  request: the line's own `billing` (meter v2) when it has one, else its provider's entry in `plans` (`token-meter/settings.json`: `subscription`,
+  `api`, `free`, `local`; a provider without a plan is `api`). A child's provider does not decide. Without a usable `plans` entry the report says
+  "plans absent": a v1 unit is then in `api`.
 - **Objective** per stratum, per active hour: `apiUsd` for the cloud classes (Σ of the root's `costUsd`, children and warming included); `localCost`
-  for `local` (Σ `durationMs` ÷ 3 600 000 × the provider's plan rate, local providers' lines of the root), `wallMs` (Σ `durationMs` of the main's
-  lines) when no local plan has a rate; `experiments/settings.json` `strata.<class>.objective` overrides it (`apiUsd`, `cashUsd`, `localCost`,
-  `wallMs`, `points5h`, `points7d`; `cashUsd` is not computed yet and reads "not measurable"). A unit without the field the objective needs
-  (a v1 line has no `durationMs`) has no objective: a local stratum on v1 lines reads "not measurable".
+  for `local` (Σ `durationMs` ÷ 3 600 000 × the provider's plan rate over the root's local-billed lines; requests to other providers, e.g. cloud children, are
+  left out: a secondary column is M8), `wallMs` (Σ `durationMs` of the main's lines) when no local plan has a rate; `experiments/settings.json` `strata.<class>.objective` overrides it (`apiUsd`, `cashUsd`, `localCost`,
+  `wallMs`, `points5h`, `points7d`; `cashUsd` is not computed yet and reads "not measurable"). Both timed objectives sum the lines that carry `durationMs`; a unit with none (a v1 line has no
+  `durationMs`) has no objective, so a local stratum on v1 lines reads "not measurable". Lines without it (compactions, nested requests) add
+  no time; the balance table shows the timed / untimed line counts.
 - **Effect** of a factor in a stratum = ratio(high level) ÷ ratio(low level) − 1, ratio = Σ objective ÷ Σ active hours over the stratum's units at the
   level (a ratio of sums: a long unit weighs more than a short one, a $0 unit is not averaged in). Units under 0.05 active h (`MIN_HOURS`) are
-  left out of the estimate; the balance table counts them. Strata are never pooled.
+  left out of the estimate; the balance table counts them. Strata are never pooled. The effects are marginal per factor and unadjusted: there is no interaction model (the earlier OLS table pooled the strata and was removed).
 - **CI and power.** 2000 bootstrap draws, units resampled with replacement within each level, PRNG mulberry32 seed 1, percentiles 2.5/97.5. The
   minimum detectable effect is 2.80 × the sd of the bootstrap effects (α .05 two-sided, power .8). With fewer than 2 units at a level there is
-  no CI and no MDE.
+  no CI and no MDE; an MDE of 0 (zero variance) reads "n/a"; bootstrap draws with a non-finite ratio are dropped and counted.
 - **Balance table**: per stratum and arm, units over `MIN_HOURS`, their active hours, the units excluded, units without an objective.
 - **Per arm** (kill switch, posterior; `meter-report --arms`): pooled over the design's strata, $ per active hour; its fold and cold-resume columns are
   the premium above (*Analysis: cache misses*), per event.

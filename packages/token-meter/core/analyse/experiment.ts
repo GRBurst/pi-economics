@@ -2,29 +2,38 @@
 // per-arm stats and the posterior (redesign M2c, B8).
 import { armStats, isError, MIN_HOURS, quotaAttribution, rootUnits, type ArmStat, type RootUnit } from "../arms.ts";
 import { bootstrapRatio, mulberry32, normal, ratio } from "../stats.ts";
-import { billingOf, type Plans } from "../plans.ts";
+import { billingOf, type Billing, type Plans } from "../plans.ts";
 import { byTs, isLine } from "./logs.ts";
 import { armInfo, DESIGNS, designOf, rowsBySession } from "./designs.ts";
 
-/** What a stratum's effects are measured in, per active hour. The same literal set as experiments' `Objective` (core/settings.ts, M5a): this package imports no other. */
+/**
+ * What a stratum's effects are measured in, per active hour. token-meter keeps its own copy of experiments' `Objective` literal set (core/settings.ts, M5a):
+ * a package imports no other, so there is no cross-import.
+ * TODO(M5b.1): owner of the drift guard (a check that compares the two literal sets; the analyser reads `strata.<billing class>.objective`, experiments keys strata by name).
+ */
 export type Objective = "apiUsd" | "cashUsd" | "localCost" | "wallMs" | "points5h" | "points7d";
 const OBJECTIVES: readonly string[] = ["apiUsd", "cashUsd", "localCost", "wallMs", "points5h", "points7d"];
 
 /** A root session as the estimate sees it: its stratum (billing class of its main's provider), arm, factor levels, active hours and objective (undefined = not measurable). */
 export type Unit = { sessionId: string; design: string; stratum: string; arm: string; levels: Record<string, string | number | boolean>;
-  hours: number; objective?: number };
+  hours: number; objective?: number;
+  /** Request timing behind a wallMs / localCost objective: lines that carry `durationMs` and lines that do not (those add no time). */ timing?: { timed: number; untimed: number } };
 export type Effect =
   | { design: string; stratum: string; factor: string; a: string; b: string; nA: number; nB: number; ratioA: number; ratioB: number;
       /** ratio(B) / ratio(A) − 1: relative change of the objective per active hour from the low (a) to the high (b) level. */ effect: number;
       /** Bootstrap 95% CI of the effect; NaN with fewer than 2 units at a level. */ ci: [number, number];
-      /** Minimum detectable effect, 2.80 · sd of the bootstrap effect (α .05 two-sided, power .8); NaN as the CI. */ mde: number }
+      /** Minimum detectable effect, 2.80 · sd of the bootstrap effect (α .05 two-sided, power .8); NaN as the CI; 0 = zero variance. */ mde: number;
+      /** Bootstrap draws dropped because their ratio was not finite (a level whose resample had no hours or a zero low ratio). */ dropped: number }
   | { design: string; stratum: string; factor: string; notMeasurable: string };
-/** Per arm of a stratum: units over MIN_HOURS (`units`, of which `unmeasured` have no objective), their active hours, units under MIN_HOURS (`excluded`). */
-export type BalanceRow = { arm: string; units: number; hours: number; excluded: number; unmeasured: number };
+/**
+ * Per arm of a stratum: units over MIN_HOURS (`units`, of which `unmeasured` have no objective), their active hours, units under MIN_HOURS (`excluded`),
+ * and for a wallMs / localCost objective the lines of those units with and without `durationMs` (the untimed ones add no time).
+ */
+export type BalanceRow = { arm: string; units: number; hours: number; excluded: number; unmeasured: number; timedLines: number; untimedLines: number };
 export type StratumResult = { stratum: string; objective: Objective; balance: BalanceRow[]; effects: Effect[] };
 export type DesignResult = { design: string; factors: string[]; baseline: string; units: number; arms: ArmStat[];
   /** One result per stratum (billing class), never pooled. */ strata: StratumResult[];
-  /** True when no `plans` were given: every unit is then in stratum "api". */ plansAbsent: boolean;
+  /** True when no usable `plans` entry exists: a unit is then in stratum "api" unless its own v2 line says otherwise. */ plansAbsent: boolean;
   posterior: Array<{ arm: string; mean: number; sd: number; pBest: number }> };
 
 const BOOTSTRAP = 2000;
@@ -66,30 +75,35 @@ const WHY: Record<Objective, string> = {
   points7d: "no q7d quota readings for the stratum's units",
 };
 
-/** The objective of one root (`ls` its lines in ts order, `u` its totals, `plans` the billing classes), undefined when not measurable. */
-function objectiveOf(o: Objective, u: RootUnit, ls: any[], plans: Plans): number | undefined {
-  const dur = (l: any): number | undefined => (typeof l.durationMs === "number" && Number.isFinite(l.durationMs) && l.durationMs >= 0 ? l.durationMs : undefined);
+const BILLINGS: readonly string[] = ["subscription", "api", "free", "local"];
+/** A line's billing class: its own `billing` (meter v2) when valid, else its provider's in `plans`. */
+const billingOfLine = (l: any, plans: Plans): Billing => (BILLINGS.includes(l.billing) ? l.billing : billingOf(plans, String(l.provider)));
+const dur = (l: any): number | undefined => (typeof l.durationMs === "number" && Number.isFinite(l.durationMs) && l.durationMs >= 0 ? l.durationMs : undefined);
+
+/**
+ * The objective of one root (`ls` its lines in ts order, `u` its totals, `plans` the billing classes), undefined when not measurable, and for the timed
+ * objectives the coverage of `durationMs`: both sum the lines that have it (wallMs the main's non-warming lines, localCost the non-warming lines of local
+ * billing with a plan rate); a root without any timed line has no objective (a v1 log), one with some untimed lines keeps its sum and says so.
+ */
+function objectiveOf(o: Objective, u: RootUnit, ls: any[], plans: Plans): { objective?: number; timing?: Unit["timing"] } {
+  const timed = (mine: any[], cost: (l: any) => number) => {
+    const have = mine.filter((l) => dur(l) !== undefined);
+    return { objective: have.length ? have.reduce((s, l) => s + cost(l), 0) : undefined, timing: { timed: have.length, untimed: mine.length - have.length } };
+  };
   switch (o) {
-    case "apiUsd": return u.cost;
-    case "points5h": return u.q5h;
-    case "points7d": return u.q7d;
-    case "cashUsd": return undefined;
-    case "wallMs": {
-      const ms = ls.filter((l) => l.parentSessionId === undefined && l.kind !== "warming").map(dur).filter((x): x is number => x !== undefined);
-      return ms.length ? ms.reduce((s, x) => s + x, 0) : undefined;
-    }
-    case "localCost": {
-      const mine = ls.filter((l) => l.kind !== "warming" && billingOf(plans, String(l.provider)) === "local" && plans[String(l.provider)]?.rate);
-      if (!mine.length || mine.some((l) => dur(l) === undefined)) return undefined;
-      return mine.reduce((s, l) => s + (dur(l)! / MS_H) * plans[String(l.provider)].rate!.amount, 0);
-    }
+    case "apiUsd": return { objective: u.cost };
+    case "points5h": return { objective: u.q5h };
+    case "points7d": return { objective: u.q7d };
+    case "cashUsd": return {};
+    case "wallMs": return timed(ls.filter((l) => l.parentSessionId === undefined && l.kind !== "warming"), (l) => dur(l)!);
+    case "localCost": return timed(ls.filter((l) => l.kind !== "warming" && billingOfLine(l, plans) === "local" && plans[String(l.provider)]?.rate), (l) => (dur(l)! / MS_H) * plans[String(l.provider)].rate!.amount);
   }
 }
 
-/** The stratum of a root: the billing class (plans) of the provider of its main session's first request; "api" without plans. */
+/** The stratum of a root: the billing class (the line's own, else plans) of the provider of its main session's first request; "api" without either. */
 function strataOf(ls: any[], plans: Plans): string {
   const main = ls.find((l) => l.parentSessionId === undefined && l.kind !== "warming" && !isError(l) && typeof l.provider === "string") ?? ls.find((l) => typeof l.provider === "string");
-  return billingOf(plans, String(main?.provider ?? ""));
+  return main ? billingOfLine(main, plans) : "api";
 }
 
 /** Every root session of the design's lines as a Unit (all hours; the estimate excludes short ones, the balance table counts them). */
@@ -101,7 +115,7 @@ function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<st
     const ls = byRoot.get(r.root) ?? [];
     const stratum = strataOf(ls, plans);
     if (!objectives.has(stratum)) objectives.set(stratum, objectiveFor(stratum, plans, expSettings));
-    return { sessionId: r.root, design, stratum, arm: r.arm, levels: info.get(r.arm)?.flags ?? {}, hours: r.hours, objective: objectiveOf(objectives.get(stratum)!, r, ls, plans) };
+    return { sessionId: r.root, design, stratum, arm: r.arm, levels: info.get(r.arm)?.flags ?? {}, hours: r.hours, ...objectiveOf(objectives.get(stratum)!, r, ls, plans) };
   });
   return { units, objectives };
 }
@@ -112,9 +126,11 @@ function stratumResult(design: string, stratum: string, objective: Objective, un
   const arms = [...new Set(units.map((u) => u.arm))].sort();
   const balance = arms.map((arm): BalanceRow => {
     const mine = included.filter((u) => u.arm === arm);
-    return { arm, units: mine.length, hours: mine.reduce((s, u) => s + u.hours, 0), excluded: units.filter((u) => u.arm === arm && u.hours < MIN_HOURS).length, unmeasured: mine.filter((u) => u.objective === undefined).length };
+    return { arm, units: mine.length, hours: mine.reduce((s, u) => s + u.hours, 0), excluded: units.filter((u) => u.arm === arm && u.hours < MIN_HOURS).length, unmeasured: mine.filter((u) => u.objective === undefined).length,
+      timedLines: mine.reduce((s, u) => s + (u.timing?.timed ?? 0), 0), untimedLines: mine.reduce((s, u) => s + (u.timing?.untimed ?? 0), 0) };
   });
   const effects = factors.map((factor): Effect => {
+    if (!included.length) return { design, stratum, factor, notMeasurable: `not measurable: every unit is under ${MIN_HOURS} active h` };
     if (!measured.length) return { design, stratum, factor, notMeasurable: `not measurable: ${WHY[objective]}` };
     const [a, b] = levels(factor);
     const A = measured.filter((u) => u.levels[factor] === a), B = measured.filter((u) => u.levels[factor] === b);
@@ -122,8 +138,8 @@ function stratumResult(design: string, stratum: string, objective: Objective, un
     const ratioA = ratio(A), ratioB = ratio(B);
     if (!(ratioA > 0) || !Number.isFinite(ratioB)) return { design, stratum, factor, notMeasurable: "not measurable: the low level's ratio is not positive" };
     const thin = A.length < 2 || B.length < 2;
-    const boot = thin ? { ci: [NaN, NaN] as [number, number], sd: NaN } : bootstrapRatio(A, B, BOOTSTRAP, 1);
-    return { design, stratum, factor, a, b, nA: A.length, nB: B.length, ratioA, ratioB, effect: ratioB / ratioA - 1, ci: boot.ci, mde: 2.8 * boot.sd };
+    const boot = thin ? { ci: [NaN, NaN] as [number, number], sd: NaN, dropped: 0 } : bootstrapRatio(A, B, BOOTSTRAP, 1);
+    return { design, stratum, factor, a, b, nA: A.length, nB: B.length, ratioA, ratioB, effect: ratioB / ratioA - 1, ci: boot.ci, mde: 2.8 * boot.sd, dropped: boot.dropped };
   });
   return { stratum, objective, balance, effects };
 }
@@ -148,6 +164,6 @@ export function experiment(meter: any[], rows: any[], expSettings: any, plans?: 
     const post = stats.filter((s) => s.units >= 2).map((s) => ({ arm: s.arm, mean: -s.costPerHour, sd: s.sd }));
     const pb = pBest(post);
     const wanted = typeof expSettings?.baseline === "string" && expSettings.baseline.length === factors.length ? expSettings.baseline : undefined;
-    return { design, factors, baseline: wanted ?? "-".repeat(factors.length), units: units.filter((u) => u.hours >= MIN_HOURS).length, arms: stats, strata, plansAbsent: plans === undefined, posterior: post.map((p, i) => ({ ...p, pBest: pb[i] })) };
+    return { design, factors, baseline: wanted ?? "-".repeat(factors.length), units: units.filter((u) => u.hours >= MIN_HOURS).length, arms: stats, strata, plansAbsent: Object.keys(plans ?? {}).length === 0, posterior: post.map((p, i) => ({ ...p, pBest: pb[i] })) };
   });
 }
