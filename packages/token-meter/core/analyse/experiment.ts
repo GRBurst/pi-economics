@@ -188,7 +188,7 @@ function stratumResult(design: string, stratum: string, objective: Objective, un
 /** factor name → lever id, from the design's v2 rows. */
 function factorLevers(rows: any[], design: string): Map<string, string> {
   const out = new Map<string, string>();
-  for (const r of rows) if (r?.v === 2 && r.design === design && plainObject(r.factors)) for (const [n, f] of Object.entries(r.factors)) if (typeof f?.lever === "string" && !out.has(n)) out.set(n, f.lever);
+  for (const r of rows) if (r?.v === 2 && r.design === design && plainObject(r.factors)) for (const [n, f] of Object.entries(r.factors as Record<string, any>)) if (typeof f?.lever === "string" && !out.has(n)) out.set(n, f.lever);
   return out;
 }
 

@@ -174,6 +174,7 @@ in {
   # The router's optional read of the old global is dead (redesign §11: the
   # router randomizes itself).
   internal-channel = import ./internal-channel {inherit lib pkgs typecheck;};
+  state-contract = import ./state-contract {inherit lib pkgs;};
   # (redesign M5b.2, G5) No extension pi-economics patches or targets reads it:
   # patches/, the built patched infinite-context, the patched actor.
   dependency-direction = import ./dependency-direction {
