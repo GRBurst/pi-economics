@@ -427,7 +427,7 @@ designs (arm ids like `-+-`). The v2 engine reads, and `meter-report --posterior
 units alone; `disabled` only grows, `posterior` is rewritten, `reasons` is merged; other designs, strata
 and keys stay). The engine reads it at session start (exploit samples from `posterior`; no arm in
 `disabled` is assigned; with every arm disabled the session is ineligible). A v2 arm is never
-written to the flat keys.
+written to the flat keys. The posterior is API-eq $ per active hour: a stratum whose objective is not `apiUsd` (`wallMs`, `localCost`, `points*`, `cashUsd`) has no estimator yet, so its `posterior` is `{}` and the engine draws from the blocks; the kill switch does not depend on the objective.
 
 `experiments/blocks.json`: `{ "<design id>/<stratum>": { "queue": [<arm>] } }`, the arms
 left in each explore block (refilled with a shuffle of the enabled arms when empty). A block whose `queue` is no list of

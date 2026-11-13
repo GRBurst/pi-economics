@@ -2,10 +2,10 @@
 import { acceptance, killSwitch, signals, type Guard, type Limits, type Signal } from "../guards.ts";
 import { type ArmStat } from "../arms.ts";
 import { designOfLine } from "./designs.ts";
-import { type DesignResult } from "./experiment.ts";
+import { type DesignResult, type Objective } from "./experiment.ts";
 
 /** One design of one stratum of the v2 engine (M5c, T5c.9): its arms' stats, guard signals and the arms its kill switch disables. */
-export type StratumGuard = { design: string; stratum: string; baseline: string; arms: ArmStat[]; kill: Record<string, string>; acc: Record<string, Guard>; sig: Record<string, Signal> };
+export type StratumGuard = { design: string; stratum: string; objective: Objective; baseline: string; arms: ArmStat[]; kill: Record<string, string>; acc: Record<string, Guard>; sig: Record<string, Signal> };
 /** `kill` = the v1–v4 designs' kill switch (flat arm → reason, state.json `disabled`); the v2 engine's is `perStratum`. */
 export type GuardsSection = { limits: Limits; baselines: Record<string, string>; kill: Record<string, string>; perStratum: StratumGuard[];
   perArm: Array<{ design: string; arm: string; units: number; peeks: number; corrections: number; ratings: number[]; accepted: number; judged: number }> };
@@ -28,7 +28,7 @@ export function guards(designs: DesignResult[], outcomes: any[], events: any[], 
     if (!st.arms) return [];
     const sig = signals(events.filter((e) => designOfEvent(e) === d.design && stratumOfEvent(e) === st.stratum));
     const acc = acceptance(outcomes.filter((e) => spawnDesign.get(e?.taskId) === d.design && spawnStratum.get(e?.taskId) === st.stratum));
-    return [{ design: d.design, stratum: st.stratum, baseline: d.baseline, arms: st.arms, kill: killSwitch(st.arms, acc, limits, d.baseline, sig), acc, sig }];
+    return [{ design: d.design, stratum: st.stratum, objective: st.objective, baseline: d.baseline, arms: st.arms, kill: killSwitch(st.arms, acc, limits, d.baseline, sig), acc, sig }];
   }));
   const v2 = new Set(perStratum.map((s) => s.design));
   return {

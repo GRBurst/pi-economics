@@ -349,7 +349,7 @@ test("review M2 (M5c): meter-report --arms/--posterior say where the v2 designs'
   assert.ok(out.includes(V2_SCOPE), out);
   assert.deepEqual(a.state().designs, designs);
   assert.ok(a.run("--posterior").includes(V2_SCOPE));
-  assert.equal(V2_SCOPE, "kill switch and posterior: per design and stratum for the v2 engine's designs (state.json `designs.<id>.<stratum>`: `disabled`, `posterior`, `reasons`), flat for the v1–v4 designs (`disabled`, `posterior`)");
+  assert.equal(V2_SCOPE, "kill switch and posterior: per design and stratum for the v2 engine's designs (state.json `designs.<id>.<stratum>`: `disabled`, `posterior`, `reasons`), flat for the v1–v4 designs (`disabled`, `posterior`); a v2 posterior is API-eq $ per active hour, so empty (the engine draws blocks) unless the stratum's objective is apiUsd");
 });
 
 // T5c.9: the v2 engine's designs get their kill switch and posterior per (design, stratum) under state.json `designs`.

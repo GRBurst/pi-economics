@@ -191,3 +191,13 @@ test("T5c.9: the guards section lists the v2 engine's kill switch per design and
   assert.ok(text.includes(`- design ${D} stratum api: disable \`10\`: acceptance`), text);
   assert.ok(text.includes(`- design ${D} stratum opus: no arm would be disabled`), text);
 });
+
+test("review M1: the posterior follows the stratum's objective: only apiUsd has an estimator (API-eq $/h); any other writes an empty posterior, so the engine falls back to the blocks", () => {
+  const w = killWorld();
+  const l = { ...w, meter: w.meter.map((x) => ({ ...x, durationMs: 1000 })), expSettings: { ...w.expSettings, strata: { opus: { objective: "wallMs" } } } };
+  const s = applyKill({}, analyse(l)) as any;
+  assert.deepEqual(s.designs[D].opus.posterior, {}, "wallMs: no posterior, never { mean 0, sd 0 } arms");
+  assert.deepEqual(Object.keys(s.designs[D].api.posterior).sort(), ["00", "10"], "apiUsd unchanged");
+  assert.equal(analyse(l).guards.perStratum.find((x) => x.stratum === "opus")!.objective, "wallMs");
+  assert.deepEqual(s.designs[D].opus.disabled, [], "the kill switch (acceptance, signals) does not depend on the objective");
+});

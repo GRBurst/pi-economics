@@ -165,10 +165,11 @@ export function renderArms(stats: ArmStat[], acc: Acc, reasons: Record<string, s
 }
 
 /** Where the kill switch and the posterior are written (M5c, T5c.9; the engine reads the same places). */
-export const V2_SCOPE = "kill switch and posterior: per design and stratum for the v2 engine's designs (state.json `designs.<id>.<stratum>`: `disabled`, `posterior`, `reasons`), flat for the v1–v4 designs (`disabled`, `posterior`)";
+export const V2_SCOPE = "kill switch and posterior: per design and stratum for the v2 engine's designs (state.json `designs.<id>.<stratum>`: `disabled`, `posterior`, `reasons`), flat for the v1–v4 designs (`disabled`, `posterior`); a v2 posterior is API-eq $ per active hour, so empty (the engine draws blocks) unless the stratum's objective is apiUsd";
 
 /** The arms of one (design, stratum) of the v2 engine and the arms its kill switch disables. */
-export type StratumState = { design: string; stratum: string; arms: ArmStat[]; kill: Record<string, string> };
+/** `objective`: the stratum's (default apiUsd); the posterior is API-eq $ per active hour, so only an apiUsd stratum has one. */
+export type StratumState = { design: string; stratum: string; objective?: string; arms: ArmStat[]; kill: Record<string, string> };
 
 const isRecord = (v: unknown): v is Record<string, any> => v !== null && typeof v === "object" && !Array.isArray(v);
 
@@ -186,7 +187,7 @@ export function nextState(old: any, stats: ArmStat[], reasons: Record<string, st
     const prev = designs.get(x.design)?.get(x.stratum);
     const was = isRecord(prev) ? prev : {};
     const disabled = Array.isArray(was.disabled) ? was.disabled.filter((a: unknown) => typeof a === "string") : [];
-    const entry = { ...was, disabled: [...new Set([...disabled, ...Object.keys(x.kill)])], posterior: posterior(x.arms), reasons: { ...(isRecord(was.reasons) ? was.reasons : {}), ...x.kill } };
+    const entry = { ...was, disabled: [...new Set([...disabled, ...Object.keys(x.kill)])], posterior: x.objective === undefined || x.objective === "apiUsd" ? posterior(x.arms) : {}, reasons: { ...(isRecord(was.reasons) ? was.reasons : {}), ...x.kill } };
     designs.set(x.design, (designs.get(x.design) ?? new Map()).set(x.stratum, entry));
   }
   const out = Object.fromEntries([...designs].map(([id, strata]) => [id, Object.fromEntries(strata)]));
