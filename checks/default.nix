@@ -50,6 +50,9 @@
     forChildren = false;
     description = "the patched actor-subagents (pi-setup)";
   };
+  # (redesign M5a) pi-bench's sources: packages/bench as bench/ with the
+  # experiments' design module it imports (packages/bench/package.nix).
+  benchSrc = self.packages.${pkgs.stdenv.hostPlatform.system}.bench.code.src;
   # (M4.5) The provider of the globalThis API __subagentsApi_v1 (spec §5.3).
   subagentsProvider = {
     src = setupActorTs;
@@ -95,15 +98,15 @@ in {
   bench = self.packages.${pkgs.stdenv.hostPlatform.system}.bench.code;
   typecheck-bench = typecheck.typecheck {
     name = "bench";
-    src = ../packages/bench;
+    src = benchSrc;
   };
   # The bench probe's copy of __subagentsApi_v1 (spec §5.3, §8.1).
   iface-subagents-bench-probe = iface.compare {
     name = "subagents-bench-probe";
     provider = subagentsProvider;
     consumer = {
-      src = ../packages/bench;
-      file = "probe/index.ts";
+      src = benchSrc;
+      file = "bench/probe/index.ts";
       type = "SubagentsApi";
     };
   };

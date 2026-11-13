@@ -17,7 +17,14 @@
   code = stdenvNoCC.mkDerivation {
     pname = "pi-bench-src";
     inherit (manifest) version;
-    src = lib.cleanSource ./.;
+    # The bench with the experiments' design module (redesign §7.2), at the
+    # repository's relative path: src/orch.ts imports
+    # ../../experiments/core/design.ts (its package.json keeps it ESM).
+    src = lib.fileset.toSource {
+      root = ../.;
+      fileset = lib.fileset.unions [./. ../experiments/core/design.ts ../experiments/package.json];
+    };
+    sourceRoot = "source/bench";
     nativeBuildInputs = runtimeInputs;
     dontBuild = true;
     doCheck = true;
@@ -32,7 +39,19 @@
       runHook preInstall
       mkdir -p $out/share/pi-bench
       cp -r package.json src probe bin $out/share/pi-bench/
+      mkdir -p $out/share/experiments/core
+      cp ../experiments/package.json $out/share/experiments/
+      cp ../experiments/core/design.ts $out/share/experiments/core/
       runHook postInstall
+    '';
+    # The installed tree resolves its imports (src/orch.ts imports the
+    # experiments' design module from ../../experiments/core).
+    doInstallCheck = true;
+    installCheckPhase = ''
+      runHook preInstallCheck
+      node --experimental-strip-types --no-warnings --input-type=module \
+        -e "const m = await import('$out/share/pi-bench/src/orch.ts'); if (Object.keys(m.orchArms()).length !== 4) process.exit(1);"
+      runHook postInstallCheck
     '';
   };
   entry = "${code}/share/pi-bench/src/cli.ts";

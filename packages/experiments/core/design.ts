@@ -51,6 +51,15 @@ export function design(factors: Factor[], maxArms: number): Arm[] {
   return arms;
 }
 
+/**
+ * The 2^(k-1) half fraction of k ≥ 2 factors (pi-bench's orchestrator arms): x_k = (−1)^k ∏_{j<k} x_j, so the all-low
+ * arm is in the design. For k = 3 that is x3 = −x1·x2.
+ */
+export function halfFraction(factors: Factor[]): Arm[] {
+  if (factors.length < 2) throw new Error("a half fraction needs at least two factors");
+  return design(factors, 2 ** (factors.length - 1));
+}
+
 // One design per stratum (redesign §7.2), named by a content id instead of v1…v4; the design() above stays the
 // runtime's until the engine moves to strata. This file imports only node builtins: bench ships it alone.
 

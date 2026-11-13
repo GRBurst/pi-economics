@@ -1,8 +1,8 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { halfFraction } from "./design.ts";
+import { halfFraction } from "../../experiments/core/design.ts";
 import { extensionsOf } from "./extensions.ts";
-import type { Factor } from "./design.ts";
+import type { Factor } from "../../experiments/core/design.ts";
 import type { Arm, Paths } from "./types.ts";
 
 /** The factors (README.md, "Orchestrator factor arms"): routing, delegation (handoff + nudge), t0Widened (pilot-derived limits). */

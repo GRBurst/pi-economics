@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defaultArms, loadArms, resolvePaths } from "../src/config.ts";
-import { halfFraction } from "../src/design.ts";
+import { halfFraction } from "../../experiments/core/design.ts";
 import { CHILD_EXTENSIONS, FACTORS, ORCH_EXTENSIONS, T0_LIMITS, materializeAgentDir, orchArms } from "../src/orch.ts";
 import { runOne } from "../src/run.ts";
 import type { Task } from "../src/types.ts";

@@ -42,8 +42,9 @@ The `qwen` arm (the free OpenRouter Qwen, gone) was retired in step Q. Its old r
 ## Orchestrator factor arms
 
 Factors `routing` (off|on), `delegation` (off|on: handoff line + nudge), `t0Widened` (off: t0Limits 3 files /
-100000 tokens, on: 10 / 150000) as the 2³⁻¹ half fraction (`src/design.ts`, x3 = −x1·x2, so the all-off baseline is
-an arm). Arm id = `orch-` + one sign per factor in that order (`+` = on):
+100000 tokens, on: 10 / 150000) as the 2³⁻¹ half fraction (`halfFraction` of the experiments' design module
+`../experiments/core/design.ts`, x3 = −x1·x2, so the all-off baseline is an arm). Arm id = `orch-` + one sign per
+factor in that order (`+` = on):
 
 | arm | routing | delegation | t0Widened |
 |---|---|---|---|
