@@ -31,34 +31,3 @@ export function fakePi() {
   const fire = (name: string, e: unknown, ctx: unknown) => (handlers.get(name) ?? []).forEach((h) => h(e, ctx));
   return { pi, handlers, commands, entries, events, fire };
 }
-
-/**
- * pi 1.4 across /reload: one bus per ResourceLoader (kept), a new runtime per reload; the old runtime's pi.events
- * wrapper throws once invalidated (assertActive). `actor` is the actor's process-global engine: listeners called in
- * a plain loop (its Engine.emit), so a listener's exception reaches the emitter.
- */
-export function reloadWorld() {
-  const raw = bus();
-  const listeners = new Set<(e: any) => void>();
-  const actor = { version: 1, list: (): any[] => [], subscribe: (l: (e: any) => void) => (listeners.add(l), () => void listeners.delete(l)) };
-  const runtime = () => {
-    let stale = false;
-    const handlers = new Map<string, Array<(e: any, ctx: any) => unknown>>();
-    const pi = {
-      on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]),
-      registerCommand: () => {},
-      appendEntry: () => {},
-      events: {
-        emit: (c: string, d: unknown) => {
-          if (stale) throw new Error("This extension ctx is stale after session replacement or reload");
-          raw.emit(c, d);
-        },
-        on: (c: string, h: (d: any) => unknown) => raw.on(c, h),
-      },
-    };
-    const fire = (n: string, e: unknown, ctx: unknown) => (handlers.get(n) ?? []).forEach((h) => h(e, ctx));
-    return { pi, fire, invalidate: () => void (stale = true) };
-  };
-  const spawn = (e: unknown) => { for (const l of [...listeners]) l(e); };
-  return { raw, actor, listeners, runtime, spawn };
-}

@@ -1,19 +1,18 @@
 // Session lifecycle of the v2 engine (redesign M5b.1, §7.3, §5.4): stratum and eligibility at session_start,
-// assignments v2, the internal channel and the custom entry, spawn → inherit, resume, legacy rows.
-import { test, afterEach, beforeEach } from "node:test";
+// assignments v2, the internal channel and the custom entry, resume, legacy rows. Children: child.test.ts (M5b.2).
+import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { onAssigned, type Assigned } from "../core/channel.ts";
+import { onAssigned, query, type Assigned } from "../core/channel.ts";
 import { design, designFor, type Factor } from "../core/design.ts";
 import { V4_FACTORS, defaults, type Settings } from "../core/settings.ts";
 import { ENTRY, install } from "../core/shell.ts";
-import { fakePi, reloadWorld, type Entry } from "./fake.ts";
+import { fakePi, type Entry } from "./fake.ts";
 
-type G = { __piExperimentsApi_v1?: any; __piEconomicsWarned_v1?: Set<string> };
+type G = { __piEconomicsWarned_v1?: Set<string> };
 beforeEach(() => void delete (globalThis as G).__piEconomicsWarned_v1);
-afterEach(() => void delete (globalThis as G).__piExperimentsApi_v1);
 
 /** Deterministic seeded RNG (mulberry32). */
 function mulberry32(seed: number): () => number {
@@ -34,8 +33,8 @@ function harness(over: Partial<Settings> = {}, opts: { agents?: any[]; plans?: u
     writeFileSync(join(agentDir, "token-meter", "settings.json"), JSON.stringify({ plans: opts.plans }));
   }
   const f = fakePi();
-  const listeners: Array<(e: any) => void> = [];
-  const sub = { list: () => opts.agents ?? [], subscribe: (l: any) => (listeners.push(l), () => {}) };
+  const subscribed: unknown[] = [];
+  const sub = { list: () => opts.agents ?? [], subscribe: (l: unknown) => (subscribed.push(l), () => {}) };
   const settings = { ...defaults(), ...over };
   const published: Assigned[] = [];
   // The assignment part of each publication (the levers states are levers.test.ts's; no target asks here: always {}).
@@ -50,10 +49,9 @@ function harness(over: Partial<Settings> = {}, opts: { agents?: any[]; plans?: u
     sessionManager: { getSessionId: () => sid, getSessionDir: () => sessionDir, getSessionFile: () => s.file ?? join(sessionDir, `x_${sid}.jsonl`), getBranch: () => s.branch ?? [] },
   });
   const start = (sid: string, s: Start = {}) => f.fire("session_start", { type: "session_start", reason: s.reason ?? "startup" }, ctxOf(sid, s));
-  const emit = (e: unknown) => listeners.forEach((l) => l(e));
   const file = join(agentDir, "experiments", "assignments.jsonl");
   const rows = () => (existsSync(file) ? readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
-  return { ...f, agentDir, sessionDir, start, ctxOf, emit, rows, notes, published, api: () => (globalThis as G).__piExperimentsApi_v1, settings };
+  return { ...f, agentDir, sessionDir, start, ctxOf, rows, notes, published, subscribed, settings };
 }
 
 const API = designFor("api", { factors: V4_FACTORS }); // the default stratum of a provider without a plan
@@ -64,7 +62,6 @@ const assignedOf = (r: any): Assigned => {
 
 test("T5b1.3 an eligible main: one assignments v2 row with stratum, design, arm and factors; the same Assigned on the channel and as the custom entry", () => {
   const h = harness();
-  assert.equal(h.api().version, 1);
   h.start("s1");
   const [r, ...more] = h.rows();
   assert.equal(more.length, 0);
@@ -78,16 +75,15 @@ test("T5b1.3 an eligible main: one assignments v2 row with stratum, design, arm 
   assert.deepEqual(h.published, [assignedOf(r)]);
   assert.deepEqual(h.entries, [{ type: "custom", customType: ENTRY, data: assignedOf(r) }]);
   assert.equal(ENTRY, "pi-economics:assignment");
-  // The process-global API (until M5b.2): the arm, its levels by the lever's name, its design and stratum.
-  assert.deepEqual(h.api().armFor("s1"), { id: r.arm, flags: Object.fromEntries(V4_FACTORS.map((f) => [f.name, String(arm.levels[f.name])])), design: API.id, stratum: "api" });
+  // The channel's answer (the same Assigned, with the levers states; no target asked here: none).
+  assert.deepEqual(query(h.events, "s1"), { ...assignedOf(r), levers: {} });
 });
 
 test("T5b1.3 ineligible mains get a v2 row without arm or factors: mode off, no matching stratum, no model, every arm disabled", () => {
   const off = harness({ mode: "off" });
   off.start("s1");
   assert.deepEqual(off.rows().map((r) => ({ ...r, ts: 0 })), [{ v: 2, ts: 0, sessionId: "s1", design: API.id, mode: "off", eligible: false, stratum: "api" }]);
-  assert.equal(off.api().armFor("s1"), undefined);
-  assert.equal(off.api().flag("warmPolicy", "own", "s1"), "own");
+  assert.deepEqual([query(off.events, "s1")?.arm, query(off.events, "s1")?.factors], [undefined, undefined]);
   assert.deepEqual(off.published, [{ sessionId: "s1", design: API.id, eligible: false, stratum: "api" }]);
 
   const local = harness({ strata: { local: { match: { billing: ["local"] } } } });
@@ -152,56 +148,14 @@ test("T5b1.3 a malformed stratum is dropped and the user is told why, once per p
   assert.deepEqual(h.rows().map((r) => r.stratum), ["api", "api"]);
 });
 
-test("a stratum's flags on the global API are keyed by the lever's name; levels become strings", () => {
+test("a stratum's factors on the channel name their levers; a level keeps its type", () => {
   const h = harness({ strata: { api: { match: {}, factors: [{ name: "ttl", lever: "cache-lifecycle.mainCacheTtl", levels: ["5m", "1h"] }, { name: "q", lever: "router.quantile", levels: [0.25, 0.75] }] } } });
   h.start("s1");
   const { factors } = h.rows()[0];
-  assert.equal(h.api().flag("mainCacheTtl", "own", "s1"), factors.ttl.assigned);
-  assert.equal(h.api().flag("quantile", "own", "s1"), String(factors.q.assigned));
-  assert.equal(h.api().flag("ttl", "own", "s1"), "own", "the factor's name is a label");
+  assert.deepEqual(query(h.events, "s1")?.factors, factors);
+  assert.equal(typeof factors.q.assigned, "number");
 });
 
-test("a spawn event maps the child session to its parent's arm (main and child parents)", () => {
-  const h = harness({}, { agents: [{ name: "w1", sessionId: "s-w1" }] });
-  h.start("main-1");
-  h.emit({ type: "spawn", name: "w1", by: "main", parent: "main", childSessionId: "s-w1", ts: 1 });
-  h.emit({ type: "spawn", name: "w2", by: "w1", parent: "w1", childSessionId: "s-w2", ts: 2 });
-  h.emit({ type: "spawn", name: "w3", by: "main", parent: "main", ts: 3 }); // no session id yet: ignored
-  const main = h.api().armFor("main-1");
-  assert.deepEqual(h.api().armFor("s-w1"), main);
-  assert.deepEqual(h.api().armFor("s-w2"), main);
-  assert.equal(h.api().flag("mainCacheTtl", "x", "s-w2"), main.flags.mainCacheTtl);
-  assert.equal(h.rows().length, 1); // children are not assigned
-});
-
-// The restart drops the in-memory inheritance of a RESUMED child (its spawn event
-// fired before its session started), so its arm is re-derived from the session file layout
-// <sessionDir>/subagents/<parent>/*_<child>.jsonl (token-meter's parentSessionId rule).
-test("resumed child without a spawn event: arm re-derived from the session file layout; no new row", () => {
-  const h = harness();
-  h.start("main-1");
-  const arm = h.api().armFor("main-1");
-  const childDir = join(h.sessionDir, "subagents", "main-1");
-  mkdirSync(childDir, { recursive: true });
-  writeFileSync(join(childDir, "2026-10-03T12-00-00-000Z_s-child.jsonl"), "");
-  assert.deepEqual(h.api().armFor("s-child"), arm);
-  assert.equal(h.api().flag("warmPolicy", "own", "s-child"), arm.flags.warmPolicy);
-  assert.deepEqual(h.api().armFor("s-child"), arm); // cached
-  assert.equal(h.rows().length, 1); // a resumed child gets no assignment of its own
-});
-
-test("child of an unassigned root stays unknown; so does a root session", () => {
-  const h = harness();
-  h.start("main-1");
-  const orphanDir = join(h.sessionDir, "subagents", "other-root");
-  mkdirSync(orphanDir, { recursive: true });
-  writeFileSync(join(orphanDir, "2026-10-03T12-00-00-000Z_s-orphan.jsonl"), "");
-  assert.equal(h.api().armFor("s-orphan"), undefined); // parent has no assignment
-  assert.equal(h.api().armFor("main-1-other"), undefined); // no such session file: not a child
-});
-
-// Rows of the v1 engine (assignments v1: design absent = v1, "v2", "v3", "v4"): a resumed session keeps the arm and flags
-// it was run with (no new draw, no new row); they never fill a v2 design's blocks.
 const SIX: Factor[] = [
   { name: "warmPolicy", values: ["native", "orchestrator-aware"] },
   { name: "mainCacheTtl", values: ["5m", "1h"] },
@@ -226,8 +180,6 @@ for (const { name, row } of legacy) {
     mkdirSync(join(h.agentDir, "experiments"), { recursive: true });
     writeFileSync(join(h.agentDir, "experiments", "assignments.jsonl"), JSON.stringify(row) + "\n");
     h.start("old");
-    assert.deepEqual(h.api().armFor("old"), { id: row.arm, flags: row.flags, ...("design" in row ? { design: row.design } : {}) });
-    assert.equal(h.api().flag("delegationRule", "off", "old"), (row.flags as Record<string, string>).delegationRule ?? "off");
     assert.deepEqual(h.rows(), [row]);
     // The add-ons read factors: the row's flags of the v4 factors, over their levers (M5b.2).
     const factors = Object.fromEntries(V4_FACTORS.filter((f) => f.name in row.flags).map((f) => [f.name, { lever: f.lever, assigned: (row.flags as Record<string, string>)[f.name] }]));
@@ -241,38 +193,6 @@ for (const { name, row } of legacy) {
     assert.deepEqual(h.rows().slice(1).map((r) => [r.v, r.design]), Array(8).fill([2, API.id]));
   });
 }
-
-import { query } from "../core/channel.ts";
-
-test("T5b1.5 children inherit via the actor's spawn events: a child's Assigned is its parent's but for sessionId and parentSessionId", () => {
-  for (const mode of ["explore", "off"] as const) {
-    const h = harness({ mode }, { agents: [{ name: "w1", sessionId: "s-w1" }] });
-    h.start("main-1");
-    const main = h.published[0];
-    h.emit({ type: "spawn", name: "w1", by: "main", parent: "main", childSessionId: "s-w1", ts: 1 });
-    h.emit({ type: "spawn", name: "w2", by: "w1", parent: "w1", childSessionId: "s-w2", ts: 2 });
-    h.emit({ type: "spawn", name: "w3", by: "main", parent: "main", ts: 3 }); // no session id yet: ignored
-    const w1 = { ...main, sessionId: "s-w1", parentSessionId: "main-1" };
-    const w2 = { ...main, sessionId: "s-w2", parentSessionId: "s-w1" };
-    assert.deepEqual(h.published, [main, w1, w2], mode);
-    assert.deepEqual([query(h.events, "s-w1"), query(h.events, "s-w2"), query(h.events, "s-w3")], [{ ...w1, levers: {} }, { ...w2, levers: {} }, undefined], mode);
-    assert.equal(h.rows().length, 1, `${mode}: children get no row`);
-    assert.deepEqual(h.entries.map((e) => (e.data as Assigned).sessionId), ["main-1"], `${mode}: nor a custom entry`);
-  }
-});
-
-test("T5b1.5 a resumed child (no spawn event since the restart) is answered from its session file layout", () => {
-  const h = harness();
-  h.start("main-1");
-  const childDir = join(h.sessionDir, "subagents", "main-1");
-  mkdirSync(childDir, { recursive: true });
-  writeFileSync(join(childDir, "2026-10-03T12-00-00-000Z_s-child.jsonl"), "");
-  mkdirSync(join(h.sessionDir, "subagents", "s-child"), { recursive: true });
-  writeFileSync(join(h.sessionDir, "subagents", "s-child", "2026-10-03T12-00-01-000Z_s-grand.jsonl"), "");
-  assert.deepEqual(query(h.events, "s-child"), { ...h.published[0], sessionId: "s-child", parentSessionId: "main-1", levers: {} });
-  assert.deepEqual(query(h.events, "s-grand"), { ...h.published[0], sessionId: "s-grand", parentSessionId: "s-child", levers: {} });
-  assert.equal(query(h.events, "s-orphan"), undefined);
-});
 
 test("T5b1.5 a child's own runtime (experiments loaded in it) never draws and writes no row", () => {
   const h = harness();
@@ -294,7 +214,7 @@ test("T5b1.6 resume reuses the branch's pi-economics:assignment entry: no draw, 
     assert.deepEqual(h.entries, [], reason);
     assert.deepEqual(h.published.at(-1), entry.data, reason);
   }
-  assert.equal(h.api().armFor("s1").id, (entry.data as Assigned).arm, "the global API serves the reused arm");
+  assert.equal(query(h.events, "s1")?.arm, (entry.data as Assigned).arm, "the channel serves the reused arm");
 });
 
 test("T5b1.6 a fork (the branch's entry names another session) is a new unit; a malformed entry is ignored", () => {
@@ -310,61 +230,24 @@ test("T5b1.6 a fork (the branch's entry names another session) is a new unit; a 
 test("T5b1.8 model_select keeps the unit (ITT, §7.3): no new draw, row, entry or Assigned; a reload after the switch keeps the start stratum", () => {
   const h = harness({}, { plans: { anthropic: { billing: "subscription", windows: ["5h"] } } });
   h.start("s1"); // openai: the api stratum
-  const before = { rows: h.rows(), entries: [...h.entries], published: [...h.published], arm: h.api().armFor("s1") };
+  const before = { rows: h.rows(), entries: [...h.entries], published: [...h.published], answer: query(h.events, "s1") };
   const claude = { provider: "anthropic", id: "claude-opus-4" };
   h.fire("model_select", { type: "model_select", model: claude, previousModel: { provider: "openai", id: "gpt-5" }, source: "set" }, h.ctxOf("s1", { model: claude }));
   h.start("s1", { reason: "reload", model: claude, branch: before.entries });
   assert.deepEqual(h.rows(), before.rows);
   assert.deepEqual(h.entries, before.entries);
   assert.deepEqual(h.published, [...before.published, before.published[0]], "the reload republishes the same Assigned");
-  assert.deepEqual(h.api().armFor("s1"), before.arm);
+  assert.deepEqual(query(h.events, "s1"), before.answer);
   assert.equal(before.rows[0].stratum, "api");
 });
 
-// Review M1: the actor's engine and __subagentsApi_v1 outlive /reload; a stale runtime's listener must neither stay
-// subscribed nor throw into the actor's Engine.emit (spawn_subagent would fail and later listeners miss the event).
-test("review M1: /reload → spawn: session_shutdown releases the actor subscription; the live runtime publishes once, nothing throws", () => {
-  const w = reloadWorld();
-  const agentDir = mkdtempSync(join(tmpdir(), "experiments-reload-"));
-  const sessionDir = join(agentDir, "sessions");
-  const ctx = { hasUI: false, ui: { notify() {} }, model: { provider: "openai", id: "gpt-5" },
-    sessionManager: { getSessionId: () => "main-1", getSessionDir: () => sessionDir, getSessionFile: () => join(sessionDir, "x_main-1.jsonl"), getBranch: () => [] } };
-  const published: Assigned[] = [];
-  onAssigned(w.raw, (a) => void published.push(a));
-  const r1 = w.runtime();
-  install(r1.pi, { agentDir, settings: defaults(), rng: mulberry32(3), api: () => w.actor as any });
-  r1.fire("session_start", { type: "session_start", reason: "startup" }, ctx);
-  r1.fire("session_shutdown", { type: "session_shutdown" }, ctx); // pi emits it before invalidating the runtime
-  r1.invalidate();
-  const r2 = w.runtime();
-  install(r2.pi, { agentDir, settings: defaults(), rng: mulberry32(3), api: () => w.actor as any });
-  r2.fire("session_start", { type: "session_start", reason: "reload" }, ctx);
-  assert.equal(w.listeners.size, 1, "only the live runtime listens to the actor");
-  published.length = 0;
-  assert.doesNotThrow(() => w.spawn({ type: "spawn", name: "w1", by: "main", parent: "main", childSessionId: "s-w1", ts: 1 }));
-  assert.deepEqual(published.map((a) => [a.sessionId, a.parentSessionId]), [["s-w1", "main-1"]]);
-});
-
-test("review M1: a stale runtime still subscribed (no session_shutdown seen) never throws into the actor's engine", () => {
-  const w = reloadWorld();
-  const agentDir = mkdtempSync(join(tmpdir(), "experiments-reload-"));
-  const sessionDir = join(agentDir, "sessions");
-  const ctx = { hasUI: false, ui: { notify() {} }, model: { provider: "openai", id: "gpt-5" },
-    sessionManager: { getSessionId: () => "main-1", getSessionDir: () => sessionDir, getSessionFile: () => join(sessionDir, "x_main-1.jsonl"), getBranch: () => [] } };
-  const r1 = w.runtime();
-  install(r1.pi, { agentDir, settings: defaults(), rng: mulberry32(3), api: () => w.actor as any });
-  r1.fire("session_start", { type: "session_start", reason: "startup" }, ctx);
-  r1.invalidate();
-  const seen: string[] = [];
-  w.actor.subscribe((e) => void seen.push(e.childSessionId)); // a later listener (the actor's own, the new runtime's)
-  const warn = console.warn;
-  console.warn = () => {};
-  try {
-    assert.doesNotThrow(() => w.spawn({ type: "spawn", name: "w1", by: "main", parent: "main", childSessionId: "s-w1", ts: 1 }));
-  } finally {
-    console.warn = warn;
-  }
-  assert.deepEqual(seen, ["s-w1"]);
+// Review M1 (the actor's engine outlives /reload; a stale runtime's listener must not throw into it) is moot since
+// M5b.2: the engine no longer subscribes to the actor; a child's runtime derives its own assignment (child.test.ts).
+test("T5b2.7 the engine never subscribes to the actor's events (D5: no parent-side inheritance)", () => {
+  const h = harness({}, { agents: [{ name: "main", sessionId: "s1" }, { name: "w1", sessionId: "c1" }] });
+  h.start("s1");
+  assert.deepEqual(h.subscribed, []);
+  assert.equal(query(h.events, "c1"), undefined, "a child's session is its own runtime's to answer");
 });
 
 // Review m1: a malformed blocks.json never leaves a session unassigned; the user is told once; another process's

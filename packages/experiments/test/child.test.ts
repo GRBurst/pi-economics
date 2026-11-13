@@ -161,3 +161,13 @@ test("T5b2.5 a child runtime logs no guard events (corrections and ratings are t
   assert.equal(existsSync(join(w.agentDir, "guards", "events.jsonl")), false);
   assert.equal(ENTRY, "pi-economics:assignment");
 });
+
+test("T5b2.7 a child derives once per runtime: its root's row is read at session_start, not again on every query", () => {
+  const w = world();
+  w.agents.push({ name: "main", sessionId: "m0" });
+  const c = w.spawn("w1", "c1");
+  assert.equal(c.seen, undefined);
+  mkdirSync(join(w.agentDir, "experiments"), { recursive: true });
+  writeFileSync(w.rowsFile, JSON.stringify({ v: 2, ts: "2026-11-20T10:00:00.000Z", sessionId: "m0", mode: "explore", eligible: true, arm: "000", factors: {} }) + "\n");
+  assert.equal(query(c.events, "c1", "cache-lifecycle"), undefined);
+});

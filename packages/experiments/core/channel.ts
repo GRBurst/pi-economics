@@ -1,7 +1,7 @@
 // The internal channel (redesign §7.7): how the engine hands a session's assignment and its levers' read-back states
-// to pi-economics' own add-ons, on pi.events, never a globalThis API (the process-global __piExperimentsApi_v1 stays
-// until M5b.2 moves its readers). pi's bus runs a synchronous handler inside emit, so a query is answered before
-// `query` returns.
+// to pi-economics' own add-ons, on pi.events, never a globalThis API. pi's bus runs a synchronous handler inside
+// emit, so a query is answered before `query` returns. pi.events is one runtime's: a child's runtime has its own
+// bus, on which experiments, loaded there too, serves the child's assignment (core/shell.ts, child mode).
 import type { LeverState } from "../addons/types.ts";
 import type { AssignmentV2 } from "./assign.ts";
 import type { LeverId } from "./design.ts";

@@ -3,13 +3,13 @@
 // eligible, an arm of that stratum's design (explore: permuted blocks; exploit: Thompson per design and stratum), kept
 // for the whole session (ITT: a later model switch changes nothing). The assignment goes to
 // <agentDir>/experiments/assignments.jsonl (v2), to the session as the custom entry ENTRY (a resumed branch reuses it),
-// to pi-economics' add-ons on the internal channel (core/channel.ts) and, until M5b.2, to the process-global API.
-// Children inherit via spawn events; a RESUMED child (whose spawn event was lost to the process restart) re-derives the
-// arm from its session file layout on lookup.
+// to pi-economics' add-ons on the internal channel (core/channel.ts), never on globalThis (M5b.2, G5). The add-ons
+// (addons/) set and read back the levers of the session's factors. A child runs its root's arm: experiments loads in
+// the child too (pi.events is per runtime, the actor builds a child without the parent's bus) and, in child mode,
+// derives the child's assignment from the root's row and serves it on the child's own bus.
 import { randomUUID } from "node:crypto";
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createApi, type ApiArm } from "./api.ts";
 import { designState, draw, eligibleFor, parseBlocks, stratumOf, type AssignmentV2, type BlockState } from "./assign.ts";
 import { CACHE_LIFECYCLE } from "../addons/cache-lifecycle.ts";
 import { createRegistry, sessionLevers } from "../addons/registry.ts";
@@ -28,7 +28,6 @@ export type PiLike = {
 /** The part of the actor-subagents API this package reads (own copy: packages do not import each other); the type check compares it with the provider's SubagentsApiV1 (spec §5.3). */
 export type SubagentsApi = {
   list(): Array<{ name: string; sessionId: string }>;
-  subscribe(l: (e: { type: string; parent?: string; childSessionId?: string }) => void): () => void;
 };
 /** `settings`: given (tests), else read from <agentDir>/experiments/settings.json, whose absence leaves the extension inert (spec D15). */
 export type Deps = { agentDir: string; settings?: Settings; rng?: () => number; api?: () => SubagentsApi | undefined };
@@ -61,56 +60,28 @@ function assignedOf(r: Partial<AssignmentV2> & { sessionId: string; eligible: bo
   return a;
 }
 
-/** The global API's view of an Assigned: its levels as strings, keyed by the lever's name (cache-lifecycle reads `flag("mainCacheTtl")`). */
-function apiArm(a: Assigned): ApiArm | undefined {
-  if (a.arm === undefined) return undefined;
-  const flags = Object.fromEntries(Object.values(a.factors ?? {}).map((f) => [f.lever.slice(f.lever.indexOf(".") + 1), String(f.assigned)]));
-  return { id: a.arm, flags, ...(a.design !== undefined ? { design: a.design } : {}), ...(a.stratum !== undefined ? { stratum: a.stratum } : {}) };
-}
-
 export function install(pi: PiLike, deps: Deps): void {
-  // Opt-in (spec D15): without the settings file no arm, no API, no hook, no assignments.jsonl, no warning.
+  // Opt-in (spec D15): without the settings file no arm, no answer on the channel, no hook, no assignments.jsonl, no warning.
   const settings = deps.settings ?? loadOptIn(join(deps.agentDir, "experiments", "settings.json"));
-  if (settings === undefined) { // an API an earlier runtime of this process published (the file was deleted, then /reload) must not outlive the opt-out
-    delete (globalThis as { __piExperimentsApi_v1?: unknown }).__piExperimentsApi_v1;
-    return;
-  }
+  if (settings === undefined) return;
   const dir = join(deps.agentDir, "experiments");
   const plans = readPlans(join(deps.agentDir, "token-meter", "settings.json"));
   const { strata, warnings } = parseStrata(settings.strata, plans, V4_FACTORS);
   const designs = new Map<string, Design>(Object.entries(strata).map(([name, s]) => [name, designFor(name, s)]));
   const rng = deps.rng ?? Math.random;
   const subagents = deps.api ?? (() => (globalThis as { __subagentsApi_v1?: SubagentsApi }).__subagentsApi_v1);
-  let main: string | undefined;
-  let sessionDir: string | undefined;
   // Own copy of token-meter's parentSessionId rule (packages do not import each other): the parent
-  // is the first `…/subagents/<parent>/` segment of the session file path. Resumed children live in
-  // <sessionDir>/subagents/<parent>/*_<child>.jsonl; a file without such a segment is a root session.
+  // is the first `…/subagents/<parent>/` segment of the session file path; a file without one is a root session's.
   const parentOf = (file: string): string | undefined => /[\\/]subagents[\\/]([^\\/]+)[\\/]/.exec(file)?.[1];
-  const resolveParent = (sid: string): string | undefined => {
-    if (sessionDir === undefined) return undefined;
-    const sub = join(sessionDir, "subagents");
-    let dirs: string[];
-    try { dirs = readdirSync(sub); } catch { return undefined; }
-    for (const d of dirs) {
-      const dir = join(sub, d);
-      let files: string[];
-      try { files = readdirSync(dir); } catch { continue; }
-      const hit = files.find((f) => f.endsWith(`_${sid}.jsonl`));
-      if (hit !== undefined) return parentOf(join(dir, hit));
-    }
-    return undefined;
-  };
-  const { api, assign: remember } = createApi(() => main, resolveParent);
-  (globalThis as { __piExperimentsApi_v1?: unknown }).__piExperimentsApi_v1 = api;
 
-  /** Every session's Assigned this runtime knows (mains, and children from their spawn events). */
+  /** The Assigned of this runtime's session (a runtime serves one session; a new, resumed or forked one is a new runtime). */
   const known = new Map<string, Assigned>();
   /** A child's Assigned is its parent's but for sessionId and parentSessionId. */
   const childOf = (p: Assigned, sessionId: string, parentSessionId: string): Assigned => ({ ...p, sessionId, parentSessionId });
   /**
    * Child mode: this runtime is a child's (experiments among the actor's childExtensions, its own bus); `root` is the
-   * main session whose row it runs. It never draws: its Assigned is derived from the root's row, once found.
+   * main session whose row it runs. It never draws, writes no row or entry and logs no guard: its Assigned is derived
+   * from the root's row once, at session_start (the root's row precedes every child of it).
    */
   let child: { sid: string; root: string } | undefined;
   /**
@@ -128,25 +99,10 @@ export function install(pi: PiLike, deps: Deps): void {
   };
   const deriveChild = (c: { sid: string; root: string }): Assigned | undefined => {
     const r = rows().find((x) => x.sessionId === c.root);
-    const p = r === undefined ? undefined : fromRow(r)?.a;
+    const p = r === undefined ? undefined : fromRow(r);
     return p === undefined ? undefined : childOf(p, c.sid, c.root);
   };
-  /** Known, or (a resumed child) derived from the parent its session file names, up to an assigned root; cached. */
-  const lookup = (sid: string, depth = 0): Assigned | undefined => {
-    const hit = known.get(sid);
-    if (hit !== undefined || depth >= 64) return hit;
-    if (child?.sid === sid) {
-      const a = deriveChild(child);
-      if (a !== undefined) known.set(sid, a);
-      return a;
-    }
-    const parent = resolveParent(sid);
-    const p = parent === undefined || parent === sid ? undefined : lookup(parent, depth + 1);
-    if (p === undefined) return undefined;
-    const a = childOf(p, sid, parent!);
-    known.set(sid, a);
-    return a;
-  };
+  const lookup = (sid: string): Assigned | undefined => known.get(sid);
   // The add-ons (§7.4): a session's levers start when their target first asks the channel; their read-back states ride
   // on every publication and answer.
   const registry = createRegistry(CACHE_LIFECYCLE);
@@ -198,10 +154,8 @@ export function install(pi: PiLike, deps: Deps): void {
     if (t?.observe(at, { sessionId: sid!, event: e })) announce(sid!);
   };
   pi.on("before_agent_start", (e, ctx) => void observeAt("before_agent_start", e, ctx));
-  const adopt = (a: Assigned, legacy?: ApiArm): void => {
+  const adopt = (a: Assigned): void => {
     known.set(a.sessionId, a);
-    const arm = legacy ?? apiArm(a);
-    if (arm !== undefined) remember(a.sessionId, arm);
     announce(a.sessionId);
   };
 
@@ -212,14 +166,14 @@ export function install(pi: PiLike, deps: Deps): void {
       });
     } catch { return []; }
   };
-  /** A session's row: v2 → its Assigned; a v1 engine's row → its arm, flags and design (the API keeps serving them). */
-  const fromRow = (r: Row): { a: Assigned; legacy?: ApiArm } | undefined => {
-    if (r.v === 2) return typeof r.eligible === "boolean" ? { a: assignedOf(r as Row & { eligible: boolean }) } : undefined;
+  /** A session's row: v2 → its Assigned; a v1 engine's row → its arm, design and flags (as factors). */
+  const fromRow = (r: Row): Assigned | undefined => {
+    if (r.v === 2) return typeof r.eligible === "boolean" ? assignedOf(r as Row & { eligible: boolean }) : undefined;
     if (typeof r.arm !== "string" || !isRecord(r.flags)) return undefined;
     const design = typeof r.design === "string" ? { design: r.design } : {};
     // Its flags by factor name as factors over the v4 levers (an add-on reads factors; a flag of no v4 factor reached no reader).
     const factors = Object.fromEntries(V4_FACTORS.flatMap((f) => (typeof r.flags![f.name] === "string" ? [[f.name, { lever: f.lever, assigned: r.flags![f.name] }]] : [])));
-    return { a: { sessionId: r.sessionId, eligible: true, ...design, arm: r.arm, factors }, legacy: { id: r.arm, flags: r.flags, ...design } };
+    return { sessionId: r.sessionId, eligible: true, ...design, arm: r.arm, factors };
   };
   /** The last ENTRY on the branch that is this session's (a well-formed Assigned). */
   const fromBranch = (branch: unknown, sid: string): Assigned | undefined => {
@@ -267,44 +221,14 @@ export function install(pi: PiLike, deps: Deps): void {
     };
   };
 
-  let off: (() => void) | undefined;
-  const connect = (): void => {
-    const a = subagents();
-    if (off || !a) return;
-    off = a.subscribe((e) => {
-      // The actor's engine calls its listeners in a plain loop: an exception here would fail its spawn (review M1).
-      try {
-        if (e.type !== "spawn" || !e.childSessionId || main === undefined) return;
-        const parent = a.list().find((x) => x.name === e.parent)?.sessionId ?? main;
-        api.inherit(e.childSessionId, parent);
-        const p = lookup(parent);
-        if (p === undefined) return;
-        const c = childOf(p, e.childSessionId, parent);
-        known.set(c.sessionId, c);
-        announce(c.sessionId);
-      } catch (err) {
-        if (!spawnFailed) console.warn(`experiments: a child's assignment was not published: ${(err as Error).message}`);
-        spawnFailed = true;
-      }
-    });
-  };
-  let spawnFailed = false;
-  connect();
-  // The actor's engine outlives /reload and session replacement; pi emits session_shutdown before it invalidates this
-  // runtime (whose pi.events then throws): let go of the engine here (review M1).
-  pi.on("session_shutdown", () => {
-    off?.();
-    off = undefined;
-  });
-
   // Guards: corrections and the end-of-session rating go to <agentDir>/guards/events.jsonl; only the fact, never text.
   const logGuard = (sessionId: string, event: string, value?: number): void => {
     if (child !== undefined) return; // a guard is the main session's user's (a child's input is its parent's message)
     try {
       mkdirSync(join(deps.agentDir, "guards"), { recursive: true });
-      const arm = api.armFor(sessionId);
+      const a = lookup(sessionId);
       // The design id rides along (carry-over 1): a v2 arm id alone may look like a v1-engine one.
-      appendFileSync(join(deps.agentDir, "guards", "events.jsonl"), JSON.stringify({ v: 1, ts: new Date().toISOString(), sessionId, arm: arm?.id, ...(arm?.design === undefined ? {} : { design: arm.design }), event, ...(value === undefined ? {} : { value }) }) + "\n");
+      appendFileSync(join(deps.agentDir, "guards", "events.jsonl"), JSON.stringify({ v: 1, ts: new Date().toISOString(), sessionId, arm: a?.arm, ...(a?.arm === undefined || a.design === undefined ? {} : { design: a.design }), event, ...(value === undefined ? {} : { value }) }) + "\n");
     } catch (err) {
       console.warn(`experiments: cannot record a guard event: ${(err as Error).message}`);
     }
@@ -332,20 +256,18 @@ export function install(pi: PiLike, deps: Deps): void {
   });
 
   pi.on("session_start", (_e, ctx) => {
-    connect();
     // spec D5: without the patched actor only the children's inheritance is off; the main session is assigned as before.
     if (!hasSubagentsApiV1(subagents())) warnOnce(ctx, "actor:experiments", actorMissing("experiments", "child agents do not inherit their parent's arm"));
     for (const w of warnings) warnOnce(ctx, `experiments:${w}`, w); // a dropped stratum (parseStrata says why)
     if (settings.legacy?.length) warnOnce(ctx, "experiments:legacy", `experiments: ignores the settings ${settings.legacy.join(", ")} (the v1 engine's): its factors come from strata (default: one stratum per billing class); baseline only labels the analyses of v1–v4 designs`);
-    main = ctx.sessionManager.getSessionId() as string;
-    sessionDir = safe(() => ctx.sessionManager.getSessionDir() as string | undefined);
+    const main = ctx.sessionManager.getSessionId() as string;
     // A child's runtime (experiments among the actor's childExtensions): never drawn, no row; its arm is its root's.
     const file = safe(() => ctx.sessionManager.getSessionFile() as string | undefined);
     const root = rootOf(main, file);
     child = root === undefined ? undefined : { sid: main, root };
     if (child !== undefined) {
-      const a = lookup(main);
-      return a === undefined ? undefined : announce(a.sessionId);
+      const a = deriveChild(child);
+      return a === undefined ? undefined : adopt(a);
     }
     // Resumed or reloaded: the branch's own entry (a fork's names the session it was forked from: a new unit), else the
     // session's row (a v1 engine's included).
@@ -353,7 +275,7 @@ export function install(pi: PiLike, deps: Deps): void {
     if (entry !== undefined) return adopt(entry);
     const prior = rows().find((r) => r.sessionId === main);
     const resumed = prior && fromRow(prior);
-    if (resumed) return adopt(resumed.a, resumed.legacy);
+    if (resumed) return adopt(resumed);
     const row = assignNew(main, safe(() => ctx.model), ctx);
     const a = assignedOf(row);
     try {

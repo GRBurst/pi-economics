@@ -1,6 +1,6 @@
 // Guards: user corrections (regex setting) and the /rate command, logged to <agentDir>/guards/events.jsonl
 // (`{ts, sessionId, arm, event: "correction" | "rating", value?}`; never prompt text).
-import { test, afterEach } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,8 +8,6 @@ import { join } from "node:path";
 import { defaults, type Settings } from "../core/settings.ts";
 import { install } from "../core/shell.ts";
 import { bus } from "./fake.ts";
-
-afterEach(() => void delete (globalThis as { __piExperimentsApi_v1?: unknown }).__piExperimentsApi_v1);
 
 function harness(over: Partial<Settings> = {}) {
   const agentDir = mkdtempSync(join(tmpdir(), "experiments-guards-"));

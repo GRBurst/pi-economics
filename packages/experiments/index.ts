@@ -1,7 +1,8 @@
 // experiments: one fractional-factorial arm per main session:
-// design + explore/exploit assignment (core/design.ts, core/assign.ts), spawn
-// inheritance for children, factor flags for the other extensions
-// (`globalThis.__piExperimentsApi_v1`). Opt-in: inert without <agentDir>/experiments/settings.json.
+// design + explore/exploit assignment (core/design.ts, core/assign.ts), the
+// add-ons that set and read back its levers (addons/), the assignment on
+// pi-economics' internal channel (core/channel.ts); a child runs its root's
+// arm. Opt-in: inert without <agentDir>/experiments/settings.json.
 // Thin shell; all logic lives in ./core/shell.ts.
 import { fileURLToPath } from "node:url";
 import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";

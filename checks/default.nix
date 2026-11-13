@@ -66,12 +66,6 @@
     file = "extensions/actor-subagents/api.ts";
     type = "SubagentsApiV1";
   };
-  # (M4.7) The provider of the globalThis API __piExperimentsApi_v1 (spec §5.3).
-  experimentsProvider = {
-    src = experimentsTs;
-    file = "experiments/core/api.ts";
-    type = "ExperimentsApiV1";
-  };
   # (M6.4) The patched pi-infinite-context.
   infiniteContext = self.packages.${pkgs.stdenv.hostPlatform.system}.infinite-context;
   # (M6.5) The type-check copy: the extension without upstream's tsconfig.json
@@ -174,17 +168,12 @@ in {
       type = "SubagentsApiShape";
     };
   };
-  # (M5.7) The router's copy of __piExperimentsApi_v1 (spec §5.3, §8.1), in
-  # the pi-task-router input (router-extraction design §8.3).
-  iface-experiments-task-router = iface.compare {
-    name = "experiments-task-router";
-    provider = experimentsProvider;
-    consumer = {
-      src = routerSrc;
-      file = "core/shell.ts";
-      type = "ExperimentsApi";
-    };
-  };
+  # (redesign M5b.2, §7.7) The internal channel replaces the process-global
+  # __piExperimentsApi_v1 and its iface checks: the engine's payload, lever
+  # states and names against the copies token-meter and cache-lifecycle keep.
+  # The router's optional read of the old global is dead (redesign §11: the
+  # router randomizes itself).
+  internal-channel = import ./internal-channel {inherit lib pkgs typecheck;};
   # (M5.11) Every log writer through pi-analyse (spec §8.1); the router's
   # writer is the pi-task-router input's (router-extraction design §7.3).
   log-contract = pkgs.callPackage ./log-contract {router = routerSrc;};

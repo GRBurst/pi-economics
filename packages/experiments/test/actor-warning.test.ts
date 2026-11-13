@@ -1,6 +1,6 @@
 // Without the patched actor (spec D5, AC6; plan T3.3): an opted-in experiments warns once at session_start that
 // children do not inherit the arm, and assigns as before; without its settings file it is inert and silent (D15).
-import { test, afterEach, beforeEach } from "node:test";
+import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,9 +8,8 @@ import { join } from "node:path";
 import { install } from "../core/shell.ts";
 import { bus } from "./fake.ts";
 
-type G = { __piExperimentsApi_v1?: any; __piEconomicsWarned_v1?: Set<string> };
+type G = { __piEconomicsWarned_v1?: Set<string> };
 beforeEach(() => void delete (globalThis as G).__piEconomicsWarned_v1);
-afterEach(() => void delete (globalThis as G).__piExperimentsApi_v1);
 
 const WARNING =
   "experiments: needs pi-actor-subagents with the spawn-policy API (__subagentsApi_v1), which is not loaded; " +
@@ -39,7 +38,6 @@ test("opted in, without the actor's API: the pinned warning once; the arm is sti
   r.start();
   r.start();
   assert.deepEqual(r.notes, [WARNING]);
-  assert.ok((globalThis as G).__piExperimentsApi_v1.armFor("s1"));
   assert.equal(existsSync(r.assignments), true);
 });
 
