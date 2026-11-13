@@ -58,8 +58,11 @@ export function install(pi: PiLike, deps: Deps): void {
   const streaming = new Set<string>();
   const warms = new Map<string, Snapshot>();
   const lastModel = new Map<string, { provider: string; model: string }>();
-  // P7: when the session's request was sent (its last before_provider_request outside a streaming turn: a send
-  // between message_start and message_end is a warm's), for the active time `durationMs` of its message_end.
+  // A session's own request runs the agent loop's `context` hook just before its before_provider_request (pi 1.4
+  // sdk.js transformContext); a warm (pi's CacheWarmer replays the request straight to the provider) and a
+  // compaction request do not. Only such a turn send times a request or ends a retry wait.
+  const turnSend = new Set<string>();
+  // P7: when the session's request was sent (its last turn send), for the active time `durationMs` of its message_end.
   const sentAt = new Map<string, number>();
   /** The first provider_stream_event after that send (`ttftMs`). */
   const firstEvent = new Map<string, number>();
@@ -128,9 +131,13 @@ export function install(pi: PiLike, deps: Deps): void {
     if (snap) writeWarming(sid, ctx, snap);
   };
 
+  pi.on("context", (_e, ctx) => {
+    const sid = sidOf(ctx);
+    if (sid !== undefined) turnSend.add(sid); // returns nothing: the messages stay as they are
+  });
   pi.on("before_provider_request", (_e, ctx) => {
     const sid = sidOf(ctx);
-    if (sid !== undefined && !streaming.has(sid)) {
+    if (sid !== undefined && turnSend.delete(sid) && !streaming.has(sid)) {
       const t = now().getTime(), failed = failedAt.get(sid);
       sentAt.set(sid, t);
       firstEvent.delete(sid);
@@ -177,6 +184,7 @@ export function install(pi: PiLike, deps: Deps): void {
       return;
     }
     streaming.delete(sid);
+    turnSend.delete(sid); // a request that failed before its send leaves no mark for the next send
     const taken = joiner.take(sid);
     lastModel.set(sid, { provider: String(m.provider ?? "unknown"), model: String(m.model ?? "unknown") });
     const end = now();

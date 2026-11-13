@@ -10,6 +10,8 @@ export function fakePi() {
       events: { on(name: string, h: (d: any) => void) { bus.set(name, [...(bus.get(name) ?? []), h]); } },
     },
     fire(name: string, e: unknown, ctx: unknown) { for (const h of handlers.get(name) ?? []) h(e, ctx); },
+    /** Like fire; returns what each handler returned. */
+    fireAll(name: string, e: unknown, ctx: unknown) { return (handlers.get(name) ?? []).map((h) => h(e, ctx)); },
     emit(name: string, d: unknown) { for (const h of bus.get(name) ?? []) h(d); },
     handlerCount: () => handlers.size + bus.size,
   };

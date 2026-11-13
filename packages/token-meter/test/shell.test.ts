@@ -17,6 +17,12 @@ const assistant = (extra: object = {}) => ({ type: "message_end", message: { rol
 const resp = { type: "after_provider_response", status: 200,
   headers: { [P + "unified-5h-utilization"]: "0.09", "request-id": "r" } };
 
+/** A session's own request: the agent loop's `context` hook, then its send (a warm's send is the bare before_provider_request). */
+const turnSend = (f: ReturnType<typeof fakePi>, ctx: unknown) => {
+  f.fire("context", { type: "context", messages: [] }, ctx);
+  f.fire("before_provider_request", {}, ctx);
+};
+
 function setup(over: Partial<Parameters<typeof install>[1]> = {}) {
   const agentDir = mkdtempSync(join(tmpdir(), "token-meter-shell-"));
   const clock = { t: T0 };
@@ -63,30 +69,30 @@ test("billing: the provider's plan class on turn and warming lines; a provider w
 });
 
 // P7: active (serving) time = the session's last send → its message_end; retry waits are not in it.
-test("durationMs: last before_provider_request → message_end of the session; a resend restarts it; a warm sent mid-stream does not", () => {
+test("durationMs: the session's last own send → its message_end; a resend restarts it; a warm sent mid-stream does not", () => {
   const { f, clock, lines } = setup();
   const ctx = fakeCtx("s1"), other = fakeCtx("s2");
   f.fire("session_start", {}, ctx);
   clock.t = T0 + 5000;
-  f.fire("before_provider_request", {}, ctx);
+  turnSend(f, ctx);
   clock.t = T0 + 6000;
-  f.fire("before_provider_request", {}, other); // another session's send
+  turnSend(f, other); // another session's send
   clock.t = T0 + 6500;
   f.fire("message_end", assistant(), ctx);
   assert.equal(lines()[0].durationMs, 1500);
   // a failed attempt, then pi resends after 2 s
   clock.t = T0 + 10_000;
-  f.fire("before_provider_request", {}, ctx);
+  turnSend(f, ctx);
   clock.t = T0 + 10_100;
   f.fire("message_end", assistant({ stopReason: "error", errorMessage: "529: overloaded", usage: undefined }), ctx);
   clock.t = T0 + 12_100;
-  f.fire("before_provider_request", {}, ctx);
+  turnSend(f, ctx);
   clock.t = T0 + 13_000;
   f.fire("message_end", assistant(), ctx);
   assert.deepEqual(lines().slice(1).map((l) => [l.status, l.durationMs]), [["error", 100], [200, 900]]);
   // a warm sent while the turn streams
   clock.t = T0 + 20_000;
-  f.fire("before_provider_request", {}, ctx);
+  turnSend(f, ctx);
   f.fire("after_provider_response", resp, ctx);
   f.fire("message_start", { message: { role: "assistant" } }, ctx);
   clock.t = T0 + 290_000;
@@ -107,8 +113,8 @@ test("ttftMs: the session's send → its first provider_stream_event; absent wit
   const ev = { type: "provider_stream_event", provider: "anthropic", api: "anthropic-messages", model: "opus", data: { type: "message_start" } };
   f.fire("provider_stream_event", ev, ctx); // before any send: no request to time
   clock.t = T0 + 1000;
-  f.fire("before_provider_request", {}, ctx);
-  f.fire("before_provider_request", {}, other);
+  turnSend(f, ctx);
+  turnSend(f, other);
   clock.t = T0 + 1100;
   f.fire("provider_stream_event", ev, other);
   clock.t = T0 + 1300;
@@ -125,7 +131,7 @@ test("ttftMs: the session's send → its first provider_stream_event; absent wit
   assert.deepEqual(lines().map((l) => [l.sessionId, l.ttftMs, l.durationMs]), [["s1", 300, 1500], ["s2", 100, 1500]]);
   // the next request fails before any stream event: no ttftMs (the previous request's events do not carry over)
   clock.t = T0 + 3000;
-  f.fire("before_provider_request", {}, ctx);
+  turnSend(f, ctx);
   clock.t = T0 + 3400;
   f.fire("message_end", assistant({ stopReason: "error", errorMessage: "500: x", usage: undefined }), ctx);
   assert.equal("ttftMs" in lines()[2], false);
@@ -322,11 +328,11 @@ const failed = (errorMessage: string) => assistant({ stopReason: "error", errorM
 test("native retry: send, 429, resend after 2000 ms, success → the success line has retries 1, retryWaitMs 2000", () => {
   const { f, clock, lines } = setup();
   const ctx = fakeCtx("s1");
-  f.fire("before_provider_request", {}, ctx);
+  turnSend(f, ctx);
   clock.t = T0 + 300;
   f.fire("message_end", failed("429: rate limited"), ctx);
   clock.t = T0 + 2300;
-  f.fire("before_provider_request", {}, ctx);
+  turnSend(f, ctx);
   f.fire("after_provider_response", resp, ctx);
   clock.t = T0 + 3000;
   f.fire("message_end", assistant(), ctx);
@@ -336,7 +342,7 @@ test("native retry: send, 429, resend after 2000 ms, success → the success lin
 test("native retry: a chain of failures puts each resend on its own line (Σ = attempts resent, Σ wait = backoff)", () => {
   const { f, clock, lines } = setup();
   const ctx = fakeCtx("s1"), other = fakeCtx("s2");
-  const send = (at: number, c = ctx) => { clock.t = T0 + at; f.fire("before_provider_request", {}, c); };
+  const send = (at: number, c = ctx) => { clock.t = T0 + at; turnSend(f, c); };
   const end = (at: number, m: unknown, c = ctx) => { clock.t = T0 + at; f.fire("message_end", m, c); };
   send(0); end(100, failed("529 overloaded"));
   send(1100); end(1200, failed("500 boom"));
@@ -349,7 +355,7 @@ test("native retry: a chain of failures puts each resend on its own line (Σ = a
 test("native retry: a context overflow is no retry; nor is a send after the run settled or after a new message", () => {
   const { f, clock, lines } = setup();
   const ctx = fakeCtx("s1");
-  const send = (at: number) => { clock.t = T0 + at; f.fire("before_provider_request", {}, ctx); };
+  const send = (at: number) => { clock.t = T0 + at; turnSend(f, ctx); };
   send(0); f.fire("message_end", failed("400 prompt is too long: 9 tokens > 8 maximum"), ctx);
   send(1000); f.fire("message_end", assistant(), ctx); // pi compacted and sent again: no retry
   send(2000); f.fire("message_end", failed("429: daily cap"), ctx);
@@ -367,11 +373,35 @@ test("native retry: every overflow pi-ai 1.4 names is no retry (pi compacts and 
     "prompt token count of 9 exceeds the limit of 8", "too many tokens"]) {
     const { f, clock, lines } = setup();
     const ctx = fakeCtx("s1");
-    const send = (at: number) => { clock.t = T0 + at; f.fire("before_provider_request", {}, ctx); };
+    const send = (at: number) => { clock.t = T0 + at; turnSend(f, ctx); };
     send(0); f.fire("message_end", failed(msg), ctx);
     send(30_000); f.fire("message_end", assistant(), ctx); // the resend after compaction
     assert.deepEqual(lines().map((l) => [l.errorKind, l.retries, l.retryWaitMs]), [["context_overflow", 0, 0], [undefined, 0, 0]], msg);
   }
+});
+
+// pi 1.4's CacheWarmer replays a request straight to the provider: its send fires before_provider_request but no
+// `context` event, which the agent loop fires before each of the session's own requests (sdk.js transformContext).
+test("a warm's send (no context event) neither restarts durationMs nor ends a retry wait; the context handler changes nothing", () => {
+  const { f, clock, lines } = setup();
+  const ctx = fakeCtx("s1");
+  const own = (at: number) => {
+    clock.t = T0 + at;
+    assert.deepEqual(f.fireAll("context", { type: "context", messages: [] }, ctx), [undefined], "the messages stay as they are");
+    f.fire("before_provider_request", {}, ctx);
+  };
+  const warmSend = (at: number) => { clock.t = T0 + at; f.fire("before_provider_request", {}, ctx); };
+  own(0);
+  warmSend(400); // a warm before the turn's message_start (a long prompt evaluation)
+  f.fire("message_start", { message: { role: "assistant" } }, ctx);
+  clock.t = T0 + 1000; f.fire("message_end", assistant(), ctx);
+  own(2000);
+  clock.t = T0 + 2100; f.fire("message_end", failed("429: x"), ctx);
+  warmSend(3000); // a warm in the backoff window
+  own(4100);
+  clock.t = T0 + 5000; f.fire("message_end", assistant(), ctx);
+  assert.deepEqual(lines().map((l) => [l.status, l.durationMs, l.retries, l.retryWaitMs]),
+    [[200, 1000, 0, 0], ["error", 100, 0, 0], [200, 900, 1, 2000]]);
 });
 
 test("native retry: warming lines carry no retries (pi's session retry never resends a warm: not observed, so absent)", () => {
