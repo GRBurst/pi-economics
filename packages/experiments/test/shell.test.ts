@@ -9,7 +9,7 @@ import { onAssigned, type Assigned } from "../core/channel.ts";
 import { design, designFor, type Factor } from "../core/design.ts";
 import { V4_FACTORS, defaults, type Settings } from "../core/settings.ts";
 import { ENTRY, install } from "../core/shell.ts";
-import { fakePi, type Entry } from "./fake.ts";
+import { fakePi, reloadWorld, type Entry } from "./fake.ts";
 
 type G = { __piExperimentsApi_v1?: any; __piEconomicsWarned_v1?: Set<string> };
 beforeEach(() => void delete (globalThis as G).__piEconomicsWarned_v1);
@@ -316,4 +316,50 @@ test("T5b1.8 model_select keeps the unit (ITT, §7.3): no new draw, row, entry o
   assert.deepEqual(h.published, [...before.published, before.published[0]], "the reload republishes the same Assigned");
   assert.deepEqual(h.api().armFor("s1"), before.arm);
   assert.equal(before.rows[0].stratum, "api");
+});
+
+// Review M1: the actor's engine and __subagentsApi_v1 outlive /reload; a stale runtime's listener must neither stay
+// subscribed nor throw into the actor's Engine.emit (spawn_subagent would fail and later listeners miss the event).
+test("review M1: /reload → spawn: session_shutdown releases the actor subscription; the live runtime publishes once, nothing throws", () => {
+  const w = reloadWorld();
+  const agentDir = mkdtempSync(join(tmpdir(), "experiments-reload-"));
+  const sessionDir = join(agentDir, "sessions");
+  const ctx = { hasUI: false, ui: { notify() {} }, model: { provider: "openai", id: "gpt-5" },
+    sessionManager: { getSessionId: () => "main-1", getSessionDir: () => sessionDir, getSessionFile: () => join(sessionDir, "x_main-1.jsonl"), getBranch: () => [] } };
+  const published: Assigned[] = [];
+  onAssigned(w.raw, (a) => void published.push(a));
+  const r1 = w.runtime();
+  install(r1.pi, { agentDir, settings: defaults(), rng: mulberry32(3), api: () => w.actor as any });
+  r1.fire("session_start", { type: "session_start", reason: "startup" }, ctx);
+  r1.fire("session_shutdown", { type: "session_shutdown" }, ctx); // pi emits it before invalidating the runtime
+  r1.invalidate();
+  const r2 = w.runtime();
+  install(r2.pi, { agentDir, settings: defaults(), rng: mulberry32(3), api: () => w.actor as any });
+  r2.fire("session_start", { type: "session_start", reason: "reload" }, ctx);
+  assert.equal(w.listeners.size, 1, "only the live runtime listens to the actor");
+  published.length = 0;
+  assert.doesNotThrow(() => w.spawn({ type: "spawn", name: "w1", by: "main", parent: "main", childSessionId: "s-w1", ts: 1 }));
+  assert.deepEqual(published.map((a) => [a.sessionId, a.parentSessionId]), [["s-w1", "main-1"]]);
+});
+
+test("review M1: a stale runtime still subscribed (no session_shutdown seen) never throws into the actor's engine", () => {
+  const w = reloadWorld();
+  const agentDir = mkdtempSync(join(tmpdir(), "experiments-reload-"));
+  const sessionDir = join(agentDir, "sessions");
+  const ctx = { hasUI: false, ui: { notify() {} }, model: { provider: "openai", id: "gpt-5" },
+    sessionManager: { getSessionId: () => "main-1", getSessionDir: () => sessionDir, getSessionFile: () => join(sessionDir, "x_main-1.jsonl"), getBranch: () => [] } };
+  const r1 = w.runtime();
+  install(r1.pi, { agentDir, settings: defaults(), rng: mulberry32(3), api: () => w.actor as any });
+  r1.fire("session_start", { type: "session_start", reason: "startup" }, ctx);
+  r1.invalidate();
+  const seen: string[] = [];
+  w.actor.subscribe((e) => void seen.push(e.childSessionId)); // a later listener (the actor's own, the new runtime's)
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    assert.doesNotThrow(() => w.spawn({ type: "spawn", name: "w1", by: "main", parent: "main", childSessionId: "s-w1", ts: 1 }));
+  } finally {
+    console.warn = warn;
+  }
+  assert.deepEqual(seen, ["s-w1"]);
 });

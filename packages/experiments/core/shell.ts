@@ -186,17 +186,30 @@ export function install(pi: PiLike, deps: Deps): void {
     const a = subagents();
     if (off || !a) return;
     off = a.subscribe((e) => {
-      if (e.type !== "spawn" || !e.childSessionId || main === undefined) return;
-      const parent = a.list().find((x) => x.name === e.parent)?.sessionId ?? main;
-      api.inherit(e.childSessionId, parent);
-      const p = lookup(parent);
-      if (p === undefined) return;
-      const c = childOf(p, e.childSessionId, parent);
-      known.set(c.sessionId, c);
-      publish(pi.events, c);
+      // The actor's engine calls its listeners in a plain loop: an exception here would fail its spawn (review M1).
+      try {
+        if (e.type !== "spawn" || !e.childSessionId || main === undefined) return;
+        const parent = a.list().find((x) => x.name === e.parent)?.sessionId ?? main;
+        api.inherit(e.childSessionId, parent);
+        const p = lookup(parent);
+        if (p === undefined) return;
+        const c = childOf(p, e.childSessionId, parent);
+        known.set(c.sessionId, c);
+        publish(pi.events, c);
+      } catch (err) {
+        if (!spawnFailed) console.warn(`experiments: a child's assignment was not published: ${(err as Error).message}`);
+        spawnFailed = true;
+      }
     });
   };
+  let spawnFailed = false;
   connect();
+  // The actor's engine outlives /reload and session replacement; pi emits session_shutdown before it invalidates this
+  // runtime (whose pi.events then throws): let go of the engine here (review M1).
+  pi.on("session_shutdown", () => {
+    off?.();
+    off = undefined;
+  });
 
   // Guards: corrections and the end-of-session rating go to <agentDir>/guards/events.jsonl; only the fact, never text.
   const logGuard = (sessionId: string, event: string, value?: number): void => {
