@@ -61,10 +61,12 @@
         [ -f "$e/$f" ] || { echo "FAIL ${dir}: $e lacks $f" >&2; exit 1; }
       done
     done
-    # cacheLifecycle's op, through the script the activation entry runs.
-    printf '{"theme":"dark"}\n' >"$TMPDIR/settings.json"
+    # cacheLifecycle's op and the load order (M6), through the script the
+    # activation entry runs: the registry first, the owner's entries after it
+    # in their order.
+    printf '{"theme":"dark","extensions":["-builtin:mcp","extensions/token-meter","/x/own"]}\n' >"$TMPDIR/settings.json"
     ${lib.getExe pe.piSettings.package} "$TMPDIR/settings.json" 2>/dev/null
-    jq -e '. == {theme: "dark", cacheWarming: "idle"}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the op: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }
+    jq -e '. == {theme: "dark", cacheWarming: "idle", extensions: (["experiments", "token-meter", "cache-lifecycle", "infinite-context", "actor-subagents"] | map("extensions/" + .)) + ["-builtin:mcp", "/x/own"]}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the ops: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }
     # (M6.16) infiniteContext: the extension pi loads, and the rendered file
     # read by the extension's own parser without loss: it drops an invalid
     # value silently (fail-open per field), so every rendered key must come

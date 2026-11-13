@@ -33,6 +33,14 @@ sets this option.
   the bridge) is how the components learn the actor is there: without it
   `cacheLifecycle` and `experiments` warn.
 
+### `loadOrder` (read-only)
+
+The registry's links relative to the agent directory, in load order:
+`experiments`, `token-meter`, `cache-lifecycle`, `infinite-context`, then
+the other entries by name. While the registry is not empty, `piSettings`
+puts them at the front of `settings.json`'s `extensions` (contributor
+`loadOrder`, op `ensurePrefix`, order 2000).
+
 ### `piSettings`
 
 Edits of pi's mutable `settings.json`, run by one activation entry,

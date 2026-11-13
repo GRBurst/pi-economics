@@ -90,11 +90,12 @@ in {
   cache-lifecycle-pisettings = let
     c = eval ".pi/agent" {} {};
     withToday = eval ".pi/agent" {} {piSettings.ops = today.withoutWarming;};
-    todays = hm.eval {programs.piEconomics.piSettings.ops = today.withWarming;};
+    # The registry entry's load-order op (M6) besides today's.
+    todays = hm.eval {programs.piEconomics.piSettings.ops = today.withWarming // {inherit ((pe withToday).piSettings.ops) loadOrder;};};
     disabled = eval ".pi/agent" {} {piSettings.enable = false;};
     description = (hm.options {}).programs.piEconomics.cacheLifecycle.enable.description;
   in
-    eq "ops" (pe c).piSettings.ops {inherit (today.withWarming) cacheLifecycle;}
+    eq "ops" (removeAttrs (pe c).piSettings.ops ["loadOrder"]) {inherit (today.withWarming) cacheLifecycle;}
     ++ eq "program with today's other ops" (pe withToday).piSettings.program (pe todays).piSettings.program
     ++ holds "activation entry piSettingsMigrate" (c.home.activation ? piSettingsMigrate)
     ++ holds "no entry while piSettings.enable = false" (!(disabled.home.activation ? piSettingsMigrate))

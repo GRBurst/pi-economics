@@ -153,6 +153,32 @@ in {
     ++ eq "names from the last path component (${dir})" (map (p: lib.last (lib.splitString "/" p)) kids) ["alpha" "zeta"])
   [".pi/agent" "custom/agent"];
 
+  # (M6) settings.json's `extensions` lists the registry first, in load order:
+  # experiments, token-meter, cache-lifecycle, infinite-context, then the
+  # others by name (redesign §7.6), relative to the agent directory as pi
+  # resolves them. The op runs after the default-order ones; without a
+  # registry entry there is none.
+  load-order = let
+    rel = n: "extensions/${n}";
+    reg = names: lib.genAttrs names (_: extA);
+    c = hm.eval {programs.piEconomics.extensions = reg ["zeta" "infinite-context" "alpha" "token-meter" "cache-lifecycle" "experiments"];};
+    some = hm.eval {programs.piEconomics.extensions = reg ["zeta" "token-meter" "alpha"];};
+    none = hm.eval {};
+  in
+    eq "loadOrder" (pe c).loadOrder (map rel ["experiments" "token-meter" "cache-lifecycle" "infinite-context" "alpha" "zeta"])
+    ++ eq "loadOrder, one of the four" (pe some).loadOrder (map rel ["token-meter" "alpha" "zeta"])
+    ++ eq "ops.loadOrder" (pe c).piSettings.ops.loadOrder [
+      {
+        op = "ensurePrefix";
+        path = ["extensions"];
+        value = (pe c).loadOrder;
+        order = 2000;
+      }
+    ]
+    ++ holds "an activation entry runs it" (activation c != null)
+    ++ eq "no registry entry: loadOrder" (pe none).loadOrder []
+    ++ holds "no registry entry: no op" (!((pe none).piSettings.ops ? loadOrder));
+
   # (M0.11; the ops and order lines: M0.12)
   pisettings-defaults = let
     s = (pe (hm.eval {})).piSettings;

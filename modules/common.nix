@@ -170,6 +170,16 @@
     '';
   };
 
+  # (M6) The registry in load order (redesign §7.6): the components first,
+  # in a fixed order, then the other entries by name.
+  firstNames = ["experiments" "token-meter" "cache-lifecycle" "infinite-context"];
+  orderedNames = let
+    names = lib.attrNames cfg.extensions;
+  in
+    lib.filter (n: lib.elem n names) firstNames ++ lib.subtractLists firstNames names;
+  # An entry's link, relative to the agent directory.
+  linkRel = n: "extensions/${n}";
+
   # (M0.17)
   absFile =
     if lib.hasPrefix "/" cfg.piSettings.file
@@ -210,6 +220,19 @@ in {
         The link path `<home>/<agentDir>/extensions/<name>` of every registry
         entry with `forChildren`, sorted by name: what actor-subagents loads
         into each child (its settings file's `childExtensions`).
+      '';
+    };
+
+    # (M6)
+    loadOrder = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      readOnly = true;
+      description = ''
+        The registry's links relative to the agent directory, as settings.json
+        lists them, in load order: experiments, token-meter, cache-lifecycle
+        and infinite-context, then the other entries by name. piSettings puts
+        them at the front of settings.json's `extensions` (op `ensurePrefix`,
+        contributor `loadOrder`, order 2000).
       '';
     };
 
@@ -275,7 +298,17 @@ in {
     programs.piEconomics.piSettings = {
       inherit sortedOps program;
       package = script;
+      # (M6) After the default-order ops, so none moves the prefix.
+      ops.loadOrder = lib.mkIf (orderedNames != []) [
+        {
+          op = "ensurePrefix";
+          path = ["extensions"];
+          value = cfg.loadOrder;
+          order = 2000;
+        }
+      ];
     };
+    programs.piEconomics.loadOrder = map linkRel orderedNames;
 
     # (M2.5) Link paths, not store paths: the extension resolves them in a child
     # process, and a reader can take each name from the last path component.
