@@ -225,6 +225,13 @@ it derives its root's assignment and serves it on the child's own channel. Desig
 (`warmPolicy`, `mainCacheTtl`, `maskOnCold`, the full 2³: 8 arms) are
 `cacheLifecycle`'s; `tokenMeter` records the arm ids; the task router's levers
 are no factors any more: its reads find its own settings.
+A factor's `lever` is an add-on's id (`cache-lifecycle.*`) or a data-only kind that sets pi
+itself, in the control tier (read back at `before_agent_start`; main sessions only): `pi.thinkingLevel` (levels from
+`off`, `minimal`, `low`, `medium`, `high`, `xhigh`; read back is the session's effective level) and
+`pi.activeTool(<name>)` (levels `false` and `true`: the tool in or out of the active set; a tool pi does not
+register is refused up front). The module refuses levels pi does not accept
+(`pi-economics: experiments factor <f> in stratum <s> has a level that <lever> does not accept`); the first level is the
+baseline, so `[false, true]` for a tool that is off by default.
 Corrections and `/rate` ratings go to `<agentDir>/guards/events.jsonl`. There
 is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 

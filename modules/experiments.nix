@@ -38,6 +38,28 @@
       then given
       else {}
     );
+  # (redesign M7b) What pi accepts of the levers that set pi itself
+  # (packages/experiments/addons/pi.ts, THINKING_LEVELS; module-eval case
+  # experiments-pi-levels keeps the lists equal): pi.thinkingLevel takes pi's
+  # six names, pi.activeTool(<name>) booleans. Levels that are no list are the
+  # two-levels assertion's.
+  thinkingLevels = ["off" "minimal" "low" "medium" "high" "xhigh"];
+  levelsAccepted = f: let
+    lever = f.lever or null;
+    levels = f.levels or null;
+  in
+    !(lib.isList levels)
+    || (
+      if lever == "pi.thinkingLevel"
+      then lib.all (l: lib.elem l thinkingLevels) levels
+      else if lib.isString lever && lib.hasPrefix "pi.activeTool(" lever
+      then lib.all builtins.isBool levels
+      else true
+    );
+  factorName = f:
+    if lib.isString (f.name or null)
+    then f.name
+    else "?";
   legacyKeys = lib.filter (k: cfg.settings ? ${k}) ["factors" "maxArms" "baseline"];
 in {
   options.programs.piEconomics.experiments = {
@@ -104,11 +126,13 @@ in {
       ]
       ++ map (f: {
         assertion = lib.isList (f.levels or null) && lib.length f.levels == 2 && lib.elemAt f.levels 0 != lib.elemAt f.levels 1;
-        message = "pi-economics: experiments factor ${
-          if lib.isString (f.name or null)
-          then f.name
-          else "?"
-        } in stratum ${name} needs exactly two levels";
+        message = "pi-economics: experiments factor ${factorName f} in stratum ${name} needs exactly two levels";
+      })
+      fs
+      # (redesign M7b)
+      ++ map (f: {
+        assertion = levelsAccepted f;
+        message = "pi-economics: experiments factor ${factorName f} in stratum ${name} has a level that ${f.lever} does not accept";
       })
       fs)
     strata);

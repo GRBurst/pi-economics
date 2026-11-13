@@ -203,6 +203,43 @@ in {
       "pi-economics: experiments factor text in stratum cloud needs exactly two levels"
     ];
 
+  # (redesign M7b) The levels of a lever that sets pi itself are what pi
+  # accepts (redesign §7.4): pi.thinkingLevel takes pi's six names,
+  # pi.activeTool(<name>) booleans. The six are also the TS add-on's list.
+  experiments-pi-levels = let
+    thinking = ["off" "minimal" "low" "medium" "high" "xhigh"];
+    withFactors = fs: eval ".pi/agent" {settings.strata.cloud.factors = fs;} withActor;
+    one = lever: levels:
+      withFactors [
+        {
+          name = "f";
+          inherit lever levels;
+        }
+      ];
+    msg = lever: "pi-economics: experiments factor f in stratum cloud has a level that ${lever} does not accept";
+    addons = lib.splitString "\n" (builtins.readFile ../../../packages/experiments/addons/pi.ts);
+  in
+    lib.concatMap (l:
+      eq "thinking level ${l}" (failed "pi-economics:" (one "pi.thinkingLevel" [
+        l
+        (
+          if l == "off"
+          then "xhigh"
+          else "off"
+        )
+      ])) [])
+    thinking
+    ++ eq "an unknown thinking level" (failed "pi-economics:" (one "pi.thinkingLevel" ["low" "extreme"])) [(msg "pi.thinkingLevel")]
+    ++ eq "wrong case and a bool" (failed "pi-economics:" (one "pi.thinkingLevel" ["Low" true])) [(msg "pi.thinkingLevel")]
+    ++ eq "a number" (failed "pi-economics:" (one "pi.thinkingLevel" ["low" 3])) [(msg "pi.thinkingLevel")]
+    ++ eq "tool, booleans" (failed "pi-economics:" (one "pi.activeTool(codemode)" [false true])) []
+    ++ eq "tool, booleans, other order" (failed "pi-economics:" (one "pi.activeTool(codemode)" [true false])) []
+    ++ eq "tool, strings" (failed "pi-economics:" (one "pi.activeTool(codemode)" ["off" "on"])) [(msg "pi.activeTool(codemode)")]
+    ++ eq "tool, one boolean" (failed "pi-economics:" (one "pi.activeTool(codemode)" [false "on"])) [(msg "pi.activeTool(codemode)")]
+    ++ eq "another lever keeps any levels" (failed "pi-economics:" (one "cache-lifecycle.mainCacheTtl" ["5m" "extreme"])) []
+    ++ eq "levels that are no list are the two-levels assertion's" (failed "pi-economics:" (one "pi.thinkingLevel" "low")) ["pi-economics: experiments factor f in stratum cloud needs exactly two levels"]
+    ++ holds "the TS add-on lists the same six" (lib.elem "export const THINKING_LEVELS = [${lib.concatMapStringsSep ", " builtins.toJSON thinking}] as const;" addons);
+
   # (M4.16) The host's combination from W3 on (spec §9.1): M2–M4's extension
   # components, piSettings off (the host's own script runs until W6). Children
   # load cache-lifecycle and token-meter, not experiments: the list pi-setup's
