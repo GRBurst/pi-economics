@@ -443,8 +443,11 @@ test("parentSessionId from …/subagents/<parent>/… session file; none otherwi
   const { f, lines } = setup();
   f.fire("message_end", assistant(), fakeCtx("child", { file: "/x/sessions/subagents/parent-1/2026_child.jsonl" }));
   f.fire("message_end", assistant(), fakeCtx("top", { file: "/x/sessions/2026_top.jsonl" }));
+  // review n1: only the subagents/<root>/ directory that holds the file (the actor's layout) names a parent
+  f.fire("message_end", assistant(), fakeCtx("deep", { file: "/x/subagents/proj/sessions/2026_deep.jsonl" }));
   assert.equal(lines()[0].parentSessionId, "parent-1");
   assert.equal("parentSessionId" in lines()[1], false);
+  assert.equal("parentSessionId" in lines()[2], false);
 });
 
 test("sessions are independent", () => {

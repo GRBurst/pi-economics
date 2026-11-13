@@ -48,7 +48,8 @@ function readJson(file: string): unknown {
 
 function parentOf(file: unknown): string | undefined {
   if (typeof file !== "string") return undefined;
-  return /[\\/]subagents[\\/]([^\\/]+)[\\/]/.exec(file)?.[1];
+  // the actor's layout: <sessionDir>/subagents/<parent>/<file> (review n1: the directory that holds the file, not a higher one)
+  return /[\\/]subagents[\\/]([^\\/]+)[\\/][^\\/]+$/.exec(file)?.[1];
 }
 
 export function install(pi: PiLike, deps: Deps): void {

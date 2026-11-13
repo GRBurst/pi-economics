@@ -71,8 +71,9 @@ export function install(pi: PiLike, deps: Deps): void {
   const rng = deps.rng ?? Math.random;
   const subagents = deps.api ?? (() => (globalThis as { __subagentsApi_v1?: SubagentsApi }).__subagentsApi_v1);
   // Own copy of token-meter's parentSessionId rule (packages do not import each other): the parent
-  // is the first `…/subagents/<parent>/` segment of the session file path; a file without one is a root session's.
-  const parentOf = (file: string): string | undefined => /[\\/]subagents[\\/]([^\\/]+)[\\/]/.exec(file)?.[1];
+  // is <parent> when the session file lies in `…/subagents/<parent>/` (the actor's layout; review n1: that directory, not a
+  // higher one); a file elsewhere is a root session's.
+  const parentOf = (file: string): string | undefined => /[\\/]subagents[\\/]([^\\/]+)[\\/][^\\/]+$/.exec(file)?.[1];
 
   /** The Assigned of this runtime's session (a runtime serves one session; a new, resumed or forked one is a new runtime). */
   const known = new Map<string, Assigned>();
@@ -88,10 +89,15 @@ export function install(pi: PiLike, deps: Deps): void {
    * The root a session runs under, or undefined for a main. A session file decides by its place (the actor keeps every
    * child, nested ones too, in <sessionDir>/subagents/<root>/); an in-memory session (no file) is a child when the
    * actor lists it, or reserves a record for the child it is creating (sessionId "": its session_start runs inside the
-   * actor's createSession), beside a main record of another session.
+   * actor's createSession), beside a main record of another session. The actor binds every child headless, so an
+   * in-memory session with a UI is a main (review m1: an interactive --no-session main starting while the actor still
+   * lists the previous main and a reservation). Residual, bounded by the actor's shutdownAll: a headless main in that
+   * window reads as a child, an in-memory child whose reservation is gone as a main (pi-setup backlog: the reservation
+   * carries the child's sessionId before its extensions are bound).
    */
-  const rootOf = (sid: string, file: string | undefined): string | undefined => {
+  const rootOf = (sid: string, file: string | undefined, hasUI: unknown): string | undefined => {
     if (typeof file === "string") return parentOf(file);
+    if (hasUI === true) return undefined;
     const agents = safe(() => subagents()?.list()) ?? [];
     const root = agents.find((x) => x.name === "main")?.sessionId;
     if (!root || root === sid) return undefined;
@@ -263,7 +269,7 @@ export function install(pi: PiLike, deps: Deps): void {
     const main = ctx.sessionManager.getSessionId() as string;
     // A child's runtime (experiments among the actor's childExtensions): never drawn, no row; its arm is its root's.
     const file = safe(() => ctx.sessionManager.getSessionFile() as string | undefined);
-    const root = rootOf(main, file);
+    const root = rootOf(main, file, safe(() => ctx.hasUI));
     child = root === undefined ? undefined : { sid: main, root };
     if (child !== undefined) {
       const a = deriveChild(child);

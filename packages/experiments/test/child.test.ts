@@ -28,12 +28,13 @@ function world(o: { persisted?: boolean } = {}) {
   const sessionDir = join(agentDir, "sessions");
   const agents: Agent[] = [];
   const actor = { version: 1, list: () => agents.map((a) => ({ ...a })), subscribe: () => () => {}, registerSpawnPolicy: () => {}, send: () => {} };
-  const runtime = (sid: string, file: string | undefined) => {
+  const runtime = (sid: string, file: string | undefined, extra: Record<string, unknown> = {}) => {
     const f = fakePi();
     const heard: Levers[] = [];
     onAssigned(f.events, (l) => void heard.push(l));
     install(f.pi, { agentDir, settings: defaults(), rng: () => 0.5, api: () => actor });
     const ctx = {
+      ...extra,
       model: { provider: "openai", id: "gpt-5" },
       sessionManager: { getSessionId: () => sid, getSessionDir: () => (o.persisted === false ? undefined : sessionDir), getSessionFile: () => file, getBranch: () => [] },
     };
@@ -58,7 +59,7 @@ function world(o: { persisted?: boolean } = {}) {
   };
   const rowsFile = join(agentDir, "experiments", "assignments.jsonl");
   const rows = () => (existsSync(rowsFile) ? readFileSync(rowsFile, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
-  return { agentDir, sessionDir, agents, main, spawn, rows, rowsFile };
+  return { agentDir, sessionDir, agents, main, spawn, rows, rowsFile, runtime };
 }
 
 const parentView = (l: Levers, sessionId: string, parentSessionId: string) => ({ ...l, sessionId, parentSessionId });
@@ -170,4 +171,43 @@ test("T5b2.7 a child derives once per runtime: its root's row is read at session
   mkdirSync(join(w.agentDir, "experiments"), { recursive: true });
   writeFileSync(w.rowsFile, JSON.stringify({ v: 2, ts: "2026-11-20T10:00:00.000Z", sessionId: "m0", mode: "explore", eligible: true, arm: "000", factors: {} }) + "\n");
   assert.equal(query(c.events, "c1", "cache-lifecycle"), undefined);
+});
+
+// Review m1: the in-memory rule reads the actor's pending reservation (sessionId "") as "a child is being created". The actor
+// binds every child headless (hasUI false), so an in-memory session with a UI is never a child: an interactive --no-session
+// main starting while the actor still lists the previous main and a reservation (e.g. a spawn timer) draws its own arm.
+test("review m1: an in-memory session with a UI is never a child (stale main record + pending reservation)", () => {
+  const w = world({ persisted: false });
+  w.main("m1");
+  w.agents.push({ name: "w-late", sessionId: "" });
+  const m2 = w.runtime("m2", undefined, { hasUI: true });
+  assert.equal(m2.seen?.sessionId, "m2");
+  assert.equal(m2.seen?.parentSessionId, undefined);
+  assert.deepEqual(w.rows().map((r) => r.sessionId), ["m1", "m2"]);
+});
+
+// The residuals, bounded by the actor (its session_shutdown deletes every non-main record, pending ones included, before a
+// replacement runtime starts) and removed only by the actor (pi-setup backlog: the reservation carries the child's sessionId
+// before the child's extensions are bound, so the "" wildcard can go, and a child whose reservation is gone is not bound).
+test("review m1 residual: a headless in-memory main in that window is still read as a child; an orphan in-memory child is read as a main", () => {
+  const w = world({ persisted: false });
+  w.main("m1");
+  w.agents.push({ name: "w-late", sessionId: "" });
+  const headless = w.runtime("m2", undefined, { hasUI: false });
+  assert.equal(headless.seen?.parentSessionId, "m1", "print mode in the window: taken for m1's child");
+  w.agents.splice(0, w.agents.length); // the actor's shutdownAll ran before the child's session_start
+  const orphan = w.runtime("c-orphan", undefined, { hasUI: false });
+  assert.equal(orphan.seen?.parentSessionId, undefined, "no record: taken for a main");
+  assert.deepEqual(w.rows().map((r) => r.sessionId), ["m1", "c-orphan"]);
+});
+
+// Review n1: the actor's layout is <sessionDir>/subagents/<root>/<file>; a main whose session dir merely contains a
+// "subagents" segment higher up is no child.
+test("review n1: only the subagents/<root>/ directory that holds the file names a root", () => {
+  const w = world();
+  const dir = join(w.agentDir, "subagents", "proj", "sessions");
+  mkdirSync(dir, { recursive: true });
+  const m = w.runtime("m5", join(dir, "2026-11-20T12-00-00-000Z_m5.jsonl"));
+  assert.equal(m.seen?.parentSessionId, undefined);
+  assert.deepEqual(w.rows().map((r) => r.sessionId), ["m5"]);
 });
