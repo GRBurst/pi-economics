@@ -43,10 +43,17 @@ test("aggregate: totals per day, session and model; warming kept apart", () => {
   assert.equal(a.total.requests, 7); assert.equal(a.total.errors, 1);
 });
 
-test("aggregate: rewrite share = cacheWrite after each session's first request / all cacheWrite", () => {
-  // s1 first=100, rest 10+30+40=80; s2 first=50, rest 20+0+0=20 → 100/250
-  assert.ok(Math.abs(aggregate(fixture).rewriteShare - 100 / 250) < 1e-9);
-  assert.equal(aggregate([]).rewriteShare, 0);
+test("aggregate: miss share = tokens a request had to process again because the cache lost the prefix / all cacheWrite (B3)", () => {
+  // opus: write 1000 (a start), +100 growth, then 10 min later a cold cache rewrites all 1100; sonnet: only growth. 1100 missed of 2200 + 150 written
+  const c = (ts: string, sid: string, model: string, read: number, write: number) => L(ts, sid, model, [0, read, write, 1, 0.1]);
+  const lines = [
+    c("2026-10-01T10:00:00Z", "s1", "opus", 0, 1000), c("2026-10-01T10:01:00Z", "s1", "opus", 1000, 100), c("2026-10-01T10:11:00Z", "s1", "opus", 0, 1100),
+    c("2026-10-01T10:00:00Z", "s2", "sonnet", 0, 100), c("2026-10-01T10:01:00Z", "s2", "sonnet", 100, 50),
+  ];
+  assert.ok(Math.abs(aggregate(lines).missShare - 1100 / 2350) < 1e-9);
+  assert.equal(aggregate([]).missShare, 0);
+  // every non-first write counted as a rewrite is the old figure of 4 of 5 requests; only the lost prefix is a miss now
+  assert.ok(aggregate(lines).missShare < 0.5);
 });
 
 test("aggregate: from/to filter by UTC day (inclusive)", () => {
@@ -96,7 +103,8 @@ test("render: markdown tables", () => {
   const md = render(aggregate(fixture));
   assert.match(md, /\| day \| requests \|/);
   assert.match(md, /\| 2026-10-01 \| 4 \|/);
-  assert.match(md, /rewrite share: 40\.0%/);
+  assert.match(md, /miss share: \d+\.\d%/);
+  assert.doesNotMatch(md, /rewrite share/);
 });
 
 test("bin/meter-report.ts prints the report for a directory", () => {

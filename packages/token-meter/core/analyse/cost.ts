@@ -1,4 +1,4 @@
-// (a) cost: $, requests, active hours, quota per active hour, splits by model, cache rewrite, warming, folds and cold resumes.
+// (a) cost: $, requests, active hours, quota per active hour, splits by model, the cache (cache.ts), warming, folds and cold resumes.
 import { armStats, attributeQuota, isError, MIN_HOURS, push, rootUnits } from "../arms.ts";
 import { type LedgerSection } from "../ledger.ts";
 import { taskCosts, type TaskCost } from "../tasks.ts";
@@ -6,12 +6,13 @@ import { bootstrapRatioCI, type CI } from "../stats.ts";
 import { byTs, isLine, num, sum } from "./logs.ts";
 import { allocate, apiUsd, cacheWrite1hOf, type Component } from "./units.ts";
 import { foldsOf } from "./folds.ts";
+import { cacheSection, type CacheSection } from "./cache.ts";
 
 export type Split = { name: string; n: number; usd: number; share: number; perHour: number };
 export type CostSection = { totalUsd: number; requests: number; errors: number; warming: number; units: number; activeHours: number;
   usdPerHour: CI; q5hPerHour: number; q7dPerHour: number; perAccepted: TaskCost;
   byModel: Array<{ model: string; requests: number; usd: number; share: number; perHour: number }>;
-  splits: Split[]; components: Record<Component, number>; folds: LedgerSection };
+  splits: Split[]; components: Record<Component, number>; cache: CacheSection; folds: LedgerSection };
 
 /**
  * Quota points pi used and all points seen, per window (`<key>Reset`): pi = the global rise attributed to roots (arms.ts attributeQuota:
@@ -44,14 +45,9 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
     m.usd += apiUsd(l);
   }
   const components: Record<Component, number> = { input: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 0, unallocated: 0 };
-  let rewrite = 0;
-  let rewrites = 0;
-  const seen = new Set<string>();
   for (const l of lines) {
     const a = allocate(l, cacheWrite1hOf(l, l.parentSessionId === undefined, flags[l.arm])); // 1 h writes weigh 2.0, 5-minute writes 1.25 (B13)
     for (const k of Object.keys(components) as Component[]) components[k] += a[k];
-    if (l.kind === "warming") continue;
-    if (seen.has(l.sessionId) && num(l.cacheWrite) > 0) { rewrite += a.cacheWrite5m + a.cacheWrite1h; rewrites += 1; } else seen.add(l.sessionId);
   }
   const warm = lines.filter((l) => l.kind === "warming");
   // Fold and cold-resume events are found per arm (the cold-resume TTL depends on the arm's mainCacheTtl).
@@ -64,8 +60,8 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
     q5hPerHour: perHour(quotaShare(lines, "q5h").pi), q7dPerHour: perHour(quotaShare(lines, "q7d").pi),
     perAccepted: all ?? { accepted: 0, judged: 0, costUsd: 0, perAccepted: NaN },
     byModel: [...models].map(([model, m]) => ({ model, ...m, share: totalUsd ? m.usd / totalUsd : NaN, perHour: perHour(m.usd) })).sort((a, b) => b.usd - a.usd),
-    splits: [split("cache rewrite", rewrites, rewrite), split("warming", warm.length, sum(warm.map((l) => apiUsd(l)))),
+    splits: [split("warming", warm.length, sum(warm.map((l) => apiUsd(l)))),
       split("after folds", evs("fold").n, evs("fold").usd), split("after cold resumes", evs("coldResume").n, evs("coldResume").usd)],
-    components, folds: foldsOf(lines, flags, rows),
+    components, cache: cacheSection(lines, flags), folds: foldsOf(lines, flags, rows),
   };
 }

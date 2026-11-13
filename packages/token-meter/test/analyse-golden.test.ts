@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { analyse, renderAnalysis, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderQuality, renderRandomized, renderSpotChecks, type Logs } from "../core/analyse.ts";
+import { analyse, renderAnalysis, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderQuality, renderRandomized, renderSpotChecks, type Logs } from "../core/analyse.ts";
 import { assignment, iso, MIN, T0, turn, turns, world } from "./world.ts";
 
 const at = (minutes: number): number => T0 + minutes * MIN;
@@ -110,6 +110,7 @@ const a = analyse(goldenLogs(), PERIOD);
 
 const sections: Record<string, () => string> = {
   cost: () => renderCost(a.cost),
+  cache: () => renderCache(a.cost.cache),
   folds: () => renderFolds(a.cost.folds),
   experiment: () => renderExperiment(a.experiment.designs),
   randomized: () => renderRandomized(a.delegation.randomized),

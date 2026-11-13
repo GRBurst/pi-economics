@@ -241,9 +241,10 @@ table is; this is what a reader of the raw files needs to reproduce them).
   - **n** = requests (warming included, they read the prompt too) after the fold until the session
     ends or the next cold gap;
   - **r, w** = the model's cache read and write price per token, derived from the lines: input price
-    `p = Σ costUsd ÷ Σ (input + 0.1·cacheRead + 1.25·cacheWrite + 5·output)` over the model's lines
-    with a cost (the same Anthropic ratios the *Token components* table uses), `r = 0.1·p`,
-    `w = 1.25·p`. A model without a priced line contributes no folds.
+    `p = Σ costUsd ÷ Σ (input + 0.1·cacheRead + 1.25·(cacheWrite − cw1h) + 2.0·cw1h + 5·output)` over the model's lines
+    with a cost (the same Anthropic ratios the *Token components* table uses; `cw1h` = the line's 1 h writes, see *Analysis: cache misses*),
+    `r = 0.1·p`, `w = 1.25·p` (5-minute write), `w1h = 2.0·p` (the fold request's 1 h share of its writes is paid at `w1h`).
+    A model without a priced line contributes no folds.
   - **savings** = n·R·r (cache-read $ the shrunken prompt saved); **rewrite** = K·(w − r) (the K
     tokens are written at w where they would have been read at r);
     **net = savings − rewrite = n·R·r − K·(w − r)** exactly. Break-even depth K/R = n·r/(w − r) ≈ n/11.5.
@@ -266,6 +267,33 @@ table is; this is what a reader of the raw files needs to reproduce them).
 - **Spot-check agreement.** For every review verdict (`reviewOf` = the original task) the
   original's verdict at the draw (last one at or before the `spotcheck` event) is compared
   with it: agree = both accept or both do not.
+
+### Analysis: cache misses
+
+The *Cache* section (Claude models only: Anthropic's explicit prompt caching; local and other providers cache differently and are not
+modelled here) and `meter-report`'s "miss share" read the request lines of one session at a time. The **branch** of a session = its
+`turn` and `warming` lines without `status: "error"` in `ts` order; every line is the "previous request" of the next, but a warming
+request is no row of its own (it only refreshes the prefix).
+
+- **Cached** after request *i*: `cacheRead + cacheWrite` (its `input` is the tail after the last cache breakpoint, never cached).
+  **Prompt** = `input + cacheRead + cacheWrite`.
+- **Growth** ("new context") = `min(cacheWrite_i, max(0, cached_i − cached_{i−1}))`: what the request wrote because the context grew; the
+  first request's whole write. Not avoidable. `cacheWrite_i − growth_i` is the **rewrite**.
+- **Miss** (prefix lost) = `max(0, min(cached_{i−1}, prompt_i) − cacheRead_i)` tokens: what the previous request left in the cache and this
+  one did not read. Only a miss is avoidable. (The design's formula says `prompt_{i−1}`; that counts the previous input tail as lost every
+  time: on the author's live log 79 808 of 79 846 steady-state steps would be "misses" of a few tokens.)
+- **Cause** of a miss, the first that holds: `ttl` — the gap since the previous request (warming included) is longer than the TTL in force
+  after it: 1 h if that line has `cacheWrite1h` > 0 or is a main session's in an arm with `mainCacheTtl` = `1h`, else 5 min; `fold` — the
+  prompt fell below 80 % of the previous request's (the fold rule of the other tables; real fold and compaction entries live in session
+  files, not in the meter log); `model` — the model changed (its own cache); `other`.
+- **$** at the line's input price *p* (`costUsd` ÷ its tokens weighted read 0.1, 5-minute write 1.25, 1 h write 2.0, output 5): a miss costs
+  its tokens × (write − read) × *p*, new context its tokens × write × *p*. A 1 h write is a line's `cacheWrite1h` tokens (meter v2), or for a
+  v1 line all of `cacheWrite` when the line is a main session's in a `mainCacheTtl` 1h arm (an approximation: children and 5m arms write 5
+  minutes).
+- **1 h writes in `costUsd`.** pi 1.4 already charges 1 h cache writes at 2.0 × input in `costUsd`; the analyser's totals are the logged
+  cost. Only the split of a cost by token component and the fold ledger's prices weigh 1 h writes 2.0 (they weighed every write 1.25).
+- **miss share** (`meter-report`) = missed tokens ÷ `cacheWrite` tokens of the same requests; the old "rewrite share" counted every
+  non-first write as a rewrite (94.7 % on the author's log, mostly ordinary growth).
 
 ## Data contract (`pi-analyse --check`)
 

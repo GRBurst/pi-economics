@@ -1,6 +1,9 @@
 // (a) cache: what a request wrote because the context grew and what it had to rewrite because the cache lost the prefix (redesign M2a, B3).
-import { FOLD_SHRINK } from "../arms.ts";
-import { num } from "./logs.ts";
+import { FOLD_SHRINK, isError, push } from "../arms.ts";
+import { byTs, isLine, num } from "./logs.ts";
+import { cacheWrite1hOf, isClaude, pIn, WEIGHT, writeWeight } from "./units.ts";
+
+type Flags = Record<string, Record<string, string>>;
 
 export type MissCause = "ttl" | "fold" | "model" | "other";
 /** One request of a session branch: `growth` = tokens written because the context grew (new context), `miss` = tokens of the cached prefix it had to process again. */
@@ -38,4 +41,59 @@ export function cacheSteps(branch: readonly any[], ttlMs: (l: any) => number, ev
     steps.push(step);
   });
   return steps;
+}
+
+const TTL_5M = 5 * 60_000;
+const TTL_1H = 60 * 60_000;
+
+/** The TTL in force after a request (`ttlMs` of cacheSteps): 1 h when it wrote 1 h (`cacheWrite1h` > 0) or is a main session's in a `mainCacheTtl` 1h arm of `flags` (arm id → factor values), else 5 minutes. */
+export const ttlMsOf = (flags: Flags = {}) => (l: any): number =>
+  num(l.cacheWrite1h) > 0 || (l.parentSessionId === undefined && flags[l.arm]?.mainCacheTtl === "1h") ? TTL_1H : TTL_5M;
+
+/** The session branches of `lines`: per session the turn and warming requests of Claude models in ts order (error lines carry no usage, nested requests are another prompt). */
+export function branchesOf(lines: readonly any[]): Map<string, any[]> {
+  const branches = new Map<string, any[]>();
+  const usable = lines.filter((l) => isLine(l) && typeof l.sessionId === "string" && (l.kind === "turn" || l.kind === "warming") && !isError(l) && isClaude(l));
+  for (const l of usable.sort(byTs)) push(branches, l.sessionId, l);
+  return branches;
+}
+
+export type CauseRow = { cause: MissCause; n: number; tokens: number; usd: number };
+export type CacheSection = {
+  /** Claude turn requests in the branches, and the branches. */ requests: number; branches: number;
+  /** Their cacheWrite tokens. */ writeTokens: number;
+  /** Growth writes: tokens and $ at the write price. */ newContext: { tokens: number; usd: number };
+  /** Misses by cause, in the order ttl, fold, model, other: requests, missed tokens, premium API-eq $ = tokens × (write − read price). */ misses: CauseRow[];
+  /** Missed tokens ÷ cacheWrite tokens (0 without writes). */ missShare: number;
+};
+const CAUSES: MissCause[] = ["ttl", "fold", "model", "other"];
+
+/**
+ * The Cache section: cacheSteps (fold = shrinkFold) over every branch of `lines`, summed. $ is at each line's input price p (pIn): a write
+ * costs 1.25 p (2.0 p for 1 h writes, cacheWrite1hOf), a read 0.1 p; a miss costs the premium of writing over reading.
+ */
+export function cacheSection(lines: readonly any[], flags: Flags = {}): CacheSection {
+  const ttl = ttlMsOf(flags);
+  const misses = CAUSES.map((cause): CauseRow => ({ cause, n: 0, tokens: 0, usd: 0 }));
+  const out: CacheSection = { requests: 0, branches: 0, writeTokens: 0, newContext: { tokens: 0, usd: 0 }, misses, missShare: 0 };
+  for (const branch of branchesOf(lines).values()) {
+    out.branches += 1;
+    for (const step of cacheSteps(branch, ttl, shrinkFold)) {
+      const l = branch[step.i];
+      const long = cacheWrite1hOf(l, l.parentSessionId === undefined, flags[l.arm]);
+      const p = pIn(l, long), w = writeWeight(l, long);
+      out.requests += 1;
+      out.writeTokens += num(l.cacheWrite);
+      out.newContext.tokens += step.growth;
+      out.newContext.usd += step.growth * w * p;
+      if (step.cause) {
+        const row = misses[CAUSES.indexOf(step.cause)];
+        row.n += 1;
+        row.tokens += step.miss;
+        row.usd += step.miss * (w - WEIGHT.cacheRead) * p;
+      }
+    }
+  }
+  out.missShare = out.writeTokens > 0 ? misses.reduce((s, m) => s + m.tokens, 0) / out.writeTokens : 0;
+  return out;
 }

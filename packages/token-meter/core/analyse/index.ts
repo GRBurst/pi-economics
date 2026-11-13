@@ -13,11 +13,12 @@ import { quality, type QualitySection } from "./quality.ts";
 export { LOGS, inPeriod, versionOf, type FileInfo, type LogName, type Logs, type Period } from "./logs.ts";
 export { DESIGNS, designOf } from "./designs.ts";
 export { type CostSection, type Split } from "./cost.ts";
+export { type CacheSection, type CauseRow, type MissCause } from "./cache.ts";
 export { type DesignResult, type Effect } from "./experiment.ts";
 export { type DelegationSection, type ProfileTier, type RandomRow, type Randomized, type Runaway, type SpotChecks } from "./delegation.ts";
 export { type GuardsSection } from "./guards.ts";
 export { type QualitySection } from "./quality.ts";
-export { renderAnalysis, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderQuality, renderRandomized, renderSpotChecks, reportName } from "./render.ts";
+export { renderAnalysis, renderCache, renderCost, renderDelegation, renderExperiment, renderFolds, renderGuards, renderQuality, renderRandomized, renderSpotChecks, reportName } from "./render.ts";
 
 export type Analysis = { period: Period; cost: CostSection; experiment: { designs: DesignResult[] }; delegation: DelegationSection; guards: GuardsSection; quality: QualitySection };
 

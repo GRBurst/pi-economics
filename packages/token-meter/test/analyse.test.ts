@@ -60,14 +60,14 @@ test("cost (B13): the token components value a 1h-arm main's cache writes at 2.0
   close(Object.values(c.components).reduce((s, x) => s + x, 0), c.totalUsd, 1e-12);
 });
 
-test("cost: splits by model, cache rewrite, warming, folds; $ per accepted task", () => {
+test("cost: splits by model, warming, folds; $ per accepted task", () => {
   const c = analyse(world()).cost;
   const model = Object.fromEntries(c.byModel.map((m) => [m.model, m.usd]));
   close(model["claude-opus"], 20.5); close(model["claude-sonnet"], 27); close(model.qwen, 0.2);
   const split = Object.fromEntries(c.splits.map((s) => [s.name, s]));
   close(split.warming.usd, 0.5);
   close(split.warming.perHour, 0.5 / 3);
-  assert.ok(split["cache rewrite"].usd > 0 && split["cache rewrite"].usd < c.components.cacheWrite5m + c.components.cacheWrite1h + 1e-9);
+  assert.ok(!("cache rewrite" in split), "every non-first write is no rewrite (B3): the Cache section reports growth and misses");
   assert.ok("after folds" in split && "after cold resumes" in split);
   // t1 (0.2) accepted, t2 (1.0) rejected, t3 (2.0) accepted: (0.2 + 1 + 2) / 2
   close(c.perAccepted.perAccepted, 1.6);
@@ -99,6 +99,23 @@ test("cost: error lines are not requests (counted apart), nor active hours", () 
 test("cost: an error line makes no fold", () => {
   const meter = [...turns("f", T0, 3, { arm: "-----" }, 1), errLine("f", 3, { arm: "-----" }), ...turns("f", T0 + 4 * MIN, 3, { arm: "-----" }, 1)];
   assert.equal(analyse(none(meter)).cost.splits.find((s) => s.name === "after folds")!.n, 0);
+});
+
+test("cost (B3): the Cache section: growth is new context, only the prefix a request had to process again is a miss, with its cause", () => {
+  const g = (at: number, read: number, write: number) => turn("g", T0 + at * MIN, { arm: "-----", input: 0, cacheRead: read, cacheWrite: write, costUsd: 1 });
+  // three requests growing without a gap, then one after 6 minutes at the 5 minute TTL that read nothing
+  const a = analyse(none([g(0, 0, 1000), g(1, 1000, 200), g(2, 1200, 300), g(8, 0, 1500)]));
+  const c = a.cost.cache;
+  assert.deepEqual([c.requests, c.branches, c.writeTokens, c.newContext.tokens], [4, 1, 3000, 1500]);
+  assert.deepEqual(c.misses.map((m) => [m.cause, m.n, m.tokens]), [["ttl", 1, 1500], ["fold", 0, 0], ["model", 0, 0], ["other", 0, 0]]);
+  close(c.missShare, 0.5);
+  const md = renderAnalysis(a);
+  assert.ok(md.includes("### Cache"), "the report has a Cache section");
+  assert.ok(md.includes("| ttl | 1 | 1500 |"), "misses by cause");
+  assert.ok(!md.includes("cache rewrite"), "the rewrite split of every non-first write is gone");
+  // without a gap nothing is missed
+  const warm = analyse(none([g(0, 0, 1000), g(1, 1000, 200), g(2, 1200, 300), g(3, 1500, 100)])).cost.cache;
+  assert.deepEqual([warm.missShare, warm.misses.reduce((s, m) => s + m.tokens, 0)], [0, 0]);
 });
 
 test("cost: a long log is analysed in linear time; a huge quota window does not overflow Math.max", () => {

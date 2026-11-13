@@ -43,6 +43,12 @@ export function pIn(l: any, long: number = num(l.cacheWrite1h), priced1h: boolea
   return w > 0 ? num(l.costUsd) / w : 0;
 }
 
+/** What a token the line wrote to the cache costs, in input prices: 1.25 for a 5-minute write, 2.0 for a 1 h one (`long` of the line's cacheWrite), the mix of the two otherwise. */
+export function writeWeight(l: any, long: number): number {
+  const written = num(l.cacheWrite);
+  return written > 0 ? (WEIGHT.cacheWrite5m * (written - long) + WEIGHT.cacheWrite1h * long) / written : WEIGHT.cacheWrite5m;
+}
+
 export type PriceOpt = {
   /** 1 h-written tokens of the line (cacheWrite1hOf); default its own `cacheWrite1h`, else 0. */
   cacheWrite1h?: number;

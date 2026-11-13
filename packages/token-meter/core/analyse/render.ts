@@ -4,6 +4,7 @@ import { type LedgerSection } from "../ledger.ts";
 import { type CI } from "../stats.ts";
 import { sum } from "./logs.ts";
 import { type CostSection } from "./cost.ts";
+import { type CacheSection } from "./cache.ts";
 import { type DesignResult } from "./experiment.ts";
 import { MIN_CI_N, type DelegationSection, type Randomized, type SpotChecks } from "./delegation.ts";
 import { type GuardsSection } from "./guards.ts";
@@ -26,10 +27,24 @@ export function renderCost(c: CostSection): string {
       ["$/accepted task (accepted/judged)", `${f2(c.perAccepted.perAccepted)} (${c.perAccepted.accepted}/${c.perAccepted.judged})`],
     ]),
     "\n### By model\n", table(["model", "requests", "$", "share", "$/active h"], c.byModel.map((m) => [m.model, String(m.requests), f2(m.usd), pc(m.share), f2(m.perHour)])),
-    "\n### Splits\n\nSplits overlap (a rewrite can follow a fold); fold and cold-resume rows charge the 3 requests from the event on; cache rewrite = cache-write $ of every request but a session's first, split from the line's cost by Anthropic price ratios.\n",
+    "\n### Splits\n\nSplits overlap; fold and cold-resume rows charge the 3 requests from the event on.\n",
     table(["split", "n", "$", "share", "$/active h"], c.splits.map((s) => [s.name, String(s.n), f2(s.usd), pc(s.share), f2(s.perHour)])),
     "\n### Token components (≈, by Anthropic price ratios)\n", table(["component", "$"], Object.entries(c.components).map(([k, v]) => [k, f2(v)])),
+    renderCache(c.cache),
     renderFolds(c.folds),
+  ].join("\n");
+}
+
+export function renderCache(c: CacheSection): string {
+  if (!c.requests) return "\n### Cache\n\n_no Claude requests in the period_";
+  return [
+    "\n### Cache (Claude models)\n",
+    "Per session branch (warming requests refresh the cache but are no row): a request's cache write is **new context** (growth: the context added since the previous request, written once whatever happens) plus a **rewrite**, the **miss**: tokens of the prefix the previous request left in the cache (cacheRead + cacheWrite) that this one did not read. Only a miss is avoidable. Cause of a miss, the first that holds: ttl (the gap outlived the TTL in force: 5 min, 1 h for a main session in a mainCacheTtl 1h arm or after a 1 h write), fold (the prompt fell below 80% of the previous request's), model (the model changed), other. $ = API-eq at each line's input price p: a write is 1.25 p (2.0 p for a 1 h write), a read 0.1 p; a miss costs the premium of writing over reading.\n",
+    table(["metric", "value"], [
+      ["requests (branches)", `${c.requests} (${c.branches})`], ["new context", `${c.newContext.tokens} tokens, ${f2(c.newContext.usd)} $`],
+      ["missed prefix", `${c.misses.reduce((s, m) => s + m.tokens, 0)} tokens, ${f2(c.misses.reduce((s, m) => s + m.usd, 0))} $ premium`], ["miss share (missed ÷ cache-write tokens)", pc(c.missShare)],
+    ]),
+    "\nMisses by cause:\n", table(["cause", "requests", "missed tokens", "premium API-eq $"], c.misses.map((m) => [m.cause, String(m.n), String(m.tokens), f2(m.usd)])),
   ].join("\n");
 }
 

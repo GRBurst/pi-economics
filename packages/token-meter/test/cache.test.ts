@@ -2,7 +2,7 @@
 // because the cache lost the prefix (miss), and why. From synthetic request sequences.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cacheSteps, shrinkFold } from "../core/analyse/cache.ts";
+import { branchesOf, cacheSection, cacheSteps, shrinkFold, ttlMsOf } from "../core/analyse/cache.ts";
 import { mulberry32 } from "../core/stats.ts";
 
 const MIN = 60_000;
@@ -134,4 +134,70 @@ test("shrinkFold: the 80% rule of arms.ts and the ledger, on whole prompts (stri
   assert.equal(shrinkFold(p(1000), p(800)), false);
   assert.equal(shrinkFold(p(1000), p(1500)), false);
   assert.equal(shrinkFold({ input: 10, cacheRead: 600, cacheWrite: 390 }, { input: 5, cacheRead: 500, cacheWrite: 100 }), true, "prompt = input + cacheRead + cacheWrite");
+});
+
+// ---- the Cache section of the report (T2a.4) ----
+
+const P = 1e-6; // $ per input token
+const close = (a: number, b: number) => assert.ok(Math.abs(a - b) <= 1e-12 + 1e-9 * Math.abs(b), `${a} ≈ ${b}`);
+/** `R` costed the way pi 1.4 does: input 1, read 0.1, write `ww` (1.25: 5 minutes, 2.0: 1 h), output 5 × P. */
+const C = (sessionId: string, at: number, read: number, write: number, extra: Record<string, unknown> = {}, ww = 1.25) => {
+  const l: any = R(at, read, write, { sessionId, ...extra });
+  return { ...l, costUsd: P * (l.input + 0.1 * read + ww * write + 5 * l.output) };
+};
+const H = { "+": { mainCacheTtl: "1h" } };
+
+test("ttlMsOf: 1 h for a line that wrote 1 h or a main session of a mainCacheTtl 1h arm, else 5 minutes", () => {
+  const ttl = ttlMsOf(H);
+  assert.equal(ttl(R(0, 0, 10, { arm: "+" })), HOUR);
+  assert.equal(ttl(R(0, 0, 10, { arm: "-" })), 5 * MIN);
+  assert.equal(ttl(R(0, 0, 10, { arm: "+", parentSessionId: "p" })), 5 * MIN, "a child keeps 5 minutes");
+  assert.equal(ttl(R(0, 0, 10, { arm: "-", parentSessionId: "p", cacheWrite1h: 10 })), HOUR, "a measured 1 h write");
+  assert.equal(ttl(R(0, 0, 10, { arm: "-", cacheWrite1h: 0 })), 5 * MIN);
+  assert.equal(ttlMsOf()(R(0, 0, 10, { arm: "+" })), 5 * MIN, "without flags");
+});
+
+test("branchesOf: one branch per session of Claude turn and warming requests in ts order; errors, nested requests and other models are out", () => {
+  const lines = [
+    R(2, 5, 5, { sessionId: "a" }), R(0, 0, 10, { sessionId: "a" }), R(1, 0, 0, { sessionId: "a", status: "error" }), R(3, 0, 0, { sessionId: "a", kind: "nested" }),
+    R(1, 0, 10, { sessionId: "b", kind: "warming" }), R(0, 0, 10, { sessionId: "q", provider: "llama", model: "qwen" }), { ts: "bad", sessionId: "a" }, { sessionId: "a" },
+  ];
+  const b = branchesOf(lines);
+  assert.deepEqual([...b.keys()].sort(), ["a", "b"]);
+  assert.deepEqual(b.get("a")!.map((l) => l.ts), [R(0, 0, 0).ts, R(2, 0, 0).ts]);
+});
+
+test("cacheSection: new context, misses by cause and their premium at the line's input price, over Claude branches only", () => {
+  const meter = [
+    C("a", 0, 0, 1000), C("a", 1, 1000, 200), C("a", 4, 0, 0, { status: "error" }), C("a", 8, 0, 1200), C("a", 9, 1200, 100), // a ttl miss of 1200 at 5 minutes
+    C("b", 0, 0, 500, { arm: "+" }, 2.0), C("b", 20, 0, 500, { arm: "+" }, 2.0), // a 1h-arm main: 20 minutes is within the TTL: an unexplained miss of 500
+    C("c", 0, 0, 900, { parentSessionId: "a", provider: "llama", model: "qwen" }), // a local model: not modelled here
+  ];
+  const c = cacheSection(meter, H);
+  assert.equal(c.requests, 6);
+  assert.equal(c.branches, 2);
+  assert.equal(c.writeTokens, 3500);
+  assert.equal(c.newContext.tokens, 1800);
+  close(c.newContext.usd, 1300 * 1.25 * P + 500 * 2.0 * P);
+  assert.deepEqual(c.misses.map((m) => [m.cause, m.n, m.tokens]), [["ttl", 1, 1200], ["fold", 0, 0], ["model", 0, 0], ["other", 1, 500]]);
+  close(c.misses[0].usd, 1200 * (1.25 - 0.1) * P);
+  close(c.misses[3].usd, 500 * (2.0 - 0.1) * P);
+  close(c.missShare, 1700 / 3500);
+});
+
+test("cacheSection: no Claude request: zeros and a miss share of 0, the cause rows still there", () => {
+  const c = cacheSection([]);
+  assert.deepEqual([c.requests, c.branches, c.writeTokens, c.newContext.tokens, c.missShare], [0, 0, 0, 0, 0]);
+  assert.deepEqual(c.misses.map((m) => m.cause), ["ttl", "fold", "model", "other"]);
+});
+
+test("cacheSection: a fold shows as cause fold (the 80% rule on the lines); a long log is stepped in linear time", () => {
+  const folded = [C("a", 0, 0, 10_000), C("a", 1, 10_000, 100), C("a", 2, 1_000, 1_500)]; // prompt 10 100 → 2 500: a fold, 1500 − ... rewritten
+  const c = cacheSection(folded);
+  assert.deepEqual(c.misses.filter((m) => m.n).map((m) => [m.cause, m.tokens]), [["fold", 1_500]]);
+  const n = 100_000;
+  const long = Array.from({ length: n }, (_, i) => C("big", i / 60, i * 10, 10));
+  const t = Date.now();
+  assert.equal(cacheSection(long).requests, n);
+  assert.ok(Date.now() - t < 5_000, `${Date.now() - t} ms`);
 });

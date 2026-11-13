@@ -1,10 +1,11 @@
 // Pure aggregation + markdown rendering for the meter log (bin/meter-report.ts does the I/O).
+import { cacheSection } from "./analyse/cache.ts";
 export type Row = { key: string; requests: number; input: number; cacheRead: number; cacheWrite: number;
   output: number; costUsd: number; errors: number; warming: number; warmingCostUsd: number };
 export type Regression =
   | { ok: true; hours: number; read: number; write: number; output: number }
   | { ok: false; hours: number };
-export type Aggregate = { byDay: Row[]; bySession: Row[]; byModel: Row[]; total: Row; rewriteShare: number; regression: Regression };
+export type Aggregate = { byDay: Row[]; bySession: Row[]; byModel: Row[]; total: Row; missShare: number; regression: Regression };
 
 const MIN_HOURS = 24;
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
@@ -46,20 +47,12 @@ export function aggregate(all: any[], range: { from?: string; to?: string } = {}
   const total = emptyRow("total");
   for (const l of lines) add(total, l);
 
-  // rewrite share: cacheWrite of every request but a session's first, over all cacheWrite
-  const seen = new Set<string>();
-  let after = 0;
-  for (const l of lines) {
-    if (l.kind === "warming") continue;
-    if (seen.has(l.sessionId)) after += num(l.cacheWrite);
-    else seen.add(l.sessionId);
-  }
   return {
     byDay: group(lines, (l) => l.ts.slice(0, 10)),
     bySession: group(lines, (l) => l.sessionId),
     byModel: group(lines, (l) => String(l.model)),
     total,
-    rewriteShare: total.cacheWrite > 0 ? after / total.cacheWrite : 0,
+    missShare: cacheSection(lines).missShare, // the cached prefix a request had to write again ÷ the cache writes (B3), Claude models
     regression: quotaRegression(lines),
   };
 }
@@ -122,7 +115,7 @@ export function render(a: Aggregate): string {
     "## Per session", table("session", a.bySession),
     "## Per model", table("model", a.byModel),
     "## Total", table("all", [a.total]),
-    `rewrite share: ${(a.rewriteShare * 100).toFixed(1)}%`,
+    `miss share: ${(a.missShare * 100).toFixed(1)}% (tokens of the cached prefix that had to be written again ÷ cache-write tokens; Claude models; pi-analyse has the causes)`,
     regLine,
   ].join("\n\n") + "\n";
 }
