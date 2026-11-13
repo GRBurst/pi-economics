@@ -264,4 +264,6 @@ in {
   };
   # redesign M10
   identity-shim-probe = import ./identity-shim-probe {inherit pkgs;};
+  # redesign M6
+  load-order = import ./load-order {inherit lib pkgs hm actorEntry;};
 }
