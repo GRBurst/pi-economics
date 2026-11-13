@@ -45,9 +45,9 @@ test("per event and version: spawn tier, verdict value, v1 assignment design, ra
 
 // Meter line v2 (M3a, design §5.2): `retries`/`retryWaitMs` are required up to v1 (the retry extension's counts) and optional
 // from v2 (present iff the meter observes native attempts); every v2 field is type-checked when present.
-test("meter v2: retries optional, v2 fields typed; v0/v1 lines still need retries", () => {
+test("meter v2: retries optional, v2 fields typed (billing required, its own test); v0/v1 lines still need retries", () => {
   const w = world();
-  const v2 = { v: 2, ts: iso(T0), sessionId: "m9", provider: "p-local", model: "m", kind: "warming", status: 200,
+  const v2 = { v: 2, ts: iso(T0), sessionId: "m9", provider: "p-local", model: "m", kind: "warming", status: 200, billing: "api",
     input: 1, cacheRead: 2, cacheWrite: 3, output: 4, costUsd: 0 };
   w.meter.push(v2, { ...v2, kind: "turn", retries: 1, retryWaitMs: 2000, billing: "local", durationMs: 900, ttftMs: 100, cacheWrite1h: 3, design: "d" });
   w.meter.push({ ...v2, kind: "turn", status: "error", errorClass: "400", errorKind: "context_overflow" });
@@ -57,6 +57,15 @@ test("meter v2: retries optional, v2 fields typed; v0/v1 lines still need retrie
   w.meter.push((({ retries, retryWaitMs, ...r }) => r)(turn("m1", T0, { arm: "-----" })), (({ retries, ...r }) => r)(v0));
   assert.deepEqual(fields(check(w)).sort(), ["meter.billing", "meter.cacheWrite1h", "meter.design", "meter.durationMs", "meter.errorKind",
     "meter.retries", "meter.retries", "meter.retryWaitMs", "meter.ttftMs"]);
+});
+
+test("meter v2: billing is required from v2 on (the writer emits it on every line); v0/v1 lines have none", () => {
+  const w = world();
+  const v2 = { v: 2, ts: iso(T0), sessionId: "m9", provider: "p", model: "m", kind: "turn", status: "error", errorClass: "500", errorKind: "other" };
+  w.meter.push({ ...v2, billing: "api" }, { ...v2, kind: "warming", status: 200, billing: "subscription", input: 0, cacheRead: 1, cacheWrite: 0, output: 1, costUsd: 0 });
+  assert.deepEqual(check(w), [], "v2 lines with billing; the v1 world has none");
+  w.meter.push(v2, { ...v2, v: 3 });
+  assert.deepEqual(check(w).map((p) => [`${p.log}.${p.field}`, p.count, p.why]), [["meter.billing", 2, "every meter line from v2"]]);
 });
 
 test("usage is required on successful requests only", () => {

@@ -108,7 +108,7 @@ largest (`rawRatelimit` is dropped first).
 
 | field | type | present | meaning |
 | --- | --- | --- | --- |
-| `billing` | `subscription` \| `api` \| `free` \| `local` | every line | billing class of the provider, from `plans` in `token-meter/settings.json` (Home Manager: `tokenMeter.plans`); a provider without a plan is `api` |
+| `billing` | `subscription` \| `api` \| `free` \| `local` | every line (`pi-analyse --check` requires it from v2) | billing class of the provider, from `plans` in `token-meter/settings.json` (Home Manager: `tokenMeter.plans`); a provider without a plan is `api` |
 | `design` | string | when the experiments extension names the session's design | the experiment design of `arm` (not written yet: the extension names none) |
 | `cacheWrite1h` | number | when the provider reports the split (Anthropic) | the part of `cacheWrite` written with the 1-hour TTL |
 | `durationMs` | int (ms) | turn lines whose request the session sent | the session's last own provider request (a `before_provider_request` right after the agent loop's `context` event) to this `message_end`; a resend restarts it, a warm's or a compaction's send (no `context` event) does not |
