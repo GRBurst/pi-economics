@@ -61,7 +61,7 @@ export function buildLine(i: LineInput): MeterLineV2 {
   if (i.retryWaitMs !== undefined) l.retryWaitMs = i.retryWaitMs;
   if (i.status === "error") {
     l.errorClass = errorClassOf(i.errorMessage);
-    l.errorKind = errorKindOf(i.status, i.errorMessage ?? "");
+    l.errorKind = errorKindOf(i.errorMessage ?? "", i.provider);
   }
   if (i.snap) {
     const { raw, ...quota } = parseRatelimit(i.snap.headers);

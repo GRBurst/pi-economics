@@ -194,7 +194,7 @@ export function install(pi: PiLike, deps: Deps): void {
       input.status = "error";
       if (typeof m.errorMessage === "string") input.errorMessage = m.errorMessage;
       // pi never retries a context overflow (it compacts instead): that resend is no retry.
-      if (errorKindOf("error", input.errorMessage ?? "") === "context_overflow") failedAt.delete(sid);
+      if (errorKindOf(input.errorMessage ?? "", input.provider) === "context_overflow") failedAt.delete(sid);
       else failedAt.set(sid, end.getTime());
     } else {
       const usage = mapUsage(m.usage);

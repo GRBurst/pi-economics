@@ -362,6 +362,18 @@ test("native retry: a context overflow is no retry; nor is a send after the run 
     [["error", 0, 0], [200, 0, 0], ["error", 0, 0], [200, 0, 0], ["error", 0, 0], [200, 0, 0]]);
 });
 
+test("native retry: every overflow pi-ai 1.4 names is no retry (pi compacts and resends), whatever its wording", () => {
+  for (const msg of ["input is too long for requested model", "413", "Please reduce the length of the messages or completion",
+    "prompt token count of 9 exceeds the limit of 8", "too many tokens"]) {
+    const { f, clock, lines } = setup();
+    const ctx = fakeCtx("s1");
+    const send = (at: number) => { clock.t = T0 + at; f.fire("before_provider_request", {}, ctx); };
+    send(0); f.fire("message_end", failed(msg), ctx);
+    send(30_000); f.fire("message_end", assistant(), ctx); // the resend after compaction
+    assert.deepEqual(lines().map((l) => [l.errorKind, l.retries, l.retryWaitMs]), [["context_overflow", 0, 0], [undefined, 0, 0]], msg);
+  }
+});
+
 test("native retry: warming lines carry no retries (pi's session retry never resends a warm: not observed, so absent)", () => {
   const { f, lines } = setup();
   const ctx = fakeCtx("s1");

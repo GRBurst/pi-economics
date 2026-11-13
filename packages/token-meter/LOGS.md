@@ -113,7 +113,7 @@ largest (`rawRatelimit` is dropped first).
 | `cacheWrite1h` | number | when the provider reports the split (Anthropic) | the part of `cacheWrite` written with the 1-hour TTL |
 | `durationMs` | int (ms) | turn lines whose request the session sent | the session's last provider request (`before_provider_request`) to this `message_end`; a resend restarts it |
 | `ttftMs` | int (ms) | when a stream event followed that request | the request to its first `provider_stream_event` |
-| `errorKind` | `context_overflow` \| `rate_limit` \| `other` | `status: "error"` | class of the error message: HTTP 429, rate limit, quota or overloaded → `rate_limit` (tested first); prompt too long, context length or window → `context_overflow`; else `other`. The message itself is never written |
+| `errorKind` | `context_overflow` \| `rate_limit` \| `other` | `status: "error"` | class of the error message: `context_overflow` exactly when pi 1.4 takes it for one (pi-ai's overflow patterns, mirrored; throttling and rate-limit texts never are), then a leading 429, a throttling or a rate-limit text → `rate_limit`; else `other` (an overloaded server too). The message itself is never written |
 | `retries`, `retryWaitMs` | int, int (ms) | turn lines | pi's native retry: `retries` = 1 when this request is pi's resend of the session's previous request that failed (an `error` line, not a context overflow, with no other message and no end of the run in between), else 0; `retryWaitMs` = that failure's `message_end` to this request. Absent on warming lines (pi never resends a warm) |
 
 The count is per request: a failed attempt is an `error` line of its own, and each resend
