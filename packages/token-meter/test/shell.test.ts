@@ -62,6 +62,45 @@ test("billing: the provider's plan class on turn and warming lines; a provider w
   assert.equal(plain.lines()[0].billing, "api", "no plans: every provider counts as api");
 });
 
+// P7: active (serving) time = the session's last send → its message_end; retry waits are not in it.
+test("durationMs: last before_provider_request → message_end of the session; a resend restarts it; a warm sent mid-stream does not", () => {
+  const { f, clock, lines } = setup();
+  const ctx = fakeCtx("s1"), other = fakeCtx("s2");
+  f.fire("session_start", {}, ctx);
+  clock.t = T0 + 5000;
+  f.fire("before_provider_request", {}, ctx);
+  clock.t = T0 + 6000;
+  f.fire("before_provider_request", {}, other); // another session's send
+  clock.t = T0 + 6500;
+  f.fire("message_end", assistant(), ctx);
+  assert.equal(lines()[0].durationMs, 1500);
+  // a failed attempt, then pi resends after 2 s
+  clock.t = T0 + 10_000;
+  f.fire("before_provider_request", {}, ctx);
+  clock.t = T0 + 10_100;
+  f.fire("message_end", assistant({ stopReason: "error", errorMessage: "529: overloaded", usage: undefined }), ctx);
+  clock.t = T0 + 12_100;
+  f.fire("before_provider_request", {}, ctx);
+  clock.t = T0 + 13_000;
+  f.fire("message_end", assistant(), ctx);
+  assert.deepEqual(lines().slice(1).map((l) => [l.status, l.durationMs]), [["error", 100], [200, 900]]);
+  // a warm sent while the turn streams
+  clock.t = T0 + 20_000;
+  f.fire("before_provider_request", {}, ctx);
+  f.fire("after_provider_response", resp, ctx);
+  f.fire("message_start", { message: { role: "assistant" } }, ctx);
+  clock.t = T0 + 290_000;
+  f.fire("before_provider_request", {}, ctx);
+  clock.t = T0 + 420_000;
+  f.fire("message_end", assistant(), ctx);
+  assert.equal(lines()[3].durationMs, 400_000);
+  // no send seen (e.g. a message_end replayed without its request): no measurement
+  f.fire("message_end", assistant(), ctx);
+  assert.equal("durationMs" in lines()[4], false);
+  f.fire("message_end", assistant(), other);
+  assert.equal(lines()[5].durationMs, 420_000 - 6000);
+});
+
 test("user message_end → no line", () => {
   const { f, lines } = setup();
   const ctx = fakeCtx("s1");
