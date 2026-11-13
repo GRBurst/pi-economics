@@ -52,7 +52,7 @@ test("T5b1.9 contract: v2 rows, eligible (design, stratum, arm, factors) and ine
 function corpus(seed: number) {
   const rand = mulberry32(seed);
   const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)];
-  const bits = (n: number, a: string) => Array.from({ length: n }, () => pick(a)).join("");
+  const bits = (n: number, a: string) => Array.from({ length: n }, () => pick([...a])).join("");
   const legacy = { meter: [] as Record<string, unknown>[], assignments: [] as Record<string, unknown>[] };
   const v2 = { meter: [] as Record<string, unknown>[], assignments: [] as Record<string, unknown>[] };
   const n = 4 + Math.floor(rand() * 12);
@@ -91,7 +91,7 @@ test("T5b1.9 property: over v1 + v2 corpora the analyser does not crash, the con
     assert.equal(mine.baseline, "000", `seed ${seed}: the all-low arm`);
     assert.deepEqual(mine.strata.map((s) => s.stratum), ["api"]);
     for (const [name, , [lo, hi]] of FACTORS) {
-      const e = mine.strata[0].effects.find((x) => x.factor === name)!;
+      const e = mine.strata[0].effects.find((x) => x.factor === name) as Record<string, unknown>;
       const nLo = units.filter((r) => r.factors[name].assigned === lo).length;
       const nHi = units.length - nLo;
       if (nLo === 0 || nHi === 0) continue;
