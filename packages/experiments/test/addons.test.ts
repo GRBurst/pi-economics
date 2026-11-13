@@ -159,5 +159,19 @@ test("T5b2.6 mainCacheTtl is a main session's lever: infeasible in a child (cach
   const ttl = CACHE_LIFECYCLE.find((l) => l.id === "cache-lifecycle.mainCacheTtl")!;
   assert.deepEqual(ttl.feasible({ child: true }, ["5m", "1h"]), []);
   assert.deepEqual(ttl.feasible({ child: false }, ["5m", "1h"]), ["5m", "1h"]);
-  for (const l of CACHE_LIFECYCLE.filter((l) => l !== ttl)) assert.deepEqual(l.feasible({ child: true }, ["a", "b"]), ["a", "b"]);
+  const all = ["native", "orchestrator-aware", "off", "on"];
+  for (const l of CACHE_LIFECYCLE.filter((l) => l !== ttl)) {
+    assert.equal(l.feasible({ child: true }, all).length, 2, l.id);
+    assert.deepEqual(l.feasible({ child: true }, all), l.feasible({ child: false }, all), `${l.id}: the same in a child`);
+  }
+});
+
+// Review m2: a lever is feasible only at the levels its target understands (§7.4); a stratum's other levels (a typo,
+// "1H") are refused up front, so no state claims them.
+test("review m2: the cache-lifecycle levers are feasible only at the levels cache-lifecycle understands", () => {
+  const f = (name: string, levels: string[], child = false) => CACHE_LIFECYCLE.find((l) => l.id === `cache-lifecycle.${name}`)!.feasible({ child }, levels);
+  assert.deepEqual(f("warmPolicy", ["native", "orchestrator-aware", "eager"]), ["native", "orchestrator-aware"]);
+  assert.deepEqual(f("mainCacheTtl", ["5m", "1H", "1h"]), ["5m", "1h"]);
+  assert.deepEqual(f("mainCacheTtl", ["5m", "1h"], true), []);
+  assert.deepEqual(f("maskOnCold", ["off", "on", "tools+thinking"]), ["off", "on"]);
 });

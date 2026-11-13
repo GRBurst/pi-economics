@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { effectiveSettings, extensionLevers } from "./effective-settings.ts";
 import { LEVERS, LEVERS_QUERY, type Bus, type Levers, type LeversQuery } from "./channel.ts";
-import { leversLine, serializeLevers, type LeverId, type LeverState } from "./levers.ts";
+import { leverViolations, leversLine, serializeLevers, type LeverId, type LeverState } from "./levers.ts";
 import { systemHash } from "./system-hash.ts";
 import { Joiner } from "./join.ts";
 import { errorKindOf } from "./errorkind.ts";
@@ -182,6 +182,22 @@ export function install(pi: PiLike, deps: Deps): void {
   // one changes (settings files, the model's per-model levers, the assignment or a lever's read-back). M5b.2: the
   // engine's lever states (`s: "pe"`, `a`, `rb`, `tier`) join pi's settings, and `eligible` is the engine's (a main
   // session that is an experiment unit; a child, with its root's eligibility, never is).
+  // Review m2: an engine state that breaks the levers rules (a stratum level that is no level name, as `a`) is dropped
+  // alone, with one warning per lever id; the line keeps pi's settings, the arm and the other states.
+  const droppedStates = new Set<string>();
+  const engineStates = (raw: unknown): Record<string, LeverState> => {
+    const out: Record<string, LeverState> = {};
+    if (raw === null || typeof raw !== "object") return out;
+    for (const [id, st] of Object.entries(raw as Record<string, unknown>)) {
+      const bad = st !== null && typeof st === "object" ? leverViolations(st as LeverState) : ["not a state object"];
+      if (bad.length === 0) out[id] = st as LeverState;
+      else if (!droppedStates.has(id)) {
+        droppedStates.add(id);
+        console.error(`token-meter: drops the experiments engine's state of ${id} from the levers line: ${bad.join("; ")}`);
+      }
+    }
+    return out;
+  };
   const writeLevers = (sid: string, a: Levers | undefined): void => {
     const base = leversBase.get(sid)!;
     const exp = experiment(a);
@@ -192,7 +208,7 @@ export function install(pi: PiLike, deps: Deps): void {
       ...(exp === undefined ? {} : { arm: exp.arm }), ...(exp?.design === undefined ? {} : { design: exp.design }),
       eligible: a?.eligible === true && parentSessionId === undefined,
       ...(exp?.stratum === undefined ? {} : { stratum: exp.stratum }),
-      levers: { ...base.levers, ...(a?.levers !== null && typeof a?.levers === "object" ? a.levers : {}) },
+      levers: { ...base.levers, ...engineStates(a?.levers) },
     });
     const key = JSON.stringify({ ...line, ts: undefined });
     if (leversSeen.get(sid) === key) return;

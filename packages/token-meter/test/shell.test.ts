@@ -621,6 +621,35 @@ test("T5b2.5 levers: a publication that changes a session's states writes a new 
   assert.deepEqual(ls[1].levers["pi.transport"], { v: "auto", s: "fixed" }, "the settings levers of the last prompt stay");
 });
 
+// Review m2: a stratum may assign a level that is no level name ("1H"); the engine then reports it as `a`. Only that state
+// goes (one warning per lever id); the line, pi's settings levers, the arm and the other states stay.
+test("review m2: an engine state that breaks the levers rules is dropped alone, with one warning per lever id; the line is written", () => {
+  const bad = { v: "5m", s: "fixed", a: "1H", rb: "refused", tier: "replace" };
+  let levers: Record<string, unknown> = { ...PE, "cache-lifecycle.mainCacheTtl": bad };
+  const errs: unknown[][] = [];
+  const oe = console.error;
+  console.error = (...x: unknown[]) => void errs.push(x);
+  try {
+    const { f, clock, lines } = setup({ env: {} }, () => ({ eligible: true, arm: "1", stratum: "api", levers }));
+    agentStart(f, fakeCtx("s1"));
+    levers = { ...levers, "cache-lifecycle.warmPolicy": { v: "native", s: "pe", a: "native", rb: "confirmed", tier: "replace" } };
+    clock.t += 1000;
+    f.pi.events.emit(LEVERS, { sessionId: "s1", eligible: true, arm: "1", stratum: "api", levers });
+    const ls = leversOf(lines());
+    assert.equal(ls.length, 2, "both lines written");
+    for (const l of ls) {
+      assert.equal("cache-lifecycle.mainCacheTtl" in l.levers, false);
+      assert.deepEqual([l.arm, l.stratum, l.eligible], ["1", "api", true]);
+      assert.deepEqual(l.levers["pi.transport"], { v: "auto", s: "fixed" });
+    }
+    assert.deepEqual(ls[1].levers["cache-lifecycle.warmPolicy"].rb, "confirmed");
+    assert.equal(errs.length, 1, "one warning for the lever id");
+    assert.ok(String(errs[0].join(" ")).includes("cache-lifecycle.mainCacheTtl"));
+  } finally {
+    console.error = oe;
+  }
+});
+
 test("T5b2.5 an in-memory child (no session file): parent from the channel; its levers line is never eligible", () => {
   const { f, lines } = setup({ env: {} }, () => ({ eligible: true, arm: "010", parentSessionId: "m1" }));
   const ctx = fakeCtx("c1");

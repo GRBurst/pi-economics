@@ -108,7 +108,7 @@ test("LOGS.md: levers line examples, each one the builder writes byte for byte, 
 // M5b.2: where the engine's states come from, when they change the line, and how an in-memory child finds its parent.
 test("LOGS.md: the Levers lines describe the engine's add-ons, read-back changes and the internal channel (M5b.2)", () => {
   const levers = md.slice(md.indexOf("### Levers lines"), md.indexOf("## task-router/"));
-  for (const s of ["`pi-economics:levers:v1`", "read-back", "may start with a digit", "in-memory child"]) assert.ok(levers.includes(s), `Levers lines: ${s}`);
+  for (const s of ["`pi-economics:levers:v1`", "read-back", "may start with a digit", "in-memory child", "drops an engine state", "a UI is never a child"]) assert.ok(levers.includes(s), `Levers lines: ${s}`);
   assert.ok(!levers.includes("will write"), "Levers lines: the add-ons' line is still announced as future");
   assert.ok(!md.includes("__piExperimentsApi"), "LOGS.md names the removed global");
   const keys = md.slice(md.indexOf("- **Join keys**"), md.indexOf("- **Contract copy**"));

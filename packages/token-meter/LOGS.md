@@ -194,8 +194,9 @@ A state: `v` = the effective value, a level name, a number or a boolean (never f
 (pi-economics assigned it), `ext` (an extension chose it: its default or its own experiment) or `fixed` (configuration or
 pi's default); `a` = the value pi-economics assigned and `rb` = the read-back, both present exactly when it assigned one:
 `confirmed` (`v` = `a`), `refused` (`v` ≠ `a`, `s` is `ext` or `fixed`) or `unverified` (no observer: `v` = `a` assumed);
-`tier` = how the add-on applied it (`seed`, `control`, `replace`, `shadow`). The writer refuses a state that breaks one of these
-rules and a line over 4 KiB (it then warns once and writes none).
+`tier` = how the add-on applied it (`seed`, `control`, `replace`, `shadow`). The writer drops an engine state that breaks one of
+these rules (one warning per lever id; the line is written without it) and refuses a line over 4 KiB or one whose own
+observation breaks them (it then warns once and writes none).
 
 Observed today, all `s: "fixed"`: pi's settings as pi 1.4 merges them (`<agentDir>/settings.json`, overridden key by key by
 `<cwd>/.pi/settings.json` when the project is trusted, pi's defaults for unset keys; each file migrated first as pi does,
@@ -224,9 +225,11 @@ writes: `5m`, no cache write: nothing seen); `warmPolicy` and `maskOnCold` have 
 child `mainCacheTtl` is infeasible (only a main takes the 1 h TTL): its state is what the child observed, `refused`
 when that is not its root's level. A level name may start with a digit (`5m`, `1h`). A read-back that changes
 a state writes a new levers line. A child runtime's experiments never draws: it derives its root's assignment (the
-session file's directory, or for an in-memory child the actor's agent list) and serves it on the child's own channel,
-so an in-memory child (no session file) takes its `parentSessionId` and the root's `arm`, `design` and `stratum` from
-there.
+session file's directory `subagents/<root>/`, or for an in-memory child the actor's agent list) and serves it on the
+child's own channel, so an in-memory child (no session file) takes its `parentSessionId` and the root's `arm`, `design`
+and `stratum` from there. The actor binds children headless: an in-memory session with a UI is never a child. Residual
+for in-memory sessions without a UI (print mode), in the short window while the actor creates a child: a new main can be
+taken for the previous main's child, and a child created after the actor dropped its records for a main.
 
 A main session's first line (complete), its line after the first read-back of `mainCacheTtl` and a child line under
 infinite-context (both shortened: the writer always writes every lever):

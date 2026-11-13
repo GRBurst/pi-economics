@@ -7,7 +7,12 @@ import type { Lever, Observed } from "./types.ts";
 
 const TARGET = "cache-lifecycle";
 const replace = { target: TARGET, scope: "session", tier: "replace", apply: () => {} } as const;
-const every = <L>(_env: unknown, levels: readonly L[]): readonly L[] => levels;
+/** Review m2: the levels cache-lifecycle understands as a factor (core/shell.ts flag()); a stratum's other levels are infeasible. */
+const understood = (known: readonly string[]) => <L>(_env: unknown, levels: readonly L[]): readonly L[] =>
+  levels.filter((l) => known.includes(l as string));
+const WARM = understood(["native", "orchestrator-aware"]);
+const TTL = understood(["5m", "1h"]);
+const MASK = understood(["off", "on"]);
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
 /** The TTL the response's cache writes show: pi 1.4 reports `cacheWrite1h` where the provider splits them (Anthropic). */
@@ -18,12 +23,12 @@ function writtenTtl(event: unknown): Observed<string> {
 }
 
 export const CACHE_LIFECYCLE: readonly Lever[] = [
-  { ...replace, id: `${TARGET}.warmPolicy`, readBackAt: "before_agent_start", feasible: every },
+  { ...replace, id: `${TARGET}.warmPolicy`, readBackAt: "before_agent_start", feasible: WARM },
   {
     ...replace, id: `${TARGET}.mainCacheTtl`, readBackAt: "message_end",
     // A main session's TTL: cache-lifecycle writes 5 m in a child whatever the arm says.
-    feasible: (env, levels) => (env.child ? [] : levels),
+    feasible: (env, levels) => (env.child ? [] : TTL(env, levels)),
     observe: (ctx) => writtenTtl(ctx.event),
   },
-  { ...replace, id: `${TARGET}.maskOnCold`, readBackAt: "before_agent_start", feasible: every },
+  { ...replace, id: `${TARGET}.maskOnCold`, readBackAt: "before_agent_start", feasible: MASK },
 ];
