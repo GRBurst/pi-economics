@@ -22,12 +22,12 @@ export const isClaude = (l: any): boolean => /claude/i.test(String(l.model)) || 
 
 /**
  * Tokens of the line's `cacheWrite` written with the 1 h TTL: its own `cacheWrite1h` when it has one (meter v2); else, for a v1 line, all
- * of `cacheWrite` when the line is a main session's (`main`) and its arm's `mainCacheTtl` is "1h" (a documented approximation: children
+ * of `cacheWrite` when the line is a Claude main session's (`main`, isClaude: only Anthropic's explicit caching has a TTL) and its arm's `mainCacheTtl` is "1h" (a documented approximation: children
  * and 5m arms write with the 5-minute TTL); else 0. Never more than `cacheWrite`.
  */
 export function cacheWrite1hOf(l: any, main: boolean, armFlags?: Record<string, unknown>): number {
   const written = num(l.cacheWrite);
-  const long = typeof l.cacheWrite1h === "number" && Number.isFinite(l.cacheWrite1h) ? l.cacheWrite1h : main && armFlags?.mainCacheTtl === "1h" ? written : 0;
+  const long = typeof l.cacheWrite1h === "number" && Number.isFinite(l.cacheWrite1h) ? l.cacheWrite1h : main && isClaude(l) && armFlags?.mainCacheTtl === "1h" ? written : 0;
   return Math.min(Math.max(long, 0), written);
 }
 

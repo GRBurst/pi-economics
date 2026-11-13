@@ -82,8 +82,15 @@ test("WEIGHT: Anthropic list ratios, a 1 h write costs 2.0 and a 5-minute write 
   assert.deepEqual(WEIGHT, { input: 1, cacheRead: 0.1, cacheWrite5m: 1.25, cacheWrite1h: 2.0, output: 5 });
 });
 
+test("cacheWrite1hOf: the v1 approximation (all writes of a main in a 1h arm) holds for Claude lines only (M2c)", () => {
+  const l = { ...priced({ input: 10, cacheRead: 1000, cacheWrite: 1000, output: 5 }, 1000), provider: "llama", model: "qwen3" };
+  assert.equal(cacheWrite1hOf(l, true, { mainCacheTtl: "1h" }), 0, "a non-Claude line has no explicit 1 h cache to infer");
+  assert.equal(cacheWrite1hOf({ ...l, provider: "anthropic" }, true, { mainCacheTtl: "1h" }), 1000);
+  assert.equal(cacheWrite1hOf({ ...l, cacheWrite1h: 200 }, true, { mainCacheTtl: "1h" }), 200, "a measured split still wins");
+});
+
 test("cacheWrite1hOf: the line's own cacheWrite1h; else (v1 approximation) all writes of a main session in a mainCacheTtl 1h arm; else 0", () => {
-  const l = priced({ input: 10, cacheRead: 1000, cacheWrite: 1000, output: 5 }, 1000);
+  const l = priced({ input: 10, cacheRead: 1000, cacheWrite: 1000, output: 5 }, 1000, { model: "claude-opus-5-5" });
   assert.equal(cacheWrite1hOf(l, true, { mainCacheTtl: "1h" }), 1000);
   assert.equal(cacheWrite1hOf(l, true, { mainCacheTtl: "5m" }), 0);
   assert.equal(cacheWrite1hOf(l, true, undefined), 0);
@@ -94,7 +101,7 @@ test("cacheWrite1hOf: the line's own cacheWrite1h; else (v1 approximation) all w
 });
 
 test("B13: a 1 h write is 2.0·pIn per token, not 1.25 (1h-arm main, 1000 write tokens)", () => {
-  const l = priced({ input: 1000, cacheRead: 0, cacheWrite: 1000, output: 0 }, 1000);
+  const l = priced({ input: 1000, cacheRead: 0, cacheWrite: 1000, output: 0 }, 1000, { model: "claude-opus-5-5" });
   const cw1h = cacheWrite1hOf(l, true, { mainCacheTtl: "1h" });
   close(pIn(l, cw1h), P);
   const parts = allocate(l, cw1h);
