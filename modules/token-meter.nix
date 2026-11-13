@@ -103,6 +103,16 @@ in {
       description = "Appends one JSONL line per provider request (tokens, cost, quota headers, retries) to <agentDir>/meter/YYYY-MM.jsonl; no prompt or response text.";
     };
 
+    # (M3a) A rate prices a local provider's active time (design §9.3).
+    assertions = let
+      bad = lib.attrNames (lib.filterAttrs (_: p: p.rate != null && p.billing != "local") cfg.plans);
+    in [
+      {
+        assertion = bad == [];
+        message = "pi-economics: tokenMeter.plans.${lib.head bad}.rate is set but its billing is not \"local\"";
+      }
+    ];
+
     # (M3.4)
     home.packages = [cfg.package.report cfg.package.analyse];
     home.file."${pe.agentDir}/LOGS.md".source = "${cfg.package}/LOGS.md";

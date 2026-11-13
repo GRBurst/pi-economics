@@ -149,6 +149,39 @@ in {
     ++ eq "no plans, no settings: no file" (json {}) null
     ++ eq "failed assertions" (failed "" (eval ".pi/agent" {inherit plans;})) [];
 
+  # (M3a T3a.2) A rate prices a local provider's active time: on any other
+  # billing class it is an error naming the provider; local with a rate holds.
+  token-meter-plans-rate = let
+    rate = {
+      amount = 1;
+      currency = "USD";
+    };
+    msg = name: "pi-economics: tokenMeter.plans.${name}.rate is set but its billing is not \"local\"";
+    bad = plans: failed "pi-economics:" (eval ".pi/agent" {inherit plans;});
+  in
+    eq "api with a rate" (bad {
+      p-api = {
+        billing = "api";
+        inherit rate;
+      };
+    }) [(msg "p-api")]
+    ++ eq "subscription with a rate, local fine" (bad {
+      p-sub = {
+        billing = "subscription";
+        inherit rate;
+      };
+      p-local = {
+        billing = "local";
+        inherit rate;
+      };
+    }) [(msg "p-sub")]
+    ++ eq "local with a rate" (bad {
+      p-local = {
+        billing = "local";
+        inherit rate;
+      };
+    }) [];
+
   # (M3.6) With the actor in the registry, children load the meter: the list
   # pi-setup's bridge writes into actor-subagents/settings.json (host
   # pi-extensions.nix:389-390) names it; the file is pi-setup's
