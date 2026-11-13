@@ -1,16 +1,16 @@
-pi-economics is MIT-licensed (LICENSE). It builds two upstream extensions
-from their sources and applies the patches under patches/<input>/ to them.
-The patches are derived from those projects and are distributed under their
-licences; each upstream's licence text, with its permission notice, is kept
+pi-economics is MIT-licensed (LICENSE). It builds one upstream extension
+from its source and applies the patches under patches/<input>/ to it.
+The patches are derived from that project and are distributed under its
+licence; the upstream's licence text, with its permission notice, is kept
 next to its patches as patches/<input>/LICENSE.
+
+The checks install their npm toolchain from a third party's manifest, kept
+byte for byte: checks/npm/package.json and its lockfile are pi-retry's own
+(https://github.com/monotykamary/pi-retry — MIT (package.json, README),
+author Tom X Nguyen). pi-economics no longer builds or ships pi-retry.
+Licence text: checks/npm/LICENSE (the upstream ships no LICENSE file; the
+text is the standard MIT licence for its package.json declaration).
 
 ## pi-infinite-context
 https://github.com/fdietze/pi-infinite-context — MIT, Copyright (c) 2026 Felix Dietze
 Licence text: patches/pi-infinite-context/LICENSE
-
-## pi-retry
-https://github.com/monotykamary/pi-retry — MIT (package.json, README), author Tom X Nguyen
-Licence text: patches/pi-retry/LICENSE (the upstream ships no LICENSE file; the
-text is the standard MIT licence for its package.json declaration).
-checks/npm/package.json and its lockfile are pi-retry's own, used to build the
-extension's dependencies.

@@ -3,6 +3,9 @@
 # byte: pi-retry's devDependencies, which pin typescript, @types/node and pi's
 # own packages for the type check and, from M6, vitest for pi-retry's suite.
 # pname and source set are the host's, so the derivation is the host's.
+# pi-retry left the flake (redesign D19); its manifest stays byte for byte,
+# pname and source set too, so the fixed-output hash holds (P17). Its licence
+# text is ./LICENSE (NOTICE).
 {
   lib,
   pkgs,
