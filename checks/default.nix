@@ -157,6 +157,13 @@ in {
     name = "infinite-context";
     src = infiniteContextTs;
   };
+  # (redesign M7a) The seed contract on the real code of the extension, the engine and the meter.
+  ic-seed-contract = import ./ic-seed-contract {
+    inherit pkgs;
+    ic = infiniteContext;
+    experiments = ../packages/experiments;
+    tokenMeter = ../packages/token-meter;
+  };
   # (T2.1) The components' runtime check of __subagentsApi_v1 (core/runtime-guard.ts,
   # identical in each package: runtime-guard-copies; token-meter's is the reference).
   iface-subagents-runtime-guard = iface.compare {
