@@ -1,4 +1,5 @@
-// Test doubles of what experiments uses of pi: event handlers, commands, pi.appendEntry and pi.events.
+// Test doubles of what experiments uses of pi: event handlers, commands, pi.appendEntry, pi.events and the session
+// control the control-tier add-ons use (thinking level, active tools).
 import { EventEmitter } from "node:events";
 
 /** pi 1.4's createEventBus: emit is synchronous; each handler is wrapped async and its errors are logged, not thrown. */
@@ -16,18 +17,44 @@ export function bus() {
 
 export type Entry = { type: "custom"; customType: string; data?: unknown };
 
-/** A fake ExtensionAPI: `entries` collects pi.appendEntry calls (the session's custom entries). */
-export function fakePi() {
+/**
+ * A fake of pi's session control: the thinking level and the active tools. As in pi 1.4 a name that is no registered tool
+ * is ignored by setActiveTools, and `clamp` stands for a model that cannot take the level asked for. `calls` records
+ * every setter call.
+ */
+export function fakeControl(o: { level?: string; active?: string[]; all?: string[]; clamp?: (level: string) => string } = {}) {
+  const all = o.all ?? ["read", "bash", "edit", "codemode"];
+  const state = { level: o.level ?? "medium", active: o.active ?? ["read", "bash"], calls: [] as string[] };
+  const control = {
+    getThinkingLevel: () => state.level,
+    setThinkingLevel: (level: string) => {
+      state.calls.push(`thinking:${level}`);
+      state.level = o.clamp?.(level) ?? level;
+    },
+    getActiveTools: () => [...state.active],
+    setActiveTools: (names: string[]) => {
+      state.calls.push(`tools:${names.join(",")}`);
+      state.active = names.filter((n) => all.includes(n));
+    },
+    getAllTools: () => all.map((name) => ({ name })),
+  };
+  return { control, state };
+}
+
+/** A fake ExtensionAPI: `entries` collects pi.appendEntry calls (the session's custom entries); `control` is the session control's state. */
+export function fakePi(controlOptions?: Parameters<typeof fakeControl>[0]) {
   const handlers = new Map<string, Array<(e: any, ctx: any) => unknown>>();
   const commands: string[] = [];
   const entries: Entry[] = [];
   const events = bus();
+  const { control: api, state: control } = fakeControl(controlOptions);
   const pi = {
+    ...api,
     on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]),
     registerCommand: (n: string) => void commands.push(n),
     appendEntry: (customType: string, data?: unknown) => void entries.push({ type: "custom", customType, data }),
     events,
   };
   const fire = (name: string, e: unknown, ctx: unknown) => (handlers.get(name) ?? []).forEach((h) => h(e, ctx));
-  return { pi, handlers, commands, entries, events, fire };
+  return { pi, handlers, commands, entries, events, fire, control };
 }

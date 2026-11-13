@@ -7,13 +7,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaults, type Settings } from "../core/settings.ts";
 import { install } from "../core/shell.ts";
-import { bus } from "./fake.ts";
+import { bus, fakeControl } from "./fake.ts";
 
 function harness(over: Partial<Settings> = {}) {
   const agentDir = mkdtempSync(join(tmpdir(), "experiments-guards-"));
   const handlers = new Map<string, Array<(e: any, ctx: any) => unknown>>();
   const commands = new Map<string, { handler: (args: string, ctx: any) => unknown }>();
-  const pi = { on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]), registerCommand: (n: string, c: any) => void commands.set(n, c), appendEntry: () => {}, events: bus() };
+  const pi = { on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]), registerCommand: (n: string, c: any) => void commands.set(n, c), appendEntry: () => {}, events: bus(), ...fakeControl().control };
   install(pi, { agentDir, settings: { ...defaults(), ...over }, rng: () => 0.5, api: () => undefined });
   const notes: string[] = [];
   const ctx = (sid: string) => ({ model: { provider: "openai", id: "gpt-5" }, sessionManager: { getSessionId: () => sid }, ui: { notify: (m: string) => void notes.push(m) } });

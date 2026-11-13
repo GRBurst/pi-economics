@@ -1,7 +1,7 @@
 // The add-on registry (redesign §7.4): which levers the engine can set, and the read-back that turns an assigned
 // level, its feasibility and an observation into one lever state (§5.3). Pure; the shell drives it.
 import type { Level, LeverId } from "../core/design.ts";
-import type { Lever, LeverState, Observed, SessionCtx, TargetEnv } from "./types.ts";
+import type { Kind, Lever, LeverState, Observed, SessionCtx, TargetEnv } from "./types.ts";
 
 /** The target's own source: an observation never says pi-economics decided what it did not assign (or what was refused). */
 const own = (o: { v: Level; s: LeverState["s"] }): LeverState => ({ v: o.v, s: o.s === "pe" ? "ext" : o.s });
@@ -24,14 +24,18 @@ export function readBack(a: Level | undefined, feasible: readonly Level[] | unde
   return { ...own(seen), a, rb: "refused" };
 }
 
-/** The levers the engine can set; a target's levers are live once it is loaded in this runtime ("pi" always is). */
+/** The levers the engine can set (`levers` by id, and the lever each data-only kind makes of an id it recognises); a target's levers are live once it is loaded in this runtime ("pi" always is). */
 export type Registry = { lever(id: LeverId): Lever | undefined; loaded(target: string): boolean; load(target: string): boolean };
 
-export function createRegistry(levers: readonly Lever[]): Registry {
+export function createRegistry(levers: readonly Lever[], kinds: readonly Kind[] = []): Registry {
   const byId = new Map(levers.map((l) => [l.id, l]));
   const live = new Set(["pi"]);
   return {
-    lever: (id) => byId.get(id),
+    lever(id) {
+      let l = byId.get(id);
+      for (const kind of kinds) if (l === undefined && (l = kind(id)) !== undefined) byId.set(id, l); // one lever per id
+      return l;
+    },
     loaded: (target) => live.has(target),
     /** true when the target was not loaded before. */
     load: (target) => !live.has(target) && live.add(target) !== undefined,
@@ -65,7 +69,10 @@ export function sessionLevers(
     const m = ctx.model;
     t.ok = t.lever.feasible(m === undefined ? env : { ...env, model: m }, levelsOf(t.name)).includes(t.level);
     t.a = t.lever.valueFor?.(ctx, t.level) ?? t.level;
-    if (t.ok) t.lever.apply(ctx, t.level);
+    // A target's control may refuse (pi's before it is active): the lever stays tracked and is read back as it is.
+    if (t.ok) {
+      try { t.lever.apply(ctx, t.level); } catch (err) { console.warn(`experiments: ${t.lever.id}: apply failed: ${(err as Error).message}`); }
+    }
   };
   return {
     /** Starts every live lever not started yet; true when one started. */

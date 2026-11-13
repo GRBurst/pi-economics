@@ -209,7 +209,7 @@ the inherited selection): `pi.cacheWarming` (global only), `pi.promptCache` (`PI
 `pi.images.{autoResize,blockImages}`, `pi.thinkingBudgets.{minimal,low,medium,high}`, `pi.defaultThinkingLevel` (the configured default
 for a new session: the session model's `modelThinkingLevels` entry, else `defaultThinkingLevel`, else `medium`; not the level the session
 ran with, which a resumed session's recorded level, `/thinking`, a CLI option or clamping to the model can change: that one is `effort` on
-the request lines, and an effective-level lever comes with the add-ons, M5b/M7b) and
+the request lines; the effective level is the add-on lever `pi.thinkingLevel` below) and
 `pi.defaultTools.<tool>` (a boolean per pi tool: read, bash, powershell, edit, write, grep, find, ls, codemode, tool_search). A value pi
 would reject leaves its lever out (unknown); `cacheWarming` falls back to `streaming` as in pi. With infinite-context's settings entry on
 the session branch `pi.compaction.enabled` is `{ "v": false, "s": "ext" }` (it cancels every native compaction); the other
@@ -234,7 +234,14 @@ The seed tier adds `infinite-context.nudgeAtTokens` (redesign M7a) in a session 
 tokens (the level is a fraction of the matched rule's range), `rb` is read from infinite-context's settings record on the branch
 (`confirmed`; an extension that redrew: `refused`, `s: "ext"`, `v` = its draw), and a rule that is a fixed number gives `refused`,
 `s: "fixed"`, `a` = the level (a fraction: there are no tokens to assign).
-A level name may start with a digit (`5m`, `1h`). A read-back that changes
+Two data-only kinds set pi itself (redesign M7b; tier `control`, read back at `before_agent_start`, a main session's levers: in a
+child both are infeasible, its level and tools are the actor's): `pi.thinkingLevel` (levels `off`, `minimal`, `low`, `medium`,
+`high`, `xhigh`; set with `setThinkingLevel` when the engine's session starts and read back with `getThinkingLevel`: the level the
+session runs with, where `pi.defaultThinkingLevel` is the configured default) and `pi.activeTool(<name>)` (levels `false`, `true`:
+whether `getActiveTools` lists the tool; a tool pi does not register is infeasible). A value other than the assigned one is
+`refused`, with source `fixed` when it is what pi reported right after the engine set it (pi clamped the level to the model's, or
+ignored the tool) and `ext` otherwise (another extension, `/thinking` or pi's reset at a model switch changed it afterwards: the
+source does not tell them apart). A level name may start with a digit (`5m`, `1h`). A read-back that changes
 a state writes a new levers line. A child runtime's experiments never draws: it derives its root's assignment (the
 session file's directory `subagents/<root>/`, or for an in-memory child the actor's agent list) and serves it on the
 child's own channel, so an in-memory child (no session file) takes its `parentSessionId` and the root's `arm`, `design`

@@ -14,6 +14,7 @@ import { designState, draw, eligibleFor, parseBlocks, stratumOf, type Assignment
 import { CACHE_LIFECYCLE } from "../addons/cache-lifecycle.ts";
 import { piProcessLevers } from "../addons/pi-process.ts";
 import { IC_TARGET, IC_TOOL, infiniteContext, parseIcRules, type IcRules } from "../addons/infinite-context.ts";
+import { piAddons, type PiControl } from "../addons/pi.ts";
 import { createRegistry, sessionLevers } from "../addons/registry.ts";
 import type { Lever, ModelRef, SessionCtx } from "../addons/types.ts";
 import { publish, serve, type Assigned, type Bus, type Levers } from "./channel.ts";
@@ -21,7 +22,7 @@ import { designFor, type Design, type Level } from "./design.ts";
 import { V4_FACTORS, defaults, loadOptIn, parseStrata, readPlans, type Settings } from "./settings.ts";
 import { actorMissing, hasSubagentsApiV1, warnOnce } from "./runtime-guard.ts";
 
-export type PiLike = {
+export type PiLike = PiControl & {
   on(name: string, handler: (e: any, ctx: any) => unknown): void;
   registerCommand(name: string, command: { description: string; handler: (args: string, ctx: any) => unknown }): void;
   appendEntry(customType: string, data?: unknown): void;
@@ -133,11 +134,12 @@ export function install(pi: PiLike, deps: Deps): void {
     const m = safe(() => ctx.model as { provider?: unknown; id?: unknown } | undefined);
     model = typeof m?.provider === "string" && typeof m?.id === "string" ? `${m.provider}/${m.id}` : undefined;
   };
-  const registry = createRegistry([...CACHE_LIFECYCLE, ...infiniteContext(readIcRules), ...piProcessLevers(() => ({
+  const pia = piAddons(pi);
+  const registry = createRegistry([...CACHE_LIFECYCLE, ...pia.levers, ...infiniteContext(readIcRules), ...piProcessLevers(() => ({
     global: readJson(join(deps.agentDir, "settings.json")),
     project: trusted ? readJson(join(cwd, ".pi", "settings.json")) : undefined,
     model,
-  }))]);
+  }))], pia.kinds);
   const tracked = new Map<string, ReturnType<typeof sessionLevers>>();
   /** What a session offers its add-ons now: its current model, its branch and its entry writer (seed tier, §7.4). */
   const live = new Map<string, { model?: ModelRef; branch: () => readonly unknown[] }>();

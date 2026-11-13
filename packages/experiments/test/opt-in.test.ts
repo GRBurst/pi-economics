@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { query } from "../core/channel.ts";
 import { V4_FACTORS } from "../core/settings.ts";
 import { install } from "../core/shell.ts";
-import { bus } from "./fake.ts";
+import { bus, fakeControl } from "./fake.ts";
 
 type G = { __piEconomicsWarned_v1?: Set<string> };
 beforeEach(() => void delete (globalThis as G).__piEconomicsWarned_v1);
@@ -23,7 +23,7 @@ function rig(settingsFile?: unknown) {
   }
   const handlers = new Map<string, Array<(e: any, ctx: any) => void>>();
   const commands: string[] = [];
-  const pi = { on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]), registerCommand: (n: string) => void commands.push(n), appendEntry: () => {}, events: bus() };
+  const pi = { on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]), registerCommand: (n: string) => void commands.push(n), appendEntry: () => {}, events: bus(), ...fakeControl().control };
   install(pi, { agentDir, rng: () => 0.5, api: () => undefined });
   const notes: string[] = [];
   const ctx = { hasUI: true, ui: { notify: (m: string) => void notes.push(m) }, model: { provider: "openai", id: "gpt-5" }, sessionManager: { getSessionId: () => "s1", getSessionDir: () => join(agentDir, "sessions") } };

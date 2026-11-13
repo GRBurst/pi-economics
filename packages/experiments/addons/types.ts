@@ -31,6 +31,9 @@ export type SessionCtx = {
   appendEntry?(customType: string, data: unknown): void;
 };
 
+/** A data-only lever kind (§12): the lever an id of its family names (`pi.activeTool(<name>)`), else undefined. */
+export type Kind = (id: LeverId) => Lever | undefined;
+
 export interface Lever<L extends Level = Level> {
   id: LeverId;
   /** The extension whose behaviour the lever sets ("pi" for pi itself); the lever is inert while it is not loaded. */

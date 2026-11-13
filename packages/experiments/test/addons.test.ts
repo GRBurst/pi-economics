@@ -2,29 +2,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRegistry, readBack, sessionLevers } from "../addons/registry.ts";
-import type { Lever, LeverState, Observed } from "../addons/types.ts";
+import type { Lever, Observed } from "../addons/types.ts";
 import type { Level } from "../core/design.ts";
 import { V4_FACTORS } from "../core/settings.ts";
 import { CACHE_LIFECYCLE } from "../addons/cache-lifecycle.ts";
-
-/**
- * The §5.3 invariants of a lever state, as token-meter's leverViolations (core/levers.ts, their one definition: its
- * writer refuses a line that breaks one) states them; a copy here because a package test reads only its own package.
- */
-function violations(x: LeverState): string[] {
-  const out: string[] = [];
-  const has = x.a !== undefined;
-  const value = (v: unknown) => typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && /^[a-z0-9][a-z0-9_-]{0,31}$/.test(v));
-  if (!["pe", "ext", "fixed"].includes(x.s)) out.push("source");
-  if (!value(x.v)) out.push("v");
-  if (has && !value(x.a)) out.push("a");
-  if (has !== (x.rb !== undefined)) out.push("a ⇔ rb");
-  if (x.s === "pe" && !(has && (x.rb === "confirmed" || x.rb === "unverified"))) out.push("pe needs a and rb confirmed|unverified");
-  if (x.rb === "confirmed" && x.v !== x.a) out.push("confirmed ⇒ v = a");
-  if (x.rb === "refused" && (x.v === x.a || x.s === "pe")) out.push("refused ⇒ v ≠ a, s ∈ {ext, fixed}");
-  if (x.rb === "unverified" && x.v !== x.a) out.push("unverified ⇒ v = a");
-  return out;
-}
+import { violations } from "./states.ts";
 
 const LEVELS: Level[] = ["off", "on", "5m", 1, true];
 const FEASIBLE: Array<readonly Level[] | undefined> = [undefined, [], ...LEVELS.map((l) => [l]), ["off", "on"]];
