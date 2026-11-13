@@ -101,6 +101,29 @@ in {
     eq "new warnings" (lib.subtractLists bare.warnings c.warnings) [warning]
     ++ eq "failed assertions" (failed "" c) [];
 
+  # (redesign M5a T5a.6) A stratum's design has at most six factors (the
+  # generator table of packages/experiments/core/design.ts).
+  experiments-strata-seven = let
+    factor = n: {
+      name = "f${toString n}";
+      lever = "t.lever${toString n}";
+      levels = ["a" "b"];
+    };
+    withFactors = k:
+      eval ".pi/agent" {
+        settings.strata = {
+          cloud = {
+            match.billing = ["api"];
+            factors = map factor (lib.range 1 k);
+          };
+          local.factors = [];
+        };
+      }
+      withActor;
+  in
+    eq "seven factors" (failed "pi-economics:" (withFactors 7)) ["pi-economics: experiments stratum cloud has more than 6 factors"]
+    ++ eq "six factors" (failed "pi-economics:" (withFactors 6)) [];
+
   # (M4.16) The host's combination from W3 on (spec §9.1): M2–M4's extension
   # components, piSettings off (the host's own script runs until W6). Children
   # load cache-lifecycle and token-meter, not experiments: the list pi-setup's

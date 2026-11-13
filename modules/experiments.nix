@@ -20,6 +20,23 @@
   # §7.3): pi-setup's patched actor, forwarded by its economics
   # bridge, or any entry of that name.
   hasActor = pe.extensions ? actor-subagents;
+  # (redesign M5a) The factor lists of settings.strata, by stratum. The
+  # settings are free-form JSON: anything but a list counts as no factors here
+  # (core/settings.ts reads the file at run time).
+  factorsOf = s: let
+    fs = s.factors or [];
+  in
+    if lib.isList fs
+    then fs
+    else [];
+  strata = let
+    given = cfg.settings.strata or {};
+  in
+    lib.mapAttrs (_: factorsOf) (
+      if lib.isAttrs given
+      then given
+      else {}
+    );
 in {
   options.programs.piEconomics.experiments = {
     enable = lib.mkEnableOption "the pi experiments extension (one fractional-factorial arm per main session; explore/exploit assignment, spawn inheritance for children)";
@@ -67,6 +84,15 @@ in {
       then {mode = "explore";}
       else cfg.settings
     );
+
+    # (redesign M5a) A stratum's design is the full 2^k factorial or a
+    # fraction from the generator table of core/design.ts, which ends at six.
+    assertions =
+      lib.mapAttrsToList (name: fs: {
+        assertion = lib.length fs <= 6;
+        message = "pi-economics: experiments stratum ${name} has more than 6 factors";
+      })
+      strata;
 
     # (M4.15) A soft dependency (spec §4.1): shell.ts tolerates a missing API.
     warnings = lib.optional (!hasActor) "pi-economics: experiments without actor-subagents in the registry (pi-setup's programs.pi.actorSubagents) loses arm inheritance by children (it reads spawn events from __subagentsApi_v1)";
