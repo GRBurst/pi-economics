@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { design } from "../core/design.ts";
+import { design, type Factor } from "../core/design.ts";
 import { defaults, type Settings } from "../core/settings.ts";
 import { install } from "../core/shell.ts";
 
@@ -39,15 +39,16 @@ test("session_start assigns an arm, publishes the API and appends one assignment
 
 test("explore balances across sessions (counts come from assignments.jsonl); resuming a session keeps its arm", () => {
   const h = harness();
+  const n = design(h.settings.factors, 16).length;
   const ids: string[] = [];
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < n; i++) {
     h.start(`s${i}`);
     ids.push(h.api().armFor(`s${i}`).id);
   }
-  assert.equal(new Set(ids).size, 16);
+  assert.equal(new Set(ids).size, n);
   h.start("s3");
   assert.equal(h.api().armFor("s3").id, ids[3]);
-  assert.equal(h.rows().length, 16);
+  assert.equal(h.rows().length, n);
 });
 
 test("mode off → baseline arm; disabled arms from state.json are skipped", () => {
@@ -120,18 +121,19 @@ test("exploit reads the posterior meter-report wrote to state.json (rewards: the
   assert.equal(h.api().armFor("s1").id, ids[5]);
 });
 
-// The assignment line names its design. Lines without `design` are v1 (the five-factor 2^(5-1) design, 5-char arm ids).
-test("assignment lines carry design \"v3\" (6-char arm ids, the same six factors as v2)", () => {
+// The assignment line names its design. Lines without `design` are v1 (the five-factor 2^(5-1) design, 5-char arm ids);
+// v2 and v3 had six factors (6-char ids, 2^(6-2)); v4 drops foldHint, freshOnCold and delegationRule: the full 2^3.
+test("assignment lines carry design \"v4\" (3-char arm ids, the factors warmPolicy, mainCacheTtl, maskOnCold; 8 arms)", () => {
   const h = harness();
   h.start("s1");
   const [r] = h.rows();
-  assert.equal(r.design, "v3");
-  assert.match(r.arm, /^[-+]{6}$/);
-  assert.equal(Object.keys(r.flags).length, 6);
-  assert.ok("delegationRule" in r.flags);
+  assert.equal(r.design, "v4");
+  assert.match(r.arm, /^[-+]{3}$/);
+  assert.deepEqual(Object.keys(r.flags), ["warmPolicy", "mainCacheTtl", "maskOnCold"]);
+  assert.equal(design(h.settings.factors, h.settings.maxArms).length, 8);
 });
 
-test("a session assigned under v1 keeps its arm and flags (not re-assigned, no new row); v1 rows do not skew the v2 balance", () => {
+test("a session assigned under v1 keeps its arm and flags (not re-assigned, no new row); v1 rows do not skew the v4 balance", () => {
   const h = harness();
   mkdirSync(join(h.agentDir, "experiments"), { recursive: true });
   const v1 = { ts: "2026-10-03T08:00:00.000Z", sessionId: "old", arm: "+-+--", mode: "explore", flags: { warmPolicy: "orchestrator-aware", mainCacheTtl: "5m", foldHint: "cache-aware", maskOnCold: "off", freshOnCold: "off" } };
@@ -139,37 +141,46 @@ test("a session assigned under v1 keeps its arm and flags (not re-assigned, no n
   h.start("old");
   assert.deepEqual(h.api().armFor("old"), { id: "+-+--", flags: v1.flags });
   assert.equal(h.api().flag("delegationRule", "off", "old"), "off"); // v1 had no such factor: the consumer's own setting
-  assert.equal(h.api().flag("foldHint", "fixed", "old"), "cache-aware");
+  assert.equal(h.api().flag("freshOnCold", "advise", "old"), "off"); // the arm's value, though v4 has no such factor
   assert.equal(h.rows().length, 1);
-  // 16 new sessions still cover the 16 v2 arms exactly once.
+  // 8 new sessions still cover the 8 v4 arms exactly once.
   const ids = new Set<string>();
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 8; i++) {
     h.start(`n${i}`);
     ids.add(h.api().armFor(`n${i}`).id);
   }
-  assert.equal(ids.size, 16);
-  assert.deepEqual(h.rows().slice(1).map((r) => r.design), Array(16).fill("v3"));
+  assert.equal(ids.size, 8);
+  assert.deepEqual(h.rows().slice(1).map((r) => r.design), Array(8).fill("v4"));
 });
 
-// v3 = v2's factors and arms with a new meaning of foldHint = cache-aware: resumed v2 sessions keep "v2", v2 rows do not balance v3.
-test("a resumed v2 session keeps its arm and design \"v2\" (no new row); new sessions are v3 and v2 rows do not skew their balance", () => {
-  const h = harness();
-  const arms = design(h.settings.factors, 16);
-  mkdirSync(join(h.agentDir, "experiments"), { recursive: true });
-  const old = arms[3];
-  const v2 = { v: 1, ts: "2026-10-03T08:00:00.000Z", sessionId: "old", arm: old.id, design: "v2", mode: "explore", flags: old.flags };
-  writeFileSync(join(h.agentDir, "experiments", "assignments.jsonl"), JSON.stringify(v2) + "\n");
-  h.start("old");
-  assert.equal(h.api().armFor("old").id, old.id);
-  assert.deepEqual(h.rows(), [v2]); // no new row, the row still says v2
-  const seen: string[] = [];
-  for (let i = 0; i < 16; i++) {
-    h.start(`n${i}`);
-    seen.push(h.api().armFor(`n${i}`).id);
-  }
-  assert.equal(new Set(seen).size, 16); // the v2 session's arm is not counted: all 16 arms still get one v3 session
-  assert.deepEqual(h.rows().slice(1).map((r) => r.design), Array(16).fill("v3"));
-  h.start("old"); // resuming again, after v3 rows exist
-  assert.equal(h.rows().length, 17);
-  assert.equal(h.rows()[0].design, "v2");
-});
+// v2 and v3 = six factors, 2^(6-2), the same arm ids: resumed sessions keep their design, their rows do not balance v4.
+const SIX: Factor[] = [
+  { name: "warmPolicy", values: ["native", "orchestrator-aware"] },
+  { name: "mainCacheTtl", values: ["5m", "1h"] },
+  { name: "foldHint", values: ["fixed", "cache-aware"] },
+  { name: "maskOnCold", values: ["off", "on"] },
+  { name: "freshOnCold", values: ["off", "advise"] },
+  { name: "delegationRule", values: ["off", "on"] },
+];
+for (const old of ["v2", "v3"]) {
+  test(`a resumed ${old} session keeps its arm and design "${old}" (no new row); new sessions are v4 and ${old} rows do not skew their balance`, () => {
+    const h = harness();
+    const arm = design(SIX, 16)[3];
+    mkdirSync(join(h.agentDir, "experiments"), { recursive: true });
+    const row = { v: 1, ts: "2026-10-03T08:00:00.000Z", sessionId: "old", arm: arm.id, design: old, mode: "explore", flags: arm.flags };
+    writeFileSync(join(h.agentDir, "experiments", "assignments.jsonl"), JSON.stringify(row) + "\n");
+    h.start("old");
+    assert.deepEqual(h.api().armFor("old"), { id: arm.id, flags: arm.flags });
+    assert.deepEqual(h.rows(), [row]); // no new row, the row still names its design
+    const seen: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      h.start(`n${i}`);
+      seen.push(h.api().armFor(`n${i}`).id);
+    }
+    assert.equal(new Set(seen).size, 8); // the old session's arm is not counted: all 8 arms get one v4 session
+    assert.deepEqual(h.rows().slice(1).map((r) => r.design), Array(8).fill("v4"));
+    h.start("old"); // resuming again, after v4 rows exist
+    assert.equal(h.rows().length, 9);
+    assert.equal(h.rows()[0].design, old);
+  });
+}

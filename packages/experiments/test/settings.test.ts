@@ -12,15 +12,12 @@ test("missing file → defaults", () => {
   assert.deepEqual(loadSettings("/nonexistent/settings.json"), defaults());
 });
 
-test("defaults: explore, the six online factors (values[0] = today's behaviour), 16-arm cap, 0.1 floor", () => {
+test("defaults: explore, the three online factors of design v4 (values[0] = today's behaviour), 16-arm cap, 0.1 floor", () => {
   const d = defaults();
   assert.deepEqual(d.factors, [
     { name: "warmPolicy", values: ["native", "orchestrator-aware"] },
     { name: "mainCacheTtl", values: ["5m", "1h"] },
-    { name: "foldHint", values: ["fixed", "cache-aware"] },
     { name: "maskOnCold", values: ["off", "on"] },
-    { name: "freshOnCold", values: ["off", "advise"] },
-    { name: "delegationRule", values: ["off", "on"] },
   ]);
   assert.deepEqual({ ...d, factors: [], baseline: "" }, { mode: "explore", factors: [], maxArms: 16, minExplore: 0.1, baseline: "", guards: { minSessions: 10, threshold: 0.2, peekThreshold: 1, correctionThreshold: 1, ratingThreshold: 0.5 }, correctionRegex: String.raw`\b(no|wrong|revert|undo|that's not)\b` });
 });
@@ -28,8 +25,8 @@ test("defaults: explore, the six online factors (values[0] = today's behaviour),
 test("default baseline is the all-low arm of the default design (review note 1)", () => {
   const d = defaults();
   const arms = design(d.factors, d.maxArms);
-  assert.equal(arms.length, 16, "2^(6-2)");
-  assert.equal(d.baseline, "------");
+  assert.equal(arms.length, 8, "the full 2^3");
+  assert.equal(d.baseline, "---");
   const base = arms.find((a) => a.id === d.baseline);
   assert.ok(base, `baseline ${d.baseline} is not an arm`);
   assert.ok(Object.entries(base.flags).every(([n, v]) => v === d.factors.find((f) => f.name === n)!.values[0]));
@@ -48,7 +45,7 @@ test("mode outside {off, explore, exploit} is ignored", () => {
 });
 
 test("factors: a valid array is honoured, malformed entries are not", () => {
-  const good = [{ name: "warmPolicy", values: ["native", "orchestrator-aware"] }, { name: "foldHint", values: ["fixed", "cache-aware"] }];
+  const good = [{ name: "warmPolicy", values: ["native", "orchestrator-aware"] }, { name: "maskOnCold", values: ["off", "on"] }];
   const f = join(tmp(), "settings.json");
   writeFileSync(f, JSON.stringify({ factors: good }));
   assert.deepEqual(loadSettings(f), { ...defaults(), factors: good });

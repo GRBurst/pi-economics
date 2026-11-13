@@ -24,11 +24,12 @@ export type SubagentsApi = {
 export type Deps = { agentDir: string; settings?: Settings; rng?: () => number; api?: () => SubagentsApi | undefined };
 /**
  * `design` is absent on v1 lines (five factors, 5-char arm ids); v2 = six factors, 2^(6-2); v3 = the same factors and arms as v2,
- * but foldHint = cache-aware now adds a paragraph to the system prompt, so v2 and v3 sessions must never be pooled. New assignments are v3;
- * a resumed session finds its row and keeps the design (and arm) it was assigned under.
+ * but foldHint = cache-aware added a paragraph to the system prompt, so v2 and v3 sessions must never be pooled; v4 = three factors
+ * (warmPolicy, mainCacheTtl, maskOnCold), the full 2^3. New assignments are v4; a resumed session finds its row and keeps the design
+ * (and arm) it was assigned under.
  */
 type Row = { sessionId: string; arm: string; design?: string; flags?: Record<string, string> };
-const DESIGN = "v3";
+const DESIGN = "v4";
 
 const readJson = (file: string): unknown => {
   try { return JSON.parse(readFileSync(file, "utf8")); } catch { return undefined; }

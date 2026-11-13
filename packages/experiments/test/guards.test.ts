@@ -34,7 +34,7 @@ test("a user message right after an assistant turn that matches the regex is a c
   const [r] = h.rows();
   assert.deepEqual({ event: r.event, sessionId: r.sessionId, keys: Object.keys(r).sort() }, { event: "correction", sessionId: "s1", keys: ["arm", "event", "sessionId", "ts", "v"] });
   assert.equal(r.v, 1); // schema version of the guards log (LOGS.md)
-  assert.match(r.arm, /^[-+]{6}$/);
+  assert.match(r.arm, /^[-+]{3}$/);
 });
 
 test("no correction: not directly after an assistant turn, extension-injected input, or no match", () => {

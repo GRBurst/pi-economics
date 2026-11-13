@@ -1,8 +1,10 @@
 # The online experiment (spec §2, §4): one fractional-factorial arm per main
 # session (explore/exploit assignment), recorded in
 # <agentDir>/experiments/assignments.jsonl and published as
-# globalThis.__piExperimentsApi_v1, whose factor flags cache-lifecycle,
-# token-meter and the task router read. Main session only:
+# globalThis.__piExperimentsApi_v1. Design v4's factors (warmPolicy,
+# mainCacheTtl, maskOnCold) are cache-lifecycle's; token-meter records the arm
+# ids; the task router's levers are no factors any more: its reads find its
+# own settings. Main session only:
 # children inherit their parent's arm from actor-subagents' spawn events. No
 # timer: the posterior update and the kill switch (token-meter's
 # `meter-report --arms --posterior`) run on demand.

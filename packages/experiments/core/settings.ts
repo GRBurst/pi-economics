@@ -23,14 +23,15 @@ export type Settings = {
 /** Thresholds are "worse than the baseline's by more than": threshold = acceptance (fraction); the others are per-session (peeks after masking, corrections) or rating points. */
 export type Guards = { minSessions: number; threshold: number; peekThreshold: number; correctionThreshold: number; ratingThreshold: number };
 
-/** The six online factors (designs v2 and v3: 2^(6-2), 16 arms, the arm ids are the same in both; v1 had the first five); values[0] is today's behaviour, so the all-low arm is the baseline. */
+/**
+ * The three online factors of design v4 (the full 2^3, 8 arms); values[0] is today's behaviour, so the all-low arm is the baseline.
+ * v1 had five factors, v2 and v3 six (2^(6-2)): with them foldHint (infinite-context dropped its fold hint) and the router's
+ * freshOnCold and delegationRule (no longer factors: the router's reads find its own settings).
+ */
 const ONLINE_FACTORS: Factor[] = [
   { name: "warmPolicy", values: ["native", "orchestrator-aware"] },
   { name: "mainCacheTtl", values: ["5m", "1h"] },
-  { name: "foldHint", values: ["fixed", "cache-aware"] },
   { name: "maskOnCold", values: ["off", "on"] },
-  { name: "freshOnCold", values: ["off", "advise"] },
-  { name: "delegationRule", values: ["off", "on"] },
 ];
 
 export function defaults(): Settings {

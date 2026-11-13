@@ -40,7 +40,7 @@ test("no settings file: inert (no API, no handler, no command, no assignments.js
   assert.deepEqual(r.notes, []);
 });
 
-test("no settings file: every factor (mainCacheTtl, maskOnCold, freshOnCold, delegationRule, ...) keeps the base value", () => {
+test("no settings file: every factor (warmPolicy, mainCacheTtl, maskOnCold) keeps the base value", () => {
   rig();
   for (const f of defaults().factors) assert.equal(read(f.name, f.values[0]), f.values[0], f.name);
 });

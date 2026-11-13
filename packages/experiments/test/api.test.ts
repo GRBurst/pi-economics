@@ -10,7 +10,7 @@ test("flag: main session → the arm's value; unknown session or unknown factor 
   assign("main-1", arm);
   assert.equal(api.version, 1);
   assert.equal(api.flag("warmPolicy", "native", "main-1"), "orchestrator-aware");
-  assert.equal(api.flag("foldHint", "fixed", "main-1"), "fixed");
+  assert.equal(api.flag("maskOnCold", "off", "main-1"), "off");
   assert.equal(api.flag("warmPolicy", "native", "other"), "native");
   assert.equal(api.armFor("other"), undefined);
 });

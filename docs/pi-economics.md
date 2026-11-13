@@ -194,8 +194,10 @@ Without `infiniteContext` the `context_peek` guard has nothing to log; without
 
 The online experiment (`packages/experiments`): one fractional-factorial arm
 per main session, recorded in `<agentDir>/experiments/assignments.jsonl` and
-published as `globalThis.__piExperimentsApi_v1`, whose factor flags
-`cacheLifecycle`, `tokenMeter` and the task router read.
+published as `globalThis.__piExperimentsApi_v1`. Design v4's factors
+(`warmPolicy`, `mainCacheTtl`, `maskOnCold`, the full 2³: 8 arms) are
+`cacheLifecycle`'s; `tokenMeter` records the arm ids; the task router's levers
+are no factors any more: its reads find its own settings.
 Corrections and `/rate` ratings go to `<agentDir>/guards/events.jsonl`. There
 is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 
