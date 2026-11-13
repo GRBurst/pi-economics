@@ -26,8 +26,8 @@ const opus: Model = { provider: "anthropic", id: "claude-opus-5-5" };
 const local: Model = { provider: "example", id: "model-a" };
 const FILE = {
   overrides: {
-    anthropic: { nudgeAtTokens: [100_000, 200_000] },
-    example: { nudgeAtTokens: [300_000, 400_000] },
+    anthropic: { nudgeAtTokens: [100_000, 200_001] },
+    example: { nudgeAtTokens: [300_000, 400_003] },
     "anthropic/claude-opus-5-5": { nudgeAtTokens: 400_000 },
   },
 };
@@ -43,7 +43,7 @@ function writeIc(dir: string, file: unknown) {
  * One session. The extension reads its file in `icDir` (as pi's getAgentDir says when it is created); the engine and the
  * meter work in `peDir` (their agentDir) and read the rules from there. Equal directories are the normal case.
  */
-function session(o: { icDir: string; peDir: string; draw?: number }) {
+function session(o: { icDir: string; peDir: string; draw?: number; rng?: number }) {
   process.env.PI_CODING_AGENT_DIR = o.icDir;
   const handlers = new Map<string, Array<(e: unknown, ctx: unknown) => unknown>>();
   const entries: Entry[] = [{ type: "message", id: "u1", parentId: null, message: { role: "user", content: "one", timestamp: 1 } }];
@@ -84,7 +84,7 @@ function session(o: { icDir: string; peDir: string; draw?: number }) {
     getContextUsage: () => ({ contextWindow: 1_000_000, tokens: 0 }),
   };
   // Load order: experiments, token-meter, then the extension (config order, modules/common.nix firstNames).
-  installExperiments(pi as never, { agentDir: o.peDir, settings: { ...defaults(), strata: { any: { match: {}, factors: [{ name: "nudge", lever: LEVER, levels: [0.25, 0.75] }] } } }, rng: () => 0.5, api: () => undefined });
+  installExperiments(pi as never, { agentDir: o.peDir, settings: { ...defaults(), strata: { any: { match: {}, factors: [{ name: "nudge", lever: LEVER, levels: [0.25, 0.75] }] } } }, rng: () => o.rng ?? 0.5, api: () => undefined });
   installMeter(pi as never, { agentDir: o.peDir });
   const realRandom = Math.random;
   Math.random = () => o.draw ?? 0; // the extension's own draw (resolveSettings gets Math.random per call)
@@ -116,20 +116,26 @@ function session(o: { icDir: string; peDir: string; draw?: number }) {
 const dirOf = () => mkdtempSync(path.join(tmpdir(), "ic-seed-contract-"));
 
 test("adopted: the seed has the extension's record shape, the real extension keeps it, and the meter's levers line says confirmed", async () => {
-  const dir = dirOf();
-  writeIc(dir, FILE);
-  const s = session({ icDir: dir, peDir: dir });
-  assert.ok(s.tools.includes(IC_TOOL), "the tool the engine takes as the sign that the extension is loaded");
-  await s.start(haiku);
-  const a = at([100_000, 200_000], s.level());
-  const [seed, own] = s.records();
-  assert.deepEqual(seed, { nudgeAtTokens: a, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" }, "the seed: tokens, the rule's range, the rule's key");
-  assert.deepEqual(own, { ...seed, nudgeAtPercent: 75 }, "the extension kept the draw and completed the record");
-  assert.equal(s.records().length, 2);
-  assert.deepEqual(s.entries.map((e) => e.customType ?? e.type), ["message", ENTRY, SETTINGS_ENTRY, SETTINGS_ENTRY]);
-  assert.equal(s.lineState(), undefined, "no levers line before the first prompt");
-  await s.prompt();
-  assert.deepEqual(s.lineState(), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
+  const levels = new Set<number>();
+  for (const rng of [0, 0.2, 0.4, 0.6, 0.8, 0.99]) {
+    const dir = dirOf();
+    writeIc(dir, FILE);
+    const s = session({ icDir: dir, peDir: dir, rng });
+    assert.ok(s.tools.includes(IC_TOOL), "the tool the engine takes as the sign that the extension is loaded");
+    await s.start(haiku);
+    levels.add(s.level());
+    // The range's width is odd: a level's tokens are not always whole until rounded.
+    const a = at([100_000, 200_001], s.level());
+    const [seed, own] = s.records();
+    assert.deepEqual(seed, { nudgeAtTokens: a, nudgeAtTokensRange: [100_000, 200_001], rule: "anthropic" }, "the seed: tokens, the rule's range, the rule's key");
+    assert.deepEqual(own, { ...seed, nudgeAtPercent: 75 }, "the extension kept the draw and completed the record");
+    assert.equal(s.records().length, 2);
+    assert.deepEqual(s.entries.map((e) => e.customType ?? e.type), ["message", ENTRY, SETTINGS_ENTRY, SETTINGS_ENTRY]);
+    assert.equal(s.lineState(), undefined, "no levers line before the first prompt");
+    await s.prompt();
+    assert.deepEqual(s.lineState(), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
+  }
+  assert.deepEqual([...levels].sort(), [0.25, 0.75], "both levels were drawn");
 });
 
 test("refused up front: a fixed-number rule draws nothing and ignores records; no seed, the configured number read back as fixed", async () => {
@@ -149,8 +155,8 @@ test("planted refusal: the extension does not adopt a seed whose range is not it
   writeIc(peDir, FILE); // the engine read [100000, 200000] for the same rule
   const s = session({ icDir, peDir, draw: 0 });
   await s.start(haiku);
-  const a = at([100_000, 200_000], s.level());
-  assert.deepEqual(s.records()[0], { nudgeAtTokens: a, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" });
+  const a = at([100_000, 200_001], s.level());
+  assert.deepEqual(s.records()[0], { nudgeAtTokens: a, nudgeAtTokensRange: [100_000, 200_001], rule: "anthropic" });
   assert.deepEqual(s.records().at(-1), { nudgeAtTokens: 150_000, nudgeAtPercent: 75, nudgeAtTokensRange: [150_000, 300_000], rule: "anthropic" }, "redrawn: the minimum of its range (Math.random = 0)");
   await s.prompt();
   assert.deepEqual(s.lineState(), { v: 150_000, s: "ext", a, rb: "refused", tier: "seed" });
@@ -165,10 +171,10 @@ test("re-seeded: a switch to a rule with another range is seeded in that range b
   await s.prompt();
   const n = s.records().length;
   await s.select(local);
-  const a = at([300_000, 400_000], q);
+  const a = at([300_000, 400_003], q);
   assert.deepEqual(s.records().slice(n), [
-    { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000], rule: "example" },
-    { nudgeAtTokens: a, nudgeAtPercent: 75, nudgeAtTokensRange: [300_000, 400_000], rule: "example" },
+    { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_003], rule: "example" },
+    { nudgeAtTokens: a, nudgeAtPercent: 75, nudgeAtTokensRange: [300_000, 400_003], rule: "example" },
   ]);
   await s.prompt();
   assert.deepEqual(s.lineState(), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
@@ -177,7 +183,7 @@ test("re-seeded: a switch to a rule with another range is seeded in that range b
   await s.prompt();
   assert.deepEqual(s.lineState(), { v: 400_000, s: "fixed", a: q, rb: "refused", tier: "seed" });
   await s.select(haiku);
-  const b = at([100_000, 200_000], q);
+  const b = at([100_000, 200_001], q);
   assert.equal(s.records().at(-2)!.nudgeAtTokens, b);
   await s.prompt();
   assert.deepEqual(s.lineState(), { v: b, s: "pe", a: b, rb: "confirmed", tier: "seed" });
