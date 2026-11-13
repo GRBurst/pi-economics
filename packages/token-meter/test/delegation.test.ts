@@ -269,47 +269,85 @@ function randomLogs(): Logs {
     ...many("r1", 5, { id: "", cost: 3, ...random("T1") }, 5), // random → T1: 5/5, $15 → $3 per accepted
     ...many("r2", 2, { id: "", cost: 4, ...random("T2") }, 1), // random → T2: 1/2 (n < 5: no CI), $8 per accepted
     ...many("ro", 1, { id: "", cost: 1, kind: "mechanical", tier: "T2", spawn: { assigned: "random", routeBase: "T1" } }, 1), // randomized from another base
-    ...many("old", 2, { id: "", kind: "mechanical", tier: "qwen", cost: 1 }, 2), // an old line: no assigned, no routeBase → router
+    ...many("old", 2, { id: "", kind: "mechanical", tier: "qwen", cost: 1 }, 2), // an old line: no assigned, no routeBase: from before the randomization
+    ...many("rf", 2, { id: "", kind: "mechanical", tier: "qwen", cost: 2, ran: ["p-api", "haiku"], spawn: { assigned: "router", routeBase: "qwen" } }, 1), // router-assigned, ran on a fallback member: 1/2, $4 per accepted
   ].map((t, i) => ({ ...t, id: `${t.id}${i}` })));
 }
-const row = (d: ReturnType<typeof analyse>["delegation"], assigned: string, tier: string) => d.randomized.rows.find((r) => r.assigned === assigned && r.tier === tier)!;
+const rnd = (d: ReturnType<typeof analyse>["delegation"], tier: string) => d.randomized.rows.find((r) => r.tier === tier)!;
 
-test("randomized comparison: acceptance and $/accepted by actual tier for random vs router-assigned qwen of the same profiles", () => {
+// B14: the router randomizes a share of the spawns it would send to qwen (`assigned: "random"`, `routeBase` the tier it computed). Its remainder, the
+// router-assigned base-qwen tasks that ran as planned, is the randomization's control; lines from before the randomization (no `assigned`) and
+// router-assigned tasks that ran on another model (a fallback member) are not, and are separate rows. The ITT row is every task it randomized.
+test("B14: the control, the pre-randomization runs and the fallback runs are three rows, not one pool; the ITT row is the randomized tasks only", () => {
   const d = analyse(randomLogs()).delegation;
+  const c = d.randomized.control;
   assert.deepEqual(d.randomized.kinds, ["mechanical"]);
-  assert.deepEqual(d.randomized.rows.map((r) => `${r.assigned}/${r.tier}`), ["router/qwen", `random/${EXEC.qwen}`, `random/${EXEC.T1}`, `random/${EXEC.T2}`]);
-  const ctl = row(d, "router", "qwen"); // the 3 router + 2 old lines of kind mechanical; "debug" is another profile
-  assert.deepEqual([ctl.tasks, ctl.judged, ctl.accepted], [5, 5, 4]);
-  close(ctl.acceptance.mean, 4 / 5);
-  close(ctl.perAccepted.mean, 5 / 4);
-  const q = row(d, "random", EXEC.qwen);
+  assert.equal(d.randomized.reference, EXEC.qwen); // the model most of the router-assigned base-qwen tasks ran on
+  assert.deepEqual([c.randomizedControl.tasks, c.randomizedControl.judged, c.randomizedControl.accepted], [3, 3, 2]); // rt: router-assigned, ran on the reference ("debug" is another profile)
+  close(c.randomizedControl.perAccepted.mean, 3 / 2);
+  assert.deepEqual([c.preRandomization.tasks, c.preRandomization.accepted], [2, 2]); // old lines: no assigned
+  assert.deepEqual([c.fallback.tasks, c.fallback.accepted], [2, 1]); // rf: router-assigned, ran on p-api/haiku
+  close(c.fallback.perAccepted.mean, 4);
+  const itt = c.itt!;
+  assert.deepEqual([itt.tasks, itt.judged, itt.accepted], [13, 13, 9]); // rq 6 + r1 5 + r2 2; the other-base spawn, the control and the old lines are not in it
+  close(itt.acceptance.mean, 9 / 13);
+  close(itt.perAccepted.mean, (6 + 15 + 8) / 9);
+  assert.equal(d.randomized.ittNote, undefined);
+});
+
+test("B14: acceptance and $/accepted by the model the randomized tasks ran on (per protocol, not causal)", () => {
+  const d = analyse(randomLogs()).delegation;
+  assert.deepEqual(d.randomized.rows.map((r) => r.tier), [EXEC.qwen, EXEC.T1, EXEC.T2]);
+  const q = rnd(d, EXEC.qwen);
   assert.deepEqual([q.tasks, q.accepted], [6, 3]);
   close(q.acceptance.mean, 0.5);
   close(q.perAccepted.mean, 2);
-  const t1 = row(d, "random", EXEC.T1);
+  const t1 = rnd(d, EXEC.T1);
   close(t1.acceptance.mean, 1);
   close(t1.perAccepted.mean, 3);
-  const t2 = row(d, "random", EXEC.T2);
-  close(t2.perAccepted.mean, 8);
+  close(rnd(d, EXEC.T2).perAccepted.mean, 8);
   assert.equal(d.randomized.otherBase, 1); // the randomized spawn whose router base was T1 is counted, not compared
 });
 
-test("randomized comparison: bootstrap CI only when n allows (≥ 5 judged), and it contains the point estimate", () => {
+test("B14: bootstrap CI only when n allows (≥ 5 judged), and it contains the point estimate", () => {
   const d = analyse(randomLogs()).delegation;
-  for (const r of d.randomized.rows) {
+  const c = d.randomized.control;
+  for (const [name, r] of [...d.randomized.rows.map((x) => [x.tier, x] as const), ["control", c.randomizedControl], ["pre", c.preRandomization], ["fallback", c.fallback], ["itt", c.itt!]] as const) {
     if (r.judged >= 5) {
-      assert.ok(Number.isFinite(r.acceptance.lo) && r.acceptance.lo - 1e-9 <= r.acceptance.mean && r.acceptance.mean <= r.acceptance.hi + 1e-9, `${r.assigned}/${r.tier} acceptance CI`);
-      if (r.accepted >= 2) assert.ok(r.perAccepted.lo - 1e-9 <= r.perAccepted.mean && r.perAccepted.mean <= r.perAccepted.hi + 1e-9, `${r.assigned}/${r.tier} $/accepted CI`);
-    } else assert.ok(Number.isNaN(r.acceptance.lo) && Number.isNaN(r.perAccepted.lo), `${r.assigned}/${r.tier} has too few tasks for a CI`);
+      assert.ok(Number.isFinite(r.acceptance.lo) && r.acceptance.lo - 1e-9 <= r.acceptance.mean && r.acceptance.mean <= r.acceptance.hi + 1e-9, `${name} acceptance CI`);
+      if (r.accepted >= 2) assert.ok(r.perAccepted.lo - 1e-9 <= r.perAccepted.mean && r.perAccepted.mean <= r.perAccepted.hi + 1e-9, `${name} $/accepted CI`);
+    } else assert.ok(Number.isNaN(r.acceptance.lo) && Number.isNaN(r.perAccepted.lo), `${name} has too few tasks for a CI`);
   }
 });
 
-test("randomized comparison: unresolved and review spawns are left out; no randomized spawn → no rows", () => {
+test("B14: unresolved and review spawns are left out of every row; no randomized spawn → no rows", () => {
   const w = randomLogs();
   const extra = logsOf([{ id: "xu", kind: "mechanical", tier: "T1", verdict: "rejected", spawn: { assigned: "random", routeBase: "qwen", unresolved: true } }, { id: "xr", kind: "mechanical", tier: "T1", verdict: "rejected", spawn: { assigned: "random", routeBase: "qwen", reviewOf: "rq0" } }]);
   const d = analyse({ ...w, meter: [...w.meter, ...extra.meter], outcomes: [...w.outcomes, ...extra.outcomes] }).delegation;
-  assert.deepEqual([row(d, "random", EXEC.T1).tasks, row(d, "random", EXEC.T1).accepted], [5, 5]);
+  assert.deepEqual([rnd(d, EXEC.T1).tasks, rnd(d, EXEC.T1).accepted], [5, 5]);
+  assert.equal(d.randomized.control.itt!.tasks, 13);
   assert.deepEqual(analyse(logsOf([{ id: "a", verdict: "accepted" }])).delegation.randomized.rows, []);
+});
+
+test("B14: the classes are disjoint: every routed task of the pool is in one row, and the ITT row has exactly the randomized ones", () => {
+  const d = analyse(randomLogs()).delegation;
+  const c = d.randomized.control;
+  assert.equal(c.randomizedControl.tasks + c.fallback.tasks + c.preRandomization.tasks, 3 + 2 + 2); // rt, rf, old — not rd (another profile), not any randomized one
+  assert.equal(d.randomized.rows.reduce((n, r) => n + r.tasks, 0), c.itt!.tasks); // per protocol, the randomized tasks split by the model they ran on
+});
+
+test("B14: no spawn carries assigned → the ITT row is not measurable, said so; the label of a randomized row is 'randomized by the router (ext)'", () => {
+  const d = analyse(logsOf([{ id: "a", verdict: "accepted" }, { id: "b", verdict: "rejected" }])).delegation;
+  assert.equal(d.randomized.control.itt, undefined);
+  assert.match(d.randomized.ittNote!, /assigned/);
+  const md = renderAnalysis(analyse(logsOf([{ id: "a", verdict: "accepted" }])), new Date("2026-10-06T00:00:00Z"));
+  assert.match(md, /ITT: not measurable/);
+  const sec = renderAnalysis(analyse(randomLogs()), new Date("2026-10-06T00:00:00Z")).split("\n### Randomized routing")[1].split("\n### ")[0];
+  assert.match(sec, /randomized by the router \(ext\)/);
+  assert.match(sec, /randomized control/);
+  assert.match(sec, /pre-randomization/);
+  assert.match(sec, /fallback/);
+  assert.match(sec, /ITT/);
 });
 
 // ---- spot-check agreement ------------------------------------------------------------------------
@@ -386,9 +424,9 @@ test("render: the delegation section shows the profile × tier table, the random
   assert.match(sec, /### By profile and tier/);
   assert.match(sec, /escalations = re-spawns one level up \(D7\)/);
   assert.match(sec, /\| profile \| tier \| tasks \| accepted \| partial \| rejected \| unjudged \| acceptance \| \$\/accepted \| escalations \| checks passed \|/);
-  assert.match(sec, /### Randomized routing \(spawns the router sent to qwen\)/);
-  assert.match(sec, /Causal only for the random subset/);
-  assert.match(sec, new RegExp(`\\| random \\| ${EXEC.T1} \\| 5 \\| 5/5 \\| 100%`));
+  assert.match(sec, /### Randomized routing \(randomized by the router \(ext\); spawns it sent to qwen\)/);
+  assert.match(sec, /Causal only for the intention-to-treat comparison/);
+  assert.match(sec, new RegExp(`\\| randomized by the router \\(ext\\), ran on ${EXEC.T1} \\| 5 \\| 5/5 \\| 100%`));
   assert.match(sec, /### Planned → executed tier/);
   assert.match(sec, new RegExp(`\\| T1 \\| ${EXEC.T1} \\| 5 \\|`));
   assert.match(sec, /### Spot checks/);

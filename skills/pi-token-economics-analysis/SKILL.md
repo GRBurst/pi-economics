@@ -54,10 +54,11 @@ without the user's explicit approval.
   (of the planned tiers; the report states no target: the router's targets are the owner's),
   acceptance per tier, escalations, reroutes, runaway alerts. Per profile (card kind) × tier:
   tasks, accepted/partial/rejected/unjudged, $/accepted task (child subtree), escalations,
-  check pass rate. *Randomized routing* (spawns the router sent to Qwen, run on a random tier):
-  acceptance and $/accepted by actual tier with bootstrap CIs when n allows; **only the
-  comparison within the random subset is causal**, the router row is a same-profile
-  reference. *Spot checks*: how often the reviewer's own verdict on a spot-checked task agrees with
+  check pass rate. *Randomized routing* ("randomized by the router (ext)": spawns the router sent to Qwen
+  or drew to another tier): the randomized control, the ITT row (every task it randomized), the
+  randomized tasks by the model they ran on, and the pre-randomization and fallback runs as rows of
+  their own; **only ITT against the randomized control is a randomized comparison**; "not measurable"
+  without `assigned` in the log. *Spot checks*: how often the reviewer's own verdict on a spot-checked task agrees with
   the original verdict, with Cohen's κ (a low rate = the parent's acceptance is too lenient); "not
   measurable" while the router logs no reviewer verdict (never read the parent's verdict of the review
   child as agreement: it is always `accepted`). Spawns whose

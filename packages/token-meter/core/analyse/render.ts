@@ -6,7 +6,7 @@ import { sum } from "./logs.ts";
 import { type CostSection } from "./cost.ts";
 import { type CacheSection } from "./cache.ts";
 import { type DesignResult, type StratumResult } from "./experiment.ts";
-import { MIN_CI_N, type CostPerAccepted, type DelegationSection, type Randomized, type SpotChecks } from "./delegation.ts";
+import { MIN_CI_N, type CostPerAccepted, type DelegationSection, type Randomized, type Row, type SpotChecks } from "./delegation.ts";
 import { type GuardsSection } from "./guards.ts";
 import { type QualitySection } from "./quality.ts";
 import { type Analysis } from "./index.ts";
@@ -111,12 +111,19 @@ export function renderExperiment(ds: DesignResult[]): string {
 const withCI = (c: CI, fmt: (n: number) => string): string => (Number.isFinite(c.mean) ? `${fmt(c.mean)}${Number.isFinite(c.lo) ? ` (${fmt(c.lo)} – ${fmt(c.hi)})` : ""}` : "–");
 
 export function renderRandomized(r: Randomized): string {
-  if (!r.rows.length) return "\n### Randomized routing\n\n_no randomized spawns in the period_ (`assigned: \"random\"` on the spawn events)";
+  if (!r.rows.length) return '\n### Randomized routing\n\n_no randomized spawns in the period_ (`assigned: "random"` on the spawn events)' + (r.ittNote ? `; ITT: not measurable: ${r.ittNote}` : "");
+  const c = r.control;
+  const row = (group: string, x: Row): string[] => [group, String(x.tasks), `${x.accepted}/${x.judged}`, withCI(x.acceptance, pc), withCI(x.perAccepted, f2)];
   return [
-    `\n### Randomized routing (spawns the router sent to qwen)\n`,
-    `Spawns whose router base was qwen, by the tier they actually ran on (${r.kinds.join(", ")}); 95% bootstrap CIs from ${MIN_CI_N} judged tasks on. **Causal only for the random subset**: comparing random tiers with one another is a randomized comparison; the router row (the router's own qwen tasks of the same profiles: assigned = router, or absent in old lines) was chosen, not randomized, so it can differ in task difficulty.\n`,
-    table(["assigned", "actual tier", "tasks", "accepted/judged", "acceptance (95% CI)", "$/accepted (95% CI)"],
-      r.rows.map((x) => [x.assigned, x.tier, String(x.tasks), `${x.accepted}/${x.judged}`, withCI(x.acceptance, pc), withCI(x.perAccepted, f2)])),
+    "\n### Randomized routing (randomized by the router (ext); spawns it sent to qwen)\n",
+    `Spawns whose router base was qwen, in the profiles the router randomized (${r.kinds.join(", ")}); 95% bootstrap CIs from ${MIN_CI_N} judged tasks on. The router draws a share of them to another tier (\`assigned: "random"\`); the rest, router-assigned and run as planned (on ${r.reference ?? "–"}, the model most of them ran on), is its **randomized control**. **Causal only for the intention-to-treat comparison**: the ITT row (every task the router randomized, by assignment, whatever ran) against the control. The rows by the model a randomized task ran on split it after the fact; the pre-randomization and fallback rows were chosen, not randomized, so they can differ in task difficulty.\n`,
+    table(["group", "tasks", "accepted/judged", "acceptance (95% CI)", "$/accepted (95% CI)"], [
+      row("randomized control (router-assigned, ran as planned)", c.randomizedControl),
+      ...(c.itt ? [row("randomized by the router (ext), ITT: every randomized task", c.itt)] : []),
+      ...r.rows.map((x) => row(`randomized by the router (ext), ran on ${x.tier}`, x)),
+      row("not randomized: pre-randomization (no `assigned`, before the router randomized)", c.preRandomization),
+      row("not randomized: fallback (router-assigned, ran on another model)", c.fallback),
+    ]),
     r.otherBase ? `\n${r.otherBase} randomized spawn(s) with another router base are not compared.` : "",
   ].join("\n");
 }

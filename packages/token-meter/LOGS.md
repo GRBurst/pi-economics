@@ -314,10 +314,7 @@ table is; this is what a reader of the raw files needs to reproduce them).
   the accepted ones. Spawns with `unresolved: true` and spot-check review children
   (`reviewOf` on the spawn or its verdict) are counted but left out of every
   routing-quality figure.
-- **Randomized comparison.** Spawns with `assigned: "random"` and `routeBase: "qwen"`, by the
-  model they ran on, with bootstrap CIs from 5 judged tasks on; the reference row is the
-  router's own qwen tasks (`assigned` `router` or absent) of the same kinds. Only the random
-  rows are comparable causally.
+- **Randomized comparison.** See *Analysis: router observation*.
 - **Spot-check agreement.** See *Analysis: router observation*.
 
 ### Analysis: cache misses
@@ -406,6 +403,16 @@ as "not measurable", never as a number.
   no acceptance, profile or randomized figure and is never counted as accepted; but its child session cost real money. Its $ is in the
   **all** population's $ (the tier table, the headline) and shown in its own column, and `$/accepted` is a bound pair over the same
   accepted tasks: **lower** leaves the unresolved $ out, **upper** counts it. One number means no unresolved $.
+- **Randomized comparison** (B14; "randomized by the router (ext)", the router's own experiment). The router sends a share of the spawns it
+  would put on qwen to another tier: `assigned: "random"` with `routeBase` = the tier it computed. The pool is the profiles (`kind`) that
+  have such a spawn, with `routeBase` qwen. Rows: **randomized control** = the pool's router-assigned tasks (`assigned: "router"`) that ran
+  as planned, on the *reference* model (the model most of them ran on; a tie goes to the smaller name); **pre-randomization** = the pool's
+  planned-qwen tasks without `assigned` (lines from before 2026-10-04); **fallback** = router-assigned tasks that ran on another model (a
+  fallback member, a reroute); **ITT** = every task the router randomized, by assignment, whatever ran on; and the randomized tasks by the model
+  they ran on (per protocol). Only ITT against the randomized control is a randomized comparison; the others were chosen. The control
+  still holds the tasks the router never drew (a pinned profile, a re-spawn): a marker on the spawn line that a task was in the draw (a router
+  backlog item) would let the analyser drop them. A log in which no spawn carries `assigned` reads "ITT: not measurable". Acceptance
+  and $/accepted of a row are over its judged tasks (bootstrap CI from 5 judged tasks on); unresolved cards and spot-check reviews are in no row.
 - **Spot-check agreement** (B7). `requested` = tasks with a `spotcheck` event; `reviewed` = those whose review child the parent judged
   (the verdict event of the review task, with `reviewOf` = the original task) while the original's verdict at the draw (the last one at or
   before the `spotcheck` event) is judged; `pending` = requested without that. The **agreement** compares the original's verdict at the draw

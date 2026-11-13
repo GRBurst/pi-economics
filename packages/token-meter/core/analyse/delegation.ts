@@ -13,8 +13,18 @@ export type ProfileTier = { kind: string; tier: string; tasks: number; accepted:
   /** Subtree cost of the judged tasks ÷ the accepted ones. */
   usd: number; perAccepted: number; escalations: number; checks: { n: number; passed: number }; passRate: number };
 /** A group of tasks: acceptance and $ per accepted task (child subtree), each with a bootstrap CI when there are enough judged tasks. */
-export type RandomRow = { assigned: "router" | "random"; tier: string; tasks: number; judged: number; accepted: number; acceptance: CI; perAccepted: CI };
-export type Randomized = { kinds: string[]; rows: RandomRow[]; otherBase: number };
+export type Row = { tasks: number; judged: number; accepted: number; acceptance: CI; perAccepted: CI };
+/** The randomized tasks that ran on one model (per protocol: not a randomized comparison). */
+export type RandomRow = Row & { tier: string };
+/**
+ * The router's randomization (B14), over the pool of its randomized profiles (`kinds`) and base tier qwen. `randomizedControl` = the router-assigned
+ * tasks that ran as planned, on the `reference` model; `preRandomization` = lines from before the randomization (no `assigned`); `fallback` =
+ * router-assigned tasks that ran on another model; `itt` = every task it randomized (`assigned: "random"`), by assignment, whatever ran.
+ */
+export type ControlRows = { randomizedControl: Row; preRandomization: Row; fallback: Row; itt?: Row };
+export type Randomized = { kinds: string[]; reference?: string; rows: RandomRow[]; otherBase: number; control: ControlRows;
+  /** Why the ITT row is not measurable: no spawn carries `assigned`. */
+  ittNote?: string };
 /**
  * Does the reviewer agree with the original verdict (B7)? Only a reviewer's own verdict says so: `reviewerVerdict` on the review's verdict event
  * (a field the router does not write yet, read untyped); without it the answer is "not measurable", never a rate. `kappa` is Cohen's κ over
@@ -141,7 +151,7 @@ function tierOrder(rows: readonly TaskRow[]): (a: string, b: string) => number {
 }
 
 /** acceptance and $ per accepted task of a group of tasks (`cost` = child subtree; undefined without a session), CIs from MIN_CI_N judged tasks on. */
-function groupRow(assigned: "router" | "random", tier: string, tasks: Array<{ verdict?: string; cost?: number }>): RandomRow {
+function groupRow(tasks: Array<{ verdict?: string; cost?: number }>): Row {
   const judged = tasks.filter((t) => t.verdict !== undefined && JUDGED.includes(t.verdict));
   const accepted = judged.filter((t) => t.verdict === "accepted");
   const costed = judged.filter((t) => t.cost !== undefined);
@@ -151,7 +161,7 @@ function groupRow(assigned: "router" | "random", tier: string, tasks: Array<{ ve
   const acceptance = enough ? bootstrapRatioCI(judged.map((t) => ({ num: acc(t), den: 1 }))) : { mean: point(accepted.length, judged.length), lo: NaN, hi: NaN, n: judged.length };
   const costedAccepted = costed.filter((t) => t.verdict === "accepted").length;
   const perAccepted = enough && costedAccepted >= 2 ? bootstrapRatioCI(costed.map((t) => ({ num: t.cost!, den: acc(t) }))) : { mean: point(sum(costed.map((t) => t.cost!)), costedAccepted), lo: NaN, hi: NaN, n: costed.length };
-  return { assigned, tier, tasks: tasks.length, judged: judged.length, accepted: accepted.length, acceptance, perAccepted };
+  return { tasks: tasks.length, judged: judged.length, accepted: accepted.length, acceptance, perAccepted };
 }
 
 /**
@@ -204,6 +214,33 @@ function agreementOf(pairs: Array<[boolean, boolean]>, withField: number): Agree
   return { measurable: true, n, agree, kappa: varies(p1) && varies(p2) ? (po - pe) / (1 - pe) : NaN };
 }
 
+/**
+ * The router's randomization of qwen-based spawns (B14). The reference model is the one most router-assigned base-qwen tasks of the randomized
+ * profiles ran on (a tie goes to the smaller name); one that ran on another is a fallback run, not a control. A task counts under its profile
+ * only if the router randomized some task of that profile.
+ */
+function randomization(routed: readonly TaskRow[], order: (a: string, b: string) => number): Randomized {
+  const task = (r: TaskRow) => ({ verdict: r.verdict, cost: r.cost });
+  const random = routed.filter((r) => r.spawn.assigned === "random" && r.spawn.routeBase === "qwen");
+  const kinds = [...new Set(random.map((r) => r.kind))].sort();
+  const pool = routed.filter((r) => r.planned === "qwen" && kinds.includes(r.kind));
+  const assigned = pool.filter((r) => r.spawn.assigned === "router" && r.spawn.routeBase === "qwen");
+  const ran = countBy(assigned, (r) => r.executed);
+  const reference = Object.entries(ran).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0];
+  const hasAssigned = routed.some((r) => r.spawn.assigned !== undefined);
+  return {
+    kinds, reference, otherBase: routed.filter((r) => r.spawn.assigned === "random" && r.spawn.routeBase !== "qwen").length,
+    rows: [...new Set(random.map((r) => r.executed))].sort(order).map((tier) => ({ tier, ...groupRow(random.filter((r) => r.executed === tier).map(task)) })),
+    control: {
+      randomizedControl: groupRow(assigned.filter((r) => r.executed === reference).map(task)),
+      preRandomization: groupRow(pool.filter((r) => r.spawn.assigned === undefined).map(task)),
+      fallback: groupRow(assigned.filter((r) => r.executed !== reference).map(task)),
+      ...(random.length ? { itt: groupRow(random.map(task)) } : {}),
+    },
+    ...(hasAssigned ? {} : { ittNote: "no spawn carries `assigned`: the log has no record of the router's randomization" }),
+  };
+}
+
 export function delegation(meter: any[], outcomes: any[], routerSettings: any): DelegationSection {
   const lines = meter.filter((l) => isLine(l) && typeof l.sessionId === "string");
   const allSpawns = outcomes.filter((e) => e?.event === "spawn" && typeof e.taskId === "string");
@@ -238,7 +275,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
     }
   }
   const profileTiers: ProfileTier[] = [...cells.values()].sort((a, b) => (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : order(a.tier, b.tier))).map((c) => {
-    const g = groupRow("router", c.tier, c.es.map(task));
+    const g = groupRow(c.es.map(task));
     const count = (v: string) => c.es.filter((e) => task(e).verdict === v).length;
     const judged = costPerAccepted(c.es.map((e) => rowOf.get(e.taskId)!), "judged"); // the judged tasks only, as the cell's acceptance
     return { kind: c.kind, tier: c.tier, tasks: c.es.length, accepted: g.accepted, partial: count("partial"), rejected: count("rejected"), unjudged: c.es.length - g.judged, acceptance: g.acceptance.mean,
@@ -249,15 +286,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   const matrix: MatrixCell[] = Object.entries(countBy(routed, (r) => `${r.planned}\u0000${r.executed}`))
     .map(([k, n]) => ({ planned: k.split("\u0000")[0], executed: k.split("\u0000")[1], n }))
     .sort((x, y) => (TIER_RANK[x.planned] ?? 9) - (TIER_RANK[y.planned] ?? 9) || cmp(x.planned, y.planned) || cmp(x.executed, y.executed));
-  // Randomized comparison: spawns whose router base was qwen, by the tier they actually ran on; the reference is the router's own qwen tasks of the same profiles.
-  const randomSpawns = spawns.filter((e) => e.assigned === "random" && e.routeBase === "qwen");
-  const kinds = [...new Set(randomSpawns.map((e) => String(e.kind)))].sort();
-  const control = spawns.filter((e) => e.assigned !== "random" && tierOf(e) === "qwen" && (e.routeBase === undefined || e.routeBase === "qwen") && kinds.includes(String(e.kind)));
-  const randomized: Randomized = {
-    kinds, otherBase: spawns.filter((e) => e.assigned === "random" && e.routeBase !== "qwen").length,
-    rows: !randomSpawns.length ? [] : [groupRow("router", "qwen", control.map(task)),
-      ...[...new Set(randomSpawns.map(ranOn))].sort(order).map((tier) => groupRow("random", tier, randomSpawns.filter((e) => ranOn(e) === tier).map(task)))],
-  };
+  const randomized = randomization(routed, order);
   const spotChecks = spotCheckAgreement(outcomes, allSpawns);
   const acc = acceptance(asTier);
   // a tier only an unresolved card ran on has no routed task, and is a row only if that card cost something

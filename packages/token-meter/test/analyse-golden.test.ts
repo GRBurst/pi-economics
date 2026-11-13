@@ -63,10 +63,10 @@ function goldenLogs(): Logs {
   const child = (sessionId: string, usd: number, when: number): Record<string, unknown> =>
     turn(sessionId, at(when), { arm: "------", parentSessionId: "m3", costUsd: usd, provider: "openrouter", model: "qwen" });
 
-  // router tasks on qwen (the control) and random ones on qwen, haiku, T1: eight judged tasks each
+  // router tasks on qwen (the control; c2 is rerouted below to another model: a fallback run; c6 and c7 are old lines) and random ones on qwen, haiku, T1: eight judged tasks each
   const verdicts = ["accepted", "accepted", "rejected", "accepted", "partial", "accepted", "rejected", "accepted"];
   verdicts.forEach((v, i) => {
-    outcomes.push(spawn(`c${i}`, `kc${i}`, "qwen", { assigned: "router", routeBase: "qwen" }), verdict(`c${i}`, v, 110 + i));
+    outcomes.push(spawn(`c${i}`, `kc${i}`, "qwen", i < 6 ? { assigned: "router", routeBase: "qwen" } : {}), verdict(`c${i}`, v, 110 + i)); // c6, c7: from before the randomization (no assigned)
     meter.push(child(`kc${i}`, 0.1 + 0.05 * i, 101 + i));
     const tier = ["qwen", "haiku", "T1", "qwen"][i % 4];
     outcomes.push(spawn(`r${i}`, `kr${i}`, tier, { assigned: "random", routeBase: "qwen" }), verdict(`r${i}`, verdicts[(i + 3) % 8], 120 + i));
