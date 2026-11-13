@@ -119,13 +119,26 @@ test("B3: cause other when nothing the analyser can see explains the miss", () =
   assert.deepEqual([steps[1].miss, steps[1].cause], [800, "other"]);
 });
 
-test("B3 precedence (P8): ttl > fold > model > other, whatever else holds", () => {
-  const at = (gapMin: number, model: string) => [R(0, 0, 1000), R(gapMin, 0, 1000, { model })];
-  const cause = (gapMin: number, model: string, event: boolean) => cacheSteps(at(gapMin, model), ttl5m, () => event)[1].cause;
+// M3b (M2a review carry-over): the meter v2 systemHash names the misses a system-prompt or tool-list change caused.
+test("B3: cause prefix when the system state changed since the branch's previous known one (systemHash)", () => {
+  const h = (x: string) => ({ systemHash: x.repeat(16) });
+  const steps = cacheSteps([R(0, 0, 1000, h("a")), R(1, 0, 1000, h("b")), R(2, 0, 1000, h("b"))], ttl5m, noEvent);
+  assert.deepEqual(steps.map((s) => s.cause), [undefined, "prefix", "other"]);
+  // a line without a hash (a warm, a v1 line, an older pi) neither hides a change nor makes one
+  const gap = cacheSteps([R(0, 0, 1000, h("a")), R(1, 1000, 0, { kind: "warming" }), R(2, 0, 1000), R(3, 0, 1000, h("c"))], ttl5m, noEvent);
+  assert.deepEqual(gap.map((s) => s.cause), [undefined, "other", "prefix"]);
+  assert.deepEqual(cacheSteps([R(0, 0, 1000), R(1, 0, 1000, h("a"))], ttl5m, noEvent).map((s) => s.cause), [undefined, "other"], "unknown before: no change seen");
+  assert.deepEqual(cacheSteps([R(0, 0, 1000, h("a")), R(1, 1000, 50, h("b"))], ttl5m, noEvent).map((s) => s.cause), [undefined, undefined], "a change without a miss has no cause");
+});
+
+test("B3 precedence (P8): ttl > fold > model > prefix > other, whatever else holds", () => {
+  const at = (gapMin: number, model: string, hash: string) => [R(0, 0, 1000, { systemHash: "a".repeat(16) }), R(gapMin, 0, 1000, { model, systemHash: hash.repeat(16) })];
+  const cause = (gapMin: number, model: string, event: boolean, hash = "b") => cacheSteps(at(gapMin, model, hash), ttl5m, () => event)[1].cause;
   assert.equal(cause(9, "claude-y", true), "ttl", "a gap beyond the TTL loses the prefix whatever happened since");
   assert.equal(cause(1, "claude-y", true), "fold");
   assert.equal(cause(1, "claude-y", false), "model");
-  assert.equal(cause(1, "claude-x", false), "other");
+  assert.equal(cause(1, "claude-x", false), "prefix");
+  assert.equal(cause(1, "claude-x", false, "a"), "other");
 });
 
 test("shrinkFold: the 80% rule of arms.ts and the ledger, on whole prompts (strictly below)", () => {
@@ -179,16 +192,16 @@ test("cacheSection: new context, misses by cause and their premium at the line's
   assert.equal(c.writeTokens, 3500);
   assert.equal(c.newContext.tokens, 1800);
   close(c.newContext.usd, 1300 * 1.25 * P + 500 * 2.0 * P);
-  assert.deepEqual(c.misses.map((m) => [m.cause, m.n, m.tokens]), [["ttl", 1, 1200], ["fold", 0, 0], ["model", 0, 0], ["other", 1, 500]]);
+  assert.deepEqual(c.misses.map((m) => [m.cause, m.n, m.tokens]), [["ttl", 1, 1200], ["fold", 0, 0], ["model", 0, 0], ["prefix", 0, 0], ["other", 1, 500]]);
   close(c.misses[0].usd, 1200 * (1.25 - 0.1) * P);
-  close(c.misses[3].usd, 500 * (2.0 - 0.1) * P);
+  close(c.misses[4].usd, 500 * (2.0 - 0.1) * P);
   close(c.missShare, 1700 / 3500);
 });
 
 test("cacheSection: no Claude request: zeros and a miss share of 0, the cause rows still there", () => {
   const c = cacheSection([]);
   assert.deepEqual([c.requests, c.branches, c.writeTokens, c.newContext.tokens, c.missShare], [0, 0, 0, 0, 0]);
-  assert.deepEqual(c.misses.map((m) => m.cause), ["ttl", "fold", "model", "other"]);
+  assert.deepEqual(c.misses.map((m) => m.cause), ["ttl", "fold", "model", "prefix", "other"]);
 });
 
 test("cacheSection: a fold shows as cause fold (the 80% rule on the lines); a long log is stepped in linear time", () => {

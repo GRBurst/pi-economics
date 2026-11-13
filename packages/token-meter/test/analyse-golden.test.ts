@@ -34,6 +34,9 @@ function goldenLogs(): Logs {
     ...turns(sessionId, start + 21 * MIN, 2, { arm, cacheRead: 5_100, cacheWrite: 100, costUsd: 0.2 }, 1),
   ];
   meter.push(...folding("f1", "++++++", at(200)), ...folding("f2", "---", at(200)));
+  // a system-prompt change inside the TTL (meter v2 systemHash, M3b): f1's third request ran under another system state (cause prefix)
+  const f1 = meter.filter((l) => l.sessionId === "f1");
+  ["0123456789abcdef", "0123456789abcdef", "fedcba9876543210"].forEach((systemHash, i) => Object.assign(f1[i], { systemHash }));
   assignments.push(assignment("f1", "++++++", at(199)), assignment("f2", "---", at(199)));
 
   // a v3 session shares its arm id with the v2 sessions (analysed apart), v4 sessions fill four arms

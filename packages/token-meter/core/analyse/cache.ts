@@ -4,7 +4,7 @@ import { cacheWrite1hOf, isClaude, pIn, WEIGHT, writeWeight } from "./units.ts";
 
 type Flags = Record<string, Record<string, string>>;
 
-export type MissCause = "ttl" | "fold" | "model" | "other";
+export type MissCause = "ttl" | "fold" | "model" | "prefix" | "other";
 /** One request of a session branch: `growth` = tokens written because the context grew (new context), `miss` = tokens of the cached prefix it had to process again. */
 export type CacheStep = { sessionId: string; i: number; growth: number; miss: number; cause?: MissCause };
 
@@ -24,12 +24,17 @@ export const shrinkFold = (a: any, b: any): boolean => prompt(b) < FOLD_SHRINK *
  * so cacheWrite_i = growth_i + the rewrite (≈ miss_i). The previous request's uncached input tail is not part of the cache, so it is no miss.
  * A miss has a cause, the first that holds (P8: a gap beyond the TTL loses the prefix whatever else happened): `ttl` when the gap since the
  * previous request outlived the TTL in force there (`ttlMs(previous)`; a warming request is a previous request: it refreshed the prefix),
- * `fold` when `eventBetween(previous, this)` (a fold or compaction), `model` when the model changed, else `other`: a prefix change inside
- * the TTL that the lines do not show (a system-prompt or tool-list change, a small fold or mask, an injected agent message).
+ * `fold` when `eventBetween(previous, this)` (a fold or compaction), `model` when the model changed, `prefix` when the request's
+ * `systemHash` (meter v2, M3b) differs from the last one the branch showed before it (the system prompt, a section or the tool list
+ * changed), else `other`: a prefix change inside the TTL that the lines do not show (a small fold or mask, an injected agent message,
+ * a system change on lines without a hash).
  */
 export function cacheSteps(branch: readonly any[], ttlMs: (l: any) => number, eventBetween: (a: any, b: any) => boolean): CacheStep[] {
   const steps: CacheStep[] = [];
+  let known: string | undefined; // the last systemHash before request i
   branch.forEach((l, i) => {
+    const before = known;
+    if (typeof l.systemHash === "string") known = l.systemHash;
     if (l.kind === "warming") return;
     const sessionId = String(l.sessionId);
     if (i === 0) { steps.push({ sessionId, i, growth: num(l.cacheWrite), miss: 0 }); return; }
@@ -37,7 +42,8 @@ export function cacheSteps(branch: readonly any[], ttlMs: (l: any) => number, ev
     const growth = Math.min(num(l.cacheWrite), Math.max(0, cached(l) - cached(prev)));
     const miss = Math.max(0, Math.min(cached(prev), prompt(l)) - num(l.cacheRead));
     const step: CacheStep = { sessionId, i, growth, miss };
-    if (miss > 0) step.cause = Date.parse(l.ts) - Date.parse(prev.ts) > ttlMs(prev) ? "ttl" : eventBetween(prev, l) ? "fold" : l.model !== prev.model ? "model" : "other";
+    if (miss > 0) step.cause = Date.parse(l.ts) - Date.parse(prev.ts) > ttlMs(prev) ? "ttl" : eventBetween(prev, l) ? "fold" : l.model !== prev.model ? "model"
+      : before !== undefined && typeof l.systemHash === "string" && l.systemHash !== before ? "prefix" : "other";
     steps.push(step);
   });
   return steps;
@@ -69,11 +75,11 @@ export type CacheSection = {
   /** Claude turn requests in the branches, and the branches. */ requests: number; branches: number;
   /** Their cacheWrite tokens. */ writeTokens: number;
   /** Growth writes: tokens and $ at the write price. */ newContext: { tokens: number; usd: number };
-  /** Misses by cause, in the order ttl, fold, model, other: requests, missed tokens, premium API-eq $ = tokens × (write − read price). */ misses: CauseRow[];
+  /** Misses by cause, in the order ttl, fold, model, prefix, other: requests, missed tokens, premium API-eq $ = tokens × (write − read price). */ misses: CauseRow[];
   /** Missed tokens ÷ cacheWrite tokens (0 without writes). */ missShare: number;
   /** Folds and cold resumes: premium over the baseline (foldPremiums). */ events: Record<EventKind, FoldPremium>;
 };
-const CAUSES: MissCause[] = ["ttl", "fold", "model", "other"];
+const CAUSES: MissCause[] = ["ttl", "fold", "model", "prefix", "other"];
 
 /**
  * The Cache section: cacheSteps (fold = shrinkFold) over every branch of `lines`, summed. $ is at each line's input price p (pIn): a write

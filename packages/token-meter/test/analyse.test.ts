@@ -115,7 +115,7 @@ test("cost (B3): the Cache section: growth is new context, only the prefix a req
   const a = analyse(none([g(0, 0, 1000), g(1, 1000, 200), g(2, 1200, 300), g(8, 0, 1500)]));
   const c = a.cost.cache;
   assert.deepEqual([c.requests, c.branches, c.writeTokens, c.newContext.tokens], [4, 1, 3000, 1500]);
-  assert.deepEqual(c.misses.map((m) => [m.cause, m.n, m.tokens]), [["ttl", 1, 1500], ["fold", 0, 0], ["model", 0, 0], ["other", 0, 0]]);
+  assert.deepEqual(c.misses.map((m) => [m.cause, m.n, m.tokens]), [["ttl", 1, 1500], ["fold", 0, 0], ["model", 0, 0], ["prefix", 0, 0], ["other", 0, 0]]);
   close(c.missShare, 0.5);
   const md = renderAnalysis(a);
   assert.ok(md.includes("### Cache"), "the report has a Cache section");
