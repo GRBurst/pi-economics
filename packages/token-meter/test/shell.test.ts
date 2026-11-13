@@ -428,6 +428,9 @@ test("arm: lines carry armFor(sessionId).id from __piExperimentsApi_v1; children
     const [none, main, child, other] = lines();
     assert.ok(!("arm" in none) && !("arm" in other));
     assert.equal(main.arm, "+-+--"); assert.equal(child.arm, "+-+--");
+    // M3a T3a.9: the API's Arm is { id, flags } and names no design, so v2 lines carry no `design` until the engine's
+    // channel provides it (M5b.2).
+    assert.ok(!("design" in main) && !("design" in child));
   } finally {
     delete g.__piExperimentsApi_v1;
   }
