@@ -4,7 +4,7 @@ import { type LedgerSection } from "../ledger.ts";
 import { taskCosts, type TaskCost } from "../tasks.ts";
 import { bootstrapRatioCI, type CI } from "../stats.ts";
 import { byTs, isLine, num, sum } from "./logs.ts";
-import { allocate, type Component } from "./units.ts";
+import { allocate, apiUsd, type Component } from "./units.ts";
 import { foldsOf } from "./folds.ts";
 
 export type Split = { name: string; n: number; usd: number; share: number; perHour: number };
@@ -31,7 +31,7 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
   const lines = meter.filter((l) => isLine(l) && typeof l.sessionId === "string").sort(byTs);
   const units = rootUnits(lines);
   const activeHours = sum(units.map((u) => u.hours));
-  const totalUsd = sum(lines.map((l) => num(l.costUsd)));
+  const totalUsd = sum(lines.map((l) => apiUsd(l)));
   const perHour = (usd: number) => (activeHours ? usd / activeHours : NaN);
   // The CI resamples units of ≥ MIN_HOURS only: a few-second root ($0 orphan child lines) would otherwise draw $/h ≈ 0.
   const timed = units.filter((u) => u.hours >= MIN_HOURS);
@@ -41,7 +41,7 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
   for (const l of lines) {
     const m = models.get(String(l.model)) ?? models.set(String(l.model), { requests: 0, usd: 0 }).get(String(l.model))!;
     if (l.kind !== "warming" && !isError(l)) m.requests += 1;
-    m.usd += num(l.costUsd);
+    m.usd += apiUsd(l);
   }
   const components = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, unallocated: 0 };
   let rewrite = 0;
@@ -64,7 +64,7 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
     q5hPerHour: perHour(quotaShare(lines, "q5h").pi), q7dPerHour: perHour(quotaShare(lines, "q7d").pi),
     perAccepted: all ?? { accepted: 0, judged: 0, costUsd: 0, perAccepted: NaN },
     byModel: [...models].map(([model, m]) => ({ model, ...m, share: totalUsd ? m.usd / totalUsd : NaN, perHour: perHour(m.usd) })).sort((a, b) => b.usd - a.usd),
-    splits: [split("cache rewrite", rewrites, rewrite), split("warming", warm.length, sum(warm.map((l) => num(l.costUsd)))),
+    splits: [split("cache rewrite", rewrites, rewrite), split("warming", warm.length, sum(warm.map((l) => apiUsd(l)))),
       split("after folds", evs("fold").n, evs("fold").usd), split("after cold resumes", evs("coldResume").n, evs("coldResume").usd)],
     components, folds: foldsOf(lines, flags, rows),
   };

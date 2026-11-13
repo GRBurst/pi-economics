@@ -3,7 +3,8 @@ import { isError, push } from "../arms.ts";
 import { acceptance } from "../guards.ts";
 import { taskCosts, taskRecords } from "../tasks.ts";
 import { bootstrapRatioCI, type CI } from "../stats.ts";
-import { countBy, isLine, num, sum } from "./logs.ts";
+import { countBy, isLine, sum } from "./logs.ts";
+import { apiUsd } from "./units.ts";
 
 /** One cell of the profile (card kind) × worker tier table; spawns whose cards did not resolve and spot-check reviews are not in it. */
 export type ProfileTier = { kind: string; tier: string; tasks: number; accepted: number; partial: number; rejected: number; unjudged: number; acceptance: number;
@@ -132,7 +133,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   const costs = taskCosts(lines, asTier);
   const tiers = countBy(spawns, tierOf);
   const children = lines.filter((l) => typeof l.parentSessionId === "string");
-  const total = sum(lines.map((l) => num(l.costUsd)));
+  const total = sum(lines.map((l) => apiUsd(l)));
   const requests = (ls: any[]) => ls.filter((l) => l.kind !== "warming" && !isError(l)).length;
   const group = <K extends string>(es: any[], keys: K[]) => Object.values(es.reduce((m, e) => {
     const k = keys.map((x) => String(e[x])).join("\u0000");
@@ -144,7 +145,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   for (const l of children) {
     const m = models.get(String(l.model)) ?? models.set(String(l.model), { requests: 0, usd: 0 }).get(String(l.model))!;
     if (l.kind !== "warming" && !isError(l)) m.requests += 1;
-    m.usd += num(l.costUsd);
+    m.usd += apiUsd(l);
   }
   const limits = { requests: routerSettings?.runaway?.requests ?? 150, usd: routerSettings?.runaway?.usd ?? 10 };
   const taskOf = new Map(allSpawns.filter((e) => typeof e.sessionId === "string").map((e) => [e.sessionId as string, e.taskId as string]));
@@ -153,7 +154,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   const runaways: Runaway[] = [];
   for (const [sid, ls] of perChild) {
     const r = requests(ls);
-    const usd = sum(ls.map((l) => num(l.costUsd)));
+    const usd = sum(ls.map((l) => apiUsd(l)));
     const why = [r > limits.requests ? `${r} requests > ${limits.requests}` : "", usd > limits.usd ? `$${usd.toFixed(2)} > $${limits.usd}` : ""].filter(Boolean);
     if (why.length) runaways.push({ sessionId: sid, taskId: taskOf.get(sid), requests: r, usd, reason: why.join("; ") });
   }
@@ -161,7 +162,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   return {
     spawns: allSpawns.length, unresolved: unresolved.length, reviewSpawns: allSpawns.filter((e) => reviewIds.has(e.taskId)).length,
     profileTiers, randomized, spotChecks, qwenShare: spawns.length ? (tiers.qwen ?? 0) / spawns.length : NaN,
-    childUsdShare: total ? sum(children.map((l) => num(l.costUsd))) / total : NaN,
+    childUsdShare: total ? sum(children.map((l) => apiUsd(l))) / total : NaN,
     childRequestShare: requests(lines) ? requests(children) / requests(lines) : NaN,
     byTier: Object.entries(tiers).sort((a, b) => b[1] - a[1]).map(([tier, n]) => {
       const a = acc[tier] ?? { accepted: 0, judged: 0 };

@@ -1,7 +1,8 @@
 // (e) data quality: the span of each log, schema versions, unjoinable lines, the pi share of the quota, the data contract.
 import { rootUnits } from "../arms.ts";
 import { check, type Problem } from "../contract.ts";
-import { countBy, inPeriod, isLine, LOGS, num, sum, versionOf, type FileInfo, type LogName, type Logs, type Period } from "./logs.ts";
+import { countBy, inPeriod, isLine, LOGS, sum, versionOf, type FileInfo, type LogName, type Logs, type Period } from "./logs.ts";
+import { apiUsd } from "./units.ts";
 import { rowsBySession } from "./designs.ts";
 import { quotaShare } from "./cost.ts";
 
@@ -23,7 +24,7 @@ export function quality(all: Logs, logs: Logs, period: Period): QualitySection {
   const rows = rowsBySession(all.assignments);
   const armedRoots = new Set(meter.filter((l) => typeof l.arm === "string" && l.arm).map((l) => l.parentSessionId ?? l.sessionId));
   const bare = rootUnits(meter).filter((u) => !armedRoots.has(u.root));
-  const total = sum(meter.map((l) => num(l.costUsd)));
+  const total = sum(meter.map((l) => apiUsd(l)));
   const meterSessions = new Set(all.meter.map((l) => l?.sessionId));
   const spawnAll = all.outcomes.filter((e) => e?.event === "spawn");
   const spawnTasks = new Set(spawnAll.map((e) => e.taskId));
