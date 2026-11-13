@@ -35,6 +35,7 @@ interventions) is drafted separately; nothing here implements it.
 |---|---|
 | `packages/task-router`, `programs.piEconomics.taskRouter` | [pi-task-router](https://github.com/GRBurst/pi-task-router), its own flake: `programs.piTaskRouter`, version 0.2.0 |
 | `docs/local-mode/`, `docs/research/` (whole, the cleanup scripts included) | the same paths in pi-task-router |
+| `docs/prompts/`, the specification of the Gemini Deep Research cleanup tool (left after 0.2.0) | its own repository, `~/projects/gemini-research-cleanup` (not published yet): the command `gdr-clean`, the specification as its `docs/spec.md` |
 | `packages/actor-subagents`, `patches/pi-actor-subagents`, `programs.piEconomics.actorSubagents` | pi-setup: `programs.pi.actorSubagents` (infrastructure that the router, cache-lifecycle, experiments and bench use) |
 
 A definition of either removed option fails with a message that names the new
@@ -72,28 +73,25 @@ How the two relate:
 - **Versions.** Each repository has its own; pi-economics' constant is
   `render/default.nix` (AGENTS.md, "Versions").
 
-### The research cleanup tool → a new repository
+### The research cleanup tool → its own repository
 
 The Gemini Deep Research cleanup tool is about processing Gemini exports, not
-about pi. It moves to a standalone repository; suggested location
-`~/projects/gemini-research-cleanup` (name not final).
+about pi. It lives in a standalone repository, `~/projects/gemini-research-cleanup`
+(not published yet), as the command `gdr-clean`.
 
-- The specification is `docs/prompts/research-cleanup-tool.md` (the future
-  tool, as specified; still here).
-- The one-off provenance scripts `clean-batch{1,2,3}.mjs` are the seed
-  implementation for it; they now live in pi-task-router's
-  `docs/research/cleanup/`.
+- Its specification is `docs/spec.md` there, amended after fifteen exports;
+  this repository no longer carries a copy.
+- The one-off provenance scripts `clean-batch{1,2,3}.mjs` stay in
+  pi-task-router's `docs/research/cleanup/` (the tool keeps copies as its rule
+  reference); the reports, the raw exports and the formula sidecars stay there
+  too, and `docs/research/cleanup.md` there names the tool and its version for
+  each batch.
 
-## Open
-
-- Cleanup-tool repository: name, layout, and what exactly migrates from
-  `docs/prompts/research-cleanup-tool.md` and the batch scripts.
-
-## Current state (2026-11-12)
+## Current state (2026-11-13)
 
 0.2.0 contains neither the router nor the actor; the router is not tagged or
 published yet, so the checks read it through an input override (AGENTS.md,
-"Commands"). Local mode is disabled in the author's setup. Unprocessed raw
-research exports (batch 4: review economics, two local-harness reports, the
-next batch) sit in `docs/research/originals/` of pi-task-router for a later
-cleanup session.
+"Commands"). Local mode is disabled in the author's setup. The raw
+research exports of batch 4 (review economics, two local-harness reports, a
+note) were cleaned with `gdr-clean` in pi-task-router; a later batch is
+cleaned the same way.
