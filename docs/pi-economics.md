@@ -225,7 +225,7 @@ is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 |---|---|---|
 | `enable` | `false` | registry entry `experiments` (`forChildren = false`: children inherit their parent's arm) |
 | `package` | the flake's `packages/experiments` | the extension |
-| `settings` | `{}` | written to `<agentDir>/experiments/settings.json` as given, `{}` as `{"mode": "explore"}` (`mode`, `factors`, `maxArms`, `minExplore`, `baseline`, `guards`, `correctionRegex`); the file is the extension's opt-in: without it experiments is inert |
+| `settings` | `{}` | written to `<agentDir>/experiments/settings.json` as given, `{}` as `{"mode": "explore"}` (`mode`, `minExplore`, `strata` (default: one per billing class of `tokenMeter.plans`, and `api`), `guards`, `correctionRegex`; the v1 engine's `factors`, `maxArms`, `baseline` are ignored); the file is the extension's opt-in: without it experiments is inert |
 
 Without the actor in the registry (`extensions.actor-subagents`) it warns:
 children do not inherit an arm.

@@ -61,8 +61,10 @@ in {
         writes `{"mode": "explore"}`. The file is the extension's opt-in:
         without it the extension stays inert (no arm, no factor change), so
         it is written whenever the component is enabled. Every key it lacks
-        has a default in the package's core/settings.ts (`mode`, `factors`,
-        `maxArms`, `minExplore`, `baseline`, `guards`, `correctionRegex`).
+        has a default in the package's core/settings.ts (`mode`, `minExplore`,
+        `strata`, `guards`, `correctionRegex`); `strata` defaults to one stratum
+        per billing class of `tokenMeter.plans` (and `api`). The v1 engine's
+        `factors`, `maxArms` and `baseline` are ignored.
       '';
     };
   };
