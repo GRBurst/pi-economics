@@ -149,6 +149,17 @@ test("error message_end → status error, errorClass from message, no usage, no 
   assert.equal(JSON.stringify(l).includes("SECRET"), false);
 });
 
+test("error message_end → errorKind: context overflow (Anthropic, llama.cpp) apart from rate limits and other errors", () => {
+  const { f, lines } = setup();
+  const ctx = fakeCtx("s1");
+  const fail = (errorMessage: string) => f.fire("message_end", assistant({ stopReason: "error", errorMessage, usage: undefined }), ctx);
+  fail('400 {"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 213462 tokens > 200000 maximum"}}');
+  fail("400 the request exceeds the available context size, try increasing it");
+  fail("429: rate limited");
+  fail("500 boom");
+  assert.deepEqual(lines().map((l) => [l.errorClass, l.errorKind]), [["400", "context_overflow"], ["400", "context_overflow"], ["429", "rate_limit"], ["500", "other"]]);
+});
+
 test("warming: unconsumed snapshot flushed at next before_provider_request with cache_warm usage", () => {
   const { f, clock, lines } = setup();
   const entries: unknown[] = [];

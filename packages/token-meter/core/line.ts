@@ -1,6 +1,7 @@
 // Pure: builds the allowlisted meter line and serializes it (bounded size).
 import { isAbsolute, join } from "node:path";
 import { parseRatelimit } from "./ratelimit.ts";
+import { errorKindOf, type ErrorKind } from "./errorkind.ts";
 import type { Billing } from "./plans.ts";
 import type { Quota, Snapshot } from "./ratelimit.ts";
 
@@ -24,7 +25,7 @@ type LineBase = { ts: string; sessionId: string; parentSessionId?: string; arm?:
 export type MeterLineV1 = LineBase & { v?: 1 };
 /** The line this writer emits (LOGS.md "Meter line v2"). */
 export type MeterLineV2 = LineBase & { v: 2; design?: string; billing?: Billing; cacheWrite1h?: number;
-  durationMs?: number; ttftMs?: number };
+  durationMs?: number; ttftMs?: number; errorKind?: ErrorKind };
 export type MeterLine = MeterLineV1 | MeterLineV2;
 
 const MAX_STR = 256;
@@ -33,7 +34,7 @@ const MAX_BYTES = 4096;
 export const SCHEMA_VERSION = 2;
 const KEYS = ["v", "ts", "sessionId", "parentSessionId", "arm", "design", "provider", "model", "effort", "kind", "billing",
   "input", "cacheRead", "cacheWrite", "cacheWrite1h", "output", "reasoning", "costUsd", "status", "retries", "retryWaitMs",
-  "errorClass", "durationMs", "ttftMs",
+  "errorClass", "errorKind", "durationMs", "ttftMs",
   "q5h", "q5hReset", "q7d", "q7dReset", "overage", "claim", "fallback", "rawRatelimit"] as const;
 
 const clip = (s: string, max: number): string => (s.length > max ? s.slice(0, max) : s);
@@ -58,7 +59,10 @@ export function buildLine(i: LineInput): MeterLineV2 {
   l.status = i.status;
   l.retries = i.retries;
   l.retryWaitMs = i.retryWaitMs;
-  if (i.status === "error") l.errorClass = errorClassOf(i.errorMessage);
+  if (i.status === "error") {
+    l.errorClass = errorClassOf(i.errorMessage);
+    l.errorKind = errorKindOf(i.status, i.errorMessage ?? "");
+  }
   if (i.snap) {
     const { raw, ...quota } = parseRatelimit(i.snap.headers);
     Object.assign(l, quota);

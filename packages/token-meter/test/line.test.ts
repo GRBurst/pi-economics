@@ -24,7 +24,7 @@ const K_ALLOWED = new Set([
   "input", "cacheRead", "cacheWrite", "output", "reasoning", "costUsd", "status", "retries", "retryWaitMs",
   "q5h", "q5hReset", "q7d", "q7dReset", "overage", "claim", "fallback", "errorClass", "rawRatelimit",
   // v2 (design §5.2)
-  "design", "billing", "cacheWrite1h", "durationMs", "ttftMs",
+  "design", "billing", "cacheWrite1h", "durationMs", "ttftMs", "errorKind",
 ]);
 
 const now = new Date("2026-10-02T12:34:56.789Z");
@@ -56,6 +56,14 @@ test("buildLine: error line has errorClass from leading HTTP code, no usage, no 
   assert.equal(buildLine({ ...base, status: "error", errorMessage: "boom" }).errorClass, "error");
   assert.equal(buildLine({ ...base, status: "error" }).errorClass, "error");
   assert.equal("errorClass" in buildLine(base), false);
+});
+
+test("buildLine: an error line has errorKind from its status and message; others have none", () => {
+  assert.equal(buildLine({ ...base, status: "error", errorMessage: "400 prompt is too long: 9 tokens > 8 maximum" }).errorKind, "context_overflow");
+  assert.equal(buildLine({ ...base, status: "error", errorMessage: "429: secret" }).errorKind, "rate_limit");
+  assert.equal(buildLine({ ...base, status: "error" }).errorKind, "other");
+  assert.equal("errorKind" in buildLine(base), false);
+  assert.equal("errorKind" in buildLine({ ...base, status: 429 }), false, "a status line is no error line");
 });
 
 test("serialize: one line ending in \\n, round-trips", () => {
