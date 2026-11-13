@@ -159,7 +159,9 @@ agent loop: no `before_provider_request`, `after_provider_response` or `message_
 made the summary, `fromExtension`), `status` 200, tokens and `costUsd` from the entry; no `durationMs`, `ttftMs`,
 `retries` or quota fields (not observed). An entry without usage gets no line. With infinite-context loaded pi never
 compacts (it cancels every `session_before_compact`), so these lines come from sessions without it. The analysis counts them
-as requests (cost, *By model*); the *Cache* branches take turn and warming lines only.
+as requests (cost, *By model*, active hours, quota) but not as a step of the session's cached branch: the *Cache* branches take
+turn and warming lines only, the fold ledger agent turns (and warms as readers of the prompt). Their `durationMs` is unknown, so
+the experiment's timed objectives (`wallMs`, `localCost`) leave them out.
 
 ```jsonl
 {"v":2,"ts":"2026-11-03T12:30:10.000Z","sessionId":"s-bench","provider":"anthropic","model":"claude-opus-5-5","kind":"compaction","billing":"subscription","input":152000,"cacheRead":0,"cacheWrite":0,"output":2100,"costUsd":0.81,"status":200}

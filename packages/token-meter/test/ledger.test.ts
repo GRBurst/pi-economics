@@ -150,6 +150,15 @@ test("summary: count, sum, share negative, K/R buckets, groups and models", () =
   assert.equal(bucketOf(0.5), "0.5 – 1");
 });
 
+test("a compaction line (M3b) is no part of the branch: no turn, no request reading the prompt, no price evidence", () => {
+  const lines = withFold(50_000, 3_000, 4);
+  const compaction = { ...L("s", 4.5, 150_000, 0), kind: "compaction", input: 150_000, cacheRead: 0, cacheWrite: 0, output: 2_000, costUsd: 0.9 };
+  const nested = { ...L("s", 4.6, 3_000, 0), kind: "nested" };
+  assert.deepEqual(foldLedger([...lines, compaction]), foldLedger(lines));
+  assert.equal(foldLedger([...lines, nested]).length, 1, "an extension's request is no turn: no fold of its own");
+  assert.equal(foldLedger([...lines, nested])[0].R, 50_000);
+});
+
 test("a long session with many folds is ledgered in linear time", () => {
   const n = 60_000;
   const lines = Array.from({ length: n }, (_, i) => L("s", i / 60, i % 10 === 9 ? 10_000 : 100_000, 10));

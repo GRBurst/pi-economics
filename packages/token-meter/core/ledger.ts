@@ -75,7 +75,8 @@ export function value(R: number, K: number, n: number, p: Pick<Price, "r" | "w">
  * until the first gap ≥ TTL or the end of the session. Folds of models without a price are left out.
  */
 export function foldLedger(all: any[], opt: LedgerOpts = {}): FoldEntry[] {
-  const lines = all.filter((l) => l && typeof l.ts === "string" && !Number.isNaN(t(l)) && typeof l.sessionId === "string" && isClaude(l)).sort((a, b) => t(a) - t(b));
+  // a compaction line (M3b: pi's own summary request) is no part of the session's cached branch: no turn, no reader of its prompt
+  const lines = all.filter((l) => l && typeof l.ts === "string" && !Number.isNaN(t(l)) && typeof l.sessionId === "string" && isClaude(l) && l.kind !== "compaction").sort((a, b) => t(a) - t(b));
   const price = prices(lines, opt);
   const sessions = new Map<string, any[]>();
   for (const l of lines) if (prompt(l) > 0) { const xs = sessions.get(l.sessionId); if (xs) xs.push(l); else sessions.set(l.sessionId, [l]); }
@@ -84,7 +85,7 @@ export function foldLedger(all: any[], opt: LedgerOpts = {}): FoldEntry[] {
     const arm = typeof reqs[0].arm === "string" ? reqs[0].arm : "";
     const ttl = (reqs[0].parentSessionId === undefined && opt.flags?.[arm]?.mainCacheTtl === "1h" ? 60 : 5) * MIN;
     const cold = (i: number): boolean => i > 0 && t(reqs[i]) - t(reqs[i - 1]) >= ttl;
-    const turns = reqs.map((l, i) => i).filter((i) => reqs[i].kind !== "warming");
+    const turns = reqs.map((l, i) => i).filter((i) => reqs[i].kind === "turn"); // agent turns only: no warm, no extension's request
     const folds = turns.filter((i, j) => j > 0 && prompt(reqs[i]) < FOLD_SHRINK * prompt(reqs[turns[j - 1]]));
     const prevTurn = new Map(turns.slice(1).map((i, j) => [i, turns[j]])); // turn → the turn before it
     const isFold = new Set(folds);

@@ -15,7 +15,7 @@ import { taskCosts } from "../core/tasks.ts";
 import { isRequestLine } from "../core/analyse/logs.ts";
 import { effectiveSettings } from "../core/effective-settings.ts";
 import { leversLine } from "../core/levers.ts";
-import { MIN, T0, turn, world } from "./world.ts";
+import { MIN, T0, turn, turns, world } from "./world.ts";
 
 /** The world plus one error line (v1: retries 0; v2: errorKind instead). */
 function v1World(): Logs {
@@ -145,4 +145,23 @@ test("levers lines: meter-report (report, --arms) and pi-analyse (tables, --chec
   assert.equal(report[1], report[0]);
   assert.equal(arms[1], arms[0]);
   ok(node("pi-analyse.ts", ["--agent-dir", both[1], "--check"]));
+});
+
+// M3b review F1: a compaction line (pi's own summary request, sessions without infinite-context) is a request (cost, By model,
+// active time) but no step of the session's cached branch: the Cache section and the fold ledger read the session without it.
+test("compaction lines: cost counts them as requests; the Cache section and the fold ledger read the branch without them", () => {
+  const w = world();
+  const at = (m: number) => T0 + m * MIN;
+  const session = [
+    ...turns("cx", at(300), 6, { cacheRead: 20_000, cacheWrite: 200, costUsd: 0.5 }, 1),
+    ...turns("cx", at(307), 4, { cacheRead: 5_000, cacheWrite: 100, costUsd: 0.2 }, 1),
+  ];
+  const compaction = { v: 2, ts: new Date(at(306.5)).toISOString(), sessionId: "cx", provider: "anthropic", model: "claude-opus", kind: "compaction",
+    billing: "api", input: 150_000, cacheRead: 0, cacheWrite: 0, output: 2_000, costUsd: 0.9, status: 200 };
+  const without = analyse({ ...w, meter: [...w.meter, ...session] });
+  const withIt = analyse({ ...w, meter: [...w.meter, ...session, compaction] });
+  assert.ok(without.cost.folds.n >= 1, "the session folds");
+  assert.equal(withIt.cost.requests, without.cost.requests + 1);
+  assert.deepEqual(withIt.cost.cache, without.cost.cache);
+  assert.deepEqual(withIt.cost.folds, without.cost.folds);
 });
