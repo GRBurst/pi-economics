@@ -139,6 +139,14 @@ Use pi's object form of a `packages` entry in `~/.pi/agent/settings.json`, or
 }
 ```
 
+### Load order
+
+pi starts the extensions that `settings.json` lists in `extensions` and those
+in `<agentDir>/extensions` before any package's, and packages in the order of
+`packages`. `pi install` appends to that list: move the pi-economics entry
+first in `packages`, and its components start before other packages'
+extensions. Before extensions outside packages only the Nix modules put them.
+
 ### Settings worth knowing
 
 - `cacheLifecycle` decides pi's idle cache warming only while pi's own
@@ -188,13 +196,21 @@ Home Manager on Linux (the checks run on `x86_64-linux`) and the pi coding
 agent: the checks build and test against pi 1.3.0 (`checks/npm`), the
 components declare `>=1.0.0`, and pi-setup's patched actor-subagents assumes
 pi 1.2.0 or later. Nothing is installed or patched globally: each component is linked
-into `<agentDir>/extensions`.
+into `<agentDir>/pi-economics/extensions`, a directory pi does not discover,
+and the `piSettings` entry puts the links at the front of `<agentDir>/settings.json`'s
+`extensions`: pi starts pi-economics' components before every other extension
+of the user scope that is not built in (`experiments`, `token-meter`,
+`cache-lifecycle`, `infinite-context`, then the registry's other entries by
+name; a trusted project's extensions and `pi -e` still start first), and the
+actor's children get them in the same order.
 
 `piSettings` is on by default and edits pi's mutable
-`<agentDir>/settings.json` idempotently, but only for the components you
-enable: `cacheLifecycle` sets `cacheWarming` to `"idle"`, creating the file
-if it is absent.
-`programs.piEconomics.piSettings.enable = false` switches all of it off.
+`<agentDir>/settings.json` idempotently, creating it if absent: the registry
+at the front of `extensions` and, with `cacheLifecycle`, `cacheWarming` set
+to `"idle"`.
+`programs.piEconomics.piSettings.enable = false` switches all of it off; the
+components then load only once you put `programs.piEconomics.loadOrder` at the
+front of `extensions` yourself (a warning says so).
 
 ## Development
 

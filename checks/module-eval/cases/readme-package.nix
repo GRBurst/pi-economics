@@ -4,7 +4,8 @@
 # upstream and no other, each with the pinned wording (the actor: patched
 # build, upstream support pending; infinite-context: what the upstream does as
 # it is, and what only the patched build adds), the experiments opt-in block, the skill collision note
-# and the duplicate guard's version note are there. Lines are compared whole or searched with
+# and the duplicate guard's version note are there, and (M6) the load order note: list the package first
+# in `packages`. Lines are compared whole or searched with
 # `replaceStrings` (no regex over the README).
 {
   lib,
@@ -71,5 +72,7 @@ in {
     ++ expect.holds "the skill collision note names the skill" (lib.length (lib.filter (has "name collision") (withText "pi-token-economics-analysis")) >= 1)
     ++ expect.holds "the duplicate warning is described" (lib.length (withText "is loaded") >= 1)
     ++ expect.holds "the duplicate guard's version note is there (L2)" (lib.length (withText "needs both copies at this version or later") == 1)
-    ++ expect.holds "README does not hedge on the expansion of ~ (L: pi expands it)" (lib.length (withText "is not verified") == 0);
+    ++ expect.holds "README does not hedge on the expansion of ~ (L: pi expands it)" (lib.length (withText "is not verified") == 0)
+    ++ expect.holds "the load order heading is there (M6)" (lib.elem "### Load order" readme)
+    ++ expect.holds "the package route lists pi-economics first in packages (M6)" (withText "first in `packages`" != []);
 }
