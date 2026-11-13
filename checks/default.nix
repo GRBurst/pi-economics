@@ -266,6 +266,8 @@ in {
   identity-shim-probe = import ./identity-shim-probe {inherit pkgs;};
   # redesign M6
   load-order = import ./load-order {inherit lib pkgs hm actorEntry;};
+  # redesign M7c
+  session-entry-contract = pkgs.callPackage ./session-entry-contract {};
   # redesign M5b.1: the analyser's copy of experiments' Objective literal set
   # (packages never import each other), compared both ways: equal sets.
   iface-objective-experiments-token-meter = iface.compare {

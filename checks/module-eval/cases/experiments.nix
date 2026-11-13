@@ -108,7 +108,7 @@ in {
   experiments-strata-seven = let
     factor = n: {
       name = "f${toString n}";
-      lever = "t.lever${toString n}";
+      lever = "session-entry(t,f${toString n})";
       levels = ["a" "b"];
     };
     withFactors = k:
@@ -138,12 +138,12 @@ in {
           }
           {
             name = "one";
-            lever = "t.lever";
+            lever = "session-entry(t,one)";
             levels = lib.take 1 levels;
           }
           {
             name = "two";
-            lever = "t.other";
+            lever = "session-entry(t,two)";
             levels = ["a" "b"];
           }
         ];
@@ -167,28 +167,28 @@ in {
           cloud.factors = [
             {
               name = "same";
-              lever = "t.a";
+              lever = "session-entry(t,a)";
               levels = ["a" "a"];
             }
             {
               name = "none";
-              lever = "t.b";
+              lever = "session-entry(t,b)";
             }
             {
               name = "text";
-              lever = "t.c";
+              lever = "session-entry(t,c)";
               levels = "ab";
             }
             {
               name = "ok";
-              lever = "t.d";
+              lever = "session-entry(t,d)";
               levels = ["a" "b"];
             }
           ];
           named.factors = [
             {
               name = {x = 1;};
-              lever = "t.e";
+              lever = "session-entry(t,e)";
               levels = ["a"];
             }
           ];
@@ -205,7 +205,7 @@ in {
 
   # (redesign M7b) The levels of a lever that sets pi itself are what pi
   # accepts (redesign §7.4): pi.thinkingLevel takes pi's six names,
-  # pi.activeTool(<name>) booleans. The six are also the TS add-on's list.
+  # pi.activeTool(<name>) booleans.
   experiments-pi-levels = let
     thinking = ["off" "minimal" "low" "medium" "high" "xhigh"];
     withFactors = fs: eval ".pi/agent" {settings.strata.cloud.factors = fs;} withActor;
@@ -217,7 +217,8 @@ in {
         }
       ];
     msg = lever: "pi-economics: experiments factor f in stratum cloud has a level that ${lever} does not accept";
-    addons = lib.splitString "\n" (builtins.readFile ../../../packages/experiments/addons/pi.ts);
+    # (redesign M7c) a level name is also what a levers line can record
+    nameMsg = "pi-economics: experiments factor f in stratum cloud has a level that is not a level name, a number or a boolean";
   in
     lib.concatMap (l:
       eq "thinking level ${l}" (failed "pi-economics:" (one "pi.thinkingLevel" [
@@ -230,7 +231,7 @@ in {
       ])) [])
     thinking
     ++ eq "an unknown thinking level" (failed "pi-economics:" (one "pi.thinkingLevel" ["low" "extreme"])) [(msg "pi.thinkingLevel")]
-    ++ eq "wrong case and a bool" (failed "pi-economics:" (one "pi.thinkingLevel" ["Low" true])) [(msg "pi.thinkingLevel")]
+    ++ eq "wrong case and a bool" (failed "pi-economics:" (one "pi.thinkingLevel" ["Low" true])) [nameMsg (msg "pi.thinkingLevel")]
     ++ eq "a number" (failed "pi-economics:" (one "pi.thinkingLevel" ["low" 3])) [(msg "pi.thinkingLevel")]
     ++ eq "tool, booleans" (failed "pi-economics:" (one "pi.activeTool(codemode)" [false true])) []
     ++ eq "tool, booleans, other order" (failed "pi-economics:" (one "pi.activeTool(codemode)" [true false])) []
@@ -238,7 +239,71 @@ in {
     ++ eq "tool, one boolean" (failed "pi-economics:" (one "pi.activeTool(codemode)" [false "on"])) [(msg "pi.activeTool(codemode)")]
     ++ eq "another lever keeps any levels" (failed "pi-economics:" (one "cache-lifecycle.mainCacheTtl" ["5m" "extreme"])) []
     ++ eq "levels that are no list are the two-levels assertion's" (failed "pi-economics:" (one "pi.thinkingLevel" "low")) ["pi-economics: experiments factor f in stratum cloud needs exactly two levels"]
-    ++ holds "the TS add-on lists the same six" (lib.elem "export const THINKING_LEVELS = [${lib.concatMapStringsSep ", " builtins.toJSON thinking}] as const;" addons);
+    ++ eq "the catalogue the module reads lists pi's six" (lib.importJSON ../../../packages/experiments/addons/catalogue.json).thinkingLevels thinking;
+
+  # (redesign M7c) A factor's lever is one the engine can set: an id of the
+  # package's add-on catalogue or a data-only kind (pi.activeTool(<name>),
+  # session-entry(<customType>,<field>)); another id would randomize nothing.
+  experiments-unknown-lever = let
+    catalogue = lib.importJSON ../../../packages/experiments/addons/catalogue.json;
+    prefix = "pi-economics: experiments factor f in stratum cloud has an unknown lever";
+    one = lever:
+      eval ".pi/agent" {
+        settings.strata.cloud.factors = [
+          {
+            name = "f";
+            inherit lever;
+            levels = ["a" "b"];
+          }
+        ];
+      }
+      withActor;
+    unknown = lever: failed prefix (one lever);
+    kinds = ["pi.activeTool(codemode)" "pi.activeTool(mcp__srv.tool-1)" "session-entry(entry-ext:settings,nudge)" "session-entry(a,b)"];
+    bad = ["t.lever" "" "pi.thinkingLevl" "pi.thinkingLevel " "Pi.thinkingLevel" "cache-lifecycle.nope" "pi.activeTool()" "pi.activeTool(a b)" "pi.activeTool(a,b)" "pi.activeTool(a(b))" "pi.activeTool(a)x" "session-entry(a)" "session-entry()" "session-entry(a,)" "session-entry(,b)" "session-entry(a,b,c)" "session-entry(a, b)" "session-entry(a,b)x" "session-entry(a,(b))" "infinite-context.nudgeAtTokens.x"];
+  in
+    lib.concatMap (id: eq "catalogue lever ${id}" (unknown id) []) catalogue.levers
+    ++ lib.concatMap (id: eq "kind ${id}" (unknown id) []) kinds
+    ++ lib.concatMap (id: eq "unknown ${builtins.toJSON id}" (unknown id) ["${prefix} ${id}"]) bad
+    ++ eq "a lever that is no string" (failed prefix (one 3)) ["${prefix} 3"]
+    ++ eq "no lever at all" (failed prefix (eval ".pi/agent" {
+        settings.strata.cloud.factors = [
+          {
+            name = "f";
+            levels = ["a" "b"];
+          }
+        ];
+      }
+      withActor)) ["${prefix} null"];
+
+  # (redesign M7c, carried from the M5b.2 review) A level reaches a levers
+  # line as a value: a level name (lowercase letters, digits, "_" and "-", at
+  # most 32 characters, as token-meter's core/levers.ts and the package's
+  # core/settings.ts say in the same literal line), a number or a boolean.
+  experiments-level-names = let
+    msg = "pi-economics: experiments factor f in stratum cloud has a level that is not a level name, a number or a boolean";
+    withLevels = levels:
+      eval ".pi/agent" {
+        settings.strata.cloud.factors = [
+          {
+            name = "f";
+            lever = "session-entry(t,f)";
+            inherit levels;
+          }
+        ];
+      }
+      withActor;
+    bad = levels: failed "pi-economics: experiments factor f in stratum cloud has a level that is not" (withLevels levels);
+    line = "const LEVEL = /^[a-z0-9][a-z0-9_-]{0,31}$/;";
+    lines = f: lib.splitString "\n" (builtins.readFile f);
+    long = n: lib.concatStrings (lib.genList (_: "x") n);
+  in
+    lib.concatMap (l: eq "ok ${builtins.toJSON l}" (bad l) []) [["5m" "1h"] ["a_b-c" "x"] [(long 32) "y"] ["0" "9"] [0.25 0.75] [false true] ["1" 2] [(-1) 1000000]]
+    ++ lib.concatMap (l: eq "not a level name: ${builtins.toJSON l}" (bad ["ok" l]) [msg]) ["1H" "" " a" "a b" "a\n" "-a" "_a" (long 33) "é" "a.b" "Medium"]
+    ++ eq "a list as a level" (bad ["ok" ["a"]]) [msg]
+    ++ eq "an attribute set as a level" (bad ["ok" {a = 1;}]) [msg]
+    ++ eq "null as a level" (bad ["ok" null]) [msg]
+    ++ holds "token-meter and experiments say the rule in the same line" (lib.elem line (lines ../../../packages/token-meter/core/levers.ts) && lib.elem line (lines ../../../packages/experiments/core/settings.ts));
 
   # (M4.16) The host's combination from W3 on (spec §9.1): M2–M4's extension
   # components, piSettings off (the host's own script runs until W6). Children
