@@ -194,10 +194,12 @@ pi's default); `a` = the value pi-economics assigned and `rb` = the read-back, b
 rules and a line over 4 KiB (it then warns once and writes none).
 
 Observed today, all `s: "fixed"`: pi's settings as pi 1.4 merges them (`<agentDir>/settings.json`, overridden key by key by
-`<cwd>/.pi/settings.json` when the project is trusted, pi's defaults for unset keys; `defaultTools` lists of `+name`/`-name` modify
+`<cwd>/.pi/settings.json` when the project is trusted, pi's defaults for unset keys; each file migrated first as pi does,
+`websockets` → `transport`, `retry.maxDelayMs` → `retry.provider.maxRetryDelayMs`; `defaultTools` lists of `+name`/`-name` modify
 the inherited selection): `pi.cacheWarming` (global only), `pi.promptCache` (`PI_CACHE_RETENTION`), `pi.compaction.{enabled,reserveTokens,keepRecentTokens}`
 (per-model overrides of the session's model), `pi.branchSummary.{reserveTokens,skipPrompt}`, `pi.codemode.{mode,inlineBudget}`,
-`pi.transport`, `pi.retry.{enabled,maxRetries,baseDelayMs,maxAgentDelayMs}`, `pi.retry.provider.{timeoutMs,maxRetries,maxRetryDelayMs}`,
+`pi.transport`, `pi.retry.{enabled,maxRetries,baseDelayMs,maxAgentDelayMs}`, `pi.retry.provider.{timeoutMs,maxRetries,maxRetryDelayMs}` (`timeoutMs` defaults to `httpIdleTimeoutMs`, parsed as pi does; `"disabled"` or
+0 = 2147483647),
 `pi.images.{autoResize,blockImages}`, `pi.thinkingBudgets.{minimal,low,medium,high}`, `pi.defaultThinkingLevel` and
 `pi.defaultTools.<tool>` (a boolean per pi tool: read, bash, powershell, edit, write, grep, find, ls, codemode, tool_search). A value pi
 would reject leaves its lever out (unknown); `cacheWarming` falls back to `streaming` as in pi. With infinite-context's settings entry on

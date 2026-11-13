@@ -2,7 +2,8 @@
 // (<agentDir>/settings.json) and project (<cwd>/.pi/settings.json, trusted projects only) files.
 // Follows pi 1.4's settings manager (docs/settings.md): objects merge deeply, the project winning per key;
 // `defaultTools` lists of only +name/-name modify the inherited selection; `cacheWarming` is global only;
-// compaction tokens resolve model override → ordinary setting → default after the merge.
+// compaction tokens resolve model override → ordinary setting → default after the merge. Each file is migrated first
+// (`websockets` → `transport`, `retry.maxDelayMs` → `retry.provider.maxRetryDelayMs`) and `httpIdleTimeoutMs` is parsed as pi does.
 // A value of the wrong type or outside its levels leaves its lever out (unknown), except `cacheWarming`,
 // which pi reads as "streaming".
 import type { LeverId, LeverState, Value } from "./levers.ts";
@@ -55,6 +56,34 @@ function resolveTools(entries: string[]): string[] {
   return tools;
 }
 
+/** pi 1.4 SettingsManager.migrateSettings, applied to each file before the merge (the levers' keys only); never changes `o`. */
+function migrate(o: Obj): Obj {
+  const out: Obj = { ...o };
+  if (!("transport" in out) && typeof out.websockets === "boolean") {
+    out.transport = out.websockets ? "websocket" : "sse";
+    delete out.websockets;
+  }
+  if (isObj(out.retry)) {
+    const retry: Obj = { ...out.retry };
+    const provider = typeof retry.provider === "object" && retry.provider !== null ? retry.provider as Obj : undefined;
+    if (typeof retry.maxDelayMs === "number" && (provider?.maxRetryDelayMs === undefined || provider?.maxRetryDelayMs === null))
+      retry.provider = { ...(provider ?? {}), maxRetryDelayMs: retry.maxDelayMs };
+    delete retry.maxDelayMs;
+    out.retry = retry;
+  }
+  return out;
+}
+
+/** pi 1.4 parseHttpIdleTimeoutMs: a number or numeric string ≥ 0, floored; "disabled" = 0; else undefined (pi throws). */
+function httpIdle(x: unknown): number | undefined {
+  if (typeof x === "string") {
+    const s = x.trim();
+    if (s.toLowerCase() === "disabled") return 0;
+    return s.length === 0 ? undefined : httpIdle(Number(s));
+  }
+  return typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.floor(x) : undefined;
+}
+
 const at = (o: Obj, path: string): unknown => path.split(".").reduce<unknown>((x, k) => (isObj(x) ? x[k] : undefined), o);
 
 /** Every lever id the observer can report, in line order. */
@@ -72,8 +101,8 @@ export const LEVER_IDS: readonly LeverId[] = [
 ];
 
 export function effectiveSettings(global: unknown, project: unknown, env: SettingsEnv = {}): Record<LeverId, LeverState> {
-  const g = isObj(global) ? global : {};
-  const p = isObj(project) ? project : {};
+  const g = isObj(global) ? migrate(global) : {};
+  const p = isObj(project) ? migrate(project) : {};
   const m = merge(g, p);
   const tools = mergeTools(g.defaultTools, p.defaultTools);
   const out: Record<LeverId, LeverState> = {};
@@ -111,7 +140,10 @@ export function effectiveSettings(global: unknown, project: unknown, env: Settin
   put("pi.retry.maxRetries", read("retry.maxRetries", count, 3));
   put("pi.retry.baseDelayMs", read("retry.baseDelayMs", count, 2000));
   put("pi.retry.maxAgentDelayMs", read("retry.maxAgentDelayMs", count, 60000));
-  const idle = read("httpIdleTimeoutMs", count, 300000);
+  // pi: getHttpIdleTimeoutMs (default 300000; 0 = disabled → 2147483647 ms per request), unless retry.provider.timeoutMs is set
+  const rawIdle = at(m, "httpIdleTimeoutMs");
+  const parsedIdle = rawIdle === undefined ? 300000 : httpIdle(rawIdle);
+  const idle = parsedIdle === 0 ? 2147483647 : parsedIdle;
   put("pi.retry.provider.timeoutMs", at(m, "retry.provider.timeoutMs") === undefined ? idle : read("retry.provider.timeoutMs", count, 0));
   put("pi.retry.provider.maxRetries", read("retry.provider.maxRetries", count, 0));
   put("pi.retry.provider.maxRetryDelayMs", read("retry.provider.maxRetryDelayMs", count, 60000));

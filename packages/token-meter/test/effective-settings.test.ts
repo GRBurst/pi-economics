@@ -139,6 +139,27 @@ test("effectiveSettings: an invalid value leaves its lever out (unknown), never 
   assert.equal(r["pi.compaction.keepRecentTokens"], undefined);
 });
 
+// M3b review F2: pi 1.4 migrates each settings file on load (SettingsManager.migrateSettings) and parses httpIdleTimeoutMs
+// (parseHttpIdleTimeoutMs: numeric strings, floored, "disabled" = 0 = no timeout, 2147483647 ms for the request).
+test("effectiveSettings: pi's migrations per file (websockets → transport, retry.maxDelayMs → provider) and httpIdleTimeoutMs forms", () => {
+  const probe = effectiveSettings({ websockets: true, retry: { maxDelayMs: 30000 }, httpIdleTimeoutMs: "disabled" }, {});
+  assert.deepEqual([probe["pi.transport"]?.v, probe["pi.retry.provider.maxRetryDelayMs"]?.v, probe["pi.retry.provider.timeoutMs"]?.v], ["websocket", 30000, 2147483647]);
+  const v = (g: unknown, p: unknown, id: string) => effectiveSettings(g, p)[id]?.v;
+  assert.equal(v({ websockets: false }, {}, "pi.transport"), "sse");
+  assert.equal(v({ transport: "auto", websockets: true }, {}, "pi.transport"), "auto", "transport set: websockets ignored");
+  assert.equal(v({ transport: "sse" }, { websockets: true }, "pi.transport"), "websocket", "per file: the project's migrated transport wins");
+  assert.equal(v({ websockets: "yes" }, {}, "pi.transport"), "auto", "not a boolean: no migration");
+  assert.equal(v({ retry: { maxDelayMs: 30000, provider: { maxRetryDelayMs: 5000 } } }, {}, "pi.retry.provider.maxRetryDelayMs"), 5000);
+  assert.equal(v({ retry: { maxDelayMs: 30000, provider: { maxRetryDelayMs: null } } }, {}, "pi.retry.provider.maxRetryDelayMs"), 30000);
+  assert.equal(v({ retry: { provider: { maxRetryDelayMs: 7000 } } }, { retry: { maxDelayMs: 30000 } }, "pi.retry.provider.maxRetryDelayMs"), 30000, "per file");
+  for (const [x, want] of [[" 120000.7 ", 120000], [90000.9, 90000], ["DISABLED", 2147483647], [0, 2147483647], ["", undefined], ["abc", undefined], [-5, undefined], [true, undefined]] as const)
+    assert.equal(v({ httpIdleTimeoutMs: x }, {}, "pi.retry.provider.timeoutMs"), want, JSON.stringify(x));
+  assert.equal(v({ httpIdleTimeoutMs: "disabled", retry: { provider: { timeoutMs: 1000 } } }, {}, "pi.retry.provider.timeoutMs"), 1000, "the provider timeout wins");
+  const input = { websockets: true, retry: { maxDelayMs: 30000 } };
+  effectiveSettings(input, {});
+  assert.deepEqual(input, { websockets: true, retry: { maxDelayMs: 30000 } }, "the parsed file is not changed");
+});
+
 test("byte cap: a levers line holding every lever, each in its longest state, fits 4096 bytes", () => {
   const worst: LeverState = { v: 2147483647, s: "fixed", a: 2147483646, rb: "refused", tier: "control" };
   const levers = Object.fromEntries(LEVER_IDS.map((id) => [id, worst]));
