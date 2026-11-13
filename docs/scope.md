@@ -62,8 +62,9 @@ How the two relate:
 - **Dependencies.** pi-economics may depend on extensions; extensions never on
   pi-economics. Today pi-economics takes the router and pi-setup as flake
   inputs for its checks only. The router's optional read of
-  `__piExperimentsApi_v1` and the experiments factors `freshOnCold` and
-  `delegationRule` predate this rule; the redesign removes them.
+  `__piExperimentsApi_v1` predates this rule; the redesign removes it. The
+  experiments factors `freshOnCold` and `delegationRule` are gone (design
+  v4), so the read already finds the router's own settings.
 - **The outcome log.** The router owns the schema (its `docs/outcome-log.md`).
   pi-economics keeps a consumer copy (`packages/token-meter/core/contract.ts`
   and the examples in `packages/token-meter/LOGS.md`) that `log-contract`

@@ -13,7 +13,7 @@ Paths are relative to this repository's root, unless noted.
 | Component | What it is | Loaded in |
 |---|---|---|
 | `packages/token-meter/` (`pi-token-meter`) | One JSONL line per provider request (tokens, cost, quota headers, retries) into `<agentDir>/meter/YYYY-MM.jsonl`; no prompt/response text. Also the `meter-report` and `pi-analyse` binaries and the log manual `LOGS.md` (linked to `~/.pi/agent/LOGS.md`). | main + children |
-| [pi-task-router](https://github.com/GRBurst/pi-task-router) (its own flake, `programs.piTaskRouter`; not in this repository) | Routes `spawn_subagent` calls by task card, with its local mode; what it does is in its `docs/task-router.md`. pi-economics observes it through its outcome log and the factors `freshOnCold` and `delegationRule` below. | main only |
+| [pi-task-router](https://github.com/GRBurst/pi-task-router) (its own flake, `programs.piTaskRouter`; not in this repository) | Routes `spawn_subagent` calls by task card, with its local mode; what it does is in its `docs/task-router.md`. pi-economics observes it through its outcome log; its levers are no experiment factors since design v4. | main only |
 | `packages/cache-lifecycle/` (`pi-cache-lifecycle`) | Warming decision (main with running children, child awaiting a reply → warm; capped), elision of stale tool results/thinking after cache expiry, optional 1 h cache TTL for main, the pi-1.0.0 message-identity shim that keeps cache warming alive past custom messages, `peek-after-mask` guard log. | main + children |
 | `packages/experiments/` (`pi-experiments`) | One fractional-factorial arm per main session (explore/exploit/off); children inherit; other extensions read factor flags through `__piExperimentsApi_v1.flag(name, default)`; correction guard log and `/rate 1-5`. | main only |
 | `packages/retry/package.nix` + `patches/pi-retry/pi-retry-free-cap.patch` | Pinned input `inputs.pi-retry` (rev `60a3b08`, 0.11.3) with a local patch: the OpenRouter free-tier daily cap is not retried (it lasts until 00:00 UTC). Print/json mode retries inline upstream since 0.11.0 (it was the local `pi-retry-print-mode.patch` until the 2026-10-25 lock update), so `pi -p` retries 429s. Upstream vitest suite on the patched source = flake check `retry`. | main + children (linked child extension) |
@@ -40,7 +40,7 @@ version, integer, 1 since 2026-10-03; absent = 0, legacy).
 | `meter/YYYY-MM.jsonl` | Meter lines: `ts, sessionId, parentSessionId, arm, provider, model, effort, kind (turn\|warming), input, cacheRead, cacheWrite, output, reasoning, costUsd, status (code or "error"), retries, retryWaitMs, q5h, q5hReset, q7d, q7dReset, overage, claim, fallback, rawRatelimit?`. OpenRouter 429s surface only in `message_end`, so errors are logged there as `status:"error"` with `errorClass`. |
 | `task-router/outcomes/YYYY-MM.jsonl`, `task-router/member-count.json` | The router's files, written by the [pi-task-router](https://github.com/GRBurst/pi-task-router) package; the outcome schema is its `docs/outcome-log.md`. The meter observes them: `packages/token-meter/LOGS.md` keeps the reader side. |
 | `guards/events.jsonl` | Guard events, shared one-line format `{ts, sessionId, arm, event, value?}`: `peek-after-mask` (cache-lifecycle), `correction` and `rating` (experiments). Never prompt text, never tool arguments. |
-| `experiments/assignments.jsonl` | One row per main session `{ts, sessionId, arm, design, mode, flags}`; `design` is `"v2"` (six factors, 6-char arm ids); a line without it is v1 (five factors, 5-char ids). Sticky (a session keeps its arm, a resumed v1 session too). |
+| `experiments/assignments.jsonl` | One row per main session `{ts, sessionId, arm, design, mode, flags}`; `design` is `"v4"` (three factors, 3-char arm ids); earlier rows say `"v2"` or `"v3"` (six factors, 6-char ids) or nothing (v1: five factors, 5-char ids). Sticky (a session keeps its arm and design, a resumed older session too). |
 | `experiments/state.json` | `posterior` (per-arm reward ± sd) and `disabled` arms with reasons; written atomically by `meter-report --posterior`, run by hand (no timer). |
 | `reports/YYYY-MM-DD-HHMM-analysis.{md,json}` | Written by `pi-analyse` (on demand; UTC time of the run, so runs of one day keep their reports). |
 | `LOGS.md` | Log manual (Home Manager link into the token-meter package). |
@@ -60,9 +60,9 @@ Code defaults (a settings file only overrides; unknown keys are ignored):
 - **cache-lifecycle** — `warmPolicy: "orchestrator-aware"` (vs `native`),
   `mainCacheTtl: "5m"` (vs `"1h"`), `maskOnCold: "off"` (vs `"tools"`,
   `"tools+thinking"`), `protectedTailTokens: 20000`, `identityShim: true`.
-- **experiments** — `mode: "explore"`; the six online factors below
+- **experiments** — `mode: "explore"`; the three online factors below
   (values[0] = today's behaviour, so the all-low arm is the baseline);
-  `maxArms: 16`; `minExplore: 0.1`; `baseline: "------"`;
+  `maxArms: 16`; `minExplore: 0.1`; `baseline: "---"`;
   `guards {minSessions: 10, threshold: 0.2, peekThreshold: 1, correctionThreshold: 1, ratingThreshold: 0.5}`;
   `correctionRegex \b(no|wrong|revert|undo|that's not)\b` (case-insensitive).
 - **Migration** — `cacheWarming: "idle"` is ensured by
@@ -85,17 +85,17 @@ Online (spec §5.6), assigned per main session by the `experiments` extension:
 |---|---|---|
 | `warmPolicy` | `native`, `orchestrator-aware` | cache-lifecycle |
 | `mainCacheTtl` | `5m`, `1h` | cache-lifecycle |
-| `foldHint` | `fixed`, `cache-aware` | infinite-context (cache patch) |
 | `maskOnCold` | `off`, `on` (= own level, or `tools+thinking` when own is off) | cache-lifecycle |
-| `freshOnCold` | `off`, `advise` | task-router |
-| `delegationRule` | `off`, `on` (orchestrator rule in the main card section; never in children) | task-router |
 
-Design v2: 2⁶ > `maxArms` 16 → the 2⁶⁻² fraction (16 arms, resolution IV,
-generators E = ABC, F = BCD: main effects are clear of each other and of all
-two-factor interactions, which are aliased in groups; the all-low arm is in the
-design). v1 (before `delegationRule`) was the 2⁵⁻¹ half fraction with 5-char
-ids; its sessions keep their arms and are told apart by `design` in
-`assignments.jsonl` (analysis must not pool the two).
+Design v4: 2³ ≤ `maxArms` 16 → the full factorial (8 arms, every main effect
+and interaction estimable). Earlier designs had more factors: v1 five
+(`warmPolicy`, `mainCacheTtl`, `foldHint`, `maskOnCold`, `freshOnCold`; the
+2⁵⁻¹ half fraction, 5-char ids), v2 and v3 six (v1 plus `delegationRule`; the
+2⁶⁻² fraction, 16 arms, resolution IV; v3 changed what `foldHint` =
+`cache-aware` meant). `foldHint` went with infinite-context's fold hint;
+`freshOnCold` and `delegationRule` are the task router's levers. Old
+sessions keep their arms and are told apart by `design` in
+`assignments.jsonl` (analysis never pools designs).
 Arm ids are sign strings (`+` = values[1]); the meter and outcome lines carry
 `arm`. Modes: `explore` (balanced over the min-count arms), `exploit` (Thompson
 sampling on the posterior reward with a `minExplore` floor per arm), `off`
