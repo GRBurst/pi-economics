@@ -14,13 +14,25 @@ export function fakePi() {
   };
 }
 
-export function fakeCtx(sessionId: string, opts: { file?: string; entries?: unknown[] } = {}) {
+export type CtxOpts = {
+  file?: string; entries?: unknown[];
+  /** the session branch (sessionManager.getBranch()); default: the entries */
+  branch?: unknown[];
+  cwd?: string; trusted?: boolean; model?: { provider: string; id: string };
+};
+
+/** A mutable ctx: tests change `opts` (model, branch) between events. */
+export function fakeCtx(sessionId: string, opts: CtxOpts = {}) {
   return {
     mode: "interactive",
+    get cwd() { return opts.cwd ?? "/nonexistent"; },
+    get model() { return opts.model; },
+    isProjectTrusted: () => opts.trusted ?? false,
     sessionManager: {
       getSessionId: () => sessionId,
       getSessionFile: () => opts.file,
       getEntries: () => opts.entries ?? [],
+      getBranch: () => opts.branch ?? opts.entries ?? [],
     },
   };
 }

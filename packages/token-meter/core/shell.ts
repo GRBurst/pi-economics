@@ -1,6 +1,8 @@
 // All extension logic, free of pi imports so it runs under node's test runner with test/fake-pi.ts.
-import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { effectiveSettings } from "./effective-settings.ts";
+import { leversLine, serializeLevers } from "./levers.ts";
 import { Joiner } from "./join.ts";
 import { errorKindOf } from "./errorkind.ts";
 import { buildLine, monthFile, serialize } from "./line.ts";
@@ -18,6 +20,8 @@ export type Deps = {
   settings?: Settings;
   /** Experiment arm id of a session, resolved at line time; default: `__piExperimentsApi_v1.armFor(sid)?.id`. */
   arm?: (sessionId: string) => string | undefined;
+  /** The environment pi reads (PI_CACHE_RETENTION); default: process.env. */
+  env?: Record<string, string | undefined>;
 };
 
 /** What token-meter reads of the experiments package's globalThis.__piExperimentsApi_v1; the type check compares it with the provider's ExperimentsApiV1 (spec §5.3). */
@@ -38,6 +42,15 @@ function mapUsage(u: any): Usage | undefined {
 }
 
 const time = (v: unknown): number => (typeof v === "number" ? v : typeof v === "string" ? Date.parse(v) : NaN);
+
+/** A JSON settings file, or undefined when missing or unreadable (the levers then show pi's defaults). */
+function readJson(file: string): unknown {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
 
 function parentOf(file: unknown): string | undefined {
   if (typeof file !== "string") return undefined;
@@ -72,21 +85,31 @@ export function install(pi: PiLike, deps: Deps): void {
   const madeDirs = new Set<string>();
   let warned = false;
 
+  const env = deps.env ?? process.env;
+  /** Per session, the last levers line written (without its ts): a new one only on change. */
+  const leversSeen = new Map<string, string>();
+
+  const warn = (err: unknown): void => {
+    if (!warned) {
+      warned = true;
+      console.error("token-meter: cannot write meter line:", err instanceof Error ? err.message : err);
+    }
+  };
+  const append = (at: Date, text: string): void => {
+    const file = monthFile(deps.agentDir, at, settings.dir);
+    if (!madeDirs.has(dirname(file))) {
+      mkdirSync(dirname(file), { recursive: true });
+      madeDirs.add(dirname(file));
+    }
+    appendFileSync(file, text);
+  };
   const write = (input: LineInput): void => {
     try {
       const line = buildLine({ ...input, billing: billingOf(settings.plans, input.provider) });
       if (!settings.rawRatelimit) delete line.rawRatelimit;
-      const file = monthFile(deps.agentDir, input.now, settings.dir);
-      if (!madeDirs.has(dirname(file))) {
-        mkdirSync(dirname(file), { recursive: true });
-        madeDirs.add(dirname(file));
-      }
-      appendFileSync(file, serialize(line));
+      append(input.now, serialize(line));
     } catch (err) {
-      if (!warned) {
-        warned = true;
-        console.error("token-meter: cannot write meter line:", err instanceof Error ? err.message : err);
-      }
+      warn(err);
     }
   };
 
@@ -128,6 +151,32 @@ export function install(pi: PiLike, deps: Deps): void {
     const { snap } = joiner.take(sid);
     if (snap) writeWarming(sid, ctx, snap);
   };
+
+  // M3b (design §5.3, §8.1): the session's effective pi settings as levers, at its first prompt and again whenever
+  // one changes (settings files, the model's per-model levers, the arm). D4: eligible until the engine says so
+  // (M5b.2) = a main session with an arm (the v1 engine assigns arms to eligible mains only; children inherit).
+  pi.on("before_agent_start", (_e, ctx) => {
+    const sid = sidOf(ctx);
+    if (sid === undefined) return;
+    try {
+      const base = common(sid, ctx);
+      const model = safe(() => ctx.model);
+      const cwd = safe(() => ctx.cwd);
+      const project = typeof cwd === "string" && safe(() => ctx.isProjectTrusted()) === true ? readJson(join(cwd, ".pi", "settings.json")) : undefined;
+      const levers = effectiveSettings(readJson(join(deps.agentDir, "settings.json")), project, {
+        model: typeof model?.provider === "string" && typeof model?.id === "string" ? `${model.provider}/${model.id}` : undefined,
+        cacheRetention: env.PI_CACHE_RETENTION,
+      });
+      const at = now();
+      const line = leversLine({ ts: at.toISOString(), ...base, eligible: base.arm !== undefined && base.parentSessionId === undefined, levers });
+      const key = JSON.stringify({ ...line, ts: undefined });
+      if (leversSeen.get(sid) === key) return;
+      append(at, serializeLevers(line));
+      leversSeen.set(sid, key);
+    } catch (err) {
+      warn(err);
+    }
+  });
 
   pi.on("context", (_e, ctx) => {
     const sid = sidOf(ctx);

@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { install, type PiLike } from "../core/shell.ts";
 import { parsePlans } from "../core/plans.ts";
 import { defaults } from "../core/settings.ts";
@@ -489,4 +489,80 @@ test("arm: lines carry armFor(sessionId).id from __piExperimentsApi_v1; children
   } finally {
     delete g.__piExperimentsApi_v1;
   }
+});
+
+// --- M3b: levers lines (design §5.3, §8.1) ---
+const agentStart = (f: ReturnType<typeof fakePi>, ctx: unknown) => f.fireAll("before_agent_start", { type: "before_agent_start", prompt: "p" }, ctx);
+const putJson = (file: string, v: unknown) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, JSON.stringify(v)); };
+const leversOf = (ls: any[]) => ls.filter((l) => l.kind === "levers");
+
+test("levers: one line at the session's first before_agent_start (global + trusted project settings), none while nothing changes", () => {
+  const { f, agentDir, lines } = setup({ env: {} });
+  putJson(join(agentDir, "settings.json"), { transport: "sse", retry: { maxRetries: 5 } });
+  const cwd = mkdtempSync(join(tmpdir(), "token-meter-project-"));
+  putJson(join(cwd, ".pi", "settings.json"), { retry: { maxRetries: 1 } });
+  const ctx = fakeCtx("s1", { cwd, trusted: true, model: { provider: "anthropic", id: "opus" } });
+  assert.deepEqual(agentStart(f, ctx), [undefined], "the handler changes nothing");
+  turnSend(f, ctx); f.fire("message_end", assistant(), ctx);
+  agentStart(f, ctx); turnSend(f, ctx); f.fire("message_end", assistant(), ctx);
+  const ls = lines();
+  assert.deepEqual(ls.map((l) => l.kind), ["levers", "turn", "turn"]);
+  const [l] = ls;
+  assert.deepEqual(Object.keys(l), ["v", "ts", "sessionId", "kind", "eligible", "levers"]);
+  assert.deepEqual([l.v, l.ts, l.sessionId, l.eligible], [2, new Date(T0).toISOString(), "s1", false]);
+  assert.deepEqual(l.levers["pi.transport"], { v: "sse", s: "fixed" });
+  assert.deepEqual(l.levers["pi.retry.maxRetries"], { v: 1, s: "fixed" });
+  assert.deepEqual(l.levers["pi.retry.baseDelayMs"], { v: 2000, s: "fixed" });
+  assert.deepEqual(l.levers["pi.promptCache"], { v: "short", s: "fixed" });
+});
+
+test("levers: an untrusted project's settings are not pi's; PI_CACHE_RETENTION sets promptCache", () => {
+  const { f, lines } = setup({ env: { PI_CACHE_RETENTION: "long" } });
+  const cwd = mkdtempSync(join(tmpdir(), "token-meter-project-"));
+  putJson(join(cwd, ".pi", "settings.json"), { transport: "websocket" });
+  agentStart(f, fakeCtx("s1", { cwd, trusted: false }));
+  const [l] = lines();
+  assert.equal(l.levers["pi.transport"].v, "auto");
+  assert.equal(l.levers["pi.promptCache"].v, "long");
+});
+
+test("levers: a new line only when a lever, the arm or the model's levers change", () => {
+  let arm: string | undefined;
+  const { f, agentDir, clock, lines } = setup({ env: {}, arm: () => arm });
+  putJson(join(agentDir, "settings.json"), { compaction: { modelOverrides: { "anthropic/opus": { reserveTokens: 9000 } } } });
+  const opts: any = { model: { provider: "anthropic", id: "sonnet" } };
+  const ctx = fakeCtx("s1", opts);
+  agentStart(f, ctx);
+  clock.t += 1000; agentStart(f, ctx); // nothing changed
+  clock.t += 1000; opts.model = { provider: "anthropic", id: "opus" }; agentStart(f, ctx); // per-model lever
+  clock.t += 1000; agentStart(f, ctx);
+  clock.t += 1000; putJson(join(agentDir, "settings.json"), { transport: "sse", compaction: { modelOverrides: { "anthropic/opus": { reserveTokens: 9000 } } } }); agentStart(f, ctx);
+  clock.t += 1000; arm = "+-+--"; agentStart(f, ctx);
+  const ls = leversOf(lines());
+  assert.deepEqual(ls.map((l) => Date.parse(l.ts) - T0), [0, 2000, 4000, 5000]);
+  assert.deepEqual(ls.map((l) => l.levers["pi.compaction.reserveTokens"].v), [16384, 9000, 9000, 9000]);
+  assert.deepEqual(ls.map((l) => l.levers["pi.transport"].v), ["auto", "auto", "sse", "sse"]);
+  assert.deepEqual(ls.map((l) => [l.arm, l.eligible]), [[undefined, false], [undefined, false], [undefined, false], ["+-+--", true]]);
+});
+
+test("levers: per session; a child carries parentSessionId and is never eligible, even with its parent's arm", () => {
+  const { f, lines } = setup({ env: {}, arm: () => "+-+--" });
+  agentStart(f, fakeCtx("main"));
+  agentStart(f, fakeCtx("child", { file: "/x/sessions/subagents/main/2026_child.jsonl" }));
+  agentStart(f, fakeCtx("main"));
+  const [m, c, ...rest] = lines();
+  assert.equal(rest.length, 0);
+  assert.deepEqual([m.sessionId, m.parentSessionId, m.arm, m.eligible], ["main", undefined, "+-+--", true]);
+  assert.deepEqual([c.sessionId, c.parentSessionId, c.arm, c.eligible], ["child", "main", "+-+--", false]);
+});
+
+test("levers: unreadable settings read as pi's defaults; a ctx without model, cwd or trust still gets a line; never throws", () => {
+  const { f, agentDir, lines } = setup({ env: {} });
+  writeFileSync(join(agentDir, "settings.json"), "{ not json");
+  const bare = { sessionManager: { getSessionId: () => "s1" } };
+  assert.doesNotThrow(() => agentStart(f, bare));
+  const [l] = lines();
+  assert.equal(l.levers["pi.transport"].v, "auto");
+  assert.equal(l.levers["pi.compaction.reserveTokens"].v, 16384);
+  assert.doesNotThrow(() => agentStart(f, {}));
 });
