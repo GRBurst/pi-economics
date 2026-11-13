@@ -303,3 +303,16 @@ test("plan lines: every action and trigger passes; the optional keys typed; trig
 test("TRIGGERS: the contract's plan trigger codes are the literal list above", () => {
   assert.deepEqual(TRIGGERS, PLAN_TRIGGERS);
 });
+
+// Levers lines (M3b, design §5.3): in the meter log, `kind: "levers"`; no provider, model, status, billing or usage
+// (they are no request); their own fields required, every lever state valid (§5.3 invariants, core/levers.ts).
+test("levers lines: their own fields, no request fields; an invalid lever state is a problem", () => {
+  const w = world();
+  const L = { v: 2, ts: iso(T0), sessionId: "m9", kind: "levers", eligible: false, levers: { "pi.transport": { v: "auto", s: "fixed" } } };
+  w.meter.push(L, { ...L, sessionId: "m1", arm: "-----", eligible: true, levers: {} });
+  assert.deepEqual(check(w), [], "well-formed levers lines");
+  w.meter.push({ ...L, v: 1 }, (({ eligible, ...r }) => r)(L), { ...L, levers: [] },
+    { ...L, levers: { "pi.x": { v: "auto", s: "pe" } } }, { ...L, sessionId: "m1", ts: iso(T0 + 10 * MIN) });
+  assert.deepEqual(check(w).map((p) => [`${p.log}.${p.field}`, p.count]).sort(),
+    [["meter.arm", 1], ["meter.eligible", 1], ["meter.levers", 2], ["meter.v", 1]]);
+});

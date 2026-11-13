@@ -2,7 +2,7 @@
 // Pure; bin/pi-analyse.ts does the I/O. Reads the meter log, the task-router outcome log, experiments/assignments.jsonl
 // and guards/events.jsonl as plain JSON (packages do not import each other; <agentDir>/LOGS.md is the contract).
 import { nextState } from "../arms.ts";
-import { inPeriod, type Logs, type Period } from "./logs.ts";
+import { inPeriod, isRequestLine, type Logs, type Period } from "./logs.ts";
 import { armInfo, rowsBySession } from "./designs.ts";
 import { cost, type CostSection } from "./cost.ts";
 import { experiment, type DesignResult } from "./experiment.ts";
@@ -24,13 +24,14 @@ export type Analysis = { period: Period; cost: CostSection; experiment: { design
 
 export function analyse(all: Logs, period: Period = {}): Analysis {
   const logs = inPeriod(all, period);
-  const designs = experiment(logs.meter, all.assignments, all.expSettings, all.plans);
-  const flags = Object.fromEntries([...armInfo([...new Set(logs.meter.filter((l) => typeof l?.arm === "string").map((l) => l.arm))], all.assignments)].map(([a, i]) => [a, i.flags]));
+  const meter = logs.meter.filter(isRequestLine); // levers lines record settings, no request (quality counts them as log lines)
+  const designs = experiment(meter, all.assignments, all.expSettings, all.plans);
+  const flags = Object.fromEntries([...armInfo([...new Set(meter.filter((l) => typeof l?.arm === "string").map((l) => l.arm))], all.assignments)].map(([a, i]) => [a, i.flags]));
   return {
     period,
-    cost: cost(logs.meter, logs.outcomes, flags, rowsBySession(all.assignments)),
+    cost: cost(meter, logs.outcomes, flags, rowsBySession(all.assignments)),
     experiment: { designs },
-    delegation: delegation(logs.meter, logs.outcomes, all.routerSettings),
+    delegation: delegation(meter, logs.outcomes, all.routerSettings),
     guards: guards(designs, logs.outcomes, logs.guards, all.expSettings, rowsBySession(all.assignments)),
     quality: quality(all, logs, period),
   };

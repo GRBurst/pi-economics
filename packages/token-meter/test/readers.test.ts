@@ -12,6 +12,9 @@ import { analyse, type Logs } from "../core/analyse.ts";
 import { armStats } from "../core/arms.ts";
 import { aggregate, quotaRegression } from "../core/report.ts";
 import { taskCosts } from "../core/tasks.ts";
+import { isRequestLine } from "../core/analyse/logs.ts";
+import { effectiveSettings } from "../core/effective-settings.ts";
+import { leversLine } from "../core/levers.ts";
 import { MIN, T0, turn, world } from "./world.ts";
 
 /** The world plus one error line (v1: retries 0; v2: errorKind instead). */
@@ -103,4 +106,42 @@ test("meter-report (report and --arms) and pi-analyse (tables, --check) read v2 
     assert.deepEqual(tables(dir), t, name);
     ok(node("pi-analyse.ts", ["--agent-dir", dir, "--check"]));
   }
+});
+
+// M3b T3b.4: levers lines (design §5.3) share the meter log but are no request: every reader skips them
+// (core/analyse/logs.ts isRequestLine); only the meter log's line counts in the data-quality section see them.
+/** The v1 world plus, per session, the levers line the shell writes before its first request (same ts: spans unchanged). */
+function withLevers(): Logs {
+  const w = v1World();
+  const first = new Map<string, any>();
+  for (const l of [...w.meter].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))) if (!first.has(l.sessionId)) first.set(l.sessionId, l);
+  const levers = [...first.values()].map((l) => leversLine({ ts: l.ts, sessionId: l.sessionId, parentSessionId: l.parentSessionId,
+    arm: l.arm, eligible: typeof l.arm === "string" && l.parentSessionId === undefined, levers: effectiveSettings({}, {}) }));
+  return { ...w, meter: [...levers, ...w.meter] };
+}
+/** The analysis without the meter log's line and version counts. */
+const sansMeterCounts = (a: ReturnType<typeof analyse>) =>
+  ({ ...a, quality: { ...a.quality, logs: a.quality.logs.map((x) => (x.log === "meter" ? { ...x, lines: 0, versions: {} } : x)) } });
+
+test("levers lines: analyse, report, arms, quota regression and task costs read the meter log as without them", () => {
+  const v1 = v1World(), lv = withLevers();
+  const n = lv.meter.length - v1.meter.length;
+  assert.ok(n >= 6);
+  const a = analyse(lv);
+  assert.deepEqual(a.quality.problems, []);
+  assert.deepEqual(sansMeterCounts(a), sansMeterCounts(analyse(v1)));
+  const meter = a.quality.logs.find((x) => x.log === "meter")!;
+  assert.deepEqual([meter.lines, meter.versions["2"]], [lv.meter.length, n]);
+  const req = lv.meter.filter(isRequestLine);
+  assert.deepEqual(req, v1.meter);
+  assert.deepEqual(aggregate(lv.meter), aggregate(v1.meter));
+});
+
+test("levers lines: meter-report (report, --arms) and pi-analyse (tables, --check) skip them", () => {
+  const ok = (r: ReturnType<typeof node>) => (assert.equal(r.status, 0, r.stdout + r.stderr), r.stdout);
+  const both = [agentDir(v1World()), agentDir(withLevers())];
+  const [report, arms] = [[], ["--arms"]].map((args) => both.map((dir) => ok(node("meter-report.ts", ["--agent-dir", dir, "--dir", join(dir, "meter"), ...args]))));
+  assert.equal(report[1], report[0]);
+  assert.equal(arms[1], arms[0]);
+  ok(node("pi-analyse.ts", ["--agent-dir", both[1], "--check"]));
 });

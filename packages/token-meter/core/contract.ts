@@ -4,6 +4,7 @@
 // other logs: a child named by a spawn event must carry its parent; a session whose root has an experiment assignment
 // must carry the arm from that assignment on.
 import type { LogName, Logs } from "./analyse.ts";
+import { leverViolations, type LeverState } from "./levers.ts";
 
 export type Problem = { log: LogName; field: string; why: string; count: number; example: string };
 
@@ -36,14 +37,23 @@ const optional = (fields: Record<string, (v: any) => boolean>, why: string, when
   Object.entries(fields).map(([field, ok]) => ({ field, why: `optional: ${why}`, when: (l) => (!when || when(l)) && field in l, ok }));
 const versioned: Rule = { field: "v", why: "schema version, an integer when present", ok: (v, l) => !("v" in l) || Number.isInteger(v) };
 
+/** Levers lines (design §5.3) record settings, no request: the request rules skip them. */
+const isLevers = (l: any) => l.kind === "levers";
+const requests = (rules: Rule[]): Rule[] => rules.map((r) => ({ ...r, when: (l) => !isLevers(l) && (!r.when || r.when(l)) }));
+const leverStates = (v: unknown) => obj(v) && Object.values(v as object).every((x) => obj(x) && leverViolations(x as LeverState).length === 0);
+
 const METER: Rule[] = [
   versioned,
-  ...every({ ts: time, sessionId: str, provider: str, model: str, kind: oneOf("turn", "warming", "nested"), status: (v) => numb(v) || v === "error" }, "every meter line"),
-  // Meter line v2 (design §5.2): the retry extension's counts were on every line up to v1; native ones are present iff observed.
-  ...every({ retries: numb, retryWaitMs: numb }, "every meter line up to v1", (l) => !(Number.isInteger(l.v) && l.v >= 2)),
-  ...every({ billing: oneOf("subscription", "api", "free", "local") }, "every meter line from v2", (l) => Number.isInteger(l.v) && l.v >= 2),
-  ...optional({ retries: int0, retryWaitMs: (v) => numb(v) && v >= 0, design: str, cacheWrite1h: int0, durationMs: int0, ttftMs: int0, errorKind: oneOf("context_overflow", "rate_limit", "other") }, "meter line v2"),
-  ...every({ input: numb, cacheRead: numb, cacheWrite: numb, output: numb, costUsd: numb }, "usage of a successful request", (l) => l.status !== "error"),
+  ...requests([
+    ...every({ ts: time, sessionId: str, provider: str, model: str, kind: oneOf("turn", "warming", "nested"), status: (v) => numb(v) || v === "error" }, "every meter line"),
+    // Meter line v2 (design §5.2): the retry extension's counts were on every line up to v1; native ones are present iff observed.
+    ...every({ retries: numb, retryWaitMs: numb }, "every meter line up to v1", (l) => !(Number.isInteger(l.v) && l.v >= 2)),
+    ...every({ billing: oneOf("subscription", "api", "free", "local") }, "every meter line from v2", (l) => Number.isInteger(l.v) && l.v >= 2),
+    ...optional({ retries: int0, retryWaitMs: (v) => numb(v) && v >= 0, design: str, cacheWrite1h: int0, durationMs: int0, ttftMs: int0, errorKind: oneOf("context_overflow", "rate_limit", "other") }, "meter line v2"),
+    ...every({ input: numb, cacheRead: numb, cacheWrite: numb, output: numb, costUsd: numb }, "usage of a successful request", (l) => l.status !== "error"),
+  ]),
+  ...every({ v: (v) => v === 2, ts: time, sessionId: str, eligible: bool, levers: leverStates }, "levers line (design §5.3: v2, every lever state valid)", isLevers),
+  ...optional({ parentSessionId: str, arm: str, design: str, stratum: str }, "levers line", isLevers),
 ];
 const OUTCOMES: Rule[] = [
   versioned,

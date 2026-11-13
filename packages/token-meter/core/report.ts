@@ -1,5 +1,6 @@
 // Pure aggregation + markdown rendering for the meter log (bin/meter-report.ts does the I/O).
 import { cacheSection } from "./analyse/cache.ts";
+import { isRequestLine } from "./analyse/logs.ts";
 export type Row = { key: string; requests: number; input: number; cacheRead: number; cacheWrite: number;
   output: number; costUsd: number; errors: number; warming: number; warmingCostUsd: number };
 export type Regression =
@@ -41,7 +42,7 @@ function group(lines: any[], keyOf: (l: any) => string): Row[] {
 /** Lines are usable if they carry a string ts and sessionId; `from`/`to` are inclusive UTC days. */
 export function aggregate(all: any[], range: { from?: string; to?: string } = {}): Aggregate {
   const lines = all
-    .filter((l) => l && typeof l.ts === "string" && typeof l.sessionId === "string")
+    .filter((l) => l && typeof l.ts === "string" && typeof l.sessionId === "string" && isRequestLine(l))
     .filter((l) => (range.from === undefined || l.ts.slice(0, 10) >= range.from) && (range.to === undefined || l.ts.slice(0, 10) <= range.to))
     .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
   const total = emptyRow("total");

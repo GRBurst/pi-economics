@@ -20,6 +20,8 @@ export const versionOf = (l: any): number => (Number.isInteger(l?.v) ? l.v : 0);
 
 export const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 export const isLine = (l: any): boolean => !!l && typeof l.ts === "string" && !Number.isNaN(Date.parse(l.ts));
+/** A meter line of a request (turn, warming, nested, compaction): every line but a levers line (design §5.3), which only records settings. */
+export const isRequestLine = (l: any): boolean => l?.kind !== "levers";
 export const byTs = (a: any, b: any): number => Date.parse(a.ts) - Date.parse(b.ts);
 export const sum = (xs: number[]): number => xs.reduce((s, x) => s + x, 0);
 export const countBy = <T>(xs: T[], key: (x: T) => string): Record<string, number> => xs.reduce((m, x) => ((m[key(x)] = (m[key(x)] ?? 0) + 1), m), {} as Record<string, number>);

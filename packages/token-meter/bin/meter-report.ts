@@ -9,6 +9,7 @@ import { armStats, nextState, renderArms } from "../core/arms.ts";
 import { acceptance, killSwitch, signals } from "../core/guards.ts";
 import { aggregate, render } from "../core/report.ts";
 import { taskCosts } from "../core/tasks.ts";
+import { isRequestLine } from "../core/analyse/logs.ts";
 
 const args = process.argv.slice(2);
 const opt = (name: string): string | undefined => {
@@ -38,7 +39,7 @@ if (args.includes("--arms") || args.includes("--posterior")) {
   const settings = readJson(join(exp, "settings.json"));
   const flags: Record<string, Record<string, string>> = {};
   for (const r of readLines(exp)) if (typeof r?.arm === "string" && r.flags) flags[r.arm] = r.flags;
-  const meter = readLines(dir);
+  const meter = readLines(dir).filter(isRequestLine); // levers lines record settings, no request
   const outcomes = readLines(join(agentDir, "task-router", "outcomes"));
   const stats = armStats(meter, { flags });
   const acc = acceptance(outcomes);
