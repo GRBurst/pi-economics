@@ -174,8 +174,12 @@ in {
   # The router's optional read of the old global is dead (redesign §11: the
   # router randomizes itself).
   internal-channel = import ./internal-channel {inherit lib pkgs typecheck;};
-  # (redesign M5b.2, G5) No patched upstream reads pi-economics.
-  dependency-direction = import ./dependency-direction {inherit pkgs;};
+  # (redesign M5b.2, G5) No extension pi-economics patches or targets reads it:
+  # patches/, the built patched infinite-context, the patched actor.
+  dependency-direction = import ./dependency-direction {
+    inherit pkgs;
+    sources = ["${../patches}" "${infiniteContext}" "${setupActor}/extensions"];
+  };
   # (M5.11) Every log writer through pi-analyse (spec §8.1); the router's
   # writer is the pi-task-router input's (router-extraction design §7.3).
   log-contract = pkgs.callPackage ./log-contract {router = routerSrc;};
