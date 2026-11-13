@@ -86,3 +86,19 @@ test("bad arguments exit 2 with usage", () => {
   assert.equal(r.status, 2);
   assert.match(r.stderr, /usage: pi-analyse/);
 });
+
+test("pi-analyse reads `plans` from token-meter/settings.json: the experiment strata are the billing classes; without the setting every unit is api and the report says so (M2c)", () => {
+  const strata = (dir: string): string[] => {
+    const out = join(dir, "reports");
+    assert.equal(run(["--agent-dir", dir, "--out", out]).status, 0);
+    const md = readdirSync(out).find((f) => f.endsWith(".md"))!;
+    const json = JSON.parse(readFileSync(join(out, readdirSync(out).find((f) => f.endsWith(".json"))!), "utf8"));
+    assert.equal(json.experiment.designs[0].plansAbsent, readFileSync(join(out, md), "utf8").includes("plans absent"));
+    return json.experiment.designs[0].strata.map((s: any) => s.stratum);
+  };
+  assert.deepEqual(strata(agentDir()), ["api"]);
+  const dir = agentDir();
+  mkdirSync(join(dir, "token-meter"), { recursive: true });
+  writeFileSync(join(dir, "token-meter", "settings.json"), JSON.stringify({ plans: { anthropic: { billing: "subscription", windows: ["5h"] } } }));
+  assert.deepEqual(strata(dir), ["subscription"]);
+});

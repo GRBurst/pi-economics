@@ -348,12 +348,34 @@ request is no row of its own (it only refreshes the prefix).
   rows charged the whole cost of the next three requests, with no baseline (about 1.6–2× too much on the author's log).
 - **$** at the line's input price *p* (`costUsd` ÷ its tokens weighted read 0.1, 5-minute write 1.25, 1 h write 2.0, output 5): a miss costs
   its tokens × (write − read) × *p*, new context its tokens × write × *p*. A 1 h write is a line's `cacheWrite1h` tokens (meter v2), or for a
-  v1 line all of `cacheWrite` when the line is a main session's in a `mainCacheTtl` 1h arm (an approximation: children and 5m arms write 5
+  v1 line all of `cacheWrite` when the line is a Claude main session's (an Anthropic model or provider) in a `mainCacheTtl` 1h arm (an approximation: children and 5m arms write 5
   minutes).
 - **1 h writes in `costUsd`.** pi 1.4 already charges 1 h cache writes at 2.0 × input in `costUsd`; the analyser's totals are the logged
   cost. Only the split of a cost by token component and the fold ledger's prices weigh 1 h writes 2.0 (they weighed every write 1.25).
 - **miss share** (`meter-report`) = missed tokens ÷ `cacheWrite` tokens of the same requests; the old "rewrite share" counted every
   non-first write as a rewrite (94.7 % on the author's log, mostly ordinary growth).
+
+### Analysis: experiments
+
+How the Experiment section (and `meter-report --arms`) turns meter lines into effects.
+
+- **Unit and stratum.** A unit is a root session (above) of an armed design. Its **stratum** is the billing class (`plans` in
+  `token-meter/settings.json`: `subscription`, `api`, `free`, `local`; a provider without a plan is `api`) of the provider of the root's
+  first main-session request. A child's provider does not decide. Without a `plans` setting every unit is in `api` and the report says so.
+- **Objective** per stratum, per active hour: `apiUsd` for the cloud classes (Σ of the root's `costUsd`, children and warming included); `localCost`
+  for `local` (Σ `durationMs` ÷ 3 600 000 × the provider's plan rate, local providers' lines of the root), `wallMs` (Σ `durationMs` of the main's
+  lines) when no local plan has a rate; `experiments/settings.json` `strata.<class>.objective` overrides it (`apiUsd`, `cashUsd`, `localCost`,
+  `wallMs`, `points5h`, `points7d`; `cashUsd` is not computed yet and reads "not measurable"). A unit without the field the objective needs
+  (a v1 line has no `durationMs`) has no objective: a local stratum on v1 lines reads "not measurable".
+- **Effect** of a factor in a stratum = ratio(high level) ÷ ratio(low level) − 1, ratio = Σ objective ÷ Σ active hours over the stratum's units at the
+  level (a ratio of sums: a long unit weighs more than a short one, a $0 unit is not averaged in). Units under 0.05 active h (`MIN_HOURS`) are
+  left out of the estimate; the balance table counts them. Strata are never pooled.
+- **CI and power.** 2000 bootstrap draws, units resampled with replacement within each level, PRNG mulberry32 seed 1, percentiles 2.5/97.5. The
+  minimum detectable effect is 2.80 × the sd of the bootstrap effects (α .05 two-sided, power .8). With fewer than 2 units at a level there is
+  no CI and no MDE.
+- **Balance table**: per stratum and arm, units over `MIN_HOURS`, their active hours, the units excluded, units without an objective.
+- **Per arm** (kill switch, posterior; `meter-report --arms`): pooled over the design's strata, $ per active hour; its fold and cold-resume columns are
+  the premium above (*Analysis: cache misses*), per event.
 
 ## Data contract (`pi-analyse --check`)
 

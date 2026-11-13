@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { analyse, applyKill, inPeriod, renderAnalysis, reportName, type FileInfo, type LogName, type Logs } from "../core/analyse.ts";
 import { check, renderProblems } from "../core/contract.ts";
+import { parsePlans } from "../core/plans.ts";
 import { loadSettings } from "../core/settings.ts";
 
 const USAGE = "usage: pi-analyse [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--agent-dir P] [--out DIR] [--check] [--apply]\n";
@@ -50,7 +51,10 @@ function read(log: LogName, path: string): any[] {
 }
 const readJson = (file: string): any => { try { return JSON.parse(readFileSync(file, "utf8")); } catch { return undefined; } };
 
-const meterDir = loadSettings(join(agentDir, "token-meter", "settings.json")).dir;
+const meterSettings = join(agentDir, "token-meter", "settings.json");
+const meterDir = loadSettings(meterSettings).dir;
+/** token-meter's `plans`, parsed; undefined (not {}) when the setting is absent, so the report can say that every unit was counted as api. */
+const rawPlans = readJson(meterSettings)?.plans;
 const logs: Logs = {
   meter: read("meter", isAbsolute(meterDir) ? meterDir : join(agentDir, meterDir)),
   outcomes: read("outcomes", join(agentDir, "task-router", "outcomes")),
@@ -59,6 +63,7 @@ const logs: Logs = {
   files,
   expSettings: readJson(join(agentDir, "experiments", "settings.json")),
   routerSettings: readJson(join(agentDir, "task-router", "settings.json")),
+  plans: rawPlans === undefined ? undefined : parsePlans(rawPlans),
 };
 
 if (args.includes("--check")) {
