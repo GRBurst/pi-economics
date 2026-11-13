@@ -101,6 +101,37 @@ test("durationMs: last before_provider_request → message_end of the session; a
   assert.equal(lines()[5].durationMs, 420_000 - 6000);
 });
 
+test("ttftMs: the session's send → its first provider_stream_event; absent without an event after the send", () => {
+  const { f, clock, lines } = setup();
+  const ctx = fakeCtx("s1"), other = fakeCtx("s2");
+  const ev = { type: "provider_stream_event", provider: "anthropic", api: "anthropic-messages", model: "opus", data: { type: "message_start" } };
+  f.fire("provider_stream_event", ev, ctx); // before any send: no request to time
+  clock.t = T0 + 1000;
+  f.fire("before_provider_request", {}, ctx);
+  f.fire("before_provider_request", {}, other);
+  clock.t = T0 + 1100;
+  f.fire("provider_stream_event", ev, other);
+  clock.t = T0 + 1300;
+  f.fire("provider_stream_event", ev, ctx);
+  f.fire("message_start", { message: { role: "assistant" } }, ctx);
+  clock.t = T0 + 1500;
+  f.fire("provider_stream_event", ev, ctx);
+  f.fire("before_provider_request", {}, ctx); // a warm, mid-stream
+  clock.t = T0 + 1700;
+  f.fire("provider_stream_event", ev, ctx);
+  clock.t = T0 + 2500;
+  f.fire("message_end", assistant(), ctx);
+  f.fire("message_end", assistant(), other);
+  assert.deepEqual(lines().map((l) => [l.sessionId, l.ttftMs, l.durationMs]), [["s1", 300, 1500], ["s2", 100, 1500]]);
+  // the next request fails before any stream event: no ttftMs (the previous request's events do not carry over)
+  clock.t = T0 + 3000;
+  f.fire("before_provider_request", {}, ctx);
+  clock.t = T0 + 3400;
+  f.fire("message_end", assistant({ stopReason: "error", errorMessage: "500: x", usage: undefined }), ctx);
+  assert.equal("ttftMs" in lines()[2], false);
+  assert.equal(lines()[2].durationMs, 400);
+});
+
 test("user message_end → no line", () => {
   const { f, lines } = setup();
   const ctx = fakeCtx("s1");

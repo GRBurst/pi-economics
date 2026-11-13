@@ -60,6 +60,8 @@ export function install(pi: PiLike, deps: Deps): void {
   // P7: when the session's request was sent (its last before_provider_request outside a streaming turn: a send
   // between message_start and message_end is a warm's), for the active time `durationMs` of its message_end.
   const sentAt = new Map<string, number>();
+  /** The first provider_stream_event after that send (`ttftMs`). */
+  const firstEvent = new Map<string, number>();
   const madeDirs = new Set<string>();
   let warned = false;
   let retrySession: string | undefined;
@@ -126,8 +128,15 @@ export function install(pi: PiLike, deps: Deps): void {
   });
   pi.on("before_provider_request", (_e, ctx) => {
     const sid = sidOf(ctx);
-    if (sid !== undefined && !streaming.has(sid)) sentAt.set(sid, now().getTime());
+    if (sid !== undefined && !streaming.has(sid)) {
+      sentAt.set(sid, now().getTime());
+      firstEvent.delete(sid);
+    }
     flushWarming(ctx); // returns nothing: the payload stays as it is
+  });
+  pi.on("provider_stream_event", (_e, ctx) => {
+    const sid = sidOf(ctx);
+    if (sid !== undefined && sentAt.has(sid) && !firstEvent.has(sid)) firstEvent.set(sid, now().getTime());
   });
   pi.on("agent_settled", (_e, ctx) => flushWarming(ctx));
   pi.on("session_shutdown", (_e, ctx) => flushWarming(ctx));
@@ -169,9 +178,11 @@ export function install(pi: PiLike, deps: Deps): void {
     const end = now();
     const input: LineInput = { ...common(sid, ctx), now: end, provider: lastModel.get(sid)!.provider,
       model: lastModel.get(sid)!.model, kind: "turn", status: 200, retries: taken.retries, retryWaitMs: taken.retryWaitMs };
-    const sent = sentAt.get(sid);
+    const sent = sentAt.get(sid), first = firstEvent.get(sid);
     sentAt.delete(sid);
+    firstEvent.delete(sid);
     if (sent !== undefined) input.durationMs = Math.max(0, end.getTime() - sent);
+    if (sent !== undefined && first !== undefined) input.ttftMs = Math.max(0, first - sent);
     if (typeof m.thinkingLevel === "string") input.effort = m.thinkingLevel;
     if (m.stopReason === "error") {
       input.status = "error";
