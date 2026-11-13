@@ -602,7 +602,7 @@ How the Experiment section (and `meter-report --arms`) turns meter lines into ef
   units whose lever state is `refused` ÷ the stratum's units; above 0.20 the factor's add-on is flagged "broken add-on".
   **Context overflows** = count of lines with `errorKind = "context_overflow"` of the root ÷ its active hours, per arm.
   **Sensitivity (model switch)**: the effect again with each unit's objective over the requests whose billing class equals the class of
-  the root's first main request; the report counts the units that used another class. A v1-engine design gets none of these.
+  the root's first main request; the report counts the units that used another class; for a `points5h`/`points7d` objective it reads "not measurable" (the account's quota is not split by billing class). A v1-engine design gets none of these.
 - **Per arm** (`meter-report --arms`): for the v1–v4 designs pooled over the design's strata and the input of the flat kill switch and posterior; for a v2 design the pooled table is descriptive, the kill switch and posterior are per stratum (one table per design and stratum in `meter-report --arms`); $ per active hour; its fold and cold-resume columns are
   the premium above (*Analysis: cache misses*), per event.
 

@@ -229,3 +229,13 @@ test("review m2/m3: v2 designs' texts say what is per stratum and what is pooled
   const g = renderAnalysis(analyse(killWorld()), new Date(T0));
   assert.ok(g.includes("rows of a v2 design are pooled across its strata"), g);
 });
+
+test("review m4: for a points objective the sensitivity row is not measurable (the quota is the account's, not split by billing class), never a copy of the ITT row", () => {
+  const us = base();
+  const l = { ...logs(us.flatMap((u) => cloud(u.id, u.arm, u.usd)), us.map((u) => row(u.id, u.arm))), expSettings: { strata: { api: { objective: "points5h" } } } };
+  const s = stratumOf(l);
+  assert.equal(s.objective, "points5h");
+  const e = eff(s.sensitivity!.effects, "warmPolicy");
+  assert.ok("notMeasurable" in e);
+  if ("notMeasurable" in e) assert.ok(e.notMeasurable.includes("billing class"), e.notMeasurable);
+});

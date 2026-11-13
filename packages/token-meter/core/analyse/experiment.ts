@@ -153,11 +153,11 @@ function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<st
 }
 
 /** Effects of each factor over `included` units with the objective `value` (undefined = not measurable). */
-function effectsOf(design: string, stratum: string, objective: Objective, included: Unit[], factors: string[], levels: (f: string) => [string, string], value: (u: Unit) => number | undefined = (u) => u.objective): Effect[] {
+function effectsOf(design: string, stratum: string, objective: Objective, included: Unit[], factors: string[], levels: (f: string) => [string, string], value: (u: Unit) => number | undefined = (u) => u.objective, why: string = WHY[objective]): Effect[] {
   const measured = included.filter((u) => value(u) !== undefined).map((u) => ({ ...u, objective: value(u) }));
   return factors.map((factor): Effect => {
     if (!included.length) return { design, stratum, factor, notMeasurable: `not measurable: every unit is under ${MIN_HOURS} active h` };
-    if (!measured.length) return { design, stratum, factor, notMeasurable: `not measurable: ${WHY[objective]}` };
+    if (!measured.length) return { design, stratum, factor, notMeasurable: `not measurable: ${why}` };
     const [a, b] = levels(factor);
     const A = measured.filter((u) => u.levels[factor] === a), B = measured.filter((u) => u.levels[factor] === b);
     if (!A.length || !B.length) return { design, stratum, factor, notMeasurable: `not measurable: no unit at level ${A.length ? b : a}` };
@@ -183,7 +183,7 @@ function stratumResult(design: string, stratum: string, objective: Objective, un
   const switched = included.filter((u) => u.switched).length;
   return { stratum, objective, balance, effects,
     perProtocol: { units: proto.length, excluded: included.length - proto.length, effects: effectsOf(design, stratum, objective, proto, factors, levels) },
-    sensitivity: { switched, effects: effectsOf(design, stratum, objective, included, factors, levels, (u) => u.sensitivity) },
+    sensitivity: { switched, effects: effectsOf(design, stratum, objective, included, factors, levels, (u) => (objective === "points5h" || objective === "points7d" ? undefined : u.sensitivity), "the quota points are the account's, not split by a request's billing class") },
     overflow: arms.map((arm) => { const mine = included.filter((u) => u.arm === arm), hours = mine.reduce((s, u) => s + u.hours, 0), overflows = mine.reduce((s, u) => s + (u.overflows ?? 0), 0);
       return { arm, units: mine.length, hours, overflows, perHour: hours > 0 ? overflows / hours : NaN }; }) };
 }
