@@ -8,7 +8,11 @@ export const LEVERS = "pi-economics:levers:v1";
 /** Payload LeversQuery: an add-on that started after the publish asks for a session's Assigned. */
 export const LEVERS_QUERY = "pi-economics:levers-query:v1";
 
-/** A session's assignment as the add-ons see it; a child's equals its parent's but for sessionId/parentSessionId. Read-only. */
+/**
+ * A session's assignment as the add-ons see it; a child's equals its parent's but for sessionId/parentSessionId, so a
+ * child's `eligible` is its root unit's (the child runs the root's arm; it is no unit of its own: its levers line says
+ * `eligible: false`). `parentSessionId` is set on children only (assignments rows never carry it). Read-only.
+ */
 export type Assigned = Pick<AssignmentV2, "sessionId" | "parentSessionId" | "design" | "stratum" | "arm" | "eligible" | "factors">;
 export type LeversQuery = { sessionId: string; reply(a: Assigned | undefined): void };
 /** pi.events (EventBus): emit is synchronous; `on` returns the unsubscribe. */

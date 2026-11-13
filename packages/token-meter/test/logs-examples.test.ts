@@ -160,3 +160,12 @@ test("LOGS.md: assignments v2 examples (eligible, ineligible with and without a 
   const ps = check({ meter: [], outcomes: [], assignments: rows, guards: [] } as Parameters<typeof check>[0]);
   assert.deepEqual(ps, [], renderProblems(ps));
 });
+
+// Review m4 (M5b.1): a child's `eligible` differs by log: on the internal channel it is its root unit's, on a levers
+// line it says the child is no unit of its own.
+test("LOGS.md: a child's eligible (channel: the root unit's; levers line: false, no unit of its own)", () => {
+  const v2 = md.slice(md.indexOf("### Assignments v2"), md.indexOf("## guards/events.jsonl"));
+  assert.ok(v2.includes("a child's `Assigned.eligible` is its root unit's"), "Assignments v2: a child's Assigned.eligible");
+  const levers = md.slice(md.indexOf("### Levers lines"), md.indexOf("### Levers lines") + 6000);
+  assert.ok(levers.includes("a child is no unit of its own: `false`"), "Levers lines: a child's eligible");
+});

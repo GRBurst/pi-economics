@@ -186,7 +186,7 @@ before it. Every request reader skips these lines (`pi-analyse`, `meter-report`,
 | `parentSessionId` | string | children | as on request lines |
 | `kind` | `levers` | yes | |
 | `arm`, `design` | string | as on request lines | experiment arm and design |
-| `eligible` | boolean | yes | the session takes part in the experiment; until the engine names strata: a main session with an arm |
+| `eligible` | boolean | yes | the session is an experiment unit: a main session with an arm (a child is no unit of its own: `false`, even with its root's arm) |
 | `stratum` | string | with an arm of the v2 engine | the experiment stratum of the session (a child: its root's) |
 | `levers` | object | yes | lever id → state `{ v, s, a?, rb?, tier? }` |
 
@@ -330,6 +330,11 @@ parent's assignment). A resumed or reloaded session reuses its row (the session'
 `pi-economics:assignment`); a forked one is a new session with a row of its own. A model switch
 later in the session changes nothing (intention to treat).
 
+Children and `eligible`: the unit is the main session. On the extensions' internal channel
+(`pi-economics:levers:v1`), a child's `Assigned.eligible` is its root unit's (with its `design`,
+`stratum`, `arm`, `factors`): the child runs its root's arm. A child's levers line says whether
+the session is a unit of its own, so it is `false` there.
+
 | field | type | required | meaning |
 | --- | --- | --- | --- |
 | `v` | `2` | yes | schema version |
@@ -341,7 +346,7 @@ later in the session changes nothing (intention to treat).
 | `stratum` | string | eligible | the first stratum (setting `strata`, default: one per billing class) the model matched |
 | `arm` | string | eligible only | one bit per factor in factor order, `1` = the high level (`""` for a stratum without factors) |
 | `factors` | object | eligible only | factor name → `{ "lever": "<target>.<name>", "assigned": <level> }` |
-| `parentSessionId` | string | no | not written by the engine (children have no row) |
+| `parentSessionId` | string | no | not written by the engine (children have no row); only on the channel's `Assigned` of a child |
 
 Every row with an `arm` names its `design`: a design id never looks like `"v4"`, so a
 3-character arm is never taken for design v4. Explore draws permuted blocks per design and
