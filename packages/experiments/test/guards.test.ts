@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaults, type Settings } from "../core/settings.ts";
 import { install } from "../core/shell.ts";
+import { bus } from "./fake.ts";
 
 afterEach(() => void delete (globalThis as { __piExperimentsApi_v1?: unknown }).__piExperimentsApi_v1);
 
@@ -14,10 +15,10 @@ function harness(over: Partial<Settings> = {}) {
   const agentDir = mkdtempSync(join(tmpdir(), "experiments-guards-"));
   const handlers = new Map<string, Array<(e: any, ctx: any) => unknown>>();
   const commands = new Map<string, { handler: (args: string, ctx: any) => unknown }>();
-  const pi = { on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]), registerCommand: (n: string, c: any) => void commands.set(n, c) };
+  const pi = { on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]), registerCommand: (n: string, c: any) => void commands.set(n, c), appendEntry: () => {}, events: bus() };
   install(pi, { agentDir, settings: { ...defaults(), ...over }, rng: () => 0.5, api: () => undefined });
   const notes: string[] = [];
-  const ctx = (sid: string) => ({ sessionManager: { getSessionId: () => sid }, ui: { notify: (m: string) => void notes.push(m) } });
+  const ctx = (sid: string) => ({ model: { provider: "openai", id: "gpt-5" }, sessionManager: { getSessionId: () => sid }, ui: { notify: (m: string) => void notes.push(m) } });
   const fire = (n: string, e: unknown, sid = "s1") => (handlers.get(n) ?? []).forEach((h) => h(e, ctx(sid)));
   const file = join(agentDir, "guards", "events.jsonl");
   const rows = () => (existsSync(file) ? readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
@@ -34,7 +35,7 @@ test("a user message right after an assistant turn that matches the regex is a c
   const [r] = h.rows();
   assert.deepEqual({ event: r.event, sessionId: r.sessionId, keys: Object.keys(r).sort() }, { event: "correction", sessionId: "s1", keys: ["arm", "event", "sessionId", "ts", "v"] });
   assert.equal(r.v, 1); // schema version of the guards log (LOGS.md)
-  assert.match(r.arm, /^[-+]{3}$/);
+  assert.match(r.arm, /^[01]{3}$/); // an arm of the default api stratum's design (v4's factors)
 });
 
 test("no correction: not directly after an assistant turn, extension-injected input, or no match", () => {

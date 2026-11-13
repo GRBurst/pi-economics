@@ -4,53 +4,57 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonical, design, designFor, designId } from "../core/design.ts";
-import { V4_FACTORS, defaults, loadSettings, parseStrata, type StratumSpec } from "../core/settings.ts";
+import { V4_FACTORS, defaults, loadSettings, parseStrata, readPlans, type StratumSpec } from "../core/settings.ts";
 import type { Billing, Plans } from "../../token-meter/core/plans.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "experiments-"));
+
+// The v1 engine's ONLINE_FACTORS (design v4), removed in M5b.1, kept here as the oracle of V4_FACTORS.
+const V4_ORACLE = [
+    { name: "warmPolicy", values: ["native", "orchestrator-aware"] as [string, string] },
+    { name: "mainCacheTtl", values: ["5m", "1h"] as [string, string] },
+    { name: "maskOnCold", values: ["off", "on"] as [string, string] },
+];
 
 test("missing file → defaults", () => {
   assert.deepEqual(loadSettings("/nonexistent/settings.json"), defaults());
 });
 
-test("defaults: explore, the three online factors of design v4 (values[0] = today's behaviour), 16-arm cap, 0.1 floor", () => {
-  const d = defaults();
-  assert.deepEqual(d.factors, [
-    { name: "warmPolicy", values: ["native", "orchestrator-aware"] },
-    { name: "mainCacheTtl", values: ["5m", "1h"] },
-    { name: "maskOnCold", values: ["off", "on"] },
-  ]);
-  assert.deepEqual({ ...d, factors: [], baseline: "" }, { mode: "explore", factors: [], maxArms: 16, minExplore: 0.1, baseline: "", guards: { minSessions: 10, threshold: 0.2, peekThreshold: 1, correctionThreshold: 1, ratingThreshold: 0.5 }, correctionRegex: String.raw`\b(no|wrong|revert|undo|that's not)\b` });
+// M5b.1: the v1 engine's factors, maxArms and baseline are gone (ONLINE_FACTORS with them); designs come from `strata`.
+test("defaults: explore, a 0.1 floor, the kill-switch guards, the correction regex; no strata (the defaults of parseStrata apply)", () => {
+  assert.deepEqual(defaults(), { mode: "explore", minExplore: 0.1, guards: { minSessions: 10, threshold: 0.2, peekThreshold: 1, correctionThreshold: 1, ratingThreshold: 0.5 }, correctionRegex: String.raw`\b(no|wrong|revert|undo|that's not)\b` });
 });
 
-test("default baseline is the all-low arm of the default design (review note 1)", () => {
-  const d = defaults();
-  const arms = design(d.factors, d.maxArms);
-  assert.equal(arms.length, 8, "the full 2^3");
-  assert.equal(d.baseline, "---");
-  const base = arms.find((a) => a.id === d.baseline);
-  assert.ok(base, `baseline ${d.baseline} is not an arm`);
-  assert.ok(Object.entries(base.flags).every(([n, v]) => v === d.factors.find((f) => f.name === n)!.values[0]));
-});
-
-test("known keys override defaults, unknown keys and wrong types are ignored", () => {
+test("known keys override defaults; unknown keys (the v1 engine's factors, maxArms, baseline among them) and wrong types are ignored", () => {
   const f = join(tmp(), "settings.json");
-  writeFileSync(f, JSON.stringify({ mode: "exploit", maxArms: 8, minExplore: 0.2, baseline: "b", extra: 1 }));
-  assert.deepEqual(loadSettings(f), { ...defaults(), mode: "exploit", maxArms: 8, minExplore: 0.2, baseline: "b" });
+  writeFileSync(f, JSON.stringify({ mode: "exploit", minExplore: 0.2, maxArms: 8, baseline: "b", factors: [{ name: "x", values: ["a", "b"] }], extra: 1 }));
+  assert.deepEqual(loadSettings(f), { ...defaults(), mode: "exploit", minExplore: 0.2 });
+});
+
+test("strata: passed through as written (any JSON value); parseStrata validates it and says why it drops one", () => {
+  const f = join(tmp(), "settings.json");
+  const strata = { opus: { match: { models: ["anthropic/claude-opus-*"] }, factors: [] }, bad: { match: 1 } };
+  writeFileSync(f, JSON.stringify({ strata }));
+  assert.deepEqual(loadSettings(f), { ...defaults(), strata });
+  writeFileSync(f, JSON.stringify({ strata: 3 }));
+  assert.equal(loadSettings(f).strata, 3);
+});
+
+test("readPlans: the billing classes of token-meter's `plans` setting (its settings file); anything else is no plan", () => {
+  const dir = tmp();
+  const f = join(dir, "settings.json");
+  assert.deepEqual(readPlans(f), {}, "no file");
+  writeFileSync(f, JSON.stringify({ plans: { claude: { billing: "subscription", windows: ["5h", "1y"] }, llama: { billing: "local" }, odd: { billing: "barter" }, nil: null } }));
+  assert.deepEqual(readPlans(f), { claude: { billing: "subscription", windows: ["5h"] }, llama: { billing: "local", windows: [] } });
+  for (const bad of ["{", "[]", JSON.stringify({ plans: [] }), JSON.stringify({ plans: "x" })]) {
+    writeFileSync(f, bad);
+    assert.deepEqual(readPlans(f), {}, bad);
+  }
 });
 
 test("mode outside {off, explore, exploit} is ignored", () => {
   const f = join(tmp(), "settings.json");
   writeFileSync(f, JSON.stringify({ mode: "uniform" }));
-  assert.deepEqual(loadSettings(f), defaults());
-});
-
-test("factors: a valid array is honoured, malformed entries are not", () => {
-  const good = [{ name: "warmPolicy", values: ["native", "orchestrator-aware"] }, { name: "maskOnCold", values: ["off", "on"] }];
-  const f = join(tmp(), "settings.json");
-  writeFileSync(f, JSON.stringify({ factors: good }));
-  assert.deepEqual(loadSettings(f), { ...defaults(), factors: good });
-  writeFileSync(f, JSON.stringify({ factors: [{ name: "warmPolicy", values: ["only-one"] }] }));
   assert.deepEqual(loadSettings(f), defaults());
 });
 
@@ -82,12 +86,12 @@ test("correctionRegex: a setting (source of a case-insensitive RegExp); an inval
 // The cloud stratum's default factors are M1's design v4 as a stratum (redesign §7.2, plan T5a.5): its design has the
 // same 8 arms (level sets) as the v4 runtime's, over cache-lifecycle's levers.
 test("V4_FACTORS: the stratum design has v4's 8 arms (the same level sets) over the levers cache-lifecycle.<factor>", () => {
-  const v4 = defaults();
+  const v4 = V4_ORACLE;
   const d = designFor("cloud", { factors: V4_FACTORS });
   const sets = (xs: Record<string, unknown>[]) => xs.map((x) => canonical(x)).sort();
   assert.equal(d.arms.length, 8);
-  assert.deepEqual(sets(d.arms.map((a) => a.levels)), sets(design(v4.factors, v4.maxArms).map((a) => a.flags)));
-  assert.deepEqual(V4_FACTORS.map((f) => f.lever), v4.factors.map((f) => `cache-lifecycle.${f.name}`));
+  assert.deepEqual(sets(d.arms.map((a) => a.levels)), sets(design(v4, 16).map((a) => a.flags)));
+  assert.deepEqual(V4_FACTORS.map((f) => f.lever), v4.map((f) => `cache-lifecycle.${f.name}`));
 });
 
 // (redesign M5a T5a.4) The strata setting (§7.2, §7.3) and its defaults (plan P12).
@@ -185,10 +189,9 @@ test("pinned: the default cloud stratum's design id (stored with every unit; a n
 });
 
 test("the default cloud stratum's design has v4's 8 arms (P5a.4)", () => {
-  const v4 = defaults();
   const sets = (xs: Record<string, unknown>[]) => xs.map((x) => canonical(x)).sort();
   for (const [name, s] of Object.entries(parseStrata(undefined, PLANS, V4_FACTORS).strata)) {
     if (name === "local") continue;
-    assert.deepEqual(sets(designFor(name, s).arms.map((a) => a.levels)), sets(design(v4.factors, v4.maxArms).map((a) => a.flags)));
+    assert.deepEqual(sets(designFor(name, s).arms.map((a) => a.levels)), sets(design(V4_ORACLE, 16).map((a) => a.flags)));
   }
 });

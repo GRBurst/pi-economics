@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { install } from "../core/shell.ts";
+import { bus } from "./fake.ts";
 
 type G = { __piExperimentsApi_v1?: any; __piEconomicsWarned_v1?: Set<string> };
 beforeEach(() => void delete (globalThis as G).__piEconomicsWarned_v1);
@@ -25,10 +26,10 @@ function rig(optedIn: boolean, api: () => typeof full | undefined) {
     writeFileSync(join(agentDir, "experiments", "settings.json"), JSON.stringify({ mode: "explore" }));
   }
   const handlers = new Map<string, Array<(e: any, ctx: any) => void>>();
-  const pi = { on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]), registerCommand: () => {} };
+  const pi = { on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]), registerCommand: () => {}, appendEntry: () => {}, events: bus() };
   install(pi, { agentDir, rng: () => 0.5, api });
   const notes: string[] = [];
-  const ctx = { hasUI: true, ui: { notify: (m: string) => void notes.push(m) }, sessionManager: { getSessionId: () => "s1", getSessionDir: () => join(agentDir, "sessions") } };
+  const ctx = { hasUI: true, ui: { notify: (m: string) => void notes.push(m) }, model: { provider: "openai", id: "gpt-5" }, sessionManager: { getSessionId: () => "s1", getSessionDir: () => join(agentDir, "sessions") } };
   const start = () => { for (const h of handlers.get("session_start") ?? []) h({}, ctx); };
   return { notes, start, assignments: join(agentDir, "experiments", "assignments.jsonl") };
 }

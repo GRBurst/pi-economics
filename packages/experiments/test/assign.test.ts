@@ -1,8 +1,7 @@
-// P-off, P-balance, P-floor for assign(). Seeded RNG throughout.
+// The v2 engine's pure parts (redesign M5b.1, §7.3): strata, eligibility, permuted blocks, Thompson per design and stratum. Seeded RNG throughout.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { design } from "../core/design.ts";
-import { assign, type Mode, type State } from "../core/assign.ts";
+import type { Mode } from "../core/assign.ts";
 
 /** Deterministic seeded RNG (mulberry32). */
 function mulberry32(seed: number): () => number {
@@ -15,32 +14,6 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-const factors = (n: number) =>
-  Array.from({ length: n }, (_, i) => ({ name: `f${i + 1}`, values: ["off", "on"] as [string, string] }));
-
-test("P-off: mode off returns the baseline arm, whatever the state or rng", () => {
-  const arms = design(factors(2), 4);
-  for (const seed of [1, 2, 3]) {
-    // Even with the baseline arm disabled and other arms heavily counted.
-    const st: State = { counts: { [arms[1].id]: 9 }, disabled: [arms[0].id] };
-    assert.deepEqual(assign("off", arms, st, mulberry32(seed), 0.1, arms[0].id), arms[0]);
-  }
-});
-
-test("P-balance: explore keeps enabled-arm counts within 1 and never picks a disabled arm", () => {
-  const arms = design(factors(2), 4);
-  const st: State = { counts: {}, disabled: [arms[3].id] };
-  const rng = mulberry32(1234);
-  for (let i = 0; i < 40; i++) {
-    const arm = assign("explore", arms, st, rng, 0.1, arms[0].id);
-    assert.notEqual(arm.id, arms[3].id, `disabled arm ${arms[3].id} was chosen (draw ${i})`);
-    st.counts[arm.id] = (st.counts[arm.id] ?? 0) + 1;
-    const counts = arms.slice(0, 3).map((a) => st.counts[a.id] ?? 0);
-    assert.ok(Math.max(...counts) - Math.min(...counts) <= 1, `after ${i + 1} draws the enabled counts [${counts}] are not balanced`);
-  }
-});
-
-// --- Engine v2 (redesign M5b.1, §7.3): strata, eligibility, permuted blocks, Thompson per design and stratum.
 import { eligibleFor, stratumOf } from "../core/assign.ts";
 import type { StratumSpec } from "../core/settings.ts";
 import type { Plans } from "../../token-meter/core/plans.ts";

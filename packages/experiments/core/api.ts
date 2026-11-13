@@ -2,9 +2,12 @@
 // `globalThis.__piExperimentsApi_v1?.flag(name, ownSetting, sessionId)`.
 import type { Arm } from "./design.ts";
 
+/** A session's arm as the API returns it: the id, the levels by flag name, and (v2 engine, and v1 rows that name one) its design and stratum. */
+export type ApiArm = Arm & { design?: string; stratum?: string };
+
 export interface ExperimentsApiV1 {
   version: 1;
-  armFor(sessionId: string): Arm | undefined;
+  armFor(sessionId: string): ApiArm | undefined;
   /** The arm's value for factor `name`; `def` (the caller's own setting) when no arm or factor applies. */
   flag(name: string, def: string, sessionId?: string): string;
   /** `child` shares the arm of `parent` (children do not get an assignment of their own). */
@@ -26,9 +29,9 @@ export function createApi(
   mainSession: () => string | undefined,
   resolveParent?: (sessionId: string) => string | undefined,
 ) {
-  const assigned = new Map<string, Arm>();
+  const assigned = new Map<string, ApiArm>();
   const parents = new Map<string, string>();
-  const walk = (start: string): Arm | undefined => {
+  const walk = (start: string): ApiArm | undefined => {
     let sid: string | undefined = start;
     for (let i = 0; sid !== undefined && i < MAX_DEPTH; i++, sid = parents.get(sid)) {
       const arm = assigned.get(sid);
@@ -36,7 +39,7 @@ export function createApi(
     }
     return undefined;
   };
-  const armFor = (sessionId: string): Arm | undefined => {
+  const armFor = (sessionId: string): ApiArm | undefined => {
     const direct = walk(sessionId);
     if (direct !== undefined) return direct;
     if (resolveParent === undefined) return undefined;
@@ -64,5 +67,5 @@ export function createApi(
     },
     inherit: (child, parent) => void parents.set(child, parent),
   };
-  return { api, assign: (sessionId: string, arm: Arm): void => void assigned.set(sessionId, arm) };
+  return { api, assign: (sessionId: string, arm: ApiArm): void => void assigned.set(sessionId, arm) };
 }
