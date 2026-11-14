@@ -85,6 +85,7 @@ export function sessionLevers(
         const target = targetOf(name);
         const lever = registry.lever(f.lever, target === undefined ? undefined : { target });
         if (lever === undefined || tracks.has(lever.id) || !registry.loaded(lever.target)) continue;
+        if (lever.mainOnly && env.child) continue; // a child's value is not the design's to report (review F4)
         const t: Track = { lever, name, level: f.assigned, a: f.assigned, ok: false, obs: undefined };
         tracks.set(lever.id, t);
         start(t);

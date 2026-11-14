@@ -62,7 +62,16 @@ test("T7b.1 pi.thinkingLevel is a main session's lever: infeasible in a child (t
   s.refresh();
   assert.deepEqual(r.state.calls, [], "never applied in a child");
   s.observe("before_agent_start", r.at);
-  assert.deepEqual(s.states()[THINK], { v: "medium", s: "ext", a: "high", rb: "refused", tier: "control" });
+  assert.deepEqual(s.states(), {}, "review F4: no state at all in a child (not refused, not ext): its level is not pi-economics' to report");
+});
+
+test("T7b.2 pi.activeTool(<name>) is a main session's lever too: a child's levers line omits it", () => {
+  const r = rig({ active: ["read"], all: ["read", "codemode"] });
+  const s = r.session(tool("codemode"), true, [false, true], { child: true });
+  s.refresh();
+  s.observe("before_agent_start", r.at);
+  assert.deepEqual(r.state.calls, [], "never applied in a child");
+  assert.deepEqual(s.states(), {}, "the actor's choice of a child's tools is not reported as a refusal");
 });
 
 test("T7b.2 pi.activeTool(<name>): the kind resolves by id; a malformed id is no lever", () => {

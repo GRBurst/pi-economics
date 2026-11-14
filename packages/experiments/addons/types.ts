@@ -52,6 +52,12 @@ export interface Lever<L extends Level = Level> {
    * where the level has no value (nothing feasible), the level.
    */
   valueFor?(ctx: SessionCtx, level: L): Level;
+  /**
+   * A main session's lever (review F4): in a child (the actor's runtime) its value is the actor's or cache-lifecycle's own
+   * choice, not what the design assigned, so the engine neither sets it nor records a state for it there: the child's
+   * levers line omits it (not refused, not `ext`).
+   */
+  mainOnly?: true;
   /** "model": feasibility and value depend on the session's model, so a model switch re-evaluates and re-applies the level. */
   follow?: "model";
   /** Absent: no observer (the state stays unverified). */

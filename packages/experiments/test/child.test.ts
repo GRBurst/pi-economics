@@ -80,12 +80,11 @@ for (const persisted of [true, false]) {
     const { levers, ...assigned } = c.seen!;
     assert.deepEqual(assigned, parentView(mainAssigned as Levers, "c1", "m1"));
     // The parent's levers in the child: the same assigned levels; mainCacheTtl is a main session's lever (cache-lifecycle
-    // writes 5 m in a child), refused up front and recorded once a response shows the TTL.
+    // writes 5 m in a child), omitted from the child's levers whatever its responses show (review F4).
     assert.deepEqual(Object.keys(mainLevers), CL);
     assert.deepEqual(levers, { [CL[0]]: mainLevers[CL[0]], [CL[2]]: mainLevers[CL[2]] });
     c.end({ cacheWrite: 500, cacheWrite1h: 0 });
-    const ttl = row.factors.mainCacheTtl.assigned;
-    assert.deepEqual(query(c.events, "c1")!.levers[CL[1]], ttl === "5m" ? { v: "5m", s: "fixed" } : { v: "5m", s: "fixed", a: "1h", rb: "refused", tier: "replace" });
+    assert.deepEqual(query(c.events, "c1")!.levers, { [CL[0]]: mainLevers[CL[0]], [CL[2]]: mainLevers[CL[2]] }, "no mainCacheTtl state after a response either");
     assert.deepEqual(c.heard.at(-1), query(c.events, "c1"), "the token-meter stand-in heard the last state");
     // Nothing of the child reaches the parent's bus, and the parent's answer is unchanged.
     assert.equal(query(m.events, "c1"), undefined);

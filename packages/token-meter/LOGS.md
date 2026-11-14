@@ -227,15 +227,15 @@ level the settings did not carry reads back `refused`; they are not in the catal
 `cache-lifecycle.warmPolicy`, `cache-lifecycle.mainCacheTtl` and `cache-lifecycle.maskOnCold` (tier `replace`:
 cache-lifecycle applies the assigned level itself; a lever starts only once cache-lifecycle asked the channel in that
 runtime). `mainCacheTtl` is read back from each assistant `message_end`'s usage (`cacheWrite1h` > 0: `1h`, other cache
-writes: `5m`, no cache write: nothing seen); `warmPolicy` and `maskOnCold` have no observer and stay `unverified`. In a
-child `mainCacheTtl` is infeasible (only a main takes the 1 h TTL): its state is what the child observed, `refused`
-when that is not its root's level.
+writes: `5m`, no cache write: nothing seen); `warmPolicy` and `maskOnCold` have no observer and stay `unverified`. `mainCacheTtl`
+is a main session's lever: cache-lifecycle writes 5 m in a child whatever the arm says, so a child's levers line carries
+no entry for it.
 The seed tier adds `infinite-context.nudgeAtTokens` (redesign M7a) in a session whose factor is on it: `v` and `a` are
 tokens (the level is a fraction of the matched rule's range), `rb` is read from infinite-context's settings record on the branch
 (`confirmed`; an extension that redrew: `refused`, `s: "ext"`, `v` = its draw), and a rule that is a fixed number gives `refused`,
 `s: "fixed"`, `a` = the level (a fraction: there are no tokens to assign).
-Two data-only kinds set pi itself (redesign M7b; tier `control`, read back at `before_agent_start`, a main session's levers: in a
-child both are infeasible, its level and tools are the actor's): `pi.thinkingLevel` (levels `off`, `minimal`, `low`, `medium`,
+Two data-only kinds set pi itself (redesign M7b; tier `control`, read back at `before_agent_start`, a main session's levers: a
+child's levers line omits both, its level and tools are the actor's): `pi.thinkingLevel` (levels `off`, `minimal`, `low`, `medium`,
 `high`, `xhigh`; set with `setThinkingLevel` when the engine's session starts and read back with `getThinkingLevel`: the level the
 session runs with, where `pi.defaultThinkingLevel` is the configured default) and `pi.activeTool(<name>)` (levels `false`, `true`:
 whether `getActiveTools` lists the tool; a tool pi does not register is infeasible). A value other than the assigned one is
@@ -262,13 +262,14 @@ and `stratum` from there. The actor binds children headless: an in-memory sessio
 for in-memory sessions without a UI (print mode), in the short window while the actor creates a child: a new main can be
 taken for the previous main's child, and a child created after the actor dropped its records for a main.
 
-A main session's first line (complete), its line after the first read-back of `mainCacheTtl` and a child line under
-infinite-context (both shortened: the writer always writes every lever):
+A main session's first line (complete), its line after the first read-backs (`mainCacheTtl`; `pi.thinkingLevel`, which pi clamped
+to the model's highest) and a child line under infinite-context (both shortened: the writer always writes every lever; the
+child's omits the main-only levers):
 
 ```jsonl
 {"v":2,"ts":"2026-11-03T09:59:58.100Z","sessionId":"s-main","kind":"levers","arm":"010","design":"b4d458675108","eligible":true,"stratum":"api","levers":{"pi.cacheWarming":{"v":"streaming","s":"fixed"},"pi.promptCache":{"v":"short","s":"fixed"},"pi.compaction.enabled":{"v":true,"s":"fixed"},"pi.compaction.reserveTokens":{"v":16384,"s":"fixed"},"pi.compaction.keepRecentTokens":{"v":20000,"s":"fixed"},"pi.branchSummary.reserveTokens":{"v":16384,"s":"fixed"},"pi.branchSummary.skipPrompt":{"v":false,"s":"fixed"},"pi.codemode.mode":{"v":"on","s":"fixed"},"pi.codemode.inlineBudget":{"v":3000,"s":"fixed"},"pi.transport":{"v":"auto","s":"fixed"},"pi.retry.enabled":{"v":true,"s":"fixed"},"pi.retry.maxRetries":{"v":3,"s":"fixed"},"pi.retry.baseDelayMs":{"v":2000,"s":"fixed"},"pi.retry.maxAgentDelayMs":{"v":60000,"s":"fixed"},"pi.retry.provider.timeoutMs":{"v":300000,"s":"fixed"},"pi.retry.provider.maxRetries":{"v":0,"s":"fixed"},"pi.retry.provider.maxRetryDelayMs":{"v":60000,"s":"fixed"},"pi.images.autoResize":{"v":true,"s":"fixed"},"pi.images.blockImages":{"v":false,"s":"fixed"},"pi.thinkingBudgets.minimal":{"v":1024,"s":"fixed"},"pi.thinkingBudgets.low":{"v":2048,"s":"fixed"},"pi.thinkingBudgets.medium":{"v":8192,"s":"fixed"},"pi.thinkingBudgets.high":{"v":16384,"s":"fixed"},"pi.defaultThinkingLevel":{"v":"medium","s":"fixed"},"pi.defaultTools.read":{"v":true,"s":"fixed"},"pi.defaultTools.bash":{"v":true,"s":"fixed"},"pi.defaultTools.powershell":{"v":false,"s":"fixed"},"pi.defaultTools.edit":{"v":true,"s":"fixed"},"pi.defaultTools.write":{"v":true,"s":"fixed"},"pi.defaultTools.grep":{"v":false,"s":"fixed"},"pi.defaultTools.find":{"v":false,"s":"fixed"},"pi.defaultTools.ls":{"v":false,"s":"fixed"},"pi.defaultTools.codemode":{"v":false,"s":"fixed"},"pi.defaultTools.tool_search":{"v":false,"s":"fixed"},"cache-lifecycle.warmPolicy":{"v":"native","s":"pe","a":"native","rb":"unverified","tier":"replace"},"cache-lifecycle.mainCacheTtl":{"v":"1h","s":"pe","a":"1h","rb":"unverified","tier":"replace"},"cache-lifecycle.maskOnCold":{"v":"off","s":"pe","a":"off","rb":"unverified","tier":"replace"}}}
-{"v":2,"ts":"2026-11-03T10:00:04.200Z","sessionId":"s-main","kind":"levers","arm":"010","design":"b4d458675108","eligible":true,"stratum":"api","levers":{"pi.cacheWarming":{"v":"streaming","s":"fixed"},"cache-lifecycle.warmPolicy":{"v":"native","s":"pe","a":"native","rb":"unverified","tier":"replace"},"cache-lifecycle.mainCacheTtl":{"v":"1h","s":"pe","a":"1h","rb":"confirmed","tier":"replace"},"cache-lifecycle.maskOnCold":{"v":"off","s":"pe","a":"off","rb":"unverified","tier":"replace"}}}
-{"v":2,"ts":"2026-11-03T11:10:00.000Z","sessionId":"s-child","parentSessionId":"s-main","kind":"levers","arm":"010","design":"b4d458675108","eligible":false,"stratum":"api","levers":{"pi.compaction.enabled":{"v":false,"s":"ext"},"pi.compaction.reserveTokens":{"v":16384,"s":"fixed"},"pi.defaultThinkingLevel":{"v":"medium","s":"fixed"},"cache-lifecycle.warmPolicy":{"v":"native","s":"pe","a":"native","rb":"unverified","tier":"replace"},"cache-lifecycle.mainCacheTtl":{"v":"5m","s":"fixed","a":"1h","rb":"refused","tier":"replace"},"cache-lifecycle.maskOnCold":{"v":"off","s":"pe","a":"off","rb":"unverified","tier":"replace"}}}
+{"v":2,"ts":"2026-11-03T10:00:04.200Z","sessionId":"s-main","kind":"levers","arm":"010","design":"b4d458675108","eligible":true,"stratum":"api","levers":{"pi.cacheWarming":{"v":"streaming","s":"fixed"},"cache-lifecycle.warmPolicy":{"v":"native","s":"pe","a":"native","rb":"unverified","tier":"replace"},"cache-lifecycle.mainCacheTtl":{"v":"1h","s":"pe","a":"1h","rb":"confirmed","tier":"replace"},"cache-lifecycle.maskOnCold":{"v":"off","s":"pe","a":"off","rb":"unverified","tier":"replace"},"pi.thinkingLevel":{"v":"high","s":"fixed","a":"xhigh","rb":"refused","tier":"control"}}}
+{"v":2,"ts":"2026-11-03T11:10:00.000Z","sessionId":"s-child","parentSessionId":"s-main","kind":"levers","arm":"010","design":"b4d458675108","eligible":false,"stratum":"api","levers":{"pi.compaction.enabled":{"v":false,"s":"ext"},"pi.compaction.reserveTokens":{"v":16384,"s":"fixed"},"pi.defaultThinkingLevel":{"v":"medium","s":"fixed"},"cache-lifecycle.warmPolicy":{"v":"native","s":"pe","a":"native","rb":"unverified","tier":"replace"},"cache-lifecycle.maskOnCold":{"v":"off","s":"pe","a":"off","rb":"unverified","tier":"replace"}}}
 ```
 
 ## task-router/outcomes/YYYY-MM.jsonl

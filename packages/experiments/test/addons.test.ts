@@ -137,8 +137,14 @@ test("T5b2.6 mainCacheTtl reads back from the response's cacheWrite1h: confirmed
   assert.equal(ttl.observe!({ sessionId: "s1" }), undefined);
 });
 
-test("T5b2.6 mainCacheTtl is a main session's lever: infeasible in a child (cache-lifecycle writes 5 m there)", () => {
+test("T5b2.6 mainCacheTtl is a main session's lever: infeasible in a child (cache-lifecycle writes 5 m there), and its state is omitted there (review F4)", () => {
   const ttl = CACHE_LIFECYCLE.find((l) => l.id === "cache-lifecycle.mainCacheTtl")!;
+  const reg = createRegistry(CACHE_LIFECYCLE);
+  reg.load("cache-lifecycle");
+  const kid = sessionLevers(reg, assignedTo({ ttl: [ttl.id, "1h"] }), { child: true }, () => ["5m", "1h"]);
+  kid.refresh();
+  kid.observe("message_end", { sessionId: "s1", event: { message: { usage: { cacheWrite: 500, cacheWrite1h: 0 } } } });
+  assert.deepEqual(kid.states(), {}, "a child's line omits it, however the responses went");
   assert.deepEqual(ttl.feasible({ child: true }, ["5m", "1h"]), []);
   assert.deepEqual(ttl.feasible({ child: false }, ["5m", "1h"]), ["5m", "1h"]);
   const all = ["native", "orchestrator-aware", "off", "on"];

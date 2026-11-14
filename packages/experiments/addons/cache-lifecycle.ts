@@ -25,8 +25,8 @@ function writtenTtl(event: unknown): Observed<string> {
 export const CACHE_LIFECYCLE: readonly Lever[] = [
   { ...replace, id: `${TARGET}.warmPolicy`, readBackAt: "before_agent_start", feasible: WARM },
   {
-    ...replace, id: `${TARGET}.mainCacheTtl`, readBackAt: "message_end",
-    // A main session's TTL: cache-lifecycle writes 5 m in a child whatever the arm says.
+    ...replace, id: `${TARGET}.mainCacheTtl`, readBackAt: "message_end", mainOnly: true,
+    // A main session's TTL: cache-lifecycle writes 5 m in a child whatever the arm says; no state is recorded there (review F4).
     feasible: (env, levels) => (env.child ? [] : TTL(env, levels)),
     observe: (ctx) => writtenTtl(ctx.event),
   },

@@ -84,6 +84,8 @@ const passes = (meter: any[]) => {
 
 // M5b.2: the levers of the experiments engine's add-ons (packages/experiments/addons/cache-lifecycle.ts).
 const ADDON_IDS = ["cache-lifecycle.warmPolicy", "cache-lifecycle.mainCacheTtl", "cache-lifecycle.maskOnCold"];
+// M7b: a data-only kind that sets pi itself (control tier); a child's line omits it, like mainCacheTtl (review F4).
+const PI_CONTROL_IDS = ["pi.thinkingLevel"];
 
 test("LOGS.md: levers line examples, each one the builder writes byte for byte, passing the contract", () => {
   const heading = "### Levers lines";
@@ -93,7 +95,7 @@ test("LOGS.md: levers line examples, each one the builder writes byte for byte, 
     const { v, kind, ...base } = l;
     assert.deepEqual([v, kind], [2, "levers"], `example line ${i + 1}`);
     assert.equal(serializeLevers(leversLine(base)), block[i] + "\n", `example line ${i + 1} is not what the writer writes`);
-    for (const id of Object.keys(l.levers)) assert.ok(LEVER_IDS.includes(id) || ADDON_IDS.includes(id), `example line ${i + 1}: ${id} is no lever the observer or the engine's add-ons write`);
+    for (const id of Object.keys(l.levers)) assert.ok(LEVER_IDS.includes(id) || ADDON_IDS.includes(id) || PI_CONTROL_IDS.includes(id), `example line ${i + 1}: ${id} is no lever the observer or the engine's add-ons write`);
   }
   const states = lines.flatMap((l) => Object.values(l.levers) as any[]);
   for (const s of ["pe", "ext", "fixed"]) assert.ok(states.some((x) => x.s === s), `no lever with source ${s}`);
@@ -102,6 +104,8 @@ test("LOGS.md: levers line examples, each one the builder writes byte for byte, 
   assert.ok(lines.some((l) => l.levers["pi.compaction.enabled"]?.s === "ext"), "no infinite-context line");
   for (const id of ADDON_IDS) assert.ok(lines.some((l) => l.levers[id]?.tier === "replace"), `no line with the engine's ${id}`);
   assert.ok(states.some((x) => typeof x.v === "string" && /^[0-9]/.test(x.v)), "no level name starting with a digit");
+  assert.ok(lines.some((l) => l.levers["pi.thinkingLevel"]?.tier === "control" && l.levers["pi.thinkingLevel"].rb === "refused"), "no main line with pi.thinkingLevel clamped (refused, control tier)");
+  assert.ok(lines.filter((l) => typeof l.parentSessionId === "string").every((l) => l.levers["cache-lifecycle.mainCacheTtl"] === undefined && l.levers["pi.thinkingLevel"] === undefined), "a child's line carries no main-only lever (review F4)");
   passes(lines);
 });
 

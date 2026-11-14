@@ -2,8 +2,8 @@
 // `pi.activeTool(<name>)`. The engine sets them through pi's session control at its own session_start and reads
 // back with the matching getter at before_agent_start. The read-back is the EFFECTIVE value (M3b review F3:
 // token-meter's `pi.defaultThinkingLevel` is the configured default for a new session, not what this one ran with).
-// Both are a main session's levers: a child's level and tools are the actor's (an orchestrator's explicit choice),
-// infeasible there like mainCacheTtl. Source of an observation that is not the assigned level: `fixed` when it is what
+// Both are a main session's levers (`mainOnly`): a child's level and tools are the actor's (an orchestrator's explicit
+// choice), infeasible there and omitted from the child's levers line, like mainCacheTtl (review F4). Source of an observation that is not the assigned level: `fixed` when it is what
 // pi reported right after the engine set it (pi's own clamp: the model cannot take the level; an ignored tool name),
 // else `ext` (changed after: another extension, /thinking, pi's reset at a model switch; the source cannot tell them
 // apart). Order hazard (§7.4): a later extension's before_agent_start handler runs after the engine's read-back, so
@@ -33,7 +33,7 @@ const seenAs = <L extends string | boolean>(v: L, settled: L | undefined): Obser
 function thinkingLevel(pi: PiControl): Lever<string> {
   const settled = new Map<string, string>(); // session → the level pi reported right after the engine set it
   return {
-    id: "pi.thinkingLevel", target: "pi", scope: "session", tier: "control", readBackAt: "before_agent_start",
+    id: "pi.thinkingLevel", target: "pi", scope: "session", tier: "control", readBackAt: "before_agent_start", mainOnly: true,
     feasible: (env, levels) => (env.child ? [] : levels.filter((l) => (THINKING_LEVELS as readonly string[]).includes(l))),
     apply(ctx, level) {
       pi.setThinkingLevel(level);
@@ -51,7 +51,7 @@ function activeTool(pi: PiControl, tool: string): Lever<boolean> {
   const settled = new Map<string, boolean>();
   const isActive = () => pi.getActiveTools().includes(tool);
   return {
-    id: `pi.activeTool(${tool})`, target: "pi", scope: "session", tier: "control", readBackAt: "before_agent_start",
+    id: `pi.activeTool(${tool})`, target: "pi", scope: "session", tier: "control", readBackAt: "before_agent_start", mainOnly: true,
     feasible: (env, levels) => (env.child || safe(() => pi.getAllTools().some((t) => t.name === tool)) !== true ? [] : levels.filter((l) => typeof l === "boolean")),
     apply(ctx, on) {
       const active = pi.getActiveTools();
