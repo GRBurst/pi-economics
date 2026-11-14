@@ -250,6 +250,7 @@ test("review L2/N3: the per-protocol text says which levers line decides (the ro
 // M8 T8.5: points5h / points7d = Σ_c β_c × the API-eq $ of component c over the unit's requests (the M4 calibration), per provider and window kind.
 // The Thompson posterior is written only for apiUsd strata (M5c): no estimator for points objectives, so `posterior` stays {} for them.
 import { experiment } from "../core/analyse/experiment.ts";
+import { allocate } from "../core/analyse/units.ts";
 const fit = (beta: number): any => ({ n: 12, beta: { input: beta, cacheRead: beta, cacheWrite: beta, output: beta }, r2: 0.99, sigma: 1, share: { input: 0.25, cacheRead: 0.25, cacheWrite: 0.25, output: 0.25 }, usdPerPoint: [], flags: [] });
 const pointsWorld = (objective: string) => {
   const us = base(), meter = us.flatMap((u) => cloud(u.id, u.arm, u.usd)), rows = us.map((u) => row(u.id, u.arm));
@@ -282,4 +283,25 @@ test("T8.5 a points stratum writes no posterior (the engine falls back to blocks
   const w = pointsWorld("points5h"), l = { ...logs(w.meter, w.rows), expSettings: w.expSettings };
   const state = applyKill({}, analyse(l));
   assert.deepEqual((state.designs as any)[D].api.posterior, {}, "pi-economics: points objective, no posterior");
+});
+
+test("review M8 #4a: a component under 1 % of the windows' $ is not identifiable: its β (noise, 1000 here) adds nothing to the points", () => {
+  const w = pointsWorld("points5h");
+  const noisy: any = { ...fit(2), beta: { input: 1000, cacheRead: 2, cacheWrite: 2, output: 2 }, share: { input: 0.0001, cacheRead: 0.3, cacheWrite: 0.3, output: 0.3999 } };
+  const zero: any = { ...noisy, beta: { ...noisy.beta, input: 0 } };
+  const ratio = (f: any) => { const e = eff(strat(experiment(w.meter, w.rows, w.expSettings, {}, new Map(), new Map([["anthropic\u00005h", f]]))).effects, "warmPolicy"); return "notMeasurable" in e ? NaN : e.ratioA; };
+  close(ratio(noisy), ratio(zero), 1e-9);
+  assert.ok(ratio(zero) > 0);
+});
+
+test("review M8 #4b: the cacheWrite component of the points is the 5-minute and the 1-hour write together (a line with cacheWrite1h)", () => {
+  const us = base(), extra = { cacheWrite: 1000, cacheWrite1h: 600, input: 100, cacheRead: 5000, output: 50 };
+  const meter = us.flatMap((u) => cloud(u.id, u.arm, u.usd, extra)), rows = us.map((u) => row(u.id, u.arm));
+  const only = (c: string): any => ({ ...fit(0), beta: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, [c]: 10 } });
+  const e = eff(strat(experiment(meter, rows, { strata: { api: { objective: "points5h" } } }, {}, new Map(), new Map([["anthropic\u00005h", only("cacheWrite")]]))).effects, "warmPolicy");
+  assert.ok(!("notMeasurable" in e));
+  if ("notMeasurable" in e) return;
+  const low = new Set(["a", "b", "e", "f"]); // warmPolicy low: arms 00 and 01, 4 units of 1 active h
+  const pts = meter.filter((l) => low.has(String(l.sessionId))).reduce((t, l) => { const x = allocate(l, 600); assert.ok(x.cacheWrite1h > 0 && x.cacheWrite5m > 0); return t + 10 * (x.cacheWrite5m + x.cacheWrite1h); }, 0);
+  close(e.ratioA, pts / 4, 1e-9);
 });

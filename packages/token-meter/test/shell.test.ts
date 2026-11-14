@@ -802,11 +802,12 @@ test("T8.7 timings: the last stream event's llama.cpp `timings` become promptMs,
   turnSend(f, ctx);
   f.fire("provider_stream_event", ev({ choices: [{ delta: { content: "x" } }] }), ctx);
   f.fire("provider_stream_event", ev({ choices: [], timings: { cache_n: 900, prompt_n: 100.2, prompt_ms: 120.4, predicted_n: 50, predicted_ms: 3500.6 } }), ctx);
+  f.fire("provider_stream_event", ev({ choices: [], usage: {}, timings: { cache_n: 950, prompt_n: 50, prompt_ms: 100, predicted_ms: 4000 } }), ctx); // llama.cpp ends with the final timings: the last event wins
   f.fire("provider_stream_event", ev({ choices: [{ delta: {} }] }), ctx); // a chunk after it without timings keeps them
   clock.t = T0 + 4000;
   f.fire("message_end", assistant(), ctx);
   const a = lines()[0];
-  assert.deepEqual([a.promptMs, a.genMs, a.cacheN, a.promptN], [120, 3501, 900, 100], "pi-economics: timings of the last event carrying them, rounded");
+  assert.deepEqual([a.promptMs, a.genMs, a.cacheN, a.promptN], [100, 4000, 950, 50], "pi-economics: timings of the last event carrying them");
   // the next request has no timings: nothing carries over, and a malformed timings object adds nothing
   turnSend(f, ctx);
   f.fire("provider_stream_event", ev({ timings: { prompt_ms: "x", predicted_ms: -1, cache_n: NaN } }), ctx);
