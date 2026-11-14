@@ -143,3 +143,27 @@ test("review m1 observe: the latest record without a numeric nudgeAtPercent (the
   assert.equal(seen([rec({ ...seed, nudgeAtTokens: 150_000, nudgeAtPercent: 75 }), rec(seed)]), undefined);
   assert.deepEqual(seen([rec(seed), rec({ ...seed, nudgeAtPercent: 75 })]), { v: 125_000, s: "ext" });
 });
+
+// Review m2: the guard that skips a second record compares the tokens AND the range. Two rules whose ranges share their minimum
+// give the same tokens at level 0; a switch between them must still seed, or the extension redraws (the range differs) and the
+// lever reads refused although nothing was wrong.
+test("review m2 apply: a branch whose latest record holds the same tokens in another range is not 'already seeded'", () => {
+  const two = rules({ overrides: { a: { nudgeAtTokens: [100, 200] }, b: { nudgeAtTokens: [100, 300] } } });
+  const [lever] = infiniteContext(() => two);
+  const entries: Array<{ type: "custom"; customType: string; data: unknown }> = [];
+  const ctx = (provider: string) => ({
+    sessionId: "s1", model: { provider, id: "m" },
+    branch: () => entries,
+    appendEntry: (customType: string, data: unknown) => void entries.push({ type: "custom", customType, data }),
+  });
+  lever.apply(ctx("a"), 0);
+  assert.deepEqual(entries.map((e) => e.data), [{ nudgeAtTokens: 100, nudgeAtTokensRange: [100, 200], rule: "a" }]);
+  lever.apply(ctx("a"), 0);
+  assert.equal(entries.length, 1, "the same tokens in the same range: already there");
+  lever.apply(ctx("b"), 0);
+  assert.deepEqual(entries.at(-1)!.data, { nudgeAtTokens: 100, nudgeAtTokensRange: [100, 300], rule: "b" }, "another range: seeded although the tokens are equal");
+  assert.equal(entries.length, 2);
+  lever.apply(ctx("b"), 1);
+  assert.equal(entries.at(-1)!.data && (entries.at(-1)!.data as { nudgeAtTokens: number }).nudgeAtTokens, 300, "another level: seeded");
+  assert.equal(entries.length, 3);
+});
