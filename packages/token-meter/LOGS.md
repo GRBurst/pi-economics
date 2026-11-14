@@ -567,9 +567,21 @@ in 2026-11) and is shared by every session, subagent and other client of the acc
   (a window's residual > 3σ, σ = √(SSE ÷ (n − 4)); a single outlier can reach 3σ only from 14 windows on), `drift` (Σ$ ÷ Σpoints over the
   windows ending in the last 28 days against the 28 before differs by more than 15 %), `beta` (a component with ≥ 1 % of the $ whose β
   is outside [0.5, 2] × the $-weighted mean β). Below 8 complete windows the report says how many it has.
-- **Spend** by billing class (a line's own `billing`, else its provider's plan, else `api`) and **local cost** = Σ `durationMs` of
-  the local requests × the plan's hourly rate, in the rate's currency; requests without `durationMs` are counted apart and add no
-  time; a provider without a rate has no cost. A guessed class (a v1 line, no plan for its provider: counted as `api`) makes its **cash $** cell an
+- **Spend** by billing class (a line's own `billing`, else its provider's plan, else `api`) and **local cost**. A request's interval is
+  [`ts` − `durationMs`, `ts`]. **Request hours** = Σ `durationMs` of a provider's local requests (concurrent ones add up; what an experiment charges
+  a unit); **machine hours** = the measure of the union of the intervals. **Local cost** = machine hours × the plan's hourly rate, in the
+  rate's currency: the server runs one request at a time, so overlapping requests queue and the machine is busy once. A failed request (an
+  `error` line with `durationMs`) occupies the machine and counts in both hours, but is no request; a warming line is none. Requests without
+  `durationMs` are counted apart and add no time; a provider with a rate but no timed request, or without a rate, has **no cost** (the
+  report says why, and shows the summed request time): never 0. **Queue share** = 1 − machine ÷ request hours (0 without time):
+  above 0, local requests overlapped and queued, so an experiment's per-unit cost exceeds the share of machine time. **Per-model rows** (the
+  q5 and q4 llama profiles are two model ids of one provider, so one rate): requests, request hours, output tokens, tokens per second
+  (output ÷ `genMs` over the lines that carry it, else ÷ `durationMs`; the basis is shown) and the cost per 1M output tokens = the provider's
+  rate × the model's request hours ÷ the output tokens of all its timed requests. **Prefix reuse** = Σ `cacheN` ÷ Σ (`cacheN` + `promptN`) over lines that
+  carry both, else Σ `cacheRead` ÷ Σ (`input` + `cacheRead`). **Costs by currency**: the cash $ of the `api` class (USD) and each rate's currency, one row per
+  currency; a **total** only when there is one currency, or every currency converts to USD with `currency.rates` (`"FROM/TO"`: 1 FROM = rate TO;
+  the inverse of `"TO/FROM"` when only that is set; when both are set the direct one is used; never chained through a third currency); otherwise
+  the currencies stay apart. A guessed class (a v1 line, no plan for its provider: counted as `api`) makes its **cash $** cell an
   upper bound (`≤ …`), and without any usable plan entry the report says *plans absent*.
 
 A capped window as lines (the 5-hour window of reset 14:00 reached 97 %, then 100 % at 12:30; a request at 12:40 was rate-limited):
@@ -591,9 +603,12 @@ How the Experiment section (and `meter-report --arms`) turns meter lines into ef
   `api`, `free`, `local`; a provider without a plan is `api`). A child's provider does not decide. Without a usable `plans` entry the report says
   "plans absent": a v1 unit is then in `api`.
 - **Objective** per stratum, per active hour: `apiUsd` for the cloud classes (Σ of the root's `costUsd`, children and warming included); `localCost`
-  for `local` (Σ `durationMs` ÷ 3 600 000 × the provider's plan rate over the root's local-billed lines; requests to other providers, e.g. cloud children, are
-  left out: a secondary column is M8), `wallMs` (Σ `durationMs` of the main's lines) when no local plan has a rate; `experiments/settings.json` `strata.<class>.objective` overrides it (`apiUsd`, `cashUsd`, `localCost`,
-  `wallMs`, `points5h`, `points7d`; `cashUsd` is not computed yet and reads "not measurable"). Both timed objectives sum the lines that carry `durationMs`; a unit with none (a v1 line has no
+  for `local` (Σ `durationMs` ÷ 3 600 000 × the provider's plan rate over the root's local-billed lines, request hours: the Budget's machine hours are lower by the
+  queue share; requests to other providers, e.g. cloud children, are not in it), `wallMs` (Σ `durationMs` of the main's lines) when no local plan has a rate; `experiments/settings.json` `strata.<class>.objective` overrides it (`apiUsd`, `cashUsd`, `localCost`,
+  `wallMs`, `points5h`, `points7d`; `cashUsd` is not computed yet and reads "not measurable"). `points5h` / `points7d` = Σ over the root's requests of Σ_c β_c × the API-eq $ of
+  component c, with the Budget's calibration of the request's provider and window kind (components under 1 % of the windows' $ are not identifiable and add nothing; no
+  fit with at least 8 complete windows: not measurable). **Secondary column**: a unit's requests in another currency than its objective (a cloud-objective unit's local requests
+  in the rate's currency; a `localCost` unit's cloud children in API-eq $) are shown per active hour by arm, converted into the objective's currency only with `currency.rates`.. Both timed objectives sum the lines that carry `durationMs`; a unit with none (a v1 line has no
   `durationMs`) has no objective, so a local stratum on v1 lines reads "not measurable". Lines without it (compactions, nested requests) add
   no time; the balance table shows the timed / untimed line counts.
 - **Effect** of a factor in a stratum = ratio(high level) ÷ ratio(low level) − 1, ratio = Σ objective ÷ Σ active hours over the stratum's units at the
