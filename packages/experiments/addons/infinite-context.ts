@@ -26,7 +26,6 @@ export const IC_TOOL = "context_fold";
 /** The extension's own limit when no rule and no top level sets one (its DEFAULT_SETTINGS; the contract check holds it equal). */
 export const IC_DEFAULT_NUDGE = 150_000;
 export const IC_TARGET = "infinite-context";
-const TARGET = IC_TARGET;
 
 const positiveInt = (v: unknown): number => (typeof v === "number" && Number.isInteger(v) && v > 0 ? v : 0);
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -92,7 +91,7 @@ export function infiniteContext(rules: () => IcRules): readonly Lever[] {
     return matchRule(r.overrides, r.top, model?.provider, model?.id);
   };
   const nudge: Lever = {
-    id: `${TARGET}.nudgeAtTokens`, target: TARGET, scope: "session", tier: "seed", readBackAt: "before_agent_start", follow: "model",
+    id: `${IC_TARGET}.nudgeAtTokens`, target: IC_TARGET, scope: "session", tier: "seed", readBackAt: "before_agent_start", follow: "model",
     // Levels are fractions q of the matched rule's range, so one level set fits every rule that has one (§7.4).
     feasible: (env, levels) => (isRange(matched(env.model).nudge) ? levels.filter(isFraction) : []),
     valueFor(ctx: SessionCtx, level: Level): Level {

@@ -320,3 +320,26 @@ test("review m4 the rules are read once per runtime: a file rewritten mid-sessio
   assert.equal(r.state("s1")?.rb, "confirmed");
   assert.equal(r.state("s1")?.a, at([100_000, 200_000], q));
 });
+
+// Review n6: a model switch that changes a state is published at once (the meter writes a levers line on change), not at
+// the next read-back.
+test("review n6 a model switch publishes the changed state at the switch", () => {
+  const r = runtime();
+  r.start("s1", haiku);
+  r.agentStart("s1", haiku);
+  const q = r.level("s1");
+  const n = r.heard.length;
+  r.select("s1", local, haiku);
+  assert.equal(r.heard.length, n + 1, "one publication at the switch");
+  const a = at([300_000, 400_000], q);
+  assert.deepEqual(r.heard.at(-1)!.levers[LEVER], { v: a, s: "pe", a, rb: "unverified", tier: "seed" });
+  r.select("s1", gpt, local);
+  assert.equal(r.heard.length, n + 2, "back to a rule with a range: the value changes again");
+  const same = runtime();
+  same.start("s1", haiku);
+  same.agentStart("s1", haiku);
+  const m = same.heard.length;
+  same.select("s1", haiku, haiku); // pi's model_select with source "restore": the model did not change
+  assert.equal(same.heard.length, m, "no change of model: nothing re-evaluated, nothing published");
+  assert.equal(same.state("s1")?.rb, "confirmed", "the read-back stands");
+});

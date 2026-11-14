@@ -26,6 +26,8 @@ export type PiLike = {
   registerCommand(name: string, command: { description: string; handler: (args: string, ctx: any) => unknown }): void;
   appendEntry(customType: string, data?: unknown): void;
   events: Bus;
+  /** pi 1.4: every registered tool; absent in a host without it (no target is then detected by its tools). */
+  getAllTools?(): Array<{ name?: unknown }>;
 };
 /** The part of the actor-subagents API this package reads (own copy: packages do not import each other); the type check compares it with the provider's SubagentsApiV1 (spec §5.3). */
 export type SubagentsApi = {
@@ -198,16 +200,17 @@ export function install(pi: PiLike, deps: Deps): void {
     noteEnv(ctx);
     const sid = safe(() => ctx.sessionManager.getSessionId() as string);
     const t = sid === undefined ? undefined : tracked.get(sid);
-    if (sid !== undefined && t !== undefined && live.has(sid)) live.get(sid)!.model = modelOf(safe(() => ctx.model)) ?? live.get(sid)!.model;
     if (t?.observe(at, sessionOf(sid!, e))) announce(sid!);
   };
   // A model switch: the levers that follow the model (the seed of a range lever) are set again before the extensions after
-  // this one (load order: experiments first) see the switch.
+  // this one (load order: experiments first) see the switch. `live.model` is the model they were last set for; an event that
+  // names it again (pi's "restore") changes nothing.
   pi.on("model_select", (e, ctx) => {
     const sid = safe(() => ctx.sessionManager.getSessionId() as string);
     const l = sid === undefined ? undefined : live.get(sid);
     const model = modelOf(e?.model);
     if (sid === undefined || l === undefined || model === undefined) return;
+    if (l.model?.provider === model.provider && l.model?.id === model.id) return;
     live.set(sid, { ...l, model });
     if (tracked.get(sid)?.modelChanged()) announce(sid);
   });
@@ -344,7 +347,7 @@ export function install(pi: PiLike, deps: Deps): void {
     watch(main, ctx);
     // An extension that does not know pi-economics cannot ask the channel: its tools show it is loaded (§7.4).
     // pi 1.4's getAllTools lists every registered tool; where it is absent (or throws) no target is detected by its tools.
-    const tools = safe(() => (pi as { getAllTools?(): Array<{ name?: unknown }> }).getAllTools?.());
+    const tools = safe(() => pi.getAllTools?.());
     if (Array.isArray(tools) && tools.some((t) => t?.name === IC_TOOL)) loaded(IC_TARGET);
     // A child's runtime (experiments among the actor's childExtensions): never drawn, no row; its arm is its root's.
     const file = safe(() => ctx.sessionManager.getSessionFile() as string | undefined);

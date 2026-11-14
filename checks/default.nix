@@ -158,7 +158,8 @@ in {
     src = infiniteContextTs;
   };
   # (redesign M7a, plan T7a.7) The engine's copy of the extension's settings record, the type the seed is written as:
-  # the extension's `Settings` must be assignable to it (the seed's fields, same names and types).
+  # the extension's `Settings` must be assignable to it (the seed's fields, same names and types). A type-shape check
+  # only: it does not see an optional field dropped or renamed upstream; ic-seed-contract runs the real code.
   iface-infinite-context-seed = iface.compare {
     name = "infinite-context-seed";
     provider = {

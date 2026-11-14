@@ -246,7 +246,7 @@ value it drew). The extension completes its record with `nudgeAtPercent`, the se
 none: while the latest record lacks it the extension has not adopted anything, and the
 state stays `unverified` (a tool of that name from another extension, a misordered load). A rule that is a fixed number draws nothing and ignores records: the
 level is refused up front (`refused`, source `fixed`, `a` = the level, as there are no
-tokens to assign). The engine reads the rules from the
+tokens to assign; the state shows once the extension's record is read back, at the first prompt). The engine reads the rules from the
 extension's settings file once per runtime, as the extension does: a file rewritten
 mid-session is the next session's. The lever is live when pi lists infinite-context's `context_fold`
 tool (the extension never asks the channel); a child seeds its own branch with its
@@ -408,7 +408,7 @@ points into `src`.
 | `internal-channel` | the internal channel `pi-economics:levers:v1`: the experiments engine's payload (`Levers`), query and lever states against the copies token-meter (`core/channel.ts`) and cache-lifecycle (`core/api.ts`) keep, both ways (every key a copy reads is one the engine sends), and the event names |
 | `infinite-context` | the patched pi-infinite-context's tests: upstream's suite without its three `fast-check` tests, with the patch's additions to `settings.test.ts` and `index.test.ts`, on the shared lock; `overlay-foreign.test.ts` and `integration.test.ts` (`index.ts` driven through its event handlers with stand-ins for pi's packages, reading the settings the module renders); the greps on `index.ts` (no fold hint, no `__piExperimentsApi_v1`) |
 | `ic-seed-contract` | the seed contract of infinite-context's limit on the real code of the patched extension, the experiments engine with its add-on and token-meter's shell: the seed's record shape, adopted (confirmed in the levers line), a fixed-number rule (refused up front), a range the extension does not adopt (planted refusal: refused, source `ext`, in the levers line), a model switch (re-seeded in the new range), and the add-on's rule matcher equal to the extension's own over a generated table |
-| `iface-infinite-context-seed` | the extension's `Settings` is assignable to the engine's copy of the seed record (`IcRecord`) |
+| `iface-infinite-context-seed` | the extension's `Settings` is assignable to the engine's copy of the seed record (`IcRecord`): a type-shape check only (an optional field dropped or renamed upstream is `ic-seed-contract`'s to see) |
 | `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's three `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
 | `dependency-direction` | no file of `patches/`, the built patched infinite-context or the patched actor mentions a `pi-economics:` channel or the removed `__piExperimentsApi_v1`: extensions never depend on pi-economics (the router stays out: it shares the claim channel and still holds its dead read) |
 | `state-contract` | `experiments/state.json` between the analyser and the engine: token-meter's writer (`nextState`) writes each v2 design's `disabled` and `posterior` under `designs.<id>.<stratum>`, and experiments' `designState` reads them back from that place (another stratum or design reads nothing; the flat keys are never read for a v2 design). Both sources side by side: packages import no other. |
