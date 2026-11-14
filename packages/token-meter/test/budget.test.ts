@@ -125,7 +125,7 @@ test("budget: local cost = the union of the serving intervals × the plan's hour
   const [l] = budget(spendLines(), plansOf).local;
   assert.equal(l.provider, "llama");
   assert.deepEqual([l.requests, l.timed, l.untimed], [3, 2, 1]);
-  close(l.sumH, 1.5); close(l.unionH, 61 / 60, "the 10:03 request (0.5 h) starts inside the 10:02 one (1 h): 61 min of machine time");
+  close(l.sumH, 1.5); close(l.unionH, 61 / 60); // the 10:03 request (0.5 h) starts inside the 10:02 one (1 h): 61 min of machine time
   assert.deepEqual(l.rate, { amount: 0.25, currency: "EUR", per: "hour" });
   close(l.cost!, (61 / 60) * 0.25);
   assert.deepEqual(budget(spendLines(), parsePlans({ llama: { billing: "local" } })).local.map((x) => x.cost), [undefined], "a local plan without a rate has no cost, never 0");
