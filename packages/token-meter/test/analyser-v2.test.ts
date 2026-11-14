@@ -239,3 +239,10 @@ test("review m4: for a points objective the sensitivity row is not measurable (t
   assert.ok("notMeasurable" in e);
   if ("notMeasurable" in e) assert.ok(e.notMeasurable.includes("billing class"), e.notMeasurable);
 });
+
+test("review L2/N3: the per-protocol text says which levers line decides (the root's last up to the period's end) and that units without a line are left out", () => {
+  const us = base();
+  const text = renderExperiment(analyse(logs(us.flatMap((u) => cloud(u.id, u.arm, u.usd)), us.map((u) => row(u.id, u.arm)))).experiment.designs);
+  assert.ok(text.includes("last levers line"), text);
+  assert.ok(text.includes("or without a levers line"), text);
+});

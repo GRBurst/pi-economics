@@ -130,7 +130,7 @@ function renderV2(s: StratumResult): string {
   return [
     ...(s.refusal ? ["\nRefusal rate per factor (units whose lever was refused by its owner ÷ the units with a levers line that assigned it; above " + (REFUSAL_LIMIT * 100).toFixed(0) + "% the add-on is flagged in the last column):\n",
       table(["factor", "lever", "eligible (with levers line)", "refused", "rate", "flag", "without a levers line"], s.refusal.map((r) => [r.factor, `\`${r.lever}\``, String(r.eligible), String(r.refused), pc(r.rate), r.broken ? "broken add-on" : "ok", `${r.noLevers} without a levers line`]))] : []),
-    ...(s.perProtocol ? [`\nPer-protocol (non-randomized comparison): the ${s.perProtocol.units} units whose every factor lever was read back \`confirmed\` (${s.perProtocol.excluded} unverified or refused units left out). Units that kept the assignment are not a random sample of the assigned ones: this row can be confounded and is no causal estimate; the intention-to-treat table is.\n`,
+    ...(s.perProtocol ? [`\nPer-protocol (non-randomized comparison): the ${s.perProtocol.units} units whose every factor lever was read back \`confirmed\` in the root's last levers line up to the period's end (${s.perProtocol.excluded} unverified, refused or without a levers line left out; the intention-to-treat table is by the assignment at start, so a lever refused later leaves this row). Units that kept the assignment are not a random sample of the assigned ones: this row can be confounded and is no causal estimate; the intention-to-treat table is.\n`,
       table(EFFECT_HEAD, effectRows(s.perProtocol.effects))] : []),
     ...(s.sensitivity ? [`\nSensitivity (model switch): the objective over the requests billed as the unit's start class only (billing of its main's first request); ${s.sensitivity.switched} unit(s) used another billing class in a request. Same units and hours as the intention-to-treat table.\n`,
       table(EFFECT_HEAD, effectRows(s.sensitivity.effects))] : []),
@@ -266,7 +266,7 @@ export function renderGuards(g: GuardsSection): string {
     `\nKill switch (baseline per design: ${Object.entries(g.baselines).map(([d, b]) => `${d} \`${b}\``).join(", ")}; ≥ ${l.minSessions} units; acceptance worse by > ${pc(l.threshold)}, peeks/corrections more by > ${l.peekThreshold}/${l.correctionThreshold} per unit, rating lower by > ${l.ratingThreshold}). Written to experiments/state.json only with \`pi-analyse --apply\`.\n`,
     Object.keys(g.kill).length || !g.perStratum.length ? (Object.keys(g.kill).length ? Object.entries(g.kill).map(([a, r]) => `- disable \`${a}\`: ${r}`).join("\n") : "- no arm would be disabled") : "",
     ...g.perStratum.map((x) => Object.keys(x.kill).length ? Object.entries(x.kill).map(([a, r]) => `- design ${x.design} stratum ${x.stratum}: disable \`${a}\`: ${r}`).join("\n") : `- design ${x.design} stratum ${x.stratum}: no arm would be disabled`),
-  ].join("\n");
+  ].filter((x) => x !== "").join("\n");
 }
 
 export function renderLevers(s: LeversSection): string {

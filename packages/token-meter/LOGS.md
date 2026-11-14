@@ -598,7 +598,7 @@ How the Experiment section (and `meter-report --arms`) turns meter lines into ef
   no CI and no MDE; an MDE of 0 (zero variance) reads "n/a"; bootstrap draws with a non-finite ratio are dropped and counted.
 - **Balance table**: per stratum and arm, units over `MIN_HOURS`, their active hours, the units excluded, units without an objective.
 - **Per-protocol** (v2 engine's strata): the units whose every factor lever has `rb = "confirmed"` in the root main's last
-  levers line, labelled a non-randomized comparison (units that kept the assignment are self-selected). **Refusal rate** per factor =
+  levers line up to the period's end (its last: a lever refused after a model switch leaves the row; units without a levers line are left out), labelled a non-randomized comparison (units that kept the assignment are self-selected). **Refusal rate** per factor =
   units whose lever state is `refused` ÷ the stratum's units; above 0.20 the factor's add-on is flagged "broken add-on".
   **Context overflows** = count of lines with `errorKind = "context_overflow"` of the root ÷ its active hours, per arm.
   **Sensitivity (model switch)**: the effect again with each unit's objective over the requests whose billing class equals the class of
