@@ -31,8 +31,10 @@ export type SessionCtx = {
   appendEntry?(customType: string, data: unknown): void;
 };
 
+/** What a factor says about its lever beyond the id: `target`, the extension whose tool or command shows it is loaded (seed kinds, review F1b). */
+export type FactorInfo = { target?: string };
 /** A data-only lever kind (§12): the lever an id of its family names (`pi.activeTool(<name>)`), else undefined. */
-export type Kind = (id: LeverId) => Lever | undefined;
+export type Kind = (id: LeverId, factor?: FactorInfo) => Lever | undefined;
 
 export interface Lever<L extends Level = Level> {
   id: LeverId;

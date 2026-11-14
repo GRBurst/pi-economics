@@ -13,21 +13,21 @@ import { onAssigned, type Levers } from "../../packages/experiments/core/channel
 import { defaults } from "../../packages/experiments/core/settings.ts";
 import { install } from "../../packages/experiments/core/shell.ts";
 import { fakePi, type Entry } from "../../packages/experiments/test/fake.ts";
-import entryExt, { CUSTOM_TYPE, FIELD, RANGE, USED } from "./entry-ext/index.ts";
+import entryExt, { CUSTOM_TYPE, FIELD, RANGE, TARGET, USED } from "./entry-ext/index.ts";
 
 beforeEach(() => void delete (globalThis as { __piEconomicsWarned_v1?: unknown }).__piEconomicsWarned_v1);
 
 const LEVER = `session-entry(${CUSTOM_TYPE},${FIELD})`;
 
 /** `target`: where the target registers: "after" the engine (pi-economics' load order), "before" it (the consumer's order), or none. `branch`: the entries a resumed or reloaded runtime finds. */
-function runtime(levels: [number, number], target: "after" | "before" | "none", branch: Entry[] = []) {
+function runtime(levels: [number, number], target: "after" | "before" | "none", branch: Entry[] = [], declared = true) {
   const agentDir = mkdtempSync(join(tmpdir(), "session-entry-contract-"));
   const f = fakePi(undefined, branch);
   const heard: Levers[] = [];
   const used: Array<{ sessionId: string; value: number }> = [];
   onAssigned(f.events, (l) => void heard.push(l));
   f.events.on(USED, (u) => void used.push(u));
-  const settings = { ...defaults(), strata: { all: { match: {}, objective: "apiUsd", factors: [{ name: "nudge", lever: LEVER, levels }] } } };
+  const settings = { ...defaults(), strata: { all: { match: {}, objective: "apiUsd", factors: [{ name: "nudge", lever: LEVER, levels, ...(declared ? { target: TARGET } : {}) }] } } };
   if (target === "before") entryExt(f.pi);
   install(f.pi, { agentDir, settings, rng: () => 0.5, api: () => undefined });
   if (target === "after") entryExt(f.pi); // the engine registers first, as in the load order
@@ -60,10 +60,16 @@ test("T7c.3 the seed is written before the target reads: the target's session_st
   assert.equal(r.used[0].value, r.assigned, "adopted at its own session_start, not a later redraw");
 });
 
-test("T7c.3 no target loaded: nothing contradicts the seed, so the read-back confirms it (seed-tier limit: adoption is not observable)", () => {
+test("T7c.3 no target loaded: the seed alone is no evidence, the read-back stays unverified (review F1: our own seed never confirms)", () => {
   const r = runtime([RANGE[0], RANGE[1]], "none");
   assert.deepEqual(r.used, []);
-  assert.deepEqual(r.state, { v: r.assigned, s: "pe", a: r.assigned, rb: "confirmed", tier: "seed" });
+  assert.deepEqual(r.state, { v: r.assigned, s: "pe", a: r.assigned, rb: "unverified", tier: "seed" });
+});
+
+test("F1b the target adopts the level but the factor declares no target: nothing says the seed was read, unverified", () => {
+  const r = runtime([RANGE[0], RANGE[1]], "after", [], false);
+  assert.deepEqual(r.used, [{ sessionId: "s1", value: r.assigned }]);
+  assert.equal(r.state.rb, "unverified");
 });
 
 // Review F1 (a): extension order is the consumer's configuration. A target that runs BEFORE the engine records its own

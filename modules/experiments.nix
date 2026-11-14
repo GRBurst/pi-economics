@@ -74,8 +74,11 @@
     && (
       lib.elem lever catalogue.levers
       || (let args = kindArgs "pi.activeTool" lever; in args != null && lib.length args == 1 && lib.all plainName args)
-      || (let args = kindArgs "session-entry" lever; in args != null && lib.length args == 2 && lib.all plainName args)
+      || isSessionEntry lever
     );
+  isSessionEntry = lever:
+    lib.isString lever
+    && (let args = kindArgs "session-entry" lever; in args != null && lib.length args == 2 && lib.all plainName args);
   # (redesign M7c, M5b.2 review m2) A level reaches a levers line as a value:
   # a level name (core/settings.ts LEVEL: lowercase letters, digits, "_" and
   # "-", at most 32 characters, not starting with "_" or "-"), a number or a
@@ -174,6 +177,14 @@ in {
           then f.lever
           else builtins.toJSON (f.lever or null)
         }";
+      })
+      fs
+      # (redesign M7b review F1b) A session-entry factor names its target: the
+      # extension whose tool or command shows it is loaded; without one the
+      # read-back can never confirm (the seed is no evidence).
+      ++ map (f: {
+        assertion = !isSessionEntry (f.lever or null) || (lib.isString (f.target or null) && f.target != "");
+        message = "pi-economics: experiments factor ${factorName f} in stratum ${name} has a session-entry lever without a target";
       })
       fs
       ++ map (f: {

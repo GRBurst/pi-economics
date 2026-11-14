@@ -234,17 +234,20 @@ register is refused up front). The module refuses levels pi does not accept
 baseline, so `[false, true]` for a tool that is off by default.
 A third kind seeds any extension that adopts a value recorded on the session branch the way infinite-context does,
 without the repository naming it: `session-entry(<customType>,<field>)` (seed tier). The engine appends the custom entry
-`{ <field>: <level> }` at its own session start, before the target reads the branch, and reads back the latest entry of
-that type at `before_agent_start`: the seed itself when the target adopted it, the target's own record (source `ext`,
-`refused`) when it drew another value. The target is not named, so a target that is not loaded, or that ignores the seed
-without recording anything, reads back as `confirmed`: the read-back sees what the target records, never that it
-adopted. A record of the type that predates the seed and differs (a target that loads before pi-economics drew its own
-value) keeps the state `unverified` until a later entry shows the target's; a latest record that already holds the level is
-not seeded again (reload). Children are seeded with their root's level. The module refuses a factor whose `lever` is neither an id of
-`packages/experiments/addons/catalogue.json` nor one of the two kinds (`pi-economics: experiments factor <f> in stratum
-<s> has an unknown lever <lever>`: it would randomize nothing) and a level that is not a level name (`a-z`, `0-9`, `_`,
-`-`, at most 32 characters), a number or a boolean (`... has a level that is not a level name, a number or a boolean`);
-the package's `parseStrata` drops such a stratum with a warning.
+`{ <field>: <level> }` at its own session start, before the target reads the branch (it does not append again when the
+latest record already holds the level, a reload), and reads back the latest entry of that type at `before_agent_start`: the
+target's own record (source `ext`, `refused`) when it drew another value. The seed is no evidence of anything, so the factor
+names its `target` (`{ name, lever, levels, target }`: a name pi lists as a tool or a command, e.g. the extension's
+command): `confirmed` needs the target listed at read-back and the latest record to hold the level, else the state stays
+`unverified` (no target, target not listed, or a record of the type that predates the seed and differs: a target that
+loads before pi-economics drew its own value, until a later entry shows the target's). A listed target that ignores the
+seed without recording anything still reads `confirmed`: the read-back sees what the target records, never that it
+adopted. Children are seeded with their root's level. The module refuses a session-entry factor without a target
+(`pi-economics: experiments factor <f> in stratum <s> has a session-entry lever without a target`), a factor whose
+`lever` is neither an id of `packages/experiments/addons/catalogue.json` nor one of the two kinds (`… has an unknown
+lever <lever>`: it would randomize nothing) and a level that is not a level name (`a-z`, `0-9`, `_`, `-`, at most 32
+characters), a number or a boolean (`… has a level that is not a level name, a number or a boolean`); the package's
+`parseStrata` drops such a stratum with a warning.
 Corrections and `/rate` ratings go to `<agentDir>/guards/events.jsonl`. There
 is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 

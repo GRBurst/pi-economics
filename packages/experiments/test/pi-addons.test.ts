@@ -69,7 +69,6 @@ test("T7b.2 pi.activeTool(<name>): the kind resolves by id; a malformed id is no
   const { registry } = rig();
   const l = registry.lever(tool("codemode"))!;
   assert.deepEqual([l.id, l.target, l.scope, l.tier, l.readBackAt], [tool("codemode"), "pi", "session", "control", "before_agent_start"]);
-  assert.equal(registry.lever(tool("codemode")), l, "one lever per id");
   assert.equal(registry.lever(tool("mcp__srv.tool-1"))?.id, tool("mcp__srv.tool-1"));
   for (const bad of ["pi.activeTool", "pi.activeTool()", "pi.activeTool(a b)", "pi.activeTool(a,b)", "pi.activeTool((a))", "pi.activeTool(a)x", "x.activeTool(a)", "pi.activeTools(a)", "pi.thinkingLevel(a)", "pi.activeTool( a)"]) {
     assert.equal(registry.lever(bad), undefined, bad);

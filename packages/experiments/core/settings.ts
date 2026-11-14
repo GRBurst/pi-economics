@@ -187,14 +187,15 @@ function parseStratum(s: unknown): StratumSpec | string {
     if (!isRecord(f) || typeof f.name !== "string" || typeof f.lever !== "string" || !Array.isArray(f.levels) || f.levels.length !== 2 || !f.levels.every(isLevel)) {
       return `factor ${i + 1} needs a name, a lever and two levels`;
     }
-    const extraFactor = unknownKey(f, ["name", "lever", "levels"]);
+    const extraFactor = unknownKey(f, ["name", "lever", "levels", "target"]);
     if (extraFactor !== undefined) return `factor ${i + 1}: unknown key ${extraFactor}`;
     if (f.levels[0] === f.levels[1]) return `factor ${i + 1} has two equal levels`;
     const unnamed = f.levels.find((l) => typeof l === "string" && !LEVEL.test(l));
     if (unnamed !== undefined) return `factor ${i + 1} has a level that is not a level name: ${JSON.stringify(unnamed)}`;
     if (factors.some((g) => g.name === f.name)) return `factor name ${f.name} repeated`;
     if (factors.some((g) => g.lever === f.lever)) return `lever ${f.lever} repeated`;
-    factors.push({ name: f.name, lever: f.lever, levels: [f.levels[0], f.levels[1]] });
+    if (f.target !== undefined && (typeof f.target !== "string" || f.target === "")) return `factor ${i + 1}: target is not a non-empty string`;
+    factors.push({ name: f.name, lever: f.lever, levels: [f.levels[0], f.levels[1]], ...(f.target === undefined ? {} : { target: f.target }) });
   }
   if (factors.length > 6) return `${factors.length} factors, at most 6`;
   return { match, objective: objective as Objective, factors };

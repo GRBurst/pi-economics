@@ -161,10 +161,15 @@ export function install(pi: PiLike, deps: Deps): void {
     const spec = d?.id === a.design ? d?.factors.find((f) => f.name === name) : undefined;
     return spec?.levels ?? (a.factors?.[name] === undefined ? [] : [a.factors[name].assigned]);
   };
+  /** A factor's declared target in the design the session was assigned. */
+  const targetOf = (a: Assigned) => (name: string): string | undefined => {
+    const d = a.stratum === undefined ? undefined : designs.get(a.stratum);
+    return d?.id === a.design ? d?.factors.find((f) => f.name === name)?.target : undefined;
+  };
   const trackerOf = (a: Assigned) => {
     let t = tracked.get(a.sessionId);
     if (t === undefined) {
-      t = sessionLevers(registry, a, { child: a.parentSessionId !== undefined }, levelsOf(a), () => sessionOf(a.sessionId));
+      t = sessionLevers(registry, a, { child: a.parentSessionId !== undefined }, levelsOf(a), () => sessionOf(a.sessionId), targetOf(a));
       tracked.set(a.sessionId, t);
       t.refresh();
     }

@@ -244,8 +244,12 @@ ignored the tool) and `ext` otherwise (another extension, `/thinking` or pi's re
 source does not tell them apart). The data-only seed kind `session-entry(<customType>,<field>)` (redesign M7c; tier `seed`,
 read back at `before_agent_start`, also in a child, seeded with its root's level) appends the custom entry `{ <field>: <level> }`
 to the session branch before an extension that adopts recorded values reads it, and reads back the latest entry of that type:
-the seed when the target adopted it, the target's own record (`refused`, source `ext`) when it drew another value. The read-back
-sees what the target records: a target that is not loaded, or that ignores the seed without recording, reads `confirmed`.
+the seed when the target adopted it, the target's own record (`refused`, source `ext`) when it drew another value. The factor declares a `target` (a name pi
+lists as a tool or a command): the seed is no evidence, a target pi lists is, so `confirmed` needs the target listed at the
+read-back and the latest record to hold the level; without a `target`, or with the target not listed, the state stays
+`unverified`. A record the target wrote that differs from the level is `refused` whether or not the target is listed. A
+target that is listed but ignores the seed without recording anything still reads `confirmed`: the read-back sees what the
+target records, never that it adopted.
 When the branch already holds another record of the type at the seed (a target that runs before pi-economics recorded its own
 value; extension order is the consumer's), the seed is appended all the same but the state stays `unverified` until a later
 entry, the target's, shows what it used; the engine does not append the seed again when the latest record already holds

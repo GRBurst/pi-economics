@@ -67,8 +67,11 @@ export function halfFraction(factors: Factor[]): Arm[] {
 export type Level = string | number | boolean;
 /** A lever id, `<target>.<name>` (§7.1), e.g. "cache-lifecycle.mainCacheTtl". */
 export type LeverId = string;
-/** A two-level factor of a stratum: `levels[0]` is the low ("0") level, `levels[1]` the high ("1") one. */
-export type FactorSpec = { name: string; lever: LeverId; levels: readonly [Level, Level] };
+/**
+ * A two-level factor of a stratum: `levels[0]` is the low ("0") level, `levels[1]` the high ("1") one. `target`: for a
+ * session-entry lever, the extension whose tool or command shows it is loaded (the read-back gate); not part of the design id.
+ */
+export type FactorSpec = { name: string; lever: LeverId; levels: readonly [Level, Level]; target?: string };
 
 /** JSON with the keys of every object sorted and no whitespace; arrays keep their order. */
 export function canonical(x: unknown): string {

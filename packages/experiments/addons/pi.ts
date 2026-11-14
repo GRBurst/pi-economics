@@ -20,6 +20,7 @@ export type PiControl = {
   getActiveTools(): readonly string[];
   setActiveTools(names: string[]): void;
   getAllTools(): ReadonlyArray<{ name: string }>;
+  getCommands(): ReadonlyArray<{ name: string }>;
 };
 
 const safe = <T>(f: () => T): T | undefined => {

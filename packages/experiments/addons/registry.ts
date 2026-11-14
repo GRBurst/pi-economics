@@ -1,7 +1,7 @@
 // The add-on registry (redesign §7.4): which levers the engine can set, and the read-back that turns an assigned
 // level, its feasibility and an observation into one lever state (§5.3). Pure; the shell drives it.
 import type { Level, LeverId } from "../core/design.ts";
-import type { Kind, Lever, LeverState, Observed, SessionCtx, TargetEnv } from "./types.ts";
+import type { FactorInfo, Kind, Lever, LeverState, Observed, SessionCtx, TargetEnv } from "./types.ts";
 
 /** The target's own source: an observation never says pi-economics decided what it did not assign (or what was refused). */
 const own = (o: { v: Level; s: LeverState["s"] }): LeverState => ({ v: o.v, s: o.s === "pe" ? "ext" : o.s });
@@ -25,15 +25,16 @@ export function readBack(a: Level | undefined, feasible: readonly Level[] | unde
 }
 
 /** The levers the engine can set (`levers` by id, and the lever each data-only kind makes of an id it recognises); a target's levers are live once it is loaded in this runtime ("pi" always is). */
-export type Registry = { lever(id: LeverId): Lever | undefined; loaded(target: string): boolean; load(target: string): boolean };
+export type Registry = { lever(id: LeverId, factor?: FactorInfo): Lever | undefined; loaded(target: string): boolean; load(target: string): boolean };
 
 export function createRegistry(levers: readonly Lever[], kinds: readonly Kind[] = []): Registry {
   const byId = new Map(levers.map((l) => [l.id, l]));
   const live = new Set(["pi"]);
   return {
-    lever(id) {
+    // A kind makes a lever per call: it depends on the factor (its target), so none is shared by id.
+    lever(id, factor) {
       let l = byId.get(id);
-      for (const kind of kinds) if (l === undefined && (l = kind(id)) !== undefined) byId.set(id, l); // one lever per id
+      for (const kind of kinds) if (l === undefined) l = kind(id, factor);
       return l;
     },
     loaded: (target) => live.has(target),
@@ -48,8 +49,9 @@ type Track = { lever: Lever; name: string; level: Level; a: Level; ok: boolean; 
 /**
  * One session's levers: each factor of its assignment whose add-on is registered and whose target is loaded starts once
  * (feasibility, then `apply` when feasible); an observer's last defined observation stands until a new one differs.
- * `levelsOf(name)` = the design's levels of a factor. `ctxOf()` = the session as the add-ons see it now (its model, branch
- * and entry writer; default: the id only); a lever that follows the model is evaluated again by `modelChanged`.
+ * `levelsOf(name)` = the design's levels of a factor, `targetOf(name)` its declared target. `ctxOf()` = the session as the
+ * add-ons see it now (its model, branch and entry writer; default: the id only); a lever that follows the model is
+ * evaluated again by `modelChanged`.
  */
 export function sessionLevers(
   registry: Registry,
@@ -57,6 +59,7 @@ export function sessionLevers(
   env: TargetEnv,
   levelsOf: (factor: string) => readonly Level[],
   ctxOf: () => SessionCtx = () => ({ sessionId: assigned.sessionId }),
+  targetOf: (factor: string) => string | undefined = () => undefined,
 ) {
   const tracks = new Map<LeverId, Track>();
   const stateOf = (t: Track): LeverState | undefined => {
@@ -79,7 +82,8 @@ export function sessionLevers(
     refresh(): boolean {
       let started = false;
       for (const [name, f] of Object.entries(assigned.factors ?? {})) {
-        const lever = registry.lever(f.lever);
+        const target = targetOf(name);
+        const lever = registry.lever(f.lever, target === undefined ? undefined : { target });
         if (lever === undefined || tracks.has(lever.id) || !registry.loaded(lever.target)) continue;
         const t: Track = { lever, name, level: f.assigned, a: f.assigned, ok: false, obs: undefined };
         tracks.set(lever.id, t);

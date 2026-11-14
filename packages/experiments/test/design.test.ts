@@ -255,3 +255,13 @@ test("pinned: the generator table and the arm names of k = 4, 5, 6 (stored with 
   assert.deepEqual(names(6), ["000000", "100010", "010011", "110001", "001011", "101001", "011000", "111010",
                               "000101", "100111", "010110", "110100", "001110", "101100", "011101", "111111"]);
 });
+
+// Review F1b: the target of a factor is a read-back detail, not part of the design: the id (stored with every unit) ignores it.
+test("F1b a factor's target rides along on the design's factors and changes no design id", () => {
+  const f = { name: "a", lever: "session-entry(t,f)", levels: ["a", "b"] as [string, string] };
+  const plain = designFor("s", { factors: [f] });
+  const targeted = designFor("s", { factors: [{ ...f, target: "entry-ext" }] });
+  assert.equal(targeted.id, plain.id);
+  assert.equal(targeted.factors[0].target, "entry-ext");
+  assert.deepEqual(targeted.arms, plain.arms);
+});

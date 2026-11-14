@@ -109,6 +109,7 @@ in {
     factor = n: {
       name = "f${toString n}";
       lever = "session-entry(t,f${toString n})";
+      target = "t";
       levels = ["a" "b"];
     };
     withFactors = k:
@@ -139,11 +140,13 @@ in {
           {
             name = "one";
             lever = "session-entry(t,one)";
+            target = "t";
             levels = lib.take 1 levels;
           }
           {
             name = "two";
             lever = "session-entry(t,two)";
+            target = "t";
             levels = ["a" "b"];
           }
         ];
@@ -168,20 +171,24 @@ in {
             {
               name = "same";
               lever = "session-entry(t,a)";
+              target = "t";
               levels = ["a" "a"];
             }
             {
               name = "none";
               lever = "session-entry(t,b)";
+              target = "t";
             }
             {
               name = "text";
               lever = "session-entry(t,c)";
+              target = "t";
               levels = "ab";
             }
             {
               name = "ok";
               lever = "session-entry(t,d)";
+              target = "t";
               levels = ["a" "b"];
             }
           ];
@@ -189,6 +196,7 @@ in {
             {
               name = {x = 1;};
               lever = "session-entry(t,e)";
+              target = "t";
               levels = ["a"];
             }
           ];
@@ -288,6 +296,7 @@ in {
           {
             name = "f";
             lever = "session-entry(t,f)";
+            target = "t";
             inherit levels;
           }
         ];
@@ -304,6 +313,40 @@ in {
     ++ eq "an attribute set as a level" (bad ["ok" {a = 1;}]) [msg]
     ++ eq "null as a level" (bad ["ok" null]) [msg]
     ++ holds "token-meter and experiments say the rule in the same line" (lib.elem line (lines ../../../packages/token-meter/core/levers.ts) && lib.elem line (lines ../../../packages/experiments/core/settings.ts));
+
+  # (redesign M7b review F1b) A session-entry factor names its target: the
+  # extension whose tool or command shows it is loaded. Without one the
+  # read-back can never confirm (the seed is no evidence), so the factor is
+  # refused; other levers have no use for it.
+  experiments-session-entry-target = let
+    msg = "pi-economics: experiments factor f in stratum cloud has a session-entry lever without a target";
+    one = factor:
+      eval ".pi/agent" {
+        settings.strata.cloud.factors = [
+          ({
+              name = "f";
+              levels = ["a" "b"];
+            }
+            // factor)
+        ];
+      }
+      withActor;
+    bad = factor: failed msg (one ({lever = "session-entry(t,f)";} // factor));
+  in
+    eq "a target" (bad {target = "entry-ext";}) []
+    ++ eq "no target" (bad {}) [msg]
+    ++ eq "an empty target" (bad {target = "";}) [msg]
+    ++ eq "a target that is no string" (bad {target = 3;}) [msg]
+    ++ eq "a list as target" (bad {target = ["a"];}) [msg]
+    ++ eq "other levers need none" (failed msg (one {lever = "cache-lifecycle.mainCacheTtl";})) []
+    ++ eq "a pi control needs none" (failed msg (one {
+      lever = "pi.activeTool(codemode)";
+      levels = [false true];
+    })) []
+    ++ eq "no other assertion fails for a target" (failed "pi-economics:" (one {
+      lever = "session-entry(t,f)";
+      target = "entry-ext";
+    })) [];
 
   # (M4.16) The host's combination from W3 on (spec §9.1): M2–M4's extension
   # components, piSettings off (the host's own script runs until W6). Children

@@ -26,12 +26,19 @@ const custom = (customType: string, data?: unknown): Entry => ({ type: "custom",
 function rig() {
   const branch: Entry[] = [];
   const appended: Array<[string, unknown]> = [];
-  const pi = { appendEntry: (t: string, d?: unknown) => void (appended.push([t, d]), branch.push(custom(t, d))) };
+  // What pi lists: the target is "loaded" when a tool or a command carries its name (review F1b).
+  const listed = { tools: [] as string[], commands: ["entry-ext"] };
+  const pi = {
+    appendEntry: (t: string, d?: unknown) => void (appended.push([t, d]), branch.push(custom(t, d))),
+    getAllTools: () => listed.tools.map((name) => ({ name })),
+    getCommands: () => listed.commands.map((name) => ({ name })),
+  };
   const registry = createRegistry([], [sessionEntryKind(pi)]);
   const at = { sessionId: "s1", branch: () => branch };
-  const session = (assigned: Level, levels: readonly Level[] = [100, 200], id = ID, env = { child: false }) =>
-    sessionLevers(registry, { sessionId: "s1", factors: { f: { lever: id, assigned } } }, env, () => levels, () => at);
-  return { branch, appended, registry, at, session };
+  // `target`: the factor's declared target (null: none declared); by default one pi lists.
+  const session = (assigned: Level, levels: readonly Level[] = [100, 200], id = ID, env = { child: false }, target: string | null = "entry-ext") =>
+    sessionLevers(registry, { sessionId: "s1", factors: { f: { lever: id, assigned } } }, env, () => levels, () => at, () => (target === null ? undefined : target));
+  return { branch, appended, registry, at, session, listed };
 }
 
 test("T7c.1 session-entry(<customType>,<field>): parsed; anything else is no such lever", () => {
@@ -44,11 +51,10 @@ test("T7c.1 session-entry(<customType>,<field>): parsed; anything else is no suc
   }
 });
 
-test("T7c.1 the kind resolves the id to a seed-tier lever of pi, one lever per id; a malformed id and other kinds are none", () => {
+test("T7c.1 the kind resolves the id to a seed-tier lever of pi; a malformed id and other kinds are none", () => {
   const { registry } = rig();
   const l = registry.lever(ID)!;
   assert.deepEqual([l.id, l.target, l.scope, l.tier, l.readBackAt], [ID, "pi", "session", "seed", "before_agent_start"]);
-  assert.equal(registry.lever(ID), l);
   assert.equal(registry.lever("session-entry(a)"), undefined);
   assert.equal(registry.lever("pi.thinkingLevel"), undefined);
   assert.equal(registry.loaded("pi"), true);
@@ -151,7 +157,8 @@ function engine(factors: unknown[], preload: Entry[] = []) {
 const seeds = (e: ReturnType<typeof engine>) => e.entries.filter((x) => x.customType === "entry-ext:settings");
 
 test("T7c.2 the engine seeds the level at session_start, before a target's own session_start, and reads it back at the first prompt", () => {
-  const e = engine([{ name: "nudge", lever: ID, levels: [100, 200] }]);
+  const e = engine([{ name: "nudge", lever: ID, levels: [100, 200], target: "entry-ext" }]);
+  e.pi.registerCommand("entry-ext"); // pi lists the target
   e.start("s1");
   const a = e.heard[0];
   const assigned = a.factors!.nudge.assigned;
@@ -230,4 +237,86 @@ test("F1a the engine: a reload (a new runtime on the same branch) does not seed 
   other.prompt("s1");
   assert.equal(other.heard.at(-1)!.levers[ID].rb, "unverified");
   assert.deepEqual(seeds(other).map((x) => x.data), [{ nudge: 150 }, { nudge: other.heard[0].factors!.nudge.assigned }]);
+});
+
+// Review F1 (b): the target is declared on the factor and gates the confirmation: our own seed is never evidence, a
+// target pi lists (a tool or a command of its name) is. A contradiction refuses whatever is listed.
+test("F1b the declared target must be listed (a tool or a command of its name) at read-back for `confirmed`; otherwise unverified", () => {
+  const r = rig();
+  r.listed.commands = [];
+  const s = r.session(100);
+  s.refresh();
+  assert.equal(s.observe("before_agent_start", r.at), false);
+  assert.deepEqual(s.states()[ID], { v: 100, s: "pe", a: 100, rb: "unverified", tier: "seed" }, "seed only, target not listed");
+  r.listed.tools = ["other", "entry-ext"]; // listed by a tool
+  assert.equal(s.observe("before_agent_start", r.at), true);
+  assert.equal(s.states()[ID].rb, "confirmed");
+  r.listed.tools = [];
+  r.listed.commands = ["entry-ext"]; // or by a command: read at each read-back, the last observation stands
+  const again = rig();
+  again.listed.commands = ["entry-ext"];
+  const s2 = again.session(100);
+  s2.refresh();
+  s2.observe("before_agent_start", again.at);
+  assert.equal(s2.states()[ID].rb, "confirmed");
+});
+
+test("F1b no target declared on the factor: the state can never be confirmed (nothing says the seed was read)", () => {
+  const r = rig();
+  const s = r.session(100, [100, 200], ID, { child: false }, null);
+  s.refresh();
+  s.observe("before_agent_start", r.at);
+  assert.deepEqual(s.states()[ID], { v: 100, s: "pe", a: 100, rb: "unverified", tier: "seed" });
+});
+
+test("F1b the name must match exactly; pi.getAllTools / getCommands that throw or are absent list nothing", () => {
+  const r = rig();
+  r.listed.commands = ["entry-ext2", "Entry-ext", "entry"];
+  const s = r.session(100);
+  s.refresh();
+  s.observe("before_agent_start", r.at);
+  assert.equal(s.states()[ID].rb, "unverified");
+  const registry = createRegistry([], [sessionEntryKind({ appendEntry: () => {}, getAllTools: () => { throw new Error("stale"); }, getCommands: undefined as never })]);
+  const lever = registry.lever(ID, { target: "entry-ext" })!;
+  const at = { sessionId: "s1", branch: () => [custom("entry-ext:settings", { nudge: 100 })] };
+  lever.apply(at, 100); // already the latest record: no append, the seed is the level
+  assert.equal(lever.observe!(at), undefined);
+});
+
+test("F1b a contradiction refuses whether or not the target is listed (a record the target wrote is evidence of itself)", () => {
+  for (const commands of [[], ["entry-ext"]]) {
+    const r = rig();
+    r.listed.commands = commands;
+    const s = r.session(100);
+    s.refresh();
+    r.branch.push(custom("entry-ext:settings", { nudge: 175 }));
+    s.observe("before_agent_start", r.at);
+    assert.deepEqual(s.states()[ID], { v: 175, s: "ext", a: 100, rb: "refused", tier: "seed" }, JSON.stringify(commands));
+  }
+});
+
+test("F1b the registry hands the factor to the kind; two sessions of one process may declare different targets (no lever is shared by id)", () => {
+  const r = rig();
+  const a = r.registry.lever(ID, { target: "a" })!;
+  const b = r.registry.lever(ID, { target: "b" })!;
+  assert.notEqual(a, b);
+  assert.equal(a.id, b.id);
+  assert.equal(r.registry.lever(ID)!.id, ID, "a lookup without a factor still resolves the kind");
+});
+
+test("F1b the engine: the factor's target reaches the add-on; a command of that name that pi lists confirms the read-back", () => {
+  const factors = [{ name: "nudge", lever: ID, levels: [100, 200], target: "entry-ext" }];
+  const e = engine(factors);
+  e.start("s1");
+  e.prompt("s1");
+  assert.equal(e.heard.at(-1)!.levers[ID].rb, "unverified", "no command or tool of that name");
+  e.pi.registerCommand("entry-ext");
+  e.entries.push(); // nothing new on the branch: only the listing changed
+  e.prompt("s1");
+  assert.equal(e.heard.at(-1)!.levers[ID].rb, "confirmed");
+  const none = engine([{ name: "nudge", lever: ID, levels: [100, 200] }]);
+  none.pi.registerCommand("entry-ext");
+  none.start("s1");
+  none.prompt("s1");
+  assert.equal(none.heard.at(-1)!.levers[ID].rb, "unverified", "no target declared");
 });

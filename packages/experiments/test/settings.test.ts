@@ -185,6 +185,21 @@ test("T7c.4 a factor level that is no level name (the levers line's rule) drops 
   }
 });
 
+// Review F1b: a session-entry factor names the extension whose tool or command shows it is loaded (the read-back gate).
+test("F1b a factor may carry a `target` (a non-empty string), kept on its spec; any other value drops the stratum", () => {
+  const stratum = (target: unknown) => ({ match: {}, factors: [{ name: "a", lever: "session-entry(t,f)", levels: ["a", "b"], target }] });
+  const ok = parseStrata({ s: stratum("entry-ext") }, PLANS, V4_FACTORS);
+  assert.deepEqual(ok.warnings, []);
+  assert.deepEqual(ok.strata.s.factors, [{ name: "a", lever: "session-entry(t,f)", levels: ["a", "b"], target: "entry-ext" }]);
+  const none = parseStrata({ s: { match: {}, factors: [{ name: "a", lever: "x.a", levels: ["a", "b"] }] } }, PLANS, V4_FACTORS);
+  assert.deepEqual(Object.keys(none.strata.s.factors[0]), ["name", "lever", "levels"], "no target key when none is given");
+  for (const bad of ["", 3, true, null, ["a"], {}]) {
+    const got = parseStrata({ s: stratum(bad) }, PLANS, V4_FACTORS);
+    assert.deepEqual(got.strata, {}, JSON.stringify(bad));
+    assert.deepEqual(got.warnings, ["experiments stratum s dropped: factor 1: target is not a non-empty string"], JSON.stringify(bad));
+  }
+});
+
 test("strata: a stratum named __proto__ is an own key like any other (review NIT)", () => {
   const got = parseStrata(JSON.parse('{"__proto__": {"match": {"billing": ["api"]}}}'), {}, V4_FACTORS);
   assert.equal(Object.getPrototypeOf(got.strata), Object.prototype);

@@ -37,6 +37,7 @@ export function fakeControl(o: { level?: string; active?: string[]; all?: string
       state.active = names.filter((n) => all.includes(n));
     },
     getAllTools: () => all.map((name) => ({ name })),
+    getCommands: () => [] as Array<{ name: string }>,
   };
   return { control, state };
 }
@@ -52,6 +53,7 @@ export function fakePi(controlOptions?: Parameters<typeof fakeControl>[0], initi
     ...api,
     on: (n: string, h: any) => void handlers.set(n, [...(handlers.get(n) ?? []), h]),
     registerCommand: (n: string) => void commands.push(n),
+    getCommands: () => commands.map((name) => ({ name })),
     appendEntry: (customType: string, data?: unknown) => void entries.push({ type: "custom", customType, data }),
     events,
   };

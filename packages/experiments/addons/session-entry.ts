@@ -10,8 +10,12 @@
 import type { Kind, Lever, Observed, SessionCtx } from "./types.ts";
 import type { Level } from "../core/design.ts";
 
-/** What the add-on uses of pi's ExtensionAPI. */
-export type Appender = { appendEntry(customType: string, data?: unknown): void };
+/** What the add-on uses of pi's ExtensionAPI: the entry writer, and the listings that show a target is loaded (tools, commands). */
+export type Appender = {
+  appendEntry(customType: string, data?: unknown): void;
+  getAllTools(): ReadonlyArray<{ name: string }>;
+  getCommands(): ReadonlyArray<{ name: string }>;
+};
 
 /** A customType or field: no parentheses, commas, space, tab or line break (an id stays one token on a levers line; modules/experiments.nix says the same). */
 const NAME = "[^(), \\t\\r\\n]+";
@@ -38,20 +42,29 @@ const entries = (ctx: SessionCtx): readonly unknown[] | undefined => {
   try { return ctx.branch?.(); } catch { return undefined; }
 };
 
-function sessionEntry(pi: Appender, customType: string, field: string): Lever {
+function sessionEntry(pi: Appender, customType: string, field: string, target: string | undefined): Lever {
   // Per session: where the engine's seed sits on the branch, when the type already had a record before it (review F1: a
   // target that ran before the engine drew and recorded its own value, so the seed that follows is no evidence of anything).
-  const seeded = new Map<string, { at: number; recordBefore: boolean }>();
+  const seeded = new Map<string, { level: Level; at: number; recordBefore: boolean }>();
+  // Review F1b: the seed is no evidence, a target pi lists is: a tool or a command of its name (read at each read-back).
+  const listed = (): boolean => {
+    if (target === undefined) return false;
+    const has = (names: () => ReadonlyArray<{ name: string }>) => { try { return names().some((x) => x.name === target); } catch { return false; } };
+    return has(() => pi.getAllTools()) || has(() => pi.getCommands());
+  };
   return {
     id: `session-entry(${customType},${field})`, target: "pi", scope: "session", tier: "seed", readBackAt: "before_agent_start",
     feasible: (_env, levels) => levels,
     apply(ctx, level) {
       const branch = entries(ctx);
       const prior = branch === undefined ? undefined : latest(branch, customType);
-      if (prior !== undefined && isRecord(prior.data) && prior.data[field] === level) return; // already the latest record (a reload; or the target ran first and used it)
       const at = branch?.length ?? -1; // where the seed will sit
+      if (prior !== undefined && isRecord(prior.data) && prior.data[field] === level) {
+        seeded.set(ctx.sessionId, { level, at, recordBefore: false }); // already the latest record (a reload; or the target ran first and used it)
+        return;
+      }
       pi.appendEntry(customType, { [field]: level });
-      seeded.set(ctx.sessionId, { at, recordBefore: prior !== undefined });
+      seeded.set(ctx.sessionId, { level, at, recordBefore: prior !== undefined });
     },
     observe(ctx): Observed {
       const branch = entries(ctx);
@@ -60,13 +73,14 @@ function sessionEntry(pi: Appender, customType: string, field: string): Lever {
       const seed = seeded.get(ctx.sessionId);
       if (seed?.recordBefore && l.at <= seed.at) return undefined; // the latest record is our own seed, over another one: nothing from the target yet
       const v = isRecord(l.data) ? l.data[field] : undefined;
-      return isLevel(v) ? { v, s: "ext" } : undefined; // the latest entry of the type decides, whatever it holds
+      if (!isLevel(v) || (v === seed?.level && !listed())) return undefined; // what would confirm needs the target listed; a contradiction refuses either way
+      return { v, s: "ext" }; // the latest entry of the type decides, whatever it holds
     },
   };
 }
 
 /** The lever kind of `session-entry(<customType>,<field>)` ids. */
-export const sessionEntryKind = (pi: Appender): Kind => (id) => {
+export const sessionEntryKind = (pi: Appender): Kind => (id, factor) => {
   const p = parseSessionEntry(id);
-  return p === undefined ? undefined : sessionEntry(pi, p.customType, p.field);
+  return p === undefined ? undefined : sessionEntry(pi, p.customType, p.field, factor?.target);
 };
