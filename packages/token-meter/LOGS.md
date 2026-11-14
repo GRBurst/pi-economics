@@ -400,8 +400,8 @@ the session is a unit of its own, so it is `false` there.
 | `sessionId` | string | yes | main session |
 | `design` | string | eligible; with `stratum` | the stratum's design id: 12 hex of the design's content (levers, levels, generators) |
 | `mode` | `off` \| `explore` \| `exploit` | yes | selection mode |
-| `eligible` | boolean | yes | the session takes part: a main whose model at session start matched a stratum, `mode` not `off`, an arm left enabled, and every gating lever (infinite-context's nudge) loaded and settable for its model |
-| `reason` | string | no; ineligible only | why a session that matched a stratum was not drawn: a gating lever's target is not loaded, or no level can be set for the model (infinite-context: the matched rule has no range). Not a refusal: such a session has no arm, no levers line state and is in no refusal rate |
+| `eligible` | boolean | yes | the session takes part: a main whose model at session start matched a stratum, `mode` not `off`, an arm left enabled, and every gating lever (infinite-context's nudge) of the stratum's design loaded and settable for its model: one failing makes the session ineligible whatever its other factors (a partial design would break the factorial) |
+| `reason` | string | no; ineligible only | why a session that matched a stratum was not drawn: a gating lever's target is not loaded, or no level can be set for the model (infinite-context: the matched rule has no range; the reason says so). Not a refusal: such a session has no arm, no levers line state and is in no refusal rate |
 | `stratum` | string | eligible | the first stratum (setting `strata`, default: one per billing class) the model matched |
 | `arm` | string | eligible only | one bit per factor in factor order, `1` = the high level (`""` for a stratum without factors) |
 | `factors` | object | eligible only | factor name → `{ "lever": "<target>.<name>", "assigned": <level> }` |
@@ -414,7 +414,7 @@ stratum (`experiments/blocks.json`); exploit samples the design's posterior in i
 ```jsonl
 {"v":2,"ts":"2026-11-13T09:00:00.000Z","sessionId":"s-main","design":"b4d458675108","mode":"explore","eligible":true,"stratum":"api","arm":"010","factors":{"warmPolicy":{"lever":"cache-lifecycle.warmPolicy","assigned":"native"},"mainCacheTtl":{"lever":"cache-lifecycle.mainCacheTtl","assigned":"1h"},"maskOnCold":{"lever":"cache-lifecycle.maskOnCold","assigned":"off"}}}
 {"v":2,"ts":"2026-11-13T09:30:00.000Z","sessionId":"s-local","design":"66bba6ce507d","mode":"explore","eligible":true,"stratum":"local","arm":"1","factors":{"nudge":{"lever":"infinite-context.nudgeAtTokens","assigned":0.75}}}
-{"v":2,"ts":"2026-11-13T09:45:00.000Z","sessionId":"s-fixed","design":"66bba6ce507d","mode":"explore","eligible":false,"reason":"infinite-context.nudgeAtTokens: no level can be set for the session's model","stratum":"local"}
+{"v":2,"ts":"2026-11-13T09:45:00.000Z","sessionId":"s-fixed","design":"66bba6ce507d","mode":"explore","eligible":false,"reason":"infinite-context.nudgeAtTokens: no level can be set for the session's model (the matched rule has no range)","stratum":"local"}
 {"v":2,"ts":"2026-11-13T10:00:00.000Z","sessionId":"s-off","design":"b4d458675108","mode":"off","eligible":false,"stratum":"api"}
 {"v":2,"ts":"2026-11-13T11:00:00.000Z","sessionId":"s-other","mode":"explore","eligible":false}
 ```

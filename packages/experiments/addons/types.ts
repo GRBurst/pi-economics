@@ -71,6 +71,8 @@ export interface Lever<L extends Level = Level> {
    * stays the add-on's.
    */
   gate?: true;
+  /** What an infeasible gating level means for this lever, appended to the ineligible row's `reason` (e.g. "the matched rule has no range"). */
+  gateWhy?: string;
   /** "model": feasibility and value depend on the session's model, so a model switch re-evaluates and re-applies the level. */
   follow?: "model";
   /** Absent: no observer (the state stays unverified). */

@@ -302,7 +302,7 @@ export function install(pi: PiLike, deps: Deps): void {
       if (lever?.gate !== true) continue;
       if (!registry.loaded(lever.target)) return `${lever.id}: the target extension is not loaded`;
       const ok = lever.feasible({ child: false, ...(m === undefined ? {} : { model: m }) }, f.levels);
-      if (!f.levels.every((l) => ok.includes(l))) return `${lever.id}: no level can be set for the session's model`;
+      if (!f.levels.every((l) => ok.includes(l))) return `${lever.id}: no level can be set for the session's model${lever.gateWhy === undefined ? "" : ` (${lever.gateWhy})`}`;
     }
     return undefined;
   };

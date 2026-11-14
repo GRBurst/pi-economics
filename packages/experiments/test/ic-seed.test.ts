@@ -57,7 +57,7 @@ const records = (entries: Entry[]) => entries.filter((e) => e.customType === "in
  * infinite-context, which registers its tool and follows the model at session_start and model_select like the patch.
  * `table`: the rules the stand-in resolves (default: RULES, the file's); `ignoresSeed`: it draws whatever it finds.
  */
-function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string, Rule>; ignoresSeed?: boolean; entries?: Entry[]; draw?: number; rng?: number; silent?: boolean; others?: string[]; defaultStrata?: boolean } = {}) {
+function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string, Rule>; ignoresSeed?: boolean; entries?: Entry[]; draw?: number; rng?: number; silent?: boolean; others?: string[]; defaultStrata?: boolean; strata?: Record<string, unknown>; mode?: "off" | "explore" } = {}) {
   const agentDir = o.agentDir ?? mkdtempSync(join(tmpdir(), "experiments-ic-"));
   mkdirSync(join(agentDir, "infinite-context"), { recursive: true });
   writeFileSync(join(agentDir, "infinite-context", "settings.json"), JSON.stringify(FILE));
@@ -72,7 +72,7 @@ function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string
     mkdirSync(join(agentDir, "token-meter"), { recursive: true });
     writeFileSync(join(agentDir, "token-meter", "settings.json"), JSON.stringify({ plans: { example: { billing: "local", windows: [] } } }));
   }
-  install(f.pi, { agentDir, settings: { ...defaults(), ...(o.defaultStrata ? {} : { strata: { any: { match: {}, factors: [NUDGE] } } }) }, rng: () => o.rng ?? 0.5, api: () => undefined });
+  install(f.pi, { agentDir, settings: { ...defaults(), ...(o.mode === undefined ? {} : { mode: o.mode }), ...(o.defaultStrata ? {} : { strata: o.strata ?? { any: { match: {}, factors: [NUDGE] } } }) }, rng: () => o.rng ?? 0.5, api: () => undefined });
   const table = o.table ?? RULES;
   tools.push(...(o.others ?? []));
   if (o.loaded !== false) tools.push("context_fold");
@@ -206,7 +206,7 @@ test("T7a.4 model_select to a rule with the same range: nothing to seed (the ext
 });
 
 const NOT_LOADED = "infinite-context.nudgeAtTokens: the target extension is not loaded";
-const NO_LEVEL = "infinite-context.nudgeAtTokens: no level can be set for the session's model";
+const NO_LEVEL = "infinite-context.nudgeAtTokens: no level can be set for the session's model (the matched rule has no range)";
 const row = (r: { agentDir: string }, sid: string) =>
   readFileSync(join(r.agentDir, "experiments", "assignments.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((x) => x.sessionId === sid);
 
@@ -254,6 +254,37 @@ test("P12 the extension is not loaded: ineligible with a reason, whatever the ru
     assert.deepEqual([x.eligible, x.reason, x.arm], [false, NOT_LOADED, undefined], String(defaultStrata));
     assert.deepEqual(r.entries.map((e) => e.customType), [ENTRY]);
     assert.deepEqual(query(r.events, "s1")!.levers, {});
+  }
+});
+
+// F1: the gate is all-or-nothing per session: a partial design would break the factorial, so one failing gating lever makes the
+// session ineligible whatever its other factors (the design record's own example is a TTL factor with the nudge).
+test("review F1 a design with a TTL factor and the nudge, on a fixed-rule model: the whole session is ineligible (no partial design)", () => {
+  const TTL = { name: "ttl", lever: "cache-lifecycle.mainCacheTtl", levels: ["5m", "1h"] };
+  const mixed = { any: { match: {}, factors: [TTL, NUDGE] } };
+  const fixed = runtime({ strata: mixed });
+  fixed.start("s1", opus);
+  const x = row(fixed, "s1");
+  assert.deepEqual([x.eligible, x.arm, x.factors, x.reason], [false, undefined, undefined, NO_LEVEL]);
+  const ranged = runtime({ strata: mixed });
+  ranged.start("s1", haiku);
+  assert.deepEqual([row(ranged, "s1").eligible, Object.keys(row(ranged, "s1").factors)], [true, ["ttl", "nudge"]], "negative case: a range rule draws both factors");
+});
+
+// F3: every level must be settable (not some), and a mode-off row says nothing about a gate.
+test("review F3 a design whose levels are only partly settable (0.5 and 2 on a range rule) is ineligible", () => {
+  const partly = { any: { match: {}, factors: [{ name: "nudge", lever: LEVER, levels: [0.5, 2] }] } };
+  const r = runtime({ strata: partly });
+  r.start("s1", haiku);
+  assert.deepEqual([row(r, "s1").eligible, row(r, "s1").reason], [false, NO_LEVEL]);
+});
+
+test("review F3 mode off: the row carries no reason, whether or not the gate would fail (extension not loaded, fixed rule)", () => {
+  for (const [loaded, model] of [[false, haiku], [true, opus]] as const) {
+    const r = runtime({ mode: "off", loaded });
+    r.start("s1", model);
+    const x = row(r, "s1");
+    assert.deepEqual([x.eligible, x.mode, "reason" in x], [false, "off", false], String(loaded));
   }
 });
 
