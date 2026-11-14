@@ -49,6 +49,7 @@ test("T5b1.9 contract: v2 rows, eligible (design, stratum, arm, factors) and ine
     [{ ...ineligible("n"), parentSessionId: "" }, "assignments.parentSessionId"],
     [{ ...ineligible("n"), reason: 3 }, "assignments.reason"],
     [{ ...ineligible("n"), reason: "" }, "assignments.reason"],
+    [{ ...eligible("m", "010"), reason: "why" }, "assignments.reason"],
   ];
   for (const [row, want] of bad) assert.deepEqual(fields(check(logs([], [row]))), [want], JSON.stringify(row));
 });

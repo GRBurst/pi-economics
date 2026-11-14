@@ -109,6 +109,7 @@ const ASSIGNMENTS: Rule[] = [
   // A stratum without factors has one arm, named "" (no bits).
   ...every({ design: str, stratum: str, arm: (v) => typeof v === "string", factors: obj }, "an eligible v2 assignment", (l) => isV2(l) && l.eligible === true),
   ...every({ arm: (v) => v === undefined, factors: (v) => v === undefined }, "an ineligible v2 assignment has neither arm nor factors", (l) => isV2(l) && l.eligible === false),
+  ...every({ reason: (v) => v === undefined }, "an eligible v2 assignment has no reason", (l) => isV2(l) && l.eligible === true),
   ...optional({ design: str, stratum: str, parentSessionId: str }, "assignments v2", isV2),
   ...optional({ reason: str }, "an ineligible v2 assignment may say why", (l) => isV2(l) && l.eligible === false),
 ];
