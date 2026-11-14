@@ -57,7 +57,7 @@ test("T9.3 the engine adopts the file's arm instead of drawing: one v2 row, the 
 });
 
 test("T9.3 / review M1 a file that is not a v1 assignment (unparseable included) is ignored with exactly one notification and the session is drawn as before (mode off: ineligible); an absent file is silent", () => {
-  for (const bad of ["{not json", "", "null", { ...FILE, v: 2 }, { ...FILE, arm: 3 }, { ...FILE, factors: { x: { lever: "a.b" } } }, { ...FILE, stratum: undefined }]) {
+  for (const bad of ["{not json", "", "null", { ...FILE, v: 2 }, { ...FILE, arm: 3 }, { ...FILE, factors: { x: { lever: "a.b" } } }, { ...FILE, stratum: undefined }, { ...FILE, stratum: "api" }]) {
     delete (globalThis as { __piEconomicsWarned_v1?: unknown }).__piEconomicsWarned_v1;
     const w = world({ file: bad });
     w.start("s1");

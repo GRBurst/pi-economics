@@ -235,9 +235,9 @@ export function install(pi: PiLike, deps: Deps): void {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined; // no file: a drawn session
       f = undefined; // unreadable or unparseable: named below
     }
-    const ok = isRecord(f) && f.v === 1 && typeof f.design === "string" && typeof f.stratum === "string" && typeof f.arm === "string"
+    const ok = isRecord(f) && f.v === 1 && typeof f.design === "string" && f.stratum === "bench" && typeof f.arm === "string"
       && isRecord(f.factors) && Object.values(f.factors).every((x) => isRecord(x) && typeof x.lever === "string" && isLevel(x.assigned));
-    if (!ok) { warnOnce(ctx, "experiments:assignment-file", `experiments: ignores ${file}: not a v 1 assignment (design, stratum, arm, factors of lever and assigned level)`); return undefined; }
+    if (!ok) { warnOnce(ctx, "experiments:assignment-file", `experiments: ignores ${file}: not a v 1 bench assignment (design, stratum "bench", arm, factors of lever and assigned level)`); return undefined; }
     const a = f as { design: string; stratum: string; arm: string; factors: AssignmentV2["factors"] };
     return { v: 2, ts: new Date().toISOString(), sessionId: sid, design: a.design, mode: settings.mode, eligible: true, stratum: a.stratum, arm: a.arm, factors: a.factors };
   };
