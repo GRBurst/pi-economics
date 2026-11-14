@@ -23,6 +23,14 @@
 # (its row in assignments.jsonl), with the main as parent; the child writes no
 # row (redesign M5b.2: child mode, an in-memory child of a --no-session main).
 # pi prints no startup timings for a child.
+# Last, a model switch (redesign M7a, review m5): the experiments engine seeds
+# infinite-context's fold-reminder limit from its model_select handler, which
+# the guard registers inside experiments' session_start, so it must still run
+# before the extension's own handler (registered at load): a probe switches the
+# model at its session_start, and the branch's settings records must read
+# seed (no nudgeAtPercent), the extension's completed record, then the seed of
+# the new rule's range and the extension's completed record of that, with the
+# seed's tokens kept.
 {
   lib,
   pkgs,
@@ -38,7 +46,23 @@
       tokenMeter.enable = true;
       cacheLifecycle.enable = true;
       experiments.enable = true;
+      # The model switch at the end: one stratum with one factor on the extension's limit, a fraction of the range of the
+      # rule that matches the model.
+      experiments.settings.strata.any = {
+        match = {};
+        factors = [
+          {
+            name = "nudge";
+            lever = "infinite-context.nudgeAtTokens";
+            levels = [0.25 0.75];
+          }
+        ];
+      };
       infiniteContext.enable = true;
+      infiniteContext.reminders.overrides = {
+        fake.nudgeAtTokens = [100000 200000];
+        "fake/m2".nudgeAtTokens = [300000 400000];
+      };
       extensions.actor-subagents = actorEntry;
       # Sorts before the components by name.
       extensions.a-reg = {
@@ -163,5 +187,24 @@ in
     jq -se --arg sid "$sid" --arg m "$main" --argjson row "$row" \
       '.[] | select(.sid == $sid) | .levers | .sessionId == $sid and .parentSessionId == $m and ({arm, eligible, design} == $row)' child.jsonl >/dev/null \
       || fail "the child's bus does not answer the main's assignment: $(jq -c --arg sid "$sid" 'select(.sid == $sid)' child.jsonl), row $row"
+
+    # The model switch: two models of the fake provider, the extension's rules (the provider's range, an exact
+    # model's other range) and a stratum with one factor on the extension's limit.
+    printf '%s\n' '{"providers":{"fake":{"baseUrl":"http://localhost:9/v1","api":"openai-completions","apiKey":"x","models":[{"id":"m"},{"id":"m1"},{"id":"m2"}]}}}' >"$agent/models.json"
+    export PROBE_OUT=$PWD/switch.jsonl SWITCH_MODEL=fake/m2
+    unset SPAWN_CHILD
+    timeout 120 pi -p x --no-session --model fake/m1 </dev/null >switch.out 2>switch.err || true
+    cat switch.out switch.err switch.jsonl >run.all 2>/dev/null || true
+    if grep -qF 'Failed to load extension' run.all; then fail "an extension failed to load"; fi
+    if grep -qF 'Extension error' run.all; then fail "an extension's handler threw"; fi
+    jq -se '[.[] | select(.switched != null)] | length == 1 and .[0].switched == true' switch.jsonl >/dev/null \
+      || fail "the probe did not switch the model"
+    jq -se '[.[] | select(.switched != null)][0].records
+      | length == 4
+        and (.[0] | has("nudgeAtPercent") | not) and .[0].nudgeAtTokensRange == [100000, 200000] and .[0].rule == "fake"
+        and (.[1] | has("nudgeAtPercent")) and .[1].nudgeAtTokens == .[0].nudgeAtTokens
+        and (.[2] | has("nudgeAtPercent") | not) and .[2].nudgeAtTokensRange == [300000, 400000] and .[2].rule == "fake/m2"
+        and (.[3] | has("nudgeAtPercent")) and .[3].nudgeAtTokens == .[2].nudgeAtTokens' switch.jsonl >/dev/null \
+      || fail "the model_select handlers did not run in load order (experiments' seed before the extension's record): $(jq -c 'select(.switched != null)' switch.jsonl)"
     touch $out
   ''
