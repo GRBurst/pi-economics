@@ -1,8 +1,9 @@
 // The Budget section's data (design §6.1, §9.2, redesign M4): quota windows of a subscription provider from the meter lines — peak, lockout, time
 // to cap, the window's API-eq $ by token component, 429 requests and retry wait. The calibration (calibration.ts) fits them. Pure.
-import { billingOf, plansAbsent, type Billing, type Plans, type Rate } from "../plans.ts";
+import { billingOfLine, billingTold, plansAbsent, type Billing, type Plans } from "../plans.ts";
 import { calibrate, type Fit } from "./calibration.ts";
 import { isError, isLine } from "./logs.ts";
+import { convert, localRows, type LocalProvider } from "./local.ts";
 import { allocate, apiUsd, cacheWrite1hOf } from "./units.ts";
 
 /** The calibration's token components: a 1 h and a 5-minute cache write are one component, as the quota does not tell them apart. */
@@ -110,31 +111,31 @@ export function windowsOf(lines: readonly any[], plans: Plans): Window[] {
 // ---- the Budget section ----
 
 export type SpendRow = { billing: Billing; /** Some line of the class had none of its own and no plan for its provider: its class was guessed (api), so cash $ is an upper bound. */ guessed: boolean; requests: number; /** API-eq $: the list price of the tokens, whoever pays. */ apiUsd: number; /** What is actually charged: the API-eq $ for `api`, 0 for the other classes. */ cashUsd: number };
-export type LocalRow = { provider: string; requests: number; /** Requests with / without `durationMs` (the untimed ones add no time). */ timed: number; untimed: number; hours: number;
-  rate?: Rate; /** hours × rate.amount in rate.currency; absent without a rate: never 0. */ cost?: number };
+/** A local provider's row (core/analyse/local.ts): `hours` = Σ request time, `unionH` the machine's serving time, queue share, per-model rows, prefix reuse. */
+export type LocalRow = LocalProvider & { /** The summed request time (the same as `sumH`), in hours. */ hours: number };
+/** What was charged or costed in one currency; `converted`: its amount in the report currency, by a configured rate (absent without one). */
+export type CurrencyRow = { currency: string; amount: number; converted?: number };
 export type BudgetSection = { /** The last line's ts: the calibration's "now" (reproducible: the clock is not read). */ now?: string; plansAbsent: boolean;
-  groups: Array<{ provider: string; kind: "5h" | "7d"; windows: Window[]; fit: Fit }>; spend: SpendRow[]; local: LocalRow[] };
+  groups: Array<{ provider: string; kind: "5h" | "7d"; windows: Window[]; fit: Fit }>; spend: SpendRow[]; local: LocalRow[];
+  /** Cash $ of the api class (USD) and the local cost of each rate's currency: one row per currency, never summed across them. */ costs: CurrencyRow[];
+  /** The costs in USD, only when every currency converts with `currency.rates` (a single currency needs none). */ total?: { currency: "USD"; amount: number } };
+const REPORT_CURRENCY = "USD";
 
 const BILLINGS: readonly Billing[] = ["subscription", "api", "free", "local"];
-const isBilling = (b: unknown): b is Billing => BILLINGS.includes(b as Billing);
-/** A line's billing class: its own `billing` (meter v2) when valid, else its provider's in `plans` (api without a plan). */
-export const billingOfLine = (l: any, plans: Plans): Billing => (isBilling(l.billing) ? l.billing : billingOf(plans, String(l.provider)));
-/** The class of a line was told (its own `billing`, or its provider's plan) rather than guessed. */
-export const billingTold = (l: any, plans: Plans): boolean => isBilling(l.billing) || Object.hasOwn(plans, String(l.provider));
-const MS_H = 3_600_000;
+export { billingOfLine, billingTold };
 
 /**
  * Quota windows with their calibration per provider and kind, spend by billing class and local cost. A line's class is its own `billing` (meter
  * v2), else its provider's in `plans`, else `api`. No usable plan entry (plansAbsent: undefined, {} …) is said, and the classes of v1 lines are guesses.
  */
-export function budget(meter: readonly any[], plans: Plans | undefined): BudgetSection {
+export function budget(meter: readonly any[], plans: Plans | undefined, rates: Readonly<Record<string, number>> = {}): BudgetSection {
   const known = plans ?? {};
   const lines = meter.filter((l) => isLine(l) && typeof l.provider === "string");
   const now = lines.reduce<string | undefined>((m, l) => (m === undefined || Date.parse(l.ts) > Date.parse(m) ? l.ts : m), undefined);
   const windows = windowsOf(lines, known);
   const groups = new Map<string, Window[]>();
   for (const w of windows) { const k = `${w.provider}\u0000${w.kind}`; const xs = groups.get(k); if (xs) xs.push(w); else groups.set(k, [w]); }
-  const spend = new Map<Billing, SpendRow>(), local = new Map<string, LocalRow>();
+  const spend = new Map<Billing, SpendRow>();
   for (const l of meter.filter(isLine)) { // every line, as Fleet counts them (a line without provider is billed as api)
     const billing = billingOfLine(l, known);
     const usd = apiUsd(l);
@@ -144,14 +145,14 @@ export function budget(meter: readonly any[], plans: Plans | undefined): BudgetS
     if (billing === "api") row.cashUsd += usd;
     if (l.kind === "warming" || isError(l)) continue;
     row.requests += 1;
-    if (billing !== "local") continue;
-    const plan = Object.hasOwn(known, l.provider) ? known[l.provider] : undefined;
-    const lr = local.get(l.provider) ?? local.set(l.provider, { provider: l.provider, requests: 0, timed: 0, untimed: 0, hours: 0, ...(plan?.rate ? { rate: plan.rate } : {}) }).get(l.provider)!;
-    lr.requests += 1;
-    if (typeof l.durationMs === "number" && Number.isFinite(l.durationMs) && l.durationMs >= 0) { lr.timed += 1; lr.hours += l.durationMs / MS_H; } else lr.untimed += 1;
   }
-  for (const lr of local.values()) if (lr.rate) lr.cost = lr.hours * lr.rate.amount;
+  const local = localRows(meter, known).map((r): LocalRow => ({ ...r, hours: r.sumH }));
+  const amounts = new Map<string, number>(), cash = spend.get("api")?.cashUsd;
+  if (cash !== undefined) amounts.set(REPORT_CURRENCY, cash);
+  for (const r of local) if (r.rate && r.cost !== undefined) amounts.set(r.rate.currency, (amounts.get(r.rate.currency) ?? 0) + r.cost);
+  const costs = [...amounts].sort(([a], [b]) => (a < b ? -1 : 1)).map(([currency, amount]): CurrencyRow => { const converted = convert(amount, currency, REPORT_CURRENCY, rates); return { currency, amount, ...(converted === undefined ? {} : { converted }) }; });
+  const total = costs.length && costs.every((c) => c.converted !== undefined) ? { currency: REPORT_CURRENCY, amount: costs.reduce((x, c) => x + c.converted!, 0) } : undefined;
   return { ...(now ? { now } : {}), plansAbsent: plansAbsent(plans),
     groups: [...groups.values()].map((ws) => ({ provider: ws[0].provider, kind: ws[0].kind, windows: ws, fit: calibrate(ws, now ?? ws[0].reset) })),
-    spend: BILLINGS.flatMap((b) => spend.get(b) ?? []), local: [...local.values()] };
+    spend: BILLINGS.flatMap((b) => spend.get(b) ?? []), local, costs, ...(total ? { total } : {}) };
 }

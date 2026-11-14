@@ -791,3 +791,31 @@ test("review M2 infinite-context in the session: its cancelled compaction (ext, 
   agentStart(f, fakeCtx("s1", { entries }));
   assert.deepEqual(leversOf(lines())[0].levers["pi.compaction.enabled"], { v: false, s: "ext", a: true, rb: "refused", tier: "seed" });
 });
+
+// M8 T8.7: pi 1.4's openai-completions stream passes each SDK chunk to `provider_stream_event` unchanged (pi-ai
+// processStream: `onProviderStreamEvent(chunk, model)` before any normalization), so a llama-server's final chunk
+// arrives with its `timings` object; the meter keeps four whole numbers of it. A provider without `timings`: none.
+test("T8.7 timings: the last stream event's llama.cpp `timings` become promptMs, genMs, cacheN, promptN; none when no event carries them", () => {
+  const { f, clock, lines } = setup();
+  const ctx = fakeCtx("s1");
+  const ev = (data: unknown) => ({ type: "provider_stream_event", provider: "llama", api: "openai-completions", model: "qwen", data });
+  turnSend(f, ctx);
+  f.fire("provider_stream_event", ev({ choices: [{ delta: { content: "x" } }] }), ctx);
+  f.fire("provider_stream_event", ev({ choices: [], timings: { cache_n: 900, prompt_n: 100.2, prompt_ms: 120.4, predicted_n: 50, predicted_ms: 3500.6 } }), ctx);
+  f.fire("provider_stream_event", ev({ choices: [{ delta: {} }] }), ctx); // a chunk after it without timings keeps them
+  clock.t = T0 + 4000;
+  f.fire("message_end", assistant(), ctx);
+  const a = lines()[0];
+  assert.deepEqual([a.promptMs, a.genMs, a.cacheN, a.promptN], [120, 3501, 900, 100], "pi-economics: timings of the last event carrying them, rounded");
+  // the next request has no timings: nothing carries over, and a malformed timings object adds nothing
+  turnSend(f, ctx);
+  f.fire("provider_stream_event", ev({ timings: { prompt_ms: "x", predicted_ms: -1, cache_n: NaN } }), ctx);
+  f.fire("message_end", assistant(), ctx);
+  const b = lines()[1];
+  for (const k of ["promptMs", "genMs", "cacheN", "promptN"]) assert.equal(k in b, false, `pi-economics: no ${k} without usable timings`);
+  // an Anthropic event has no timings
+  turnSend(f, ctx);
+  f.fire("provider_stream_event", { type: "provider_stream_event", provider: "anthropic", api: "anthropic-messages", model: "opus", data: { type: "message_start" } }, ctx);
+  f.fire("message_end", assistant(), ctx);
+  assert.equal("promptMs" in lines()[2], false);
+});

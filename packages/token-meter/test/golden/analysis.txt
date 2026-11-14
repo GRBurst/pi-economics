@@ -38,11 +38,33 @@ API-eq $ = the tokens at the provider's list price (what a pay-per-token account
 
 ### Local cost
 
-Σ request time (`durationMs`, summed over requests: concurrent requests add up) × the provider's hourly rate in its currency. A request without `durationMs` adds no time: untimed requests make the cost an undercount. A provider without a rate has no cost.
+Σ request time (`durationMs`, summed over requests: concurrent requests add up) × the provider's hourly rate in its currency. A request without `durationMs` adds no time: untimed requests make the cost an undercount. A provider without a rate has no cost: its wall time (the summed request time) is shown instead. Machine hours = the union of the requests' serving intervals; the queue share = 1 − machine hours ÷ request hours: the server has one slot, so above 0 local requests overlapped and queued (their `durationMs` include the wait).
 
-| provider | requests (timed / untimed) | active hours | rate | cost |
-| --- | --- | --- | --- | --- |
-| llama | 2 (2 / 0) | 0.05 | no rate | – |
+| provider | requests (timed / untimed) | request hours | machine hours | queue share | rate | cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| llama | 2 (2 / 0) | 0.05 | 0.05 | 0% | no rate | not measurable (wall time 0.05 h) |
+
+#### Models
+
+One rate per provider (its models run on one machine). Tokens per second = output tokens ÷ the generation time `genMs` of the requests that carry llama.cpp timings, else ÷ the request time `durationMs`; cost per 1M output tokens = the provider's rate × the model's request hours ÷ the output tokens of all its timed requests.
+
+| provider | model | requests | request hours | output tokens (throughput basis) | tokens/s (basis) | cost per 1M output tokens |
+| --- | --- | --- | --- | --- | --- | --- |
+| llama | qwen3.8 | 2 | 0.05 | 100 | 0.56 (durationMs) | – |
+
+#### Prefix reuse
+
+No cached or re-used prompt tokens in the period.
+
+### Costs by currency
+
+Cash $ of the api class and the local cost of each rate's currency; currencies are summed only with a conversion (`currency.rates`, e.g. `USD/EUR`), else they stay apart.
+
+| currency | amount | in USD |
+| --- | --- | --- |
+| USD | 145.20 | 145.20 |
+
+Total: 145.20 USD
 
 ## Fleet
 

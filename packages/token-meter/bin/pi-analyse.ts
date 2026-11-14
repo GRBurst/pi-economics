@@ -54,7 +54,7 @@ function read(log: LogName, path: string): any[] {
 const readJson = (file: string): any => { try { return JSON.parse(readFileSync(file, "utf8")); } catch { return undefined; } };
 
 const meterSettings = join(agentDir, "token-meter", "settings.json");
-const { dir: meterDir, plans } = loadSettings(meterSettings); // no usable plan entry ({}): the report says every unit was counted as api
+const { dir: meterDir, plans, currency } = loadSettings(meterSettings); // no usable plan entry ({}): the report says every unit was counted as api
 const logs: Logs = {
   meter: read("meter", isAbsolute(meterDir) ? meterDir : join(agentDir, meterDir)),
   outcomes: read("outcomes", join(agentDir, "task-router", "outcomes")),
@@ -64,6 +64,7 @@ const logs: Logs = {
   expSettings: readJson(join(agentDir, "experiments", "settings.json")),
   routerSettings: readJson(join(agentDir, "task-router", "settings.json")),
   plans,
+  currencyRates: currency.rates,
 };
 
 if (args.includes("--check")) {

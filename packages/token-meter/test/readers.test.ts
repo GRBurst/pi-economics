@@ -46,9 +46,9 @@ const variants = (): Record<string, Logs> => {
   };
 };
 
-/** The analysis without the per-version line counts of the meter (the one table that must differ), without the windows' 429 counts (a v2 line names a rate limit by errorKind, a v1 error line does not) and without cash $, which follows the billing class: a v2 line carries its own, a v1 line takes its provider's plan (M4). */
+/** The analysis without the per-version line counts of the meter (the one table that must differ), without the windows' 429 counts (a v2 line names a rate limit by errorKind, a v1 error line does not) and without cash $ and the costs by currency, which follow the billing class: a v2 line carries its own, a v1 line takes its provider's plan (M4). */
 const sansVersions = (a: ReturnType<typeof analyse>) =>
-  ({ ...a, budget: { ...a.budget, spend: [], local: [], groups: a.budget.groups.map((g) => ({ ...g, windows: g.windows.map((w) => ({ ...w, r429: 0 })) })) }, cost: { ...a.cost, cashUsd: 0, cashGuessed: false }, quality: { ...a.quality, logs: a.quality.logs.map((x) => (x.log === "meter" ? { ...x, versions: {} } : x)) } });
+  ({ ...a, budget: { ...a.budget, spend: [], local: [], costs: [], total: undefined, groups: a.budget.groups.map((g) => ({ ...g, windows: g.windows.map((w) => ({ ...w, r429: 0 })) })) }, cost: { ...a.cost, cashUsd: 0, cashGuessed: false }, quality: { ...a.quality, logs: a.quality.logs.map((x) => (x.log === "meter" ? { ...x, versions: {} } : x)) } });
 
 test("analyse: v2 and mixed v1/v2 meter lines give the analysis of the same lines in v1, but for the version counts", () => {
   const base = analyse(v1World());

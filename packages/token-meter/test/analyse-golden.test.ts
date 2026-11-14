@@ -171,9 +171,11 @@ function budgetLogs(): Logs {
   }
   meter.push({ v: 1, ts: "2026-11-12T11:00:00.000Z", sessionId: "old", provider: "anthropic", model: "claude-opus-5-5", kind: "turn", status: "error", errorClass: "429", retries: 4, retryWaitMs: 30_000 }); // v1: pi-retry's totals
   meter.push({ v: 2, ts: "2026-11-12T12:00:00.000Z", sessionId: "or", provider: "openrouter", model: "gpt-6-luna", kind: "turn", billing: "api", status: 200, input: 1000, output: 1000, costUsd: 0.05, durationMs: 2_000 });
-  for (const [k, ms] of [[0, 600_000], [1, 1_200_000], [2, undefined]] as const) meter.push({ v: 2, ts: iso(end - 3_600_000 + k * 60_000), sessionId: "ll", provider: "llama", model: "qwen3.8", kind: "turn", billing: "local", status: 200, input: 5000, output: 500, costUsd: 0, ...(ms ? { durationMs: ms } : {}) });
-  const plans = { anthropic: { billing: "subscription" as const, windows: ["5h" as const, "7d" as const] }, llama: { billing: "local" as const, windows: [], rate: { amount: 0.13, currency: "EUR", per: "hour" as const } }, openrouter: { billing: "api" as const, windows: [] } };
-  return { meter, outcomes: [], assignments: [], guards: [], plans };
+  for (const [k, ms] of [[0, 600_000], [1, 1_200_000], [2, undefined]] as const) meter.push({ v: 2, ts: iso(end - 3_600_000 + k * 60_000), sessionId: "ll", provider: "llama", model: "qwen3.8", kind: "turn", billing: "local", status: 200, input: 5000, output: 500, costUsd: 0, ...(k === 0 ? { genMs: 8_000, cacheN: 4_000, promptN: 1_000 } : {}), ...(ms ? { durationMs: ms } : {}) });
+  // M8: a second model id of the same provider (the q4 profile), well after the others: no overlap, the same rate
+  meter.push({ v: 2, ts: iso(end - 1_800_000), sessionId: "ll", provider: "llama", model: "qwen3.8-q4", kind: "turn", billing: "local", status: 200, input: 2000, output: 900, costUsd: 0, durationMs: 900_000, genMs: 18_000, cacheN: 500, promptN: 1_500 });
+  const plans = { anthropic: { billing: "subscription" as const, windows: ["5h" as const, "7d" as const] }, llama: { billing: "local" as const, windows: [], rate: { amount: 0.25, currency: "EUR", per: "hour" as const } }, openrouter: { billing: "api" as const, windows: [] } };
+  return { meter, outcomes: [], assignments: [], guards: [], plans, currencyRates: { "USD/EUR": 0.9 } };
 }
 
 const PERIOD = { since: "2026-10-05", until: "2026-10-05" };

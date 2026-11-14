@@ -5,7 +5,8 @@ import { bootstrapRatio, mulberry32, normal, ratio } from "../stats.ts";
 import { billingOf, plansAbsent, type Billing, type Plans } from "../plans.ts";
 import { byTs, isLine } from "./logs.ts";
 import { type LeverState } from "../levers.ts";
-import { apiUsd } from "./units.ts";
+import { MATERIAL, type Fit } from "./calibration.ts";
+import { allocate, apiUsd, cacheWrite1hOf } from "./units.ts";
 import { armInfo, DESIGNS, designOf, designOfLine, rowsBySession, v2Levels } from "./designs.ts";
 
 /**
@@ -15,6 +16,10 @@ import { armInfo, DESIGNS, designOf, designOfLine, rowsBySession, v2Levels } fro
  */
 export type Objective = (typeof OBJECTIVES)[number];
 const OBJECTIVES = ["apiUsd", "cashUsd", "localCost", "wallMs", "points5h", "points7d"] as const;
+
+/** The quota calibrations by provider and window kind (the Budget's fits): key `fitKey(provider, kind)`. */
+export type Fits = ReadonlyMap<string, Fit>;
+export const fitKey = (provider: string, kind: "5h" | "7d"): string => `${provider}\u0000${kind}`;
 
 /** A root session as the estimate sees it: its stratum (billing class of its main's provider), arm, factor levels, active hours and objective (undefined = not measurable). */
 export type Unit = { sessionId: string; design: string; stratum: string; arm: string; levels: Record<string, string | number | boolean>;
@@ -89,8 +94,8 @@ const WHY: Record<Objective, string> = {
   cashUsd: "cashUsd is not computed by this analyser yet",
   localCost: "localCost needs durationMs on the stratum's lines (meter v1 lines carry none) and a rate for the provider in plans",
   wallMs: "wallMs needs durationMs on the stratum's main-session lines (meter v1 lines carry none)",
-  points5h: "no q5h quota readings for the stratum's units",
-  points7d: "no q7d quota readings for the stratum's units",
+  points5h: "no calibration of the 5-hour quota (fewer than 8 complete windows, or no window of the stratum's providers)",
+  points7d: "no calibration of the 7-day quota (fewer than 8 complete windows, or no window of the stratum's providers)",
 };
 
 const BILLINGS: readonly string[] = ["subscription", "api", "free", "local"];
@@ -103,15 +108,33 @@ const dur = (l: any): number | undefined => (typeof l.durationMs === "number" &&
  * objectives the coverage of `durationMs`: both sum the lines that have it (wallMs the main's non-warming lines, localCost the non-warming lines of local
  * billing with a plan rate); a root without any timed line has no objective (a v1 log), one with some untimed lines keeps its sum and says so.
  */
-function objectiveOf(o: Objective, u: RootUnit, ls: any[], plans: Plans): { objective?: number; timing?: Unit["timing"] } {
+/**
+ * Points of a unit's requests: Σ_c β_c × the API-eq $ of component c (calibration.ts: the quota's weights fitted over complete windows), with the
+ * fit of each line's provider and window kind; components under MATERIAL of the fit's $ are not identifiable and add nothing. Lines of a provider without a
+ * usable fit add nothing; a unit none of whose lines has one is not measurable (undefined).
+ */
+function pointsOf(kind: "5h" | "7d", ls: any[], fits: Fits | undefined): number | undefined {
+  let total = 0, covered = false;
+  for (const l of ls) {
+    const f = fits?.get(fitKey(String(l.provider), kind));
+    if (!f || "notEnough" in f) continue;
+    covered = true;
+    const a = allocate(l, cacheWrite1hOf(l, l.parentSessionId === undefined));
+    const usd = { input: a.input, cacheRead: a.cacheRead, cacheWrite: a.cacheWrite5m + a.cacheWrite1h, output: a.output };
+    for (const c of Object.keys(usd) as Array<keyof typeof usd>) if (f.share[c] >= MATERIAL) total += f.beta[c] * usd[c];
+  }
+  return covered ? total : undefined;
+}
+
+function objectiveOf(o: Objective, u: RootUnit, ls: any[], plans: Plans, fits?: Fits): { objective?: number; timing?: Unit["timing"] } {
   const timed = (mine: any[], cost: (l: any) => number) => {
     const have = mine.filter((l) => dur(l) !== undefined);
     return { objective: have.length ? have.reduce((s, l) => s + cost(l), 0) : undefined, timing: { timed: have.length, untimed: mine.length - have.length } };
   };
   switch (o) {
     case "apiUsd": return { objective: u.cost };
-    case "points5h": return { objective: u.q5h };
-    case "points7d": return { objective: u.q7d };
+    case "points5h": return { objective: pointsOf("5h", ls, fits) };
+    case "points7d": return { objective: pointsOf("7d", ls, fits) };
     case "cashUsd": return {};
     case "wallMs": return timed(ls.filter((l) => l.parentSessionId === undefined && l.kind !== "warming"), (l) => dur(l)!);
     case "localCost": return timed(ls.filter((l) => l.kind !== "warming" && billingOfLine(l, plans) === "local" && plans[String(l.provider)]?.rate), (l) => (dur(l)! / MS_H) * plans[String(l.provider)].rate!.amount);
@@ -128,7 +151,7 @@ function strataOf(ls: any[], plans: Plans): string {
  * Every root session of the design's lines as a Unit (all hours; the estimate excludes short ones, the balance table counts them). Its stratum is
  * the one its assignment row records (v2 engine: a named stratum), else the billing class of its main's first request (strataOf).
  */
-function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<string, string> }>, plans: Plans, quota: ReturnType<typeof quotaAttribution>, expSettings: any, rows: Map<string, any>, states: LeverStates): { units: Unit[]; objectives: Map<string, Objective> } {
+function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<string, string> }>, plans: Plans, quota: ReturnType<typeof quotaAttribution>, expSettings: any, rows: Map<string, any>, states: LeverStates, fits?: Fits): { units: Unit[]; objectives: Map<string, Objective> } {
   const byRoot = new Map<string, any[]>();
   for (const l of [...dl].sort(byTs)) { const r = l.parentSessionId ?? l.sessionId; (byRoot.get(r) ?? byRoot.set(r, []).get(r)!).push(l); }
   const objectives = new Map<string, Objective>();
@@ -138,14 +161,14 @@ function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<st
     const stratum = typeof recorded === "string" && recorded ? recorded : strataOf(ls, plans);
     if (!objectives.has(stratum)) objectives.set(stratum, objectiveFor(stratum, plans, expSettings));
     const o = objectives.get(stratum)!;
-    const unit: Unit = { sessionId: r.root, design, stratum, arm: r.arm, levels: info.get(r.arm)?.flags ?? {}, hours: r.hours, ...objectiveOf(o, r, ls, plans) };
+    const unit: Unit = { sessionId: r.root, design, stratum, arm: r.arm, levels: info.get(r.arm)?.flags ?? {}, hours: r.hours, ...objectiveOf(o, r, ls, plans, fits) };
     const row = rows.get(r.root);
     if (row?.v !== 2) return unit;
     const start = strataOf(ls, plans), same = ls.filter((l) => billingOfLine(l, plans) === start);
     const mine = states.get(r.root);
     const factors: Array<{ lever?: string }> = plainObject(row.factors) ? Object.values(row.factors) : [];
     return { ...unit, confirmed: factors.every((f) => typeof f?.lever === "string" && mine?.[f.lever]?.rb === "confirmed"),
-      sensitivity: objectiveOf(o, { ...r, cost: same.reduce((s, l) => s + apiUsd(l), 0) }, same.filter((l) => l.kind !== "warming" || o === "apiUsd"), plans).objective,
+      sensitivity: objectiveOf(o, { ...r, cost: same.reduce((s, l) => s + apiUsd(l), 0) }, same.filter((l) => l.kind !== "warming" || o === "apiUsd"), plans, fits).objective,
       switched: ls.some((l) => l.kind !== "warming" && !isError(l) && billingOfLine(l, plans) !== start),
       overflows: ls.filter((l) => l.errorKind === "context_overflow").length };
   });
@@ -205,7 +228,7 @@ function refusalOf(units: Unit[], levers: Map<string, string>, states: LeverStat
   });
 }
 
-export function experiment(meter: any[], rows: any[], expSettings: any, plans?: Plans, states: LeverStates = new Map()): DesignResult[] {
+export function experiment(meter: any[], rows: any[], expSettings: any, plans?: Plans, states: LeverStates = new Map(), fits?: Fits): DesignResult[] {
   const armed = meter.filter((l) => isLine(l) && typeof l.sessionId === "string" && typeof l.arm === "string" && l.arm);
   const quota = quotaAttribution(meter.filter((l) => isLine(l) && typeof l.sessionId === "string")); // account-wide: over every root, armed or not
   const by = rowsBySession(rows);
@@ -222,7 +245,7 @@ export function experiment(meter: any[], rows: any[], expSettings: any, plans?: 
     const isV2 = v2.size > 0;
     const factors = known ? known.map(([n]) => n) : [...new Set(arms.flatMap((a) => Object.keys(info.get(a)!.flags)))];
     const levels = (f: string): [string, string] => known?.find(([n]) => n === f)?.[1] ?? v2.get(f) ?? ([...new Set(arms.map((a) => info.get(a)!.flags[f]))].sort().concat(["", ""]).slice(0, 2) as [string, string]);
-    const { units, objectives } = unitsOf(dl, design, info, plans ?? {}, quota, expSettings, by, states);
+    const { units, objectives } = unitsOf(dl, design, info, plans ?? {}, quota, expSettings, by, states, fits);
     const names = [...objectives.keys()].sort((x, y) => (STRATA_ORDER.indexOf(x) + 1 || 99) - (STRATA_ORDER.indexOf(y) + 1 || 99) || (x < y ? -1 : 1));
     const strata = names.map((s) => {
       const mine = units.filter((u) => u.stratum === s), result = stratumResult(design, s, objectives.get(s)!, mine, factors, levels);

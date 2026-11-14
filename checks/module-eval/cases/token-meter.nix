@@ -192,6 +192,40 @@ in {
       };
     }) [];
 
+  # (M8 T8.6) currencyRates: rendered as settings.json `currency.rates` next to
+  # the other keys; a key that is not "XXX/YYY" is an error naming it (each bad
+  # key its own message); none set: no `currency` key.
+  token-meter-currency-rates = let
+    json = tm: let
+      f = fileAt ".pi/agent/token-meter/settings.json" (eval ".pi/agent" tm);
+    in
+      if f == null
+      then null
+      else builtins.fromJSON f.text;
+    msg = k: "pi-economics: tokenMeter.currencyRates key ${k} is not \"XXX/YYY\"";
+    bad = rates: failed "pi-economics:" (eval ".pi/agent" {currencyRates = rates;});
+  in
+    eq "rates only" (json {currencyRates."USD/EUR" = 0.92;}) {currency.rates."USD/EUR" = 0.92;}
+    ++ eq "next to plans" (json {
+      currencyRates."USD/EUR" = 0.5;
+      plans.p-free.billing = "free";
+    }) {
+      currency.rates."USD/EUR" = 0.5;
+      plans.p-free = {
+        billing = "free";
+        windows = [];
+      };
+    }
+    ++ eq "none: no file" (json {}) null
+    ++ eq "a good key holds" (bad {"USD/EUR" = 0.92;}) []
+    ++ eq "lowercase key" (bad {"usd/eur" = 1;}) [(msg "usd/eur")]
+    ++ eq "no slash, long code and two bad keys" (bad {
+      USDEUR = 1;
+      "USD/EURO" = 1;
+      "GBP/USD" = 1.2;
+    }) [(msg "USD/EURO") (msg "USDEUR")]
+    ++ eq "a rate of zero is rejected by the type" (builtins.tryEval (pe (eval ".pi/agent" {currencyRates."USD/EUR" = 0;})).tokenMeter.currencyRates."USD/EUR").success false;
+
   # (M3.6) With the actor in the registry, children load the meter: the list
   # pi-setup's bridge writes into actor-subagents/settings.json (host
   # pi-extensions.nix:389-390) names it; the file is pi-setup's

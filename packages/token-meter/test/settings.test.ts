@@ -31,3 +31,12 @@ test("invalid JSON → defaults (never partly applied)", () => {
   writeFileSync(f, "{ not json");
   assert.deepEqual(loadSettings(f), defaults());
 });
+
+test("M8 currency.rates: positive numbers under keys FROM/TO (three capitals each) are kept, anything else is dropped; default none", () => {
+  assert.deepEqual(defaults().currency, { rates: {} });
+  const f = join(tmp(), "settings.json");
+  writeFileSync(f, JSON.stringify({ currency: { rates: { "USD/EUR": 0.92, "EUR/USD": 0, "usd/eur": 1, "USD/EURO": 1, "GBP/USD": "1.2", "CHF/EUR": -1 } } }));
+  assert.deepEqual(loadSettings(f).currency, { rates: { "USD/EUR": 0.92 } });
+  writeFileSync(f, JSON.stringify({ currency: [1], plans: {} }));
+  assert.deepEqual(loadSettings(f).currency, { rates: {} });
+});

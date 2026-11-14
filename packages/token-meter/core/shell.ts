@@ -72,6 +72,8 @@ export function install(pi: PiLike, deps: Deps): void {
   const sentAt = new Map<string, number>();
   /** The first provider_stream_event after that send (`ttftMs`). */
   const firstEvent = new Map<string, number>();
+  /** M8: llama.cpp's `timings` of the request's last stream event that carried usable ones (`promptMs`, `genMs`, `cacheN`, `promptN`). */
+  const timings = new Map<string, Timings>();
   // D19, P18: pi's native retry. A failed attempt (error message_end, not a context overflow) waits in `failedAt`
   // until the session's next send, which is its retry when nothing came between (pi resends after a backoff with no
   // message in between; a settled run or a new message means no retry follows). `retryWait` holds that send's wait.
@@ -290,15 +292,18 @@ export function install(pi: PiLike, deps: Deps): void {
       const t = now().getTime(), failed = failedAt.get(sid);
       sentAt.set(sid, t);
       firstEvent.delete(sid);
+      timings.delete(sid);
       failedAt.delete(sid);
       if (failed === undefined) retryWait.delete(sid);
       else retryWait.set(sid, Math.max(0, t - failed));
     }
     flushWarming(ctx); // returns nothing: the payload stays as it is
   });
-  pi.on("provider_stream_event", (_e, ctx) => {
+  pi.on("provider_stream_event", (e, ctx) => {
     const sid = sidOf(ctx);
     if (sid !== undefined && sentAt.has(sid) && !firstEvent.has(sid)) firstEvent.set(sid, now().getTime());
+    const t = sid !== undefined && sentAt.has(sid) ? timingsOf(e?.data) : undefined;
+    if (sid !== undefined && t) timings.set(sid, t);
   });
   pi.on("agent_settled", (_e, ctx) => {
     const sid = sidOf(ctx);
@@ -344,6 +349,9 @@ export function install(pi: PiLike, deps: Deps): void {
     const sent = sentAt.get(sid), first = firstEvent.get(sid);
     sentAt.delete(sid);
     firstEvent.delete(sid);
+    const tm = timings.get(sid);
+    timings.delete(sid);
+    if (tm) Object.assign(input, tm);
     if (sent !== undefined) input.durationMs = Math.max(0, end.getTime() - sent);
     if (sent !== undefined && first !== undefined) input.ttftMs = Math.max(0, first - sent);
     if (typeof m.thinkingLevel === "string") input.effort = m.thinkingLevel;
@@ -363,6 +371,20 @@ export function install(pi: PiLike, deps: Deps): void {
     }
     write(input);
   });
+}
+
+type Timings = Pick<LineInput, "promptMs" | "genMs" | "cacheN" | "promptN">;
+
+/** The whole non-negative numbers of a llama.cpp `timings` object (a stream chunk's top-level field) the line keeps; undefined when it has none. */
+function timingsOf(data: unknown): Timings | undefined {
+  const t = (data as { timings?: Record<string, unknown> } | null | undefined)?.timings;
+  if (t === null || typeof t !== "object") return undefined;
+  const out: Timings = {};
+  for (const [from, to] of [["prompt_ms", "promptMs"], ["predicted_ms", "genMs"], ["cache_n", "cacheN"], ["prompt_n", "promptN"]] as const) {
+    const v = t[from];
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) out[to] = Math.round(v);
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function safe<T>(f: () => T): T | undefined {

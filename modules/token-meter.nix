@@ -10,9 +10,12 @@
 }: let
   pe = config.programs.piEconomics;
   cfg = pe.tokenMeter;
-  # settings.json: `settings`, and `plans` without unset rates.
+  # settings.json: `settings`, `plans` without unset rates, and `currency.rates`.
   plan = p: {inherit (p) billing windows;} // lib.optionalAttrs (p.rate != null) {inherit (p) rate;};
-  file = cfg.settings // lib.optionalAttrs (cfg.plans != {}) {plans = lib.mapAttrs (_: plan) cfg.plans;};
+  file =
+    cfg.settings
+    // lib.optionalAttrs (cfg.plans != {}) {plans = lib.mapAttrs (_: plan) cfg.plans;}
+    // lib.optionalAttrs (cfg.currencyRates != {}) {currency.rates = cfg.currencyRates;};
 in {
   options.programs.piEconomics.tokenMeter = {
     enable = lib.mkEnableOption "the pi token-meter extension (per-request token, cost and quota log) and its reports";
@@ -92,6 +95,21 @@ in {
     };
   };
 
+  options.programs.piEconomics.tokenMeter.currencyRates = lib.mkOption {
+    type = lib.types.attrsOf lib.types.numbers.positive;
+    default = {};
+    example = {"USD/EUR" = 0.92;};
+    description = ''
+      Conversion rates between the currencies of the analysis (design §9.3):
+      the key `"FROM/TO"` (three capitals each) says how many TO one FROM
+      is; the inverse is used when only the opposite key is given. The
+      Budget section sums costs across currencies (the API-eq cash dollars,
+      each local rate's currency) only with a rate between them, and
+      otherwise keeps separate columns. Written to `currency.rates` of
+      `<agentDir>/token-meter/settings.json`.
+    '';
+  };
+
   config = lib.mkIf cfg.enable {
     # (M3.3) Loaded into children too: their requests are what the meter is for.
     programs.piEconomics.extensions.token-meter = {
@@ -106,12 +124,18 @@ in {
     # (M3a) A rate prices a local provider's active time (design §9.3).
     assertions = let
       bad = lib.attrNames (lib.filterAttrs (_: p: p.rate != null && p.billing != "local") cfg.plans);
-    in [
-      {
-        assertion = bad == [];
-        message = "pi-economics: tokenMeter.plans: a rate is set but billing is not \"local\" for ${lib.concatStringsSep ", " bad}";
-      }
-    ];
+    in
+      [
+        {
+          assertion = bad == [];
+          message = "pi-economics: tokenMeter.plans: a rate is set but billing is not \"local\" for ${lib.concatStringsSep ", " bad}";
+        }
+      ]
+      # (M8) A key is two ISO-style codes; the key is short, so a regex is fine.
+      ++ map (k: {
+        assertion = builtins.match "[A-Z]{3}/[A-Z]{3}" k != null;
+        message = "pi-economics: tokenMeter.currencyRates key ${k} is not \"XXX/YYY\"";
+      }) (lib.attrNames cfg.currencyRates);
 
     # (M3.4)
     home.packages = [cfg.package.report cfg.package.analyse];

@@ -10,7 +10,9 @@ export type Logs = { meter: any[]; outcomes: any[]; assignments: any[]; guards: 
   /** experiments/settings.json and task-router/settings.json, when present. */
   expSettings?: any; routerSettings?: any;
   /** token-meter's `plans` setting (billing class per provider), parsed; absent = not known: every unit is then in stratum "api". */
-  plans?: Plans };
+  plans?: Plans;
+  /** token-meter's `currency.rates` setting ("FROM/TO" → rate); absent = none: costs in different currencies stay apart. */
+  currencyRates?: Record<string, number> };
 /** Inclusive UTC days, YYYY-MM-DD. */
 export type Period = { since?: string; until?: string };
 

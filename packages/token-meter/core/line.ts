@@ -16,6 +16,8 @@ export type LineInput = { now: Date; sessionId: string; parentSessionId?: string
   provider: string; model: string; effort?: string; kind: "turn" | "warming" | "nested" | "compaction"; billing?: Billing;
   usage?: Usage; status: number | "error"; retries?: number; retryWaitMs?: number; snap?: Snapshot;
   errorMessage?: string; durationMs?: number; ttftMs?: number;
+  /** llama.cpp `timings` of the stream (M8): prompt_ms, predicted_ms, cache_n, prompt_n, rounded */
+  promptMs?: number; genMs?: number; cacheN?: number; promptN?: number;
   /** core/system-hash.ts: the system state the request ran under (M3b) */
   systemHash?: string };
 type LineBase = { ts: string; sessionId: string; parentSessionId?: string; arm?: string;
@@ -27,7 +29,7 @@ type LineBase = { ts: string; sessionId: string; parentSessionId?: string; arm?:
 export type MeterLineV1 = LineBase & { v?: 1; retries: number; retryWaitMs: number };
 /** The line this writer emits (LOGS.md "Meter line v2"); `retries` from pi's native retry, present iff observed. */
 export type MeterLineV2 = LineBase & { v: 2; retries?: number; retryWaitMs?: number; design?: string; billing?: Billing; cacheWrite1h?: number;
-  durationMs?: number; ttftMs?: number; errorKind?: ErrorKind; systemHash?: string };
+  durationMs?: number; ttftMs?: number; promptMs?: number; genMs?: number; cacheN?: number; promptN?: number; errorKind?: ErrorKind; systemHash?: string };
 export type MeterLine = MeterLineV1 | MeterLineV2;
 
 const MAX_STR = 256;
@@ -36,7 +38,7 @@ const MAX_BYTES = 4096;
 export const SCHEMA_VERSION = 2;
 export const KEYS = ["v", "ts", "sessionId", "parentSessionId", "arm", "design", "provider", "model", "effort", "kind", "billing",
   "input", "cacheRead", "cacheWrite", "cacheWrite1h", "output", "reasoning", "costUsd", "status", "retries", "retryWaitMs",
-  "errorClass", "errorKind", "durationMs", "ttftMs", "systemHash",
+  "errorClass", "errorKind", "durationMs", "ttftMs", "promptMs", "genMs", "cacheN", "promptN", "systemHash",
   "q5h", "q5hReset", "q7d", "q7dReset", "overage", "claim", "fallback", "rawRatelimit"] as const;
 
 const clip = (s: string, max: number): string => (s.length > max ? s.slice(0, max) : s);
@@ -51,7 +53,7 @@ export function buildLine(i: LineInput): MeterLineV2 {
   const l: Record<string, unknown> = {
     v: SCHEMA_VERSION, ts: i.now.toISOString(), sessionId: i.sessionId, provider: i.provider, model: i.model, kind: i.kind,
   };
-  for (const k of ["parentSessionId", "arm", "design", "effort", "billing", "durationMs", "ttftMs", "systemHash"] as const) {
+  for (const k of ["parentSessionId", "arm", "design", "effort", "billing", "durationMs", "ttftMs", "promptMs", "genMs", "cacheN", "promptN", "systemHash"] as const) {
     if (i[k] !== undefined) l[k] = i[k];
   }
   for (const k of ["input", "cacheRead", "cacheWrite", "cacheWrite1h", "output", "reasoning", "costUsd"] as const) {

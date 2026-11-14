@@ -246,3 +246,40 @@ test("review L2/N3: the per-protocol text says which levers line decides (the ro
   assert.ok(text.includes("last levers line"), text);
   assert.ok(text.includes("or without a levers line"), text);
 });
+
+// M8 T8.5: points5h / points7d = Σ_c β_c × the API-eq $ of component c over the unit's requests (the M4 calibration), per provider and window kind.
+// The Thompson posterior is written only for apiUsd strata (M5c): no estimator for points objectives, so `posterior` stays {} for them.
+import { experiment } from "../core/analyse/experiment.ts";
+const fit = (beta: number): any => ({ n: 12, beta: { input: beta, cacheRead: beta, cacheWrite: beta, output: beta }, r2: 0.99, sigma: 1, share: { input: 0.25, cacheRead: 0.25, cacheWrite: 0.25, output: 0.25 }, usdPerPoint: [], flags: [] });
+const pointsWorld = (objective: string) => {
+  const us = base(), meter = us.flatMap((u) => cloud(u.id, u.arm, u.usd)), rows = us.map((u) => row(u.id, u.arm));
+  return { meter, rows, expSettings: { strata: { api: { objective } } } };
+};
+const strat = (ds: ReturnType<typeof experiment>) => ds.find((d) => d.design === D)!.strata.find((s) => s.stratum === "api")!;
+
+test("T8.5 points5h: Σ β × the unit's API-eq $ with the provider's 5h fit (β = 2 everywhere: twice the API-eq $ per hour); the 7d fit is not the 5h one", () => {
+  const w = pointsWorld("points5h"), fits = new Map([["anthropic\u00005h", fit(2)]]);
+  const api = strat(experiment(w.meter, w.rows, { strata: { api: { objective: "apiUsd" } } }, {}, new Map())), pts = strat(experiment(w.meter, w.rows, w.expSettings, {}, new Map(), fits));
+  assert.equal(pts.objective, "points5h");
+  const a = eff(api.effects, "warmPolicy"), p = eff(pts.effects, "warmPolicy");
+  assert.ok(!("notMeasurable" in a) && !("notMeasurable" in p));
+  if ("notMeasurable" in a || "notMeasurable" in p) return;
+  close(p.ratioA, 2 * a.ratioA, 1e-6); close(p.ratioB, 2 * a.ratioB, 1e-6);
+  const seven = strat(experiment(w.meter, w.rows, { strata: { api: { objective: "points7d" } } }, {}, new Map(), fits));
+  assert.ok("notMeasurable" in eff(seven.effects, "warmPolicy"), "pi-economics: a 5h fit gives no 7d points");
+});
+
+test("T8.5 points5h: no fit or fewer than 8 complete windows (notEnough) is not measurable, the reason names the calibration; never 0", () => {
+  const w = pointsWorld("points5h");
+  for (const fits of [undefined, new Map(), new Map([["anthropic\u00005h", { n: 3, notEnough: true } as any]])]) {
+    const e = eff(strat(experiment(w.meter, w.rows, w.expSettings, {}, new Map(), fits)).effects, "warmPolicy");
+    assert.ok("notMeasurable" in e, `${fits === undefined ? "no fits" : "fits"}`);
+    if ("notMeasurable" in e) assert.ok(e.notMeasurable.includes("calibration"), e.notMeasurable);
+  }
+});
+
+test("T8.5 a points stratum writes no posterior (the engine falls back to blocks): { } for the stratum", () => {
+  const w = pointsWorld("points5h"), l = { ...logs(w.meter, w.rows), expSettings: w.expSettings };
+  const state = applyKill({}, analyse(l));
+  assert.deepEqual(state.designs[D].api.posterior, {}, "pi-economics: points objective, no posterior");
+});

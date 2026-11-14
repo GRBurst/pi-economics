@@ -6,7 +6,7 @@ import { withSpawnArms } from "../guards.ts";
 import { inPeriod, isRequestLine, type Logs, type Period } from "./logs.ts";
 import { armInfo, rowsBySession } from "./designs.ts";
 import { cost, type CostSection } from "./cost.ts";
-import { experiment, type DesignResult } from "./experiment.ts";
+import { experiment, fitKey, type DesignResult, type Fits } from "./experiment.ts";
 import { delegation, type DelegationSection } from "./delegation.ts";
 import { guards, type GuardsSection } from "./guards.ts";
 import { quality, type QualitySection } from "./quality.ts";
@@ -31,11 +31,13 @@ export type Analysis = { period: Period; budget: BudgetSection; cost: CostSectio
 export function analyse(all: Logs, period: Period = {}): Analysis {
   const logs = inPeriod(all, period);
   const meter = logs.meter.filter(isRequestLine); // levers lines record settings, no request (quality counts them as log lines)
-  const designs = experiment(meter, all.assignments, all.expSettings, all.plans, leverStates(all.meter, period));
+  const bud = budget(meter, all.plans, all.currencyRates);
+  const fits: Fits = new Map(bud.groups.map((g) => [fitKey(g.provider, g.kind), g.fit]));
+  const designs = experiment(meter, all.assignments, all.expSettings, all.plans, leverStates(all.meter, period), fits);
   const flags = Object.fromEntries([...armInfo([...new Set(meter.filter((l) => typeof l?.arm === "string").map((l) => l.arm))], all.assignments)].map(([a, i]) => [a, i.flags]));
   return {
     period,
-    budget: budget(meter, all.plans),
+    budget: bud,
     cost: cost(meter, logs.outcomes, flags, rowsBySession(all.assignments), all.plans),
     levers: levers(all.meter, logs.meter, period),
     experiment: { designs },

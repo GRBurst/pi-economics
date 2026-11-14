@@ -192,3 +192,9 @@ test("serialize keeps small raw headers", () => {
   const l = buildLine({ ...base, snap: { status: 200, at: 1, headers: { [P + "a"]: "1" } } });
   assert.deepEqual(JSON.parse(serialize(l)).rawRatelimit, { [P + "a"]: "1" });
 });
+
+test("M8 buildLine: the llama.cpp timings are written iff given (promptMs, genMs, cacheN, promptN)", () => {
+  assert.deepEqual(pickKeys(buildLine({ ...base, promptMs: 120, genMs: 3500, cacheN: 900, promptN: 100 }), ["promptMs", "genMs", "cacheN", "promptN"]), { promptMs: 120, genMs: 3500, cacheN: 900, promptN: 100 });
+  for (const k of ["promptMs", "genMs", "cacheN", "promptN"]) assert.equal(k in buildLine(base), false, `pi-economics: no ${k} unless given`);
+});
+function pickKeys(l: Record<string, unknown>, ks: string[]): Record<string, unknown> { return Object.fromEntries(ks.filter((k) => k in l).map((k) => [k, l[k]])); }

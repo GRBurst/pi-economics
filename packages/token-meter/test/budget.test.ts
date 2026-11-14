@@ -101,7 +101,7 @@ test("windowsOf: plans decide the providers and kinds — a subscription plan li
 // ---- the Budget section's spend rows (design §6.2: cash $, explicit currencies, local cost = active time × rate) ----
 import { budget } from "../core/analyse/budget.ts";
 
-const plansOf = parsePlans({ anthropic: { billing: "subscription", windows: ["5h", "7d"] }, llama: { billing: "local", rate: { amount: 0.13, currency: "EUR" } }, openrouter: { billing: "api" } });
+const plansOf = parsePlans({ anthropic: { billing: "subscription", windows: ["5h", "7d"] }, llama: { billing: "local", rate: { amount: 0.25, currency: "EUR" } }, openrouter: { billing: "api" } });
 const spendLines = (): Record<string, unknown>[] => [
   { v: 2, ts: at("10:00"), sessionId: "a", provider: "anthropic", model: "claude-x", kind: "turn", status: 200, billing: "subscription", ...TOK },
   { v: 2, ts: at("10:01"), sessionId: "o", provider: "openrouter", model: "gpt", kind: "turn", status: 200, billing: "api", input: 1, output: 1, costUsd: 0.05 },
@@ -126,8 +126,8 @@ test("budget: local cost = Σ durationMs × the plan's hourly rate, in the rate'
   assert.equal(l.provider, "llama");
   assert.deepEqual([l.requests, l.timed, l.untimed], [3, 2, 1]);
   close(l.hours, 1.5);
-  assert.deepEqual(l.rate, { amount: 0.13, currency: "EUR", per: "hour" });
-  close(l.cost!, 1.5 * 0.13);
+  assert.deepEqual(l.rate, { amount: 0.25, currency: "EUR", per: "hour" });
+  close(l.cost!, 1.5 * 0.25);
   assert.deepEqual(budget(spendLines(), parsePlans({ llama: { billing: "local" } })).local.map((x) => x.cost), [undefined], "a local plan without a rate has no cost, never 0");
 });
 
@@ -214,4 +214,27 @@ test("a stale lower reading of a parallel session does not undo a capped limit (
   const { five, seven } = kindsOf([reading("16:00", 20, 99), reading("16:10", 20, 97), err429("16:30")]);
   assert.deepEqual([seven.r429, five.r429], [1, 0]);
   assert.equal(seven.timeToCapMs, Date.parse(at("16:30")) - Date.parse(seven.start));
+});
+
+// M8 T8.3/T8.6/T8.8: the Budget's local rows come from core/analyse/local.ts; costs are per currency, summed only with a configured conversion
+test("M8 budget: a local row carries the union of the serving intervals, the queue share, per-model rows and prefix reuse; `hours` is the summed request time", () => {
+  const T = Date.parse("2026-11-02T10:00:00Z"), at = (m: number) => new Date(T + m * 60_000).toISOString();
+  const ll = (m: number, minutes: number, model: string, extra = {}) => ({ v: 2, ts: at(m), sessionId: "s", provider: "llama", model, kind: "turn", billing: "local", status: 200, input: 10, output: 100, costUsd: 0, durationMs: minutes * 60_000, ...extra });
+  const [l] = budget([ll(0, 30, "q5"), ll(15, 30, "q5"), ll(120, 30, "q4", { cacheN: 50, promptN: 50 })], parsePlans({ llama: { billing: "local", windows: [], rate: { amount: 2, currency: "EUR", per: "hour" } } })).local;
+  close(l.hours, 1.5); close(l.unionH, 1.25); close(l.queueShare, 1 / 6);
+  assert.deepEqual(l.models.map((m) => m.model), ["q4", "q5"]);
+  assert.deepEqual(l.prefix, { share: 0.5, basis: "timings", requests: 1 });
+  close(l.cost!, 3);
+});
+
+test("M8 budget: costs per currency (API-eq cash $ of the api class in USD, local cost in the rate's currency); a total only when every currency converts with `currency.rates`", () => {
+  const plans = parsePlans({ llama: { billing: "local", windows: [], rate: { amount: 2, currency: "EUR", per: "hour" } } });
+  const none = budget(spendLines(), plansOf);
+  assert.deepEqual(none.costs.map((c) => [c.currency, c.amount, c.converted]), [["EUR", 1.5 * 0.25, undefined], ["USD", 0.55, 0.55]]);
+  assert.equal(none.total, undefined, "pi-economics: no total without a rate between EUR and USD");
+  const some = budget(spendLines(), plansOf, { "USD/EUR": 0.5 });
+  assert.equal(some.total?.currency, "USD");
+  close(some.total!.amount, 0.55 + (1.5 * 0.25) / 0.5);
+  assert.deepEqual(budget(spendLines().filter((l) => l.provider !== "llama"), plans, {}).costs.map((c) => c.currency), ["USD"], "one currency: nothing to convert, its own total");
+  assert.deepEqual(budget(spendLines(), plansOf, { "EUR/GBP": 1 }).total, undefined);
 });

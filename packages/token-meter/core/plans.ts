@@ -43,3 +43,9 @@ export function parsePlans(raw: unknown): Plans {
   }
   return out;
 }
+
+const isBilling = (b: unknown): b is Billing => BILLINGS.includes(b as Billing);
+/** A line's billing class: its own `billing` (meter v2) when valid, else its provider's in `plans` (api without a plan). */
+export const billingOfLine = (l: any, plans: Plans): Billing => (isBilling(l.billing) ? l.billing : billingOf(plans, String(l.provider)));
+/** The class of a line was told (its own `billing`, or its provider's plan) rather than guessed. */
+export const billingTold = (l: any, plans: Plans): boolean => isBilling(l.billing) || Object.hasOwn(plans, String(l.provider));

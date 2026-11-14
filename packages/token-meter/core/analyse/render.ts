@@ -64,8 +64,24 @@ export function renderBudget(b: BudgetSection): string {
   out.push("\n### Spend by billing class\n", "API-eq $ = the tokens at the provider's list price (what a pay-per-token account would be charged); cash $ = what is actually charged: the API-eq $ of billing class api, 0 for subscription, free and local.\n",
     b.spend.length ? table(["billing class", "requests", "API-eq $", "cash $"], b.spend.map((r) => [r.billing, String(r.requests), f2(r.apiUsd), cash(r.cashUsd, r.guessed)])) : "_no requests in the period_");
   out.push("\n### Local cost\n");
-  out.push(b.local.length ? "Σ request time (`durationMs`, summed over requests: concurrent requests add up) × the provider's hourly rate in its currency. A request without `durationMs` adds no time: untimed requests make the cost an undercount. A provider without a rate has no cost.\n" : "_no local requests in the period_");
-  if (b.local.length) out.push(table(["provider", "requests (timed / untimed)", "active hours", "rate", "cost"], b.local.map((l) => [l.provider, `${l.requests} (${l.timed} / ${l.untimed})`, f2(l.hours), l.rate ? `${l.rate.amount} ${l.rate.currency}/h` : "no rate", l.cost === undefined ? "–" : `${f2(l.cost)} ${l.rate!.currency}`])));
+  out.push(b.local.length ? "Σ request time (`durationMs`, summed over requests: concurrent requests add up) × the provider's hourly rate in its currency. A request without `durationMs` adds no time: untimed requests make the cost an undercount. A provider without a rate has no cost: its wall time (the summed request time) is shown instead. Machine hours = the union of the requests' serving intervals; the queue share = 1 − machine hours ÷ request hours: the server has one slot, so above 0 local requests overlapped and queued (their `durationMs` include the wait).\n" : "_no local requests in the period_");
+  if (b.local.length) {
+    out.push(table(["provider", "requests (timed / untimed)", "request hours", "machine hours", "queue share", "rate", "cost"], b.local.map((l) => [l.provider, `${l.requests} (${l.timed} / ${l.untimed})`, f2(l.sumH), f2(l.unionH), pc(l.queueShare),
+      l.rate ? `${l.rate.currency} (local, ${l.rate.amount}/h)` : "no rate", l.cost === undefined ? `not measurable (wall time ${f2(l.sumH)} h)` : `${f2(l.cost)} ${l.rate!.currency}`])));
+    out.push("\n#### Models\n", "One rate per provider (its models run on one machine). Tokens per second = output tokens ÷ the generation time `genMs` of the requests that carry llama.cpp timings, else ÷ the request time `durationMs`; cost per 1M output tokens = the provider's rate × the model's request hours ÷ the output tokens of all its timed requests.\n",
+      table(["provider", "model", "requests", "request hours", "output tokens (throughput basis)", "tokens/s (basis)", "cost per 1M output tokens"], b.local.flatMap((l) => l.models.map((m) => [l.provider, m.model, String(m.requests), f2(m.sumH), String(m.output),
+        m.tokPerS === undefined ? "–" : `${f2(m.tokPerS)} (${m.basis})`, m.costPerMOut === undefined ? "–" : `${f2(m.costPerMOut)} ${l.rate!.currency}`]))));
+    const prefix = b.local.filter((l) => l.prefix);
+    out.push("\n#### Prefix reuse\n", prefix.length ? "Share of the prompt the server served from its cache: llama.cpp `cache_n` ÷ (`cache_n` + `prompt_n`) when the lines carry timings, else `cacheRead` ÷ (`input` + `cacheRead`).\n" : "No cached or re-used prompt tokens in the period.");
+    if (prefix.length) out.push(table(["provider", "reused", "basis", "requests"], prefix.map((l) => [l.provider, pc(l.prefix!.share), l.prefix!.basis, String(l.prefix!.requests)])));
+  }
+  out.push("\n### Costs by currency\n");
+  if (!b.costs.length) out.push("_no cost in the period_");
+  else {
+    out.push("Cash $ of the api class and the local cost of each rate's currency; currencies are summed only with a conversion (`currency.rates`, e.g. `USD/EUR`), else they stay apart.\n",
+      table(["currency", "amount", b.total ? `in ${b.total.currency}` : "converted"], b.costs.map((c) => [c.currency, f2(c.amount), c.converted === undefined ? "no rate" : f2(c.converted)])));
+    out.push(b.total ? `\nTotal: ${f2(b.total.amount)} ${b.total.currency}` : "\nNo total: a currency has no configured conversion; the amounts above stay separate columns.");
+  }
   return out.join("\n");
 }
 
