@@ -165,6 +165,35 @@
       t = "pi-retry";
       unless = ["removed" "former" "left" "gone"];
     }
+    # (redesign M11, review) What the review found overclaimed or stale.
+    {
+      f = "docs/pi-token-economics.md";
+      t = "listed as not observable with the reason";
+    }
+    {
+      f = "docs/pi-token-economics.md";
+      t = "ineligible session's row says why";
+    }
+    {
+      f = "skills/pi-token-economics-analysis/SKILL.md";
+      t = "a reason: no matching stratum, mode off";
+    }
+    {
+      f = "packages/token-meter/LOGS.md";
+      t = "of a run before 2026-11";
+    }
+    {
+      f = "modules/experiments.nix";
+      t = "fractional-factorial arm per";
+    }
+    {
+      f = "packages/experiments/package.json";
+      t = "ractional-factorial arm per";
+    }
+    {
+      f = "README.md";
+      t = "still start first";
+    }
   ];
   # The Checks table of docs/pi-economics.md: its lines, and a row's first cell.
   checksTable = takeWhile (l: !lib.hasPrefix "## " l) (lib.tail (dropWhile (l: l != "## Checks") economics));

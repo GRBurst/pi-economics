@@ -1,4 +1,4 @@
-// experiments: one fractional-factorial arm per main session:
+// experiments: one randomized arm per main session, per stratum:
 // design + explore/exploit assignment (core/design.ts, core/assign.ts), the
 // add-ons that set and read back its levers (addons/), the assignment on
 // pi-economics' internal channel (core/channel.ts); a child runs its root's

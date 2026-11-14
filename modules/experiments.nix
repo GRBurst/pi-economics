@@ -1,5 +1,5 @@
-# The online experiment (spec §2, §4): one fractional-factorial arm per main
-# session (explore/exploit assignment), recorded in
+# The online experiment (spec §2, §4): one randomized arm per main
+# session, per stratum (explore/exploit assignment), recorded in
 # <agentDir>/experiments/assignments.jsonl and handed to pi-economics' own
 # add-ons on its internal channel (pi.events; redesign §7.7, M5b.2: no
 # globalThis API). Design v4's factors (warmPolicy, mainCacheTtl, maskOnCold)
@@ -95,7 +95,7 @@
   legacyKeys = lib.filter (k: cfg.settings ? ${k}) ["factors" "maxArms" "baseline"];
 in {
   options.programs.piEconomics.experiments = {
-    enable = lib.mkEnableOption "the pi experiments extension (one fractional-factorial arm per main session; explore/exploit assignment; a child runtime runs its root's arm)";
+    enable = lib.mkEnableOption "the pi experiments extension (one randomized arm per main session, per stratum; explore/exploit assignment; a child runtime runs its root's arm)";
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -135,7 +135,7 @@ in {
       path = "${cfg.package}";
       checkPath = ../packages/experiments/index.ts;
       forChildren = true;
-      description = "One fractional-factorial arm per main session (explore/exploit assignment); children run their root's arm; pi-economics' add-ons read and read back its levers on the internal channel.";
+      description = "One randomized arm per main session, per stratum (explore/exploit assignment); children run their root's arm; pi-economics' add-ons read and read back its levers on the internal channel.";
     };
 
     # (M4.14) Literal text (spec §4). N4: always written, the extension's

@@ -740,7 +740,7 @@ every report section has data.
 
 - **Branch summaries** (`/tree` with a summary) are summary requests outside the agent loop like compactions; pi 1.4 keeps
   their usage on the branch-summary entry, which the meter does not read yet: they are not metered.
-- A **resumed** child session of a run before 2026-11 (v1 engine) took its arm from the spawn event only,
+- A **resumed** child session of a run of the v1 engine (before 0.3.0) took its arm from the spawn event only,
   so its later meter lines miss `arm` (seen 2026-10-03; `pi-analyse --check` names those lines). Since
   the v2 engine a child runtime derives its root's arm from durable state (the session file's
   `subagents/<root>/` directory, or the actor's agent list for an in-memory child), so a resumed child

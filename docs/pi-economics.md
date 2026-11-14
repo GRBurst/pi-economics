@@ -84,13 +84,13 @@ Three options of the components that existed before 0.3.0 are hidden stubs (`mod
 are no options in the generated manual, have no effect, and a definition fails the assertion that says
 where the component went (a definition under `lib.mkIf false` is none, so a guarded leftover evaluates).
 
-| Option | Where it went | The assertion's message |
-|---|---|---|
-| `retry` | nowhere: pi's native retry (`retry.*` in its settings) handles transient errors; the component served an OpenRouter free tier that is gone | `pi-economics: programs.piEconomics.retry was removed; pi's native retry (settings retry.*) handles transient errors` |
-| `taskRouter` | the [pi-task-router](https://github.com/GRBurst/pi-task-router) flake, `programs.piTaskRouter` | `pi-economics: programs.piEconomics.taskRouter moved to the pi-task-router flake (programs.piTaskRouter)` |
-| `actorSubagents` | pi-setup, `programs.pi.actorSubagents` | `pi-economics: programs.piEconomics.actorSubagents moved to pi-setup (programs.pi.actorSubagents)` |
+| Option | Where it went |
+|---|---|
+| `retry` | nowhere: pi's native retry (`retry.*` in its settings) handles transient errors; the component served an OpenRouter free tier that is gone |
+| `taskRouter` | the [pi-task-router](https://github.com/GRBurst/pi-task-router) flake, `programs.piTaskRouter` |
+| `actorSubagents` | pi-setup, `programs.pi.actorSubagents` |
 
-Their sections below say what still refers to them here. The registry names `task-router` and
+Each option's section below quotes the assertion's message and says what still refers to it here. The registry names `task-router` and
 `actor-subagents` stay: they are how the components learn that those extensions are loaded.
 
 ## Components
@@ -301,7 +301,7 @@ patched extension against the add-on.
 |---|---|---|
 | `enable` | `false` | registry entry `experiments` (`forChildren = true`: in a child it draws nothing and serves its root's arm and levers) |
 | `package` | the flake's `packages/experiments` | the extension |
-| `settings` | `{}` | written to `<agentDir>/experiments/settings.json` as given, `{}` as `{"mode": "explore"}` (`mode`, `minExplore`, `strata` (default: one per billing class of `tokenMeter.plans`, and `api`; cloud classes get the cache-lifecycle factors, `local` the infinite-context nudge), `guards`, `correctionRegex`; the v1 engine's `factors`, `maxArms`, `baseline` are not applied and draw a warning; `baseline` still labels the analyses of v1–v4 designs); the file is the extension's opt-in: without it experiments is inert |
+| `settings` | `{}` | written to `<agentDir>/experiments/settings.json` as given, `{}` as `{"mode": "explore"}` (`mode`, `minExplore`, `strata` (default: one per billing class of `tokenMeter.plans`, and `api`; cloud classes get the cache-lifecycle factors, `local` the infinite-context nudge; `{}` opts out: no stratum, nobody is drawn), `guards`, `correctionRegex`; the v1 engine's `factors`, `maxArms`, `baseline` are not applied and draw a warning; `baseline` still labels the analyses of v1–v4 designs); the file is the extension's opt-in: without it experiments is inert |
 
 Without the actor in the registry (`extensions.actor-subagents`) it warns:
 in-memory children are not recognised (it reads the actor's agent list; children

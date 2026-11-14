@@ -84,8 +84,8 @@ State the unit with every number; the report labels them, keep the labels.
   line: a non-randomized comparison (the units that kept the assignment are self-selected), never the headline. **Refusal rate** per factor: above 20% the add-on is broken and the factor's effect is not to be trusted. **Sensitivity** repeats the
   effect over the requests of the root's first billing class (a model switch moves cost between classes); **context
   overflows** count failed turns per arm. A secondary column shows the requests in the other currency (an arm that moves
-  work to another kind of provider looks cheaper in the objective alone). An ineligible session (`eligible: false`, with
-  a reason: no matching stratum, mode off, a lever that cannot be set for its model) is no unit and in no refusal rate.
+  work to another kind of provider looks cheaper in the objective alone). An ineligible session (`eligible: false`: no matching stratum, mode off, no arm left, or a gating
+  lever that cannot be set for its model, which is the one case that carries a `reason`) is no unit and in no refusal rate.
   An effect counts only when its CI excludes 0 *and* each level has several units.
 - **Router**: share of tasks and $ in child sessions, Qwen share (of the
   planned tiers; the report states no target: the router's targets are the owner's), escalations,

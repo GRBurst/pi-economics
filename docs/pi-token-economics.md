@@ -42,7 +42,7 @@ Every figure in a report carries its unit; none is added to another without a st
 
 | Unit | What it is | Where it is used |
 |---|---|---|
-| API-eq $ | the list price of the tokens: pi's `costUsd` (1 h cache writes at 2.0 × input, 5-minute at 1.25, reads per model: 0.1, Opus 5.5 and Sonnet 5.5 0.05) | the comparison metric of cloud strata (`apiUsd`); Fleet; the Budget's spend |
+| API-eq $ | the list price of the tokens: pi's `costUsd` (1 h cache writes at 2.0 × input, 5-minute at 1.25, reads at the model's own ratio from `packages/token-meter/core/analyse/prices.ts`: 0.1 × input by default, 0.05 for Opus 5.5 and Sonnet 5.5, lower for a few others) | the comparison metric of cloud strata (`apiUsd`); Fleet; the Budget's spend |
 | cash $ | what is charged: the API-eq $ of billing class `api`, else 0; a v1 line with no plan is guessed `api`, so its cash $ reads "≤ X" | the Budget's spend by class |
 | quota % (`q5h`, `q7d`) | the account's utilisation of a subscription's windows, in whole percent, shared by every session and client | the Budget: windows, peak, lockouts; never charged to a session or an arm |
 | est. points | quota points estimated from API-eq $ by the calibration (a non-negative fit per token component); the cache premiums and the `points5h` / `points7d` objectives | where the fit has at least 8 complete windows; else "not measurable" |
@@ -135,7 +135,7 @@ The unit of the online experiment is the **main session** (a child runs its root
 billing class (from `plans`) and/or by `<provider>/<id>` globs, the first stratum that matches wins,
 and strata are never pooled (cloud and local costs are different currencies and different regimes).
 Without a `strata` setting there is one stratum per billing class of `plans` plus `api`, each named
-after its class:
+after its class (an explicit `strata = {}` is the opt-out: no stratum, so nobody is drawn):
 
 | Stratum | Factors (a level pair each) | Objective |
 |---|---|---|
@@ -159,9 +159,11 @@ is not measurable.
 **Eligibility.** A main is eligible when its model matches a stratum, `mode` is not `off`, an arm is
 left enabled and every **gating** lever of the stratum's design (the fold-reminder limit) is
 loaded and settable for the session's model (its matched rule has a range). The gate is
-all-or-nothing per session: a design with a partly settable lever would break the factorial. An
-ineligible session's row says why (`eligible: false`, `reason`), has no arm, consumes no block and
-is in no refusal rate.
+all-or-nothing per session: a design with a partly settable lever would break the factorial. A
+session that matched a stratum but fails the gate has a row that says why (`eligible: false`, `reason`: the
+lever's target is not loaded, or no level can be set for its model); a main that matches no stratum, or runs
+with `mode` off or no arm left, is ineligible too but its row carries no `reason`. None has an arm, consumes a
+block or counts in a refusal rate.
 
 **Modes.** `explore` draws permuted blocks per design and stratum (`experiments/blocks.json`);
 `exploit` samples the posterior reward of a stratum whose objective has an estimator (`apiUsd`) with
@@ -195,12 +197,14 @@ session at its first prompt (and a new one when a state changes): per lever the 
 `v`, its **source** `s` (`pe`: pi-economics assigned it; `ext`: an extension chose it, its default or
 its own experiment; `fixed`: configuration or pi's default), and, where pi-economics assigned a
 level, `a` (the assigned level), `rb` (the read-back) and `tier`. The levers table of the report
-shows per lever the values the period ran with, the sources and the refusal rate. A lever pi-economics
-cannot observe is listed as not observable with the reason, not left out.
+shows per lever the values the period ran with, the sources and the refusal rate. A lever whose value pi
+would reject, or that pi-economics cannot read, is left off the line (unknown), never listed with a guess:
+the table shows the levers that appeared on lines and counts the sessions without a levers line, so a lever
+missing from the table, or a session count short of the period's, is how a gap shows.
 
 An **add-on** (`packages/experiments/addons/<target>.ts`) is the only code that knows how to set a
 lever and how to see it set. It applies a level before the target reads it, then reads back what the
-session ended up with, at the first prompt: `confirmed` (the effective value is the assigned one),
+session ended up with, at the first prompt (a cache TTL at each response): `confirmed` (the effective value is the assigned one),
 `refused` (it is another: pi clamped it, an extension redrew it, a project setting overrode it; the
 source says who) or `unverified` (nothing can tell: the state is the assignment, assumed). pi-economics'
 assignment wins over an extension's own experiment, but a refusal is recorded, never counted as applied.
@@ -233,8 +237,8 @@ are linked, never copied. See `packages/bench/README.md`.
 A few pi settings cannot change per session in a live pi (compaction runs on the process's settings),
 so only the bench varies them: a factor named `pi.compaction.enabled`, `pi.compaction.reserveTokens`
 or `pi.compaction.keepRecentTokens` in a bench arm's `factors` is written into the run's agent dir
-`settings.json`. Infinite-context cancels every native compaction, so such an arm loads none (and
-`experiments`, which adopts the bench's `experiments/assignment.json` instead of drawing). The levers
+`settings.json`. Infinite-context cancels every native compaction, so such an arm loads no
+infinite-context, and it loads `experiments`, which adopts the bench's `experiments/assignment.json` instead of drawing. The levers
 line of the run then reads `pe`/`confirmed` once pi's effective settings (a trusted project's over the
 global file, `compaction.modelOverrides`, pi's default when unset) show the level, `refused` when they do
 not. `bench-report` shows compactions, context overflows, active minutes, meter cost and the levers
@@ -247,8 +251,8 @@ session and in a child: the experiments engine seeds levers before their targets
 route links each component outside pi's auto-discovered directory (`<agentDir>/pi-economics/extensions`)
 and `piSettings` puts the links at the front of `settings.json`'s `extensions` (op `ensurePrefix`):
 `experiments`, `token-meter`, `cache-lifecycle`, `infinite-context`, then the registry's other
-entries by name; the children get the same order. A trusted project's extensions and `pi -e` still
-start first. With `piSettings.enable = false` nothing lists them: put
+entries by name; the children get the same order. pi decides where a trusted project's extensions and
+`pi -e` ones go (the check does not cover them). With `piSettings.enable = false` nothing lists them: put
 `programs.piEconomics.loadOrder` at the front of `extensions` yourself (a warning says so). The
 package route (`pi install`) cannot reorder: move its entry first in `packages`. The check `load-order`
 runs real pi 1.4 offline over the home-file layout, two installed packages and a listed entry, a child

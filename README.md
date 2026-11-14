@@ -114,7 +114,7 @@ it). The components see the actor when `programs.piEconomics.extensions` has an 
   and `nudgeAtPercent` per provider or model; `startTokens`, `everyTokens`,
   `prices`, `cacheTtlMinutes` and `foldHint` of the earlier patch are gone (a
   definition is an unknown option).
-- **`programs.piEconomics.retry` is removed** (a definition fails: pi's native
+- **`programs.piEconomics.retry` (the former pi-retry component) is removed** (a definition fails: pi's native
   `retry.*` settings handle transient errors); `taskRouter` and
   `actorSubagents` moved in 0.2.0. A leftover `piRetry` key in `settings.json`
   does nothing and can be deleted.
@@ -238,7 +238,7 @@ and the `piSettings` entry puts the links at the front of `<agentDir>/settings.j
 `extensions`: pi starts pi-economics' components before every other extension
 of the user scope that is not built in (`experiments`, `token-meter`,
 `cache-lifecycle`, `infinite-context`, then the registry's other entries by
-name; a trusted project's extensions and `pi -e` still start first), and the
+name; pi decides where a trusted project's extensions and `pi -e` ones go), and the
 actor's children get them in the same order.
 
 `piSettings` is on by default and edits pi's mutable

@@ -9,6 +9,8 @@
   pe = cfg: cfg.programs.piEconomics;
   dirs = [".pi/agent" "custom/agent"];
   source = builtins.readFile (self + "/skills/pi-token-economics-analysis/SKILL.md");
+  # An infix test without a regex (the skill text is long: lib.hasInfix would be a backtracking match over all of it).
+  contains = needle: hay: builtins.replaceStrings [needle] [""] hay != hay;
   # dir: agentDir; meter: whether tokenMeter is enabled too.
   eval = dir: meter:
     hm.eval {
@@ -34,8 +36,8 @@ in {
   analysis-skill-text = lib.concatMap (dir: let
     a = (pe (eval dir true)).analysisSkill;
   in
-    holds "names ~/${dir}/LOGS.md" (lib.hasInfix "~/${dir}/LOGS.md" a.text)
-    ++ holds "no other agent dir (${dir})" (dir == ".pi/agent" || !lib.hasInfix ".pi/agent" a.text)
+    holds "names ~/${dir}/LOGS.md" (contains "~/${dir}/LOGS.md" a.text)
+    ++ holds "no other agent dir (${dir})" (dir == ".pi/agent" || !contains ".pi/agent" a.text)
     ++ eq "the rest unchanged (${dir})" (builtins.replaceStrings ["~/${dir}"] ["~/.pi/agent"] a.text) source
     ++ holds "frontmatter name (${dir})" (lib.elem "name: pi-token-economics-analysis" (lib.splitString "\n" a.text))
     ++ eq "path (${dir})" a.path "${a.package}"
@@ -64,9 +66,9 @@ in {
     text = (pe c).analysisSkill.text;
   in
     holds "${command} on PATH (${dir})" (lib.elem command (map lib.getName c.home.packages))
-    ++ holds "the skill runs ${command} (${dir})" (lib.hasInfix "${command} " text)
+    ++ holds "the skill runs ${command} (${dir})" (contains "${command} " text)
     ++ holds "${dir}/LOGS.md installed (${dir})" (c.home.file ? "${dir}/LOGS.md")
-    ++ holds "the skill reads ~/${dir}/LOGS.md (${dir})" (lib.hasInfix "~/${dir}/LOGS.md" text))
+    ++ holds "the skill reads ~/${dir}/LOGS.md (${dir})" (contains "~/${dir}/LOGS.md" text))
   dirs;
 
   # (M3b, M4) The skill explains every section of the report (Budget, Fleet, Cache, Levers, Experiments, Router, ...), and every cache-miss cause.
@@ -79,7 +81,7 @@ in {
   # randomized comparison and per-protocol as a self-selected one, a refusal rate to distrust, and where the quota waiter's
   # waits are (not yet).
   analysis-skill-redesign = let
-    has = s: builtins.replaceStrings [s] [""] source != source;
+    has = s: contains s source;
   in
     lib.concatMap (s: holds "the skill carries ${s}" (has s))
     [
