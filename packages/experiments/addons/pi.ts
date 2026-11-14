@@ -71,9 +71,13 @@ const ACTIVE_TOOL = /^pi\.activeTool\(([^(), \t\r\n]+)\)$/;
 
 /** The levers and the lever kinds that set pi through its session control. */
 export function piAddons(pi: PiControl): { levers: readonly Lever[]; kinds: readonly Kind[] } {
-  const tool: Kind = (id) => {
-    const name = ACTIVE_TOOL.exec(id)?.[1];
-    return name === undefined ? undefined : activeTool(pi, name);
+  const tool: Kind = {
+    name: "pi.activeTool",
+    arity: 1,
+    make(id) {
+      const name = ACTIVE_TOOL.exec(id)?.[1];
+      return name === undefined ? undefined : activeTool(pi, name);
+    },
   };
   return { levers: [thinkingLevel(pi)], kinds: [tool] };
 }

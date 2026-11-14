@@ -80,7 +80,11 @@ function sessionEntry(pi: Appender, customType: string, field: string, target: s
 }
 
 /** The lever kind of `session-entry(<customType>,<field>)` ids. */
-export const sessionEntryKind = (pi: Appender): Kind => (id, factor) => {
-  const p = parseSessionEntry(id);
-  return p === undefined ? undefined : sessionEntry(pi, p.customType, p.field, factor?.target);
-};
+export const sessionEntryKind = (pi: Appender): Kind => ({
+  name: "session-entry",
+  arity: 2,
+  make(id, factor) {
+    const p = parseSessionEntry(id);
+    return p === undefined ? undefined : sessionEntry(pi, p.customType, p.field, factor?.target);
+  },
+});

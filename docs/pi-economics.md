@@ -245,8 +245,9 @@ loads before pi-economics drew its own value, until a later entry shows the targ
 seed without recording anything still reads `confirmed`: the read-back sees what the target records, never that it
 adopted. Children are seeded with their root's level. The module refuses a session-entry factor without a target
 (`pi-economics: experiments factor <f> in stratum <s> has a session-entry lever without a target`), a factor whose
-`lever` is neither an id of `packages/experiments/addons/catalogue.json` nor one of the two kinds (`… has an unknown
-lever <lever>`: it would randomize nothing) and a level that is not a level name (`a-z`, `0-9`, `_`, `-`, at most 32
+`lever` is neither an id nor an id of a kind (name and number of arguments) of `packages/experiments/addons/catalogue.json`,
+which `test/catalogue.test.ts` holds equal to what the engine registers (`… has an unknown lever <lever>`: it would
+randomize nothing) and a level that is not a level name (`a-z`, `0-9`, `_`, `-`, at most 32
 characters), a number or a boolean (`… has a level that is not a level name, a number or a boolean`); the package's
 `parseStrata` drops such a stratum with a warning.
 Corrections and `/rate` ratings go to `<agentDir>/guards/events.jsonl`. There

@@ -20,5 +20,17 @@ test("T7c.0 the catalogue lists exactly the online levers the engine registers b
   assert.deepEqual(catalogue.levers, online, "same ids, in registration order");
   assert.ok(levers.length > online.length, "the process levers are registered");
   assert.deepEqual(catalogue.thinkingLevels, [...THINKING_LEVELS]);
-  assert.deepEqual(Object.keys(catalogue).sort(), ["levers", "thinkingLevels"]);
+  assert.deepEqual(Object.keys(catalogue).sort(), ["kinds", "levers", "thinkingLevels"]);
+});
+
+test("F5 the catalogue lists the data-only kinds the engine registers, by name and arity; a name with that many arguments resolves, one more or fewer does not", () => {
+  const { kinds } = allAddons(fakePi().pi, deps);
+  const byName = (a: { name: string }, b: { name: string }) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  assert.deepEqual([...catalogue.kinds].sort(byName), kinds.map(({ name, arity }) => ({ name, arity })).sort(byName));
+  for (const k of kinds) {
+    const id = (n: number) => `${k.name}(${Array.from({ length: n }, (_, i) => `a${i}`).join(",")})`;
+    assert.equal(k.make(id(k.arity))?.id, id(k.arity), k.name);
+    assert.equal(k.make(id(k.arity + 1)), undefined, `${k.name}: one more argument`);
+    assert.equal(k.make(id(k.arity - 1)), undefined, `${k.name}: one fewer`);
+  }
 });

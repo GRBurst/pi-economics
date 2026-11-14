@@ -59,10 +59,10 @@
       else true
     );
   # (redesign M7c) A factor's lever is one the engine can set: an id of the
-  # catalogue or a data-only kind, pi.activeTool(<name>) or
-  # session-entry(<customType>,<field>) (names without parentheses, commas or
-  # whitespace: space, tab, newline, carriage return; addons/session-entry.ts and
-  # addons/pi.ts parse the same).
+  # catalogue or an id of a data-only kind the catalogue lists with its arity,
+  # <kind>(<name>, …) (pi.activeTool(<name>), session-entry(<customType>,<field>);
+  # names without parentheses, commas or whitespace: space, tab, newline,
+  # carriage return; addons/session-entry.ts and addons/pi.ts parse the same).
   plainName = s:
     s != "" && lib.all (c: !lib.elem c ["(" ")" "," " " "\t" "\n" "\r"]) (lib.stringToCharacters s);
   kindArgs = prefix: lever:
@@ -73,12 +73,10 @@
     lib.isString lever
     && (
       lib.elem lever catalogue.levers
-      || (let args = kindArgs "pi.activeTool" lever; in args != null && lib.length args == 1 && lib.all plainName args)
-      || isSessionEntry lever
+      || lib.any (ofKind lever) catalogue.kinds
     );
-  isSessionEntry = lever:
-    lib.isString lever
-    && (let args = kindArgs "session-entry" lever; in args != null && lib.length args == 2 && lib.all plainName args);
+  ofKind = lever: k: let args = kindArgs k.name lever; in args != null && lib.length args == k.arity && lib.all plainName args;
+  isSessionEntry = lever: lib.isString lever && lib.any (k: k.name == "session-entry" && ofKind lever k) catalogue.kinds;
   # (redesign M7c, M5b.2 review m2) A level reaches a levers line as a value:
   # a level name (core/settings.ts LEVEL: lowercase letters, digits, "_" and
   # "-", at most 32 characters, not starting with "_" or "-"), a number or a

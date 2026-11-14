@@ -34,7 +34,7 @@ export function createRegistry(levers: readonly Lever[], kinds: readonly Kind[] 
     // A kind makes a lever per call: it depends on the factor (its target), so none is shared by id.
     lever(id, factor) {
       let l = byId.get(id);
-      for (const kind of kinds) if (l === undefined) l = kind(id, factor);
+      for (const kind of kinds) if (l === undefined) l = kind.make(id, factor);
       return l;
     },
     loaded: (target) => live.has(target),
