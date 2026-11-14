@@ -54,7 +54,7 @@ const records = (entries: Entry[]) => entries.filter((e) => e.customType === "in
  * infinite-context, which registers its tool and follows the model at session_start and model_select like the patch.
  * `table`: the rules the stand-in resolves (default: RULES, the file's); `ignoresSeed`: it draws whatever it finds.
  */
-function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string, Rule>; ignoresSeed?: boolean; entries?: Entry[]; draw?: number; rng?: number; silent?: boolean } = {}) {
+function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string, Rule>; ignoresSeed?: boolean; entries?: Entry[]; draw?: number; rng?: number; silent?: boolean; others?: string[] } = {}) {
   const agentDir = o.agentDir ?? mkdtempSync(join(tmpdir(), "experiments-ic-"));
   mkdirSync(join(agentDir, "infinite-context"), { recursive: true });
   writeFileSync(join(agentDir, "infinite-context", "settings.json"), JSON.stringify(FILE));
@@ -66,6 +66,7 @@ function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string
   onAssigned(f.events, (l) => void heard.push(l));
   install(f.pi, { agentDir, settings: { ...defaults(), strata: { any: { match: {}, factors: [NUDGE] } } }, rng: () => o.rng ?? 0.5, api: () => undefined });
   const table = o.table ?? RULES;
+  tools.push(...(o.others ?? []));
   if (o.loaded !== false) tools.push("context_fold");
   const follow = (model: Model) => {
     const { rule, nudge } = table[key(model)] ?? { nudge: 150_000 };
@@ -275,4 +276,26 @@ test("review m1 a loaded but silent target: the seed is the latest record and st
   r.select("s1", local, haiku);
   r.agentStart("s1", local);
   assert.equal(r.state("s1")?.rb, "unverified", "after a switch too");
+});
+
+// Review m3: the tool name is the only sign that the extension is loaded; other tools, even its siblings', are none.
+test("review m3 other tools listed, no context_fold: the target is not loaded — inert, nothing seeded", () => {
+  const r = runtime({ loaded: false, others: ["read", "bash", "context_peek", "context_map", "context_search", "context_unfold"] });
+  r.start("s1", haiku);
+  assert.deepEqual(r.entries.map((e) => e.customType), [ENTRY]);
+  r.agentStart("s1", haiku);
+  assert.deepEqual(query(r.events, "s1")!.levers, {});
+  // The same tools plus context_fold: loaded.
+  const loaded = runtime({ others: ["read", "bash", "context_peek"] });
+  loaded.start("s1", haiku);
+  assert.equal(records(loaded.entries).length, 2);
+});
+
+test("review m3 a host whose pi has no getAllTools, or whose getAllTools throws or answers no list: not loaded", () => {
+  for (const getAllTools of [undefined, () => { throw new Error("not bound"); }, () => undefined, () => "context_fold", () => [null, 3, { name: 5 }]]) {
+    const r = runtime({ loaded: false });
+    Object.assign(r.pi, { getAllTools });
+    r.start("s1", haiku);
+    assert.deepEqual(r.entries.map((e) => e.customType), [ENTRY], String(getAllTools));
+  }
 });
