@@ -86,6 +86,9 @@ in {
   doc-pointers = import ./doc-pointers.nix {
     inherit lib pkgs;
     router = pi-task-router;
+    setup = pi-setup;
+    # (redesign M11) Only the names are read: no check is forced.
+    checkNames = builtins.attrNames self.checks.${pkgs.stdenv.hostPlatform.system};
   };
   npm-deps = npm.check;
   typecheck-harness = typecheck.selftest;

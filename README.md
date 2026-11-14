@@ -1,8 +1,10 @@
 # pi-economics
 
 The [pi](https://github.com/earendil-works/pi) coding agent's token-economics
-stack as Home Manager components: a meter that logs every provider request,
-prompt-cache and context-window management, online experiments, and a
+stack as Home Manager components: a meter that logs every provider request in
+the unit that binds your setup (subscription quota, API-equivalent dollars,
+local machine time), per-session online experiments over pi's own settings and
+the extensions you run, prompt-cache and context-window management, and a
 bench to measure all of it on your own work. Scope: a purely exploratory
 framework ([docs/scope.md](docs/scope.md)). The task router that picks the
 cheapest member that can do a job, with its local mode and research, is a flake
@@ -15,7 +17,9 @@ pi-actor-subagents that two components use is
 `programs.piEconomics.actorSubagents` fails likewise). The former `retry`
 component is gone: pi's native retry (its `retry.*` settings) handles
 transient errors, and a definition of `programs.piEconomics.retry` fails
-saying so. Each component is
+saying so. Waiting out a quota window is the job of the quota waiter, an
+extension of its own that is not part of this repository or of 0.3.0; metering
+its waits ships after 0.3.0. Each component is
 an option under `programs.piEconomics` and is off until you enable it (the
 `piSettings` migration of pi's `settings.json` is the one default-on switch,
 see Requirements).
@@ -24,13 +28,13 @@ see Requirements).
 
 | Option | What it does |
 |---|---|
-| `tokenMeter` | one JSON line per provider request (tokens, cost, quota headers, retries; no prompt text); `meter-report` and `pi-analyse` |
+| `tokenMeter` | one JSON line per provider request (tokens, cost, billing class, timing, quota headers, retries; no prompt text) and the value and source of every lever in force; `meter-report` and `pi-analyse`, whose report opens with the budget (quota windows, calibration, spend, local cost) |
 | `analysisSkill` | an agent skill that runs `pi-analyse` and proposes decisions from the logs |
 | `cacheLifecycle` | elides stale tool results and thinking after the prompt cache expired; cache warming |
-| `experiments` | one fractional-factorial arm per main session, recorded for the reports |
-| `infiniteContext` | pi-infinite-context with one patch: fold-reminder limits per provider or model |
-| `bench` | `pi-bench` and `bench-report`: arms, blind judges, bootstrap reports |
-| `piSettings` | idempotent edits of pi's mutable `settings.json` that the components contribute |
+| `experiments` | one randomized arm per main session, per setup (stratum) with its own objective; assigns levers through add-ons and reads each back (confirmed, refused or unverified) |
+| `infiniteContext` | pi-infinite-context with one patch: fold-reminder limits (a number or a range) per provider or model |
+| `bench` | `pi-bench` and `bench-report`: arms, blind judges, bootstrap reports, process-scope pi levers |
+| `piSettings` | idempotent edits of pi's mutable `settings.json` that the components contribute, among them the load order (the components start first) |
 
 Every option, its default and its effect: [`docs/pi-economics.md`](docs/pi-economics.md).
 What is logged and measured, and how to run the reports and the bench:
@@ -40,9 +44,10 @@ What is logged and measured, and how to run the reports and the bench:
 ## Use
 
 Add the flake as an input and let it follow your `nixpkgs` and `home-manager`
-(its two patched upstreams are `flake = false` inputs; the patches apply to
-the revisions in this flake's `flake.lock`, so let them follow another
-revision of yours only if the patches still apply):
+(its one patched upstream, pi-infinite-context, is a `flake = false` input; the
+patch applies to the revision in this flake's `flake.lock`, so let it follow
+another revision of yours only if the patch still applies; the inputs
+`pi-setup` and `pi-task-router` serve its checks only):
 
 ```nix
 inputs = {
@@ -81,10 +86,42 @@ The agent directory defaults to `~/.pi/agent`;
 The patched actor-subagents comes from pi-setup: its `homeModules.default`
 with `programs.pi.actorSubagents.enable = true`, and its economics bridge
 `homeModules.piEconomics`, which forwards `programs.pi.extensions` (the
-actor's entry included) to `programs.piEconomics.extensions` and hands the
-children's list (`childExtensions`) back to the actor's settings file. The
-components see the actor when `programs.piEconomics.extensions` has an entry
+actor's entry included) and `programs.pi.agentDir` to
+`programs.piEconomics.extensions` and `agentDir` and hands the
+children's list (`childExtensions`) back to the actor's settings file (a
+pi-setup that does not forward a moved `agentDir` leaves the components out of
+it). The components see the actor when `programs.piEconomics.extensions` has an entry
 `actor-subagents`; without one, `cacheLifecycle` and `experiments` warn.
+
+## Upgrading to 0.3.0
+
+0.3.0 redesigns the measurement core; what a consumer of 0.2.0 meets:
+
+- **Meter lines are v2** (billing class, timing, per-request retries, `levers`
+  lines, compaction lines); the readers still read v0 to v2. Set
+  `tokenMeter.plans` (a provider's billing class, quota windows, a local
+  provider's hourly `rate`) and, for money in two currencies,
+  `tokenMeter.currencyRates`: without a plan every provider counts as `api`
+  and the report says so.
+- **The experiment has strata**: one design and one objective per setup. The
+  default cloud strata keep the three cache-lifecycle factors (the former design
+  v4); the default `local` stratum draws infinite-context's fold-reminder limit,
+  and only for a model whose reminder rule has a range. The v1 engine's
+  `factors`, `maxArms` and `baseline` settings are not applied. The global
+  `__piExperimentsApi_v1` is removed (extensions get their levers on an internal
+  channel), and `experiments` loads in children too.
+- **`infiniteContext.reminders`** takes `nudgeAtTokens` (a number or a range)
+  and `nudgeAtPercent` per provider or model; `startTokens`, `everyTokens`,
+  `prices`, `cacheTtlMinutes` and `foldHint` of the earlier patch are gone (a
+  definition is an unknown option).
+- **`programs.piEconomics.retry` is removed** (a definition fails: pi's native
+  `retry.*` settings handle transient errors); `taskRouter` and
+  `actorSubagents` moved in 0.2.0. A leftover `piRetry` key in `settings.json`
+  does nothing and can be deleted.
+- **Load order**: the components start before every other extension that is not
+  built in; with `piSettings.enable = false` list `loadOrder` yourself.
+
+Every option and what a removed one says: [`docs/pi-economics.md`](docs/pi-economics.md).
 
 ## Without Nix
 
@@ -193,9 +230,9 @@ twice, and nothing is said. Remove one of them.
 ## Requirements
 
 Home Manager on Linux (the checks run on `x86_64-linux`) and the pi coding
-agent: the checks build and test against pi 1.3.0 (`checks/npm`), the
-components declare `>=1.0.0`, and pi-setup's patched actor-subagents assumes
-pi 1.2.0 or later. Nothing is installed or patched globally: each component is linked
+agent: the checks type-check against pi 1.3.0's packages (`checks/npm`) and
+load pi 1.4 offline, the components declare `>=1.0.0`, and pi-setup's patched
+actor-subagents assumes pi 1.2.0 or later. Nothing is installed or patched globally: each component is linked
 into `<agentDir>/pi-economics/extensions`, a directory pi does not discover,
 and the `piSettings` entry puts the links at the front of `<agentDir>/settings.json`'s
 `extensions`: pi starts pi-economics' components before every other extension
@@ -229,5 +266,5 @@ contract is `docs/pi-economics.md`.
 
 ## Licence
 
-MIT, see [`LICENSE`](LICENSE). Three components build patched copies of
-upstream extensions; their authors and licences are in [`NOTICE`](NOTICE).
+MIT, see [`LICENSE`](LICENSE). One component builds a patched copy of an upstream extension; its author and
+licence are in [`NOTICE`](NOTICE).

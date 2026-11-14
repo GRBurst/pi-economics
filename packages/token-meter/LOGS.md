@@ -23,7 +23,7 @@ message text, strings clipped to 256 characters. Timestamps are ISO-8601 UTC.
 | file | writer | one line per | rotation |
 | --- | --- | --- | --- |
 | `meter/YYYY-MM.jsonl` | token-meter extension (every session, children too) | provider request | UTC month |
-| `task-router/outcomes/YYYY-MM.jsonl` | task-router extension (main session) | routing event of a delegated task | UTC month |
+| `task-router/outcomes/YYYY-MM.jsonl` | the pi-task-router extension (main session) | routing event of a delegated task | UTC month |
 | `experiments/assignments.jsonl` | experiments extension (main session) | root session's assignment (v2: eligible or not) | none |
 | `experiments/blocks.json` | experiments extension | — (one JSON object: the explore queues) | rewritten atomically |
 | `guards/events.jsonl` | experiments (correction, rating), cache-lifecycle (peek-after-mask) | guard event | none |
@@ -31,7 +31,8 @@ message text, strings clipped to 256 characters. Timestamps are ISO-8601 UTC.
 | `reports/YYYY-MM-DD-HHMM-analysis.{md,json}` | `pi-analyse` | — | one pair per run (UTC; a rerun in the same minute replaces it) |
 
 Settings read by the analysis: `token-meter/settings.json` (`dir`: meter directory,
-relative to the agent dir unless absolute; default `meter`),
+relative to the agent dir unless absolute, default `meter`; `plans`: each provider's billing class, quota
+windows and local rate; `currency.rates`: conversions between currencies),
 `experiments/settings.json` (`baseline` of the v1 engine's designs, `strata` objectives, `guards` thresholds),
 `task-router/settings.json` (`runaway.requests`, `runaway.usd`; default 150 / $10).
 
@@ -48,6 +49,9 @@ field does not bump it). `pi-analyse` reports the versions per log under *Data q
 | assignments | design v1 rows (5-character arms, no `design`) | `v`, `design` (`"v2"`: 6 factors; `"v3"` since 2026-10-04; `"v4"`: 3 factors) |
 | guards | lines before 2026-10-03 | `v` added (2026-10-03) |
 
+The meter writes `v: 2` since the redesign (0.3.0; *Meter line v2*, *Levers lines*, *Compaction lines*): billing class,
+timing, per-request retries and the `levers` kind. The readers take v0 to v2 alike. A guard line of the v2 engine
+carries `design` too. The router's outcome log has its own version rule (pi-task-router's `docs/outcome-log.md`).
 assignments **v2** (redesign M5b.1): the experiments engine v2 — a stratum and design id per main session,
 eligible or not; see *experiments/assignments.jsonl*. Readers keep reading v0 and v1 rows.
 
@@ -283,7 +287,7 @@ child's omits the main-only levers):
 Written by the router, which is a package of its own
 ([pi-task-router](https://github.com/GRBurst/pi-task-router)); the router owns
 the schema: every event and field, the join keys and the version rule are in
-its `docs/outcome-log.md`. This file keeps what the readers here need.
+pi-task-router's `docs/outcome-log.md`. This file keeps what the readers here need.
 
 - **Events**: `spawn`, `reroute`, `check`, `corrective`, `escalate`, `verdict`,
   `spotcheck` (task events, joined by `taskId` = the subagent's name), and the
@@ -736,8 +740,15 @@ every report section has data.
 
 - **Branch summaries** (`/tree` with a summary) are summary requests outside the agent loop like compactions; pi 1.4 keeps
   their usage on the branch-summary entry, which the meter does not read yet: they are not metered.
-- A **resumed** child session does not inherit its arm again (inheritance happens on the
-  spawn event only), so its later meter lines miss `arm` (seen 2026-10-03).
+- A **resumed** child session of a run before 2026-11 (v1 engine) took its arm from the spawn event only,
+  so its later meter lines miss `arm` (seen 2026-10-03; `pi-analyse --check` names those lines). Since
+  the v2 engine a child runtime derives its root's arm from durable state (the session file's
+  `subagents/<root>/` directory, or the actor's agent list for an in-memory child), so a resumed child
+  has it.
+- A wait for a quota reset is seen only as the `429` error lines before it and the gap after.
+  The quota waiter (its own extension, not part of pi-economics) will emit events that the meter
+  turns into `kind: "quota-wait"` lines and Budget rows; both ship after 0.3.0, and the report
+  says "not observable" where a wait would show.
 - Quota readings of parallel sessions interleave and are slightly stale; per-root and per-arm
   quota is an attribution of the account's rise (see *Analysis*), approximate.
 - Lines before 2026-10-03 have no `v` and partly no `arm`.

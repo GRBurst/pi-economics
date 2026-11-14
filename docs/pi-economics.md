@@ -78,6 +78,21 @@ Edits of pi's mutable `settings.json`, run by one activation entry,
   `removeWhere` with nothing to remove), it names in a notice. It never fails
   the activation, and rewrites an existing file only when its JSON changes.
 
+## Removed and moved options
+
+Three options of the components that existed before 0.3.0 are hidden stubs (`modules/removed.nix`): they
+are no options in the generated manual, have no effect, and a definition fails the assertion that says
+where the component went (a definition under `lib.mkIf false` is none, so a guarded leftover evaluates).
+
+| Option | Where it went | The assertion's message |
+|---|---|---|
+| `retry` | nowhere: pi's native retry (`retry.*` in its settings) handles transient errors; the component served an OpenRouter free tier that is gone | `pi-economics: programs.piEconomics.retry was removed; pi's native retry (settings retry.*) handles transient errors` |
+| `taskRouter` | the [pi-task-router](https://github.com/GRBurst/pi-task-router) flake, `programs.piTaskRouter` | `pi-economics: programs.piEconomics.taskRouter moved to the pi-task-router flake (programs.piTaskRouter)` |
+| `actorSubagents` | pi-setup, `programs.pi.actorSubagents` | `pi-economics: programs.piEconomics.actorSubagents moved to pi-setup (programs.pi.actorSubagents)` |
+
+Their sections below say what still refers to them here. The registry names `task-router` and
+`actor-subagents` stay: they are how the components learn that those extensions are loaded.
+
 ## Components
 
 ### `bench` (`modules/bench.nix`)
@@ -215,16 +230,18 @@ Without `infiniteContext` the `context_peek` guard has nothing to log; without
 
 ### `experiments` (`modules/experiments.nix`)
 
-The online experiment (`packages/experiments`): one fractional-factorial arm
-per main session, recorded in `<agentDir>/experiments/assignments.jsonl` and
+The online experiment (`packages/experiments`): one arm per main session, drawn from the design of
+its stratum (the setup its model belongs to: billing class or model globs, each with its own factors and
+objective), recorded in `<agentDir>/experiments/assignments.jsonl` and
 served with its levers' states on each runtime's internal channel
 `pi-economics:levers:v1` (`pi.events`; the former global `__piExperimentsApi_v1` is removed).
 A lever starts once its target extension asked the channel in that runtime; its
 add-on (`packages/experiments/addons/`) reads it back. A child runtime never draws:
-it derives its root's assignment and serves it on the child's own channel. Design v4's factors
-(`warmPolicy`, `mainCacheTtl`, `maskOnCold`, the full 2³: 8 arms) are
-`cacheLifecycle`'s; `tokenMeter` records the arm ids; the task router's levers
-are no factors any more: its reads find its own settings.
+it derives its root's assignment and serves it on the child's own channel. The default cloud strata's
+factors (`warmPolicy`, `mainCacheTtl`, `maskOnCold`, the full 2³: 8 arms, the former design v4) are
+`cacheLifecycle`'s; `tokenMeter` records the arm ids and every lever's state; the task router's levers
+are no factors any more: it randomizes them itself and the analysis reads them as extension-owned. The
+strata, objectives, eligibility and the read-back states are explained in `docs/pi-token-economics.md`.
 A factor's `lever` is an add-on's id (`cache-lifecycle.*`) or a data-only kind that sets pi
 itself, in the control tier (read back at `before_agent_start`; main sessions only: a child's levers line omits them, as it
 omits `cache-lifecycle.mainCacheTtl`): `pi.thinkingLevel` (levels from
@@ -357,6 +374,15 @@ tier sections, which read its outcome log; its experiment factor; the checks
 the `pi-task-router` input; and the claim channel its runtime guard shares with
 the three copies here (`runtime-guard-copies`).
 
+## Quota waits
+
+Waiting out a quota window (a session that pauses until the 5-hour window reopens and then resumes) is not
+pi-economics' job (`docs/scope.md`): the quota waiter is an extension of its own, in its own repository,
+provided through pi-setup. It is not part of 0.3.0, and neither is the meter's reading of its events (wait time
+as a row of the Budget, `kind: "quota-wait"` lines): both ship after 0.3.0. Until then the meter sees a wait only
+as the `429` error lines that precede it, and the reports say "not observable" where a wait would show. No option
+here refers to the waiter.
+
 ## The pi package
 
 The repository root is a pi package (`package.json`, rendered; spec decision D1): the three own extensions
@@ -456,6 +482,9 @@ points into `src`.
 | `runtime-guard-copies`, `iface-subagents-runtime-guard` | the three `runtime-guard.ts` copies equal token-meter's (AC8), whose claim channel line stands verbatim in the `pi-task-router` input's copy too; `SubagentsApiV1` satisfies their `SubagentsApiShape` |
 | `nix-route-smoke` | the Home Manager route's agent directory under real pi: every extension loads, no duplicate or missing-actor warning, `task_verdict` active (pi-setup's actor and the router as registry entries from the `pi-setup` and `pi-task-router` inputs' packages; the router's claim and the three copies' share one channel), experiments' settings file (AC15) |
 | `identity-shim-probe` | the pinned pi still needs cache-lifecycle's `identityShim`: one offline session (pi-ai's faux provider) without the shim loses its warming run with "conversation context changed" once pi rebuilds a context that held a custom message, one with the shim keeps it; fails when a pi update fixes that (the shim may then go) |
+| `load-order` | pi-economics' components start before every other extension that is not built in, under real pi 1.4 offline: the Home Manager route's links (main and child), an auto-discovered probe, two installed packages in `packages` order, an entry the owner listed before the activation ran, and a model switch before the seed (redesign §7.6) |
+| `iface-objective-experiments-token-meter`, `iface-objective-token-meter-experiments` | the analyser's copy of the experiments `Objective` literal set equals the setting's, both ways |
+| `doc-pointers` | the documents point at what exists (every code span naming a file or directory of this repository, every relative link, each against its owner's sources) and say what the redesign changed: a row here for every check, the headings and terms the token-economics document must carry, what it replaced said nowhere; the moved router specification, the moved actor and the router's rules are in no document |
 
 How to run them: `AGENTS.md`, "Commands".
 

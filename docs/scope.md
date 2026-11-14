@@ -2,8 +2,8 @@
 
 Decision recorded 2026-11-12 (after local mode was disabled over the merge-gate
 problems: size refusals on real work, cold-cache review economics, fixer churn);
-the extraction it announced is done in 0.2.0. This file is the pointer for a
-fresh session that needs the goal of the extension.
+the extraction it announced is done in 0.2.0, the redesign that follows from it in
+0.3.0. This file is the pointer for a fresh session that needs the goal of the extension.
 
 ## The goal
 
@@ -13,10 +13,10 @@ drive work. Everything below stays:
 
 | Stays in pi-economics | Role |
 |---|---|
-| `tokenMeter` | the meter: one JSON line per provider request; `meter-report`, `pi-analyse` |
+| `tokenMeter` | the meter: one JSON line per provider request with its billing class, timing and the value and source of every lever in force; `meter-report`, `pi-analyse` (budget first: quota windows and calibration, spend, local cost) |
 | `analysisSkill` | the skill that runs `pi-analyse` and proposes decisions from the logs |
-| `experiments` | one fractional-factorial arm per main session |
-| `bench` | `pi-bench`, blind judges, bootstrap reports |
+| `experiments` | one randomized arm per main session and setup (stratum), levers assigned through add-ons and read back |
+| `bench` | `pi-bench`, blind judges, bootstrap reports, process-scope pi levers |
 | `cacheLifecycle` | stale-result elision, cache warming (a cost mechanism) |
 | `infiniteContext` | context folding: reminders, their limits per provider or model |
 | `piSettings` | the settings.json migration |
@@ -25,8 +25,15 @@ pi-economics keeps **observing** the router after the split: the meter reads
 the router's outcome log (`task-router/outcomes/*.jsonl`). The observation
 relationship survives; the ownership does not (see below).
 
-The redesign of pi-economics (measurement core, experiment engine, opt-in
-interventions) is drafted separately; nothing here implements it.
+Measuring covers pi's own defaults (compaction, cache warming, thinking levels, codemode,
+transport, retry) and the opt-in interventions this repository ships (cache lifecycle, fold-reminder
+limits), each of them a lever whose value and source the meter records. Interventions are
+opt-in and exploratory: they are tried per session at random and read back, never driven.
+
+A quota guard that blocks and a quota waiter that pauses until the window reopens are control, not
+measurement: the quota waiter is its own extension in its own repository (provided through
+pi-setup). It is not part of 0.3.0, and neither is the meter's reading of its events; both ship
+after 0.3.0.
 
 ## What left
 
@@ -88,11 +95,13 @@ about pi. It lives in a standalone repository, `~/projects/gemini-research-clean
   too, and `docs/research/cleanup.md` there names the tool and its version for
   each batch.
 
-## Current state (2026-11-13)
+## Current state (2026-11-14)
 
-0.2.0 contains neither the router nor the actor; the router is not tagged or
-published yet, so the checks read it through an input override (AGENTS.md,
-"Commands"). Local mode is disabled in the author's setup. The raw
+0.3.0 is prepared: it contains neither the router nor the actor nor the retry component, and
+the redesign is implemented (units, strata, levers, add-ons, load order). The router is not
+tagged or published yet, so the checks read it, and pi-setup's branch that forwards the agent
+directory, through input overrides (AGENTS.md, "Commands"); the release relocks both inputs.
+The quota waiter and its metering come after 0.3.0. Local mode is disabled in the author's setup. The raw
 research exports of batch 4 (review economics, two local-harness reports, a
 note) were cleaned with `gdr-clean` in pi-task-router; a later batch is
 cleaned the same way.
