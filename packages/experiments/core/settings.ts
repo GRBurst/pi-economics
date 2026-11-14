@@ -30,6 +30,9 @@ export const V4_FACTORS: readonly FactorSpec[] = [
   { name: "maskOnCold", lever: "cache-lifecycle.maskOnCold", levels: ["off", "on"] },
 ];
 
+/** The default local stratum's factor (P12/OQ3): infinite-context's fold-reminder limit, at the quarter and three quarters of the matched rule's range (§7.4). */
+export const IC_FACTORS: readonly FactorSpec[] = [{ name: "nudge", lever: "infinite-context.nudgeAtTokens", levels: [0.25, 0.75] }];
+
 export function defaults(): Settings {
   return { mode: "explore", minExplore: 0.1, guards: { minSessions: 10, threshold: 0.2, peekThreshold: 1, correctionThreshold: 1, ratingThreshold: 0.5 }, correctionRegex: String.raw`\b(no|wrong|revert|undo|that's not)\b` };
 }
@@ -134,7 +137,7 @@ const unknownKey = (o: Record<string, unknown>, known: readonly string[]): strin
 /**
  * The `strata` setting. Absent (or of a wrong type, with a warning): plan P12's defaults, one stratum per billing
  * class of `plans` and "api" (a provider without a plan bills as api), each named after its class; the cloud
- * classes get `legacy` (the v4 factors) and objective apiUsd, "local" gets no factors (OQ3) and localCost. Given:
+ * classes get `legacy` (the v4 factors) and objective apiUsd, "local" gets IC_FACTORS (P12) and localCost. Given:
  * each stratum as written, its objective defaulting to localCost for a local-only match and apiUsd otherwise; a
  * malformed stratum (an unknown key included) is dropped whole (never repaired into a design nobody asked for) with
  * a warning.
@@ -158,7 +161,7 @@ export function parseStrata(raw: unknown, plans: Plans, legacy: readonly FactorS
 function defaultStrata(plans: Plans, legacy: readonly FactorSpec[]): Record<string, StratumSpec> {
   const present = new Set<Billing>(["api", ...Object.values(plans).map((p) => p.billing)]);
   return Object.fromEntries(BILLINGS.filter((b) => present.has(b)).map((b): [string, StratumSpec] => [b, b === "local"
-    ? { match: { billing: [b] }, objective: "localCost", factors: [] }
+    ? { match: { billing: [b] }, objective: "localCost", factors: [...IC_FACTORS] }
     : { match: { billing: [b] }, objective: "apiUsd", factors: [...legacy] }]));
 }
 

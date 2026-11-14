@@ -111,7 +111,7 @@ test("strata absent: one stratum per billing class of the plans, and api (a prov
       subscription: cloud("subscription"),
       api: cloud("api"),
       free: cloud("free"),
-      local: { match: { billing: ["local"] }, objective: "localCost", factors: [] },
+      local: { match: { billing: ["local"] }, objective: "localCost", factors: [{ name: "nudge", lever: "infinite-context.nudgeAtTokens", levels: [0.25, 0.75] }] },
     },
     warnings: [],
   });

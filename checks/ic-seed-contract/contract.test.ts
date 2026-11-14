@@ -43,7 +43,7 @@ function writeIc(dir: string, file: unknown) {
  * One session. The extension reads its file in `icDir` (as pi's getAgentDir says when it is created); the engine and the
  * meter work in `peDir` (their agentDir) and read the rules from there. Equal directories are the normal case.
  */
-function session(o: { icDir: string; peDir: string; draw?: number; rng?: number; sid?: string; carried?: Entry[] }) {
+function session(o: { icDir: string; peDir: string; draw?: number; rng?: number; sid?: string; carried?: Entry[]; defaultStrata?: boolean }) {
   process.env.PI_CODING_AGENT_DIR = o.icDir;
   const handlers = new Map<string, Array<(e: unknown, ctx: unknown) => unknown>>();
   // `carried`: the entries of an earlier session's branch (a resumed session, a fork), after the first message.
@@ -86,7 +86,12 @@ function session(o: { icDir: string; peDir: string; draw?: number; rng?: number;
     getContextUsage: () => ({ contextWindow: 1_000_000, tokens: 0 }),
   };
   // Load order: experiments, token-meter, then the extension (config order, modules/common.nix firstNames).
-  installExperiments(pi as never, { agentDir: o.peDir, settings: { ...defaults(), strata: { any: { match: {}, factors: [{ name: "nudge", lever: LEVER, levels: [0.25, 0.75] }] } } }, rng: () => o.rng ?? 0.5, api: () => undefined });
+  // defaultStrata: no `strata` setting; provider `example` bills as local, so its sessions are the default local stratum's (P12).
+  if (o.defaultStrata) {
+    mkdirSync(path.join(o.peDir, "token-meter"), { recursive: true });
+    writeFileSync(path.join(o.peDir, "token-meter", "settings.json"), JSON.stringify({ plans: { example: { billing: "local", windows: [] } } }));
+  }
+  installExperiments(pi as never, { agentDir: o.peDir, settings: { ...defaults(), ...(o.defaultStrata ? {} : { strata: { any: { match: {}, factors: [{ name: "nudge", lever: LEVER, levels: [0.25, 0.75] }] } } }) }, rng: () => o.rng ?? 0.5, api: () => undefined });
   installMeter(pi as never, { agentDir: o.peDir });
   const realRandom = Math.random;
   Math.random = () => o.draw ?? 0; // the extension's own draw (resolveSettings gets Math.random per call)
@@ -114,7 +119,9 @@ function session(o: { icDir: string; peDir: string; draw?: number; rng?: number;
   };
   /** The entries after the first message, as a later session carries them. */
   const branch = () => entries.slice(1).map((e) => ({ ...e }));
-  return { entries, tools, state, start, select, prompt, records, lines, lineState, level, branch };
+  /** The rows of the engine's assignments.jsonl. */
+  const rows = () => readFileSync(path.join(o.peDir, "experiments", "assignments.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  return { rows, entries, tools, state, start, select, prompt, records, lines, lineState, level, branch };
 }
 
 const dirOf = () => mkdtempSync(path.join(tmpdir(), "ic-seed-contract-"));
@@ -142,14 +149,34 @@ test("adopted: the seed has the extension's record shape, the real extension kee
   assert.deepEqual([...levels].sort(), [0.25, 0.75], "both levels were drawn");
 });
 
-test("refused up front: a fixed-number rule draws nothing and ignores records; no seed, the configured number read back as fixed", async () => {
+test("ineligible (P12): a fixed-number rule draws nothing and ignores records; the session has no arm, no seed and no lever state (no refusal)", async () => {
   const dir = dirOf();
   writeIc(dir, FILE);
   const s = session({ icDir: dir, peDir: dir });
   await s.start(opus);
   assert.deepEqual(s.records(), [{ nudgeAtTokens: 400_000, nudgeAtPercent: 75, rule: "anthropic/claude-opus-5-5" }], "only the extension's record");
+  const [row] = s.rows();
+  assert.deepEqual([row.eligible, row.arm, row.factors, row.reason], [false, undefined, undefined, "infinite-context.nudgeAtTokens: no level can be set for the session's model"]);
   await s.prompt();
-  assert.deepEqual(s.lineState(), { v: 400_000, s: "fixed", a: s.level(), rb: "refused", tier: "seed" });
+  assert.equal(s.lineState(), undefined, "no lever state: nothing to refuse");
+});
+
+test("default local stratum (P12): a range rule is eligible, seeded, adopted and confirmed; a fixed rule is ineligible; without the extension too", async () => {
+  const dir = dirOf();
+  writeIc(dir, { overrides: { example: { nudgeAtTokens: [300_000, 400_003] } } });
+  const s = session({ icDir: dir, peDir: dir, defaultStrata: true });
+  await s.start(local);
+  const [row] = s.rows();
+  assert.deepEqual([row.stratum, row.eligible, Object.keys(row.factors)], ["local", true, ["nudge"]]);
+  const a = at([300_000, 400_003], s.level());
+  assert.deepEqual(s.records()[0], { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_003], rule: "example" });
+  await s.prompt();
+  assert.deepEqual(s.lineState(), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
+  const fixed = dirOf();
+  writeIc(fixed, { overrides: { example: { nudgeAtTokens: 350_000 } } });
+  const f = session({ icDir: fixed, peDir: fixed, defaultStrata: true });
+  await f.start(local);
+  assert.deepEqual([f.rows()[0].eligible, f.rows()[0].arm], [false, undefined]);
 });
 
 test("planted refusal: the extension does not adopt a seed whose range is not its rule's — it draws its own, and the meter's line says refused", async () => {

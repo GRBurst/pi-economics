@@ -216,6 +216,17 @@ test("review m1: the refusal denominator is the units with a levers line (as in 
   assert.equal(q?.n, 3);
 });
 
+test("P12: an ineligible session (a reason, no arm: no feasible level) is in no refusal rate", () => {
+  const us = base();
+  const lv = us.map((u) => levers(u.id, u.arm, u.id === "a" ? { warmPolicy: "refused" } : {}));
+  const ineligible = ["x", "y", "z"].map((id) => ({ v: 2, ts: iso(T0), sessionId: id, mode: "explore", eligible: false, stratum: "api", design: D, reason: "no feasible level" }));
+  const mk = (extra: Record<string, unknown>[]) => logs([...us.flatMap((u) => cloud(u.id, u.arm, u.usd)), ...lv, ...extra.flatMap((r) => turns(r.sessionId as string, T0 + MIN, 7, { costUsd: 1 }))], [...us.map((u) => row(u.id, u.arm)), ...extra]);
+  const plain = stratumOf(mk([])).refusal!.find((r) => r.factor === "warmPolicy")!;
+  const withIne = stratumOf(mk(ineligible)).refusal!.find((r) => r.factor === "warmPolicy")!;
+  assert.deepEqual(withIne, plain, "ineligible sessions change neither numerator, denominator nor noLevers");
+  assert.equal(withIne.refused, 1);
+});
+
 test("review m2/m3: v2 designs' texts say what is per stratum and what is pooled; the primary table is titled intention-to-treat", () => {
   const us = base();
   const text = renderExperiment(analyse(logs(us.flatMap((u) => cloud(u.id, u.arm, u.usd)), us.map((u) => row(u.id, u.arm, "opus")))).experiment.designs);

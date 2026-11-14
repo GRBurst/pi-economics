@@ -11,6 +11,7 @@ import { V4_FACTORS, defaults, type Settings } from "../core/settings.ts";
 import { ENTRY, install } from "../core/shell.ts";
 import { fakePi, type Entry } from "./fake.ts";
 
+const LOCAL_FACTORS = [{ name: "nudge", lever: "infinite-context.nudgeAtTokens", levels: [0.25, 0.75] as [number, number] }];
 type G = { __piEconomicsWarned_v1?: Set<string> };
 beforeEach(() => void delete (globalThis as G).__piEconomicsWarned_v1);
 
@@ -108,8 +109,9 @@ test("T5b1.3 strata from the settings and plans from token-meter's settings file
   h.start("s3", { model: { provider: "openai", id: "gpt-5" } });
   const [sub, local, api] = h.rows();
   assert.deepEqual([sub.stratum, sub.design, sub.eligible], ["subscription", designFor("subscription", { factors: V4_FACTORS }).id, true]);
-  // The default local stratum has no factors (OQ3): its design has one arm, "", and no levels to set.
-  assert.deepEqual([local.stratum, local.design, local.eligible, local.arm, local.factors], ["local", designFor("local", { factors: [] }).id, true, "", {}]);
+  // The default local stratum's factor is infinite-context's nudge (P12); this host lists no tools, so no extension is loaded: ineligible, with its reason.
+  assert.deepEqual([local.stratum, local.design, local.eligible, local.arm, local.factors], ["local", designFor("local", { factors: LOCAL_FACTORS }).id, false, undefined, undefined]);
+  assert.equal(local.reason, "infinite-context.nudgeAtTokens: the target extension is not loaded");
   assert.deepEqual([api.stratum, api.eligible], ["api", true]);
 });
 

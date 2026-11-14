@@ -256,7 +256,7 @@ Corrections and `/rate` ratings go to `<agentDir>/guards/events.jsonl`. There
 is no timer: `meter-report --arms --posterior` updates the posterior on demand.
 
 A stratum can put `infiniteContext`'s fold-reminder limit under test (the add-on
-`addons/infinite-context.ts`, tier `seed`, lever `infinite-context.nudgeAtTokens`):
+`addons/infinite-context.ts`, tier `seed`, lever `infinite-context.nudgeAtTokens`); the default `local` stratum does so with exactly this factor (levels 0.25 and 0.75, objective `localCost`):
 
 ```json
 { "strata": { "local": { "match": { "billing": ["local"] }, "objective": "localCost",
@@ -272,9 +272,8 @@ that the extension keeps it; the record on the branch after the extension's hand
 the read-back (`confirmed`; an extension that redrew it: `refused`, source `ext`, the
 value it drew). The extension completes its record with `nudgeAtPercent`, the seed has
 none: while the latest record lacks it the extension has not adopted anything, and the
-state stays `unverified` (a tool of that name from another extension, a misordered load). A rule that is a fixed number draws nothing and ignores records: the
-level is refused up front (`refused`, source `fixed`, `a` = the level, as there are no
-tokens to assign; the state shows once the extension's record is read back, at the first prompt). The engine reads the rules from the
+state stays `unverified` (a tool of that name from another extension, a misordered load). A rule that is a fixed number draws nothing and ignores records. The lever gates the draw (P12): a main whose matched rule at `session_start` has no range, or while infinite-context is not loaded, is ineligible, not refused: its `assignments.jsonl` row has `eligible: false`, a `reason`, no arm, no seed, and no block is consumed (the analyser's refusal rate never sees it). A drawn session that later switches to a fixed-number rule is refused up front (`refused`, source `fixed`, `a` = the level, as there are no
+tokens to assign; the state shows once the extension's record is read back, at the first prompt). The owner's per-model ranges (`infiniteContext.reminders.overrides`) decide which local models are eligible. The engine reads the rules from the
 extension's settings file once per runtime, as the extension does: a file rewritten
 mid-session is the next session's. The lever is live when pi lists infinite-context's `context_fold`
 tool (the extension never asks the channel); a child seeds its own branch with its
@@ -285,7 +284,7 @@ patched extension against the add-on.
 |---|---|---|
 | `enable` | `false` | registry entry `experiments` (`forChildren = true`: in a child it draws nothing and serves its root's arm and levers) |
 | `package` | the flake's `packages/experiments` | the extension |
-| `settings` | `{}` | written to `<agentDir>/experiments/settings.json` as given, `{}` as `{"mode": "explore"}` (`mode`, `minExplore`, `strata` (default: one per billing class of `tokenMeter.plans`, and `api`), `guards`, `correctionRegex`; the v1 engine's `factors`, `maxArms`, `baseline` are not applied and draw a warning; `baseline` still labels the analyses of v1–v4 designs); the file is the extension's opt-in: without it experiments is inert |
+| `settings` | `{}` | written to `<agentDir>/experiments/settings.json` as given, `{}` as `{"mode": "explore"}` (`mode`, `minExplore`, `strata` (default: one per billing class of `tokenMeter.plans`, and `api`; cloud classes get the cache-lifecycle factors, `local` the infinite-context nudge), `guards`, `correctionRegex`; the v1 engine's `factors`, `maxArms`, `baseline` are not applied and draw a warning; `baseline` still labels the analyses of v1–v4 designs); the file is the extension's opt-in: without it experiments is inert |
 
 Without the actor in the registry (`extensions.actor-subagents`) it warns:
 in-memory children are not recognised (it reads the actor's agent list; children

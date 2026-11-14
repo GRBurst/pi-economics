@@ -11,11 +11,11 @@ export type Mode = "off" | "explore" | "exploit";
  * A line of <agentDir>/experiments/assignments.jsonl, v2 (§5.4): one per main session at its first session_start.
  * `stratum` = the setup its model matched (none: ineligible), `design` = that stratum's design id (always with an arm);
  * an eligible session has `arm` (the bits of its levels, factor order) and `factors` (by factor name: the lever and
- * the level assigned to it); an ineligible one has neither. `parentSessionId` is channel-only (a child's Assigned):
+ * the level assigned to it); an ineligible one has neither, and may say why (`reason`: a gating lever has no feasible level, P12). `parentSessionId` is channel-only (a child's Assigned):
  * the engine writes no child rows.
  */
 export type AssignmentV2 = { v: 2; ts: string; sessionId: string; parentSessionId?: string; design?: string; mode: Mode;
-  eligible: boolean; stratum?: string; arm?: string; factors?: Record<string, { lever: LeverId; assigned: Level }> };
+  eligible: boolean; reason?: string; stratum?: string; arm?: string; factors?: Record<string, { lever: LeverId; assigned: Level }> };
 
 /** token-meter's billingOf, restated (no value import across packages): a provider without a plan bills as api. */
 const billingOf = (plans: Plans, provider: string): Billing => (Object.hasOwn(plans, provider) ? plans[provider].billing : "api");

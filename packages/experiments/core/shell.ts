@@ -292,6 +292,20 @@ export function install(pi: PiLike, deps: Deps): void {
     const a = f as { design: string; stratum: string; arm: string; factors: AssignmentV2["factors"] };
     return { v: 2, ts: new Date().toISOString(), sessionId: sid, design: a.design, mode: settings.mode, eligible: true, stratum: a.stratum, arm: a.arm, factors: a.factors };
   };
+  /**
+   * Why a design cannot be drawn for a session (P12): a gating lever whose target is not loaded, or for which a level of the
+   * factor is infeasible for the session's model at its start. Such a session is ineligible, never a refusal.
+   */
+  const gateReason = (d: Design, m: ModelRef | undefined): string | undefined => {
+    for (const f of d.factors) {
+      const lever = registry.lever(f.lever, f.target === undefined ? undefined : { target: f.target });
+      if (lever?.gate !== true) continue;
+      if (!registry.loaded(lever.target)) return `${lever.id}: the target extension is not loaded`;
+      const ok = lever.feasible({ child: false, ...(m === undefined ? {} : { model: m }) }, f.levels);
+      if (!f.levels.every((l) => ok.includes(l))) return `${lever.id}: no level can be set for the session's model`;
+    }
+    return undefined;
+  };
   /** A new main's assignment: its stratum, and an arm when eligible (none left enabled: ineligible). */
   const assignNew = (sid: string, model: unknown, ctx: Parameters<typeof warnOnce>[0]): AssignmentV2 => {
     const given = fromFile(sid, ctx);
@@ -299,8 +313,9 @@ export function install(pi: PiLike, deps: Deps): void {
     const m = isRecord(model) && typeof model.provider === "string" && typeof model.id === "string" ? model : undefined;
     const stratum = m === undefined ? undefined : stratumOf(strata, plans, m.provider as string, m.id as string);
     const d = stratum === undefined ? undefined : designs.get(stratum);
+    const reason = d === undefined || settings.mode === "off" ? undefined : gateReason(d, modelOf(model));
     let arm: string | undefined;
-    if (d !== undefined && settings.mode !== "off" && eligibleFor(false, stratum, settings.mode)) {
+    if (d !== undefined && reason === undefined && settings.mode !== "off" && eligibleFor(false, stratum, settings.mode)) {
       const { blocks, bad } = parseBlocks(readJson(join(dir, "blocks.json")));
       if (bad) warnOnce(ctx, "experiments:blocks", `experiments: blocks.json in ${dir} held a malformed explore block; it is rebuilt`);
       const r = draw(settings.mode, d, blocks, designState(readJson(join(dir, "state.json")), d), rng, settings.minExplore);
@@ -313,6 +328,7 @@ export function install(pi: PiLike, deps: Deps): void {
       ...(d !== undefined ? { design: d.id } : {}),
       mode: settings.mode,
       eligible: levels !== undefined,
+      ...(reason !== undefined ? { reason } : {}),
       ...(stratum !== undefined ? { stratum } : {}),
       ...(levels !== undefined ? { arm, factors: Object.fromEntries(d!.factors.map((f) => [f.name, { lever: f.lever, assigned: levels[f.name] }])) } : {}),
     };

@@ -5,7 +5,7 @@
 // the real code runs in the check ic-seed-contract.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { onAssigned, query, type Levers } from "../core/channel.ts";
@@ -21,6 +21,7 @@ const haiku = { provider: "anthropic", id: "claude-haiku-5-5" };
 const opus = { provider: "anthropic", id: "claude-opus-5-5" };
 const gpt = { provider: "openai", id: "gpt-5" };
 const local = { provider: "example", id: "model-a" };
+const localFixed = { provider: "example", id: "fixed" };
 type Model = { provider: string; id: string };
 type Nudge = number | readonly [number, number];
 type Rule = { rule?: string; nudge: Nudge };
@@ -33,6 +34,7 @@ const FILE = {
     openai: { nudgeAtTokens: [100_000, 200_000] },
     example: { nudgeAtTokens: [300_000, 400_000] },
     "anthropic/claude-opus-5-5": { nudgeAtTokens: 400_000 },
+    "example/fixed": { nudgeAtTokens: 250_000 },
   },
 };
 const RULES: Record<string, Rule> = {
@@ -40,6 +42,7 @@ const RULES: Record<string, Rule> = {
   "anthropic/claude-opus-5-5": { rule: "anthropic/claude-opus-5-5", nudge: 400_000 },
   "openai/gpt-5": { rule: "openai", nudge: [100_000, 200_000] },
   "example/model-a": { rule: "example", nudge: [300_000, 400_000] },
+  "example/fixed": { rule: "example/fixed", nudge: 250_000 },
 };
 const key = (m: Model) => `${m.provider}/${m.id}`;
 /** What a level q is, in tokens, in [min, max] — written out here, not taken from the add-on under test. */
@@ -54,7 +57,7 @@ const records = (entries: Entry[]) => entries.filter((e) => e.customType === "in
  * infinite-context, which registers its tool and follows the model at session_start and model_select like the patch.
  * `table`: the rules the stand-in resolves (default: RULES, the file's); `ignoresSeed`: it draws whatever it finds.
  */
-function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string, Rule>; ignoresSeed?: boolean; entries?: Entry[]; draw?: number; rng?: number; silent?: boolean; others?: string[] } = {}) {
+function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string, Rule>; ignoresSeed?: boolean; entries?: Entry[]; draw?: number; rng?: number; silent?: boolean; others?: string[]; defaultStrata?: boolean } = {}) {
   const agentDir = o.agentDir ?? mkdtempSync(join(tmpdir(), "experiments-ic-"));
   mkdirSync(join(agentDir, "infinite-context"), { recursive: true });
   writeFileSync(join(agentDir, "infinite-context", "settings.json"), JSON.stringify(FILE));
@@ -64,7 +67,12 @@ function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string
   f.entries.push(...(o.entries ?? []));
   const heard: Levers[] = [];
   onAssigned(f.events, (l) => void heard.push(l));
-  install(f.pi, { agentDir, settings: { ...defaults(), strata: { any: { match: {}, factors: [NUDGE] } } }, rng: () => o.rng ?? 0.5, api: () => undefined });
+  // defaultStrata: no `strata` setting, provider example bills as local: the default local stratum (P12) applies to it.
+  if (o.defaultStrata) {
+    mkdirSync(join(agentDir, "token-meter"), { recursive: true });
+    writeFileSync(join(agentDir, "token-meter", "settings.json"), JSON.stringify({ plans: { example: { billing: "local", windows: [] } } }));
+  }
+  install(f.pi, { agentDir, settings: { ...defaults(), ...(o.defaultStrata ? {} : { strata: { any: { match: {}, factors: [NUDGE] } } }) }, rng: () => o.rng ?? 0.5, api: () => undefined });
   const table = o.table ?? RULES;
   tools.push(...(o.others ?? []));
   if (o.loaded !== false) tools.push("context_fold");
@@ -197,16 +205,67 @@ test("T7a.4 model_select to a rule with the same range: nothing to seed (the ext
   assert.deepEqual(r.state("s1"), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
 });
 
-test("T7a.5 a fixed-number rule is refused up front: nothing seeded, the configured number read back with source fixed", () => {
-  const r = runtime();
-  r.start("s1", opus);
-  const q = r.level("s1");
-  assert.deepEqual(r.entries.map((e) => e.customType), [ENTRY, "infinite-context:settings"], "the extension's record only");
-  assert.deepEqual(records(r.entries)[0], { nudgeAtTokens: 400_000, nudgeAtPercent: 75, rule: "anthropic/claude-opus-5-5" });
-  assert.equal(r.state("s1"), undefined, "not recorded before anything is observed");
-  r.agentStart("s1", opus);
-  // a is the level: a rule without a range has no tokens to assign.
-  assert.deepEqual(r.state("s1"), { v: 400_000, s: "fixed", a: q, rb: "refused", tier: "seed" });
+const NOT_LOADED = "infinite-context.nudgeAtTokens: the target extension is not loaded";
+const NO_LEVEL = "infinite-context.nudgeAtTokens: no level can be set for the session's model";
+const row = (r: { agentDir: string }, sid: string) =>
+  readFileSync(join(r.agentDir, "experiments", "assignments.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((x) => x.sessionId === sid);
+
+test("P12 a session whose matched rule has a fixed number is ineligible, not refused: a v2 row with a reason, no arm, nothing seeded or observed", () => {
+  for (const [model, rule] of [[opus, "anthropic/claude-opus-5-5"], [localFixed, "example/fixed"]] as const) {
+    const r = runtime({ ...(model === localFixed ? { defaultStrata: true } : {}) });
+    r.start("s1", model);
+    const x = row(r, "s1");
+    assert.equal(x.eligible, false, rule);
+    assert.equal(x.reason, NO_LEVEL, rule);
+    assert.deepEqual([x.arm, x.factors], [undefined, undefined]);
+    assert.equal(typeof x.stratum, "string");
+    assert.equal(typeof x.design, "string");
+    assert.deepEqual(r.entries.map((e) => e.customType), [ENTRY, "infinite-context:settings"], "the extension's record only; no seed");
+    assert.deepEqual(records(r.entries)[0], { nudgeAtTokens: model === opus ? 400_000 : 250_000, nudgeAtPercent: 75, rule });
+    r.agentStart("s1", model);
+    assert.deepEqual(query(r.events, "s1")!.levers, {}, "no lever state, so no refusal");
+    assert.equal(query(r.events, "s1")!.eligible, false);
+    assert.equal(existsSync(join(r.agentDir, "experiments", "blocks.json")), false, "no draw consumed a block");
+  }
+});
+
+test("P12 the default local stratum: its factor is the nudge at levels 0.25 / 0.75; a range rule is eligible, seeded and confirmed", () => {
+  const r = runtime({ defaultStrata: true });
+  r.start("s1", local);
+  const x = row(r, "s1");
+  assert.deepEqual([x.stratum, x.eligible, x.reason], ["local", true, undefined]);
+  assert.equal(x.factors.nudge.lever, LEVER);
+  assert.ok([0.25, 0.75].includes(x.factors.nudge.assigned));
+  const a = at([300_000, 400_000], x.factors.nudge.assigned);
+  assert.deepEqual(records(r.entries)[0], { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000], rule: "example" }, "seeded");
+  r.agentStart("s1", local);
+  assert.deepEqual(r.state("s1"), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
+  // Both levels are drawn over sessions (permuted blocks of the two arms).
+  const seen = new Set<unknown>();
+  for (let i = 0; i < 4; i++) { r.start(`t${i}`, local); seen.add(row(r, `t${i}`).factors.nudge.assigned); }
+  assert.deepEqual([...seen].sort(), [0.25, 0.75]);
+});
+
+test("P12 the extension is not loaded: ineligible with a reason, whatever the rule (explicit or default strata)", () => {
+  for (const defaultStrata of [false, true]) {
+    const r = runtime({ loaded: false, defaultStrata });
+    r.start("s1", defaultStrata ? local : haiku);
+    const x = row(r, "s1");
+    assert.deepEqual([x.eligible, x.reason, x.arm], [false, NOT_LOADED, undefined], String(defaultStrata));
+    assert.deepEqual(r.entries.map((e) => e.customType), [ENTRY]);
+    assert.deepEqual(query(r.events, "s1")!.levers, {});
+  }
+});
+
+test("P12 the model switch of a session never makes it ineligible (ITT): a drawn session keeps its arm", () => {
+  const r = runtime({ defaultStrata: true });
+  r.start("s1", local);
+  const q = row(r, "s1").factors.nudge.assigned;
+  r.select("s1", localFixed, local);
+  r.agentStart("s1", localFixed);
+  assert.equal(query(r.events, "s1")!.eligible, true);
+  assert.equal(r.state("s1")?.rb, "refused", "refused, as before: a switch is the session's own");
+  assert.equal(r.state("s1")?.a, q);
 });
 
 test("T7a.5 a switch to a fixed-number rule is refused, and back to a range it is seeded again", () => {

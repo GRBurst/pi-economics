@@ -172,6 +172,7 @@ test("LOGS.md: assignments v2 examples (eligible, ineligible with and without a 
   assert.ok(eligible.length > 0, "no eligible row");
   assert.ok(rows.some((r) => r.eligible === false && typeof r.stratum === "string"), "no ineligible row with a stratum (mode off)");
   assert.ok(rows.some((r) => r.eligible === false && !("stratum" in r)), "no ineligible row without a stratum (no stratum matched)");
+  assert.ok(rows.some((r) => r.eligible === false && typeof r.reason === "string"), "no ineligible row with a reason (a gating lever had no feasible level)");
   for (const r of eligible) {
     assert.equal(Object.keys(r.factors).length, r.arm.length, `${r.sessionId}: one bit of the arm per factor`);
     assert.match(r.design, /^[0-9a-f]{12}$/, `${r.sessionId}: a design id`);

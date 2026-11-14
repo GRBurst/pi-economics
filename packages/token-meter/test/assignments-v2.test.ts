@@ -31,6 +31,9 @@ test("T5b1.9 contract: v2 rows, eligible (design, stratum, arm, factors) and ine
     { ...eligible("l", ""), factors: {} }]; // a stratum without factors: its one arm is ""
   const meter = [...cloud("m", { arm: "010", design: D }), ...cloud("n", {}), ...cloud("o", {}), ...cloud("l", { arm: "", design: D })];
   assert.deepEqual(fields(check(logs(meter, rows))), []);
+  // An ineligible row may say why (P12: no feasible level of a gating lever).
+  const why = ineligible("p", T0, { stratum: "local", design: D, reason: "infinite-context.nudgeAtTokens: the matched rule has no range" });
+  assert.deepEqual(fields(check(logs(cloud("p", {}), [why]))), []);
   // An eligible session's lines carry its arm; an ineligible one's need none.
   assert.deepEqual(fields(check(logs(cloud("m", {}), [rows[0]]))), ["meter.arm"]);
   const bad: Array<[Record<string, unknown>, string]> = [
@@ -44,6 +47,8 @@ test("T5b1.9 contract: v2 rows, eligible (design, stratum, arm, factors) and ine
     [{ ...ineligible("n"), factors: {} }, "assignments.factors"],
     [{ ...ineligible("n"), stratum: 3 }, "assignments.stratum"],
     [{ ...ineligible("n"), parentSessionId: "" }, "assignments.parentSessionId"],
+    [{ ...ineligible("n"), reason: 3 }, "assignments.reason"],
+    [{ ...ineligible("n"), reason: "" }, "assignments.reason"],
   ];
   for (const [row, want] of bad) assert.deepEqual(fields(check(logs([], [row]))), [want], JSON.stringify(row));
 });

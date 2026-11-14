@@ -91,7 +91,7 @@ export function infiniteContext(rules: () => IcRules): readonly Lever[] {
     return matchRule(r.overrides, r.top, model?.provider, model?.id);
   };
   const nudge: Lever = {
-    id: `${IC_TARGET}.nudgeAtTokens`, target: IC_TARGET, scope: "session", tier: "seed", readBackAt: "before_agent_start", follow: "model",
+    id: `${IC_TARGET}.nudgeAtTokens`, target: IC_TARGET, scope: "session", tier: "seed", readBackAt: "before_agent_start", follow: "model", gate: true,
     // Levels are fractions q of the matched rule's range, so one level set fits every rule that has one (§7.4).
     feasible: (env, levels) => (isRange(matched(env.model).nudge) ? levels.filter(isFraction) : []),
     valueFor(ctx: SessionCtx, level: Level): Level {

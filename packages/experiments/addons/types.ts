@@ -65,6 +65,12 @@ export interface Lever<L extends Level = Level> {
    * levers line omits it (not refused, not `ext`).
    */
   mainOnly?: true;
+  /**
+   * A gating lever (P12): a session is drawn only when its target is loaded and every level of the factor is feasible for
+   * its model at session_start; else it is ineligible (a row with a reason, no arm), not a refusal, so the refusal rate
+   * stays the add-on's.
+   */
+  gate?: true;
   /** "model": feasibility and value depend on the session's model, so a model switch re-evaluates and re-applies the level. */
   follow?: "model";
   /** Absent: no observer (the state stays unverified). */
