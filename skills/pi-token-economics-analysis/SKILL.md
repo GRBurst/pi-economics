@@ -33,18 +33,37 @@ without the user's explicit approval.
    (the same tables, for follow-up computations).
 4. **Read `~/.pi/agent/LOGS.md`** for any field, join or version you are unsure about
    before you interpret a number. Without Nix it is `../../packages/token-meter/LOGS.md`, relative to this skill's directory. Never guess what a field means.
-5. **Interpret** section by section (below), then answer the user's question with the
-   numbers, their uncertainty and the caveats that apply.
+5. **Interpret**: Read the **Budget** first, then the other sections (below), all in the units of *Units*; then answer
+   the user's question with the numbers, their uncertainty and the caveats that apply.
 6. **Offer decisions** from the menu, each with its evidence and risk. Wait for approval.
+
+## Units
+
+State the unit with every number; the report labels them, keep the labels.
+
+- **API-eq $**: the list price of the tokens (pi's `costUsd`); the comparison metric of cloud setups, deterministic per
+  request and attributable under concurrent sessions and subagents.
+- **cash $**: what is charged: the API-eq $ of `api` providers, 0 for subscription, free and local; "≤ X" while the billing
+  class is guessed (a v1 line, no plan for its provider).
+- **quota %** (`q5h`, `q7d`): the account's windows, shared by every client: the budget, not a per-session cost.
+  **est. points** = the calibration's β × API-eq $ (it needs 8 complete windows).
+- **local cost**: **machine hours** (the union of the requests' intervals; the server runs one request at a time) × the plan's
+  hourly rate, in the rate's currency (EUR, say). An experiment charges **request hours** (the sum of the request times); the
+  gap is the **queue share**, so a unit's local cost is not its share of machine time.
+- Currencies: never add USD and EUR; a total exists only with one currency or with `currency.rates`.
+- **not measurable**: the data to compute the figure is absent (no `durationMs`, no rate, no reviewer verdict, fewer than 8
+  complete windows, a timed objective on untimed lines); **not observable**: the lines never carried the field. Report the
+  reason; the figure is never 0 and never a guess.
 
 ## Reading the report
 
-- **Budget** (first): the quota windows of subscription providers (peak, lockouts, time to cap, 429 requests and retry wait; "not
+- **Budget** (first: the quota, not the dollar, binds a subscription): the quota windows of subscription providers (peak, lockouts, time to cap, 429 requests and retry wait; "not
   observable" when no line carries the field), the **calibration** (non-negative least-squares fit of the windows' peak on the API-eq $ of
   input, cacheRead, cacheWrite and output: β, R², $/point, and the flags r2, residual, drift, beta — a flag means the quota now weighs
   tokens differently from API prices, a reason to revisit the objective, never an automatic change; it needs 8 complete windows), the
-  spend by billing class (API-eq $ vs cash $) and the local cost (active time × the plan's rate, with its currency). The quota is the
-  budget, not the comparison metric of experiments.
+  spend by billing class (API-eq $ vs cash $) and the local cost (machine hours × the plan's rate, with its currency and
+  the queue share). "plans absent" means the report guessed every billing class. The quota is the budget, not the
+  comparison metric of experiments.
 - **Fleet**: total API-eq $ and cash $, active hours (gaps < 30 min), API-eq $/active hour with a bootstrap 95% CI,
   API-eq $/accepted task (over all routed tasks: what a task cost, judged or not, paid for by the accepted ones); splits by model and warming; token components (each model's own
   price ratios; a 1 h cache write weighs 2.0 × input, a 5-minute one 1.25). **Cache** (Claude models; premiums also in est. points once calibrated): new context (growth) apart from misses (the cached prefix a
@@ -53,12 +72,20 @@ without the user's explicit approval.
   (net of what an ordinary request misses).
 - **Levers**: per lever (a pi setting, an extension's or pi-economics' control) the values the period's sessions ran with,
   their sources (pe = pi-economics assigned it, ext = an extension, fixed = configuration or pi default) and the refusal rate
-  of assigned values (a factor refused in > 20% of its sessions points at a broken add-on). Sessions from before levers lines
-  existed count as without one.
-- **Experiments** (per design: v1 = 5 factors / 5-character arms, v2 and v3 = 6 factors incl.
-  `delegationRule`, v4 = 3 factors `warmPolicy`, `mainCacheTtl`, `maskOnCold`): per **stratum** (billing class of the main's provider, never pooled) the marginal per-factor effect
-  ratio(high) ÷ ratio(low) − 1 of the objective per active hour (a ratio of sums), with a bootstrap CI and minimum detectable effect, a balance table
-  (units, hours, excluded) and a power line; no interaction model. Per-arm $/h, posterior and P(best) pool the strata.
+  of assigned values (a factor refused in > 20% of its sessions points at a broken add-on). A read-back is `confirmed`
+  (the effective value is the assigned one), `refused` (another value, with who decided) or `unverified` (nothing can tell:
+  never read it as applied). Sessions from before levers lines existed count as without one.
+- **Experiments** (per design, and per **stratum**: the setup a main belongs to, by billing class or model; each stratum has
+  its own design and objective per active hour: `apiUsd` for cloud, `localCost` for local, `wallMs`, `cashUsd`, `points5h`,
+  `points7d`; strata are never pooled, and the legacy designs v1 to v4 are analysed apart). The table to trust is the
+  **Intention-to-treat** one: every unit by its assignment, the marginal per-factor effect ratio(high) ÷ ratio(low) − 1 (a
+  ratio of sums) with a bootstrap CI, a minimum detectable effect, a balance table (units, hours, excluded) and a power
+  line; no interaction model. **Per-protocol** keeps the units whose every factor was read back `confirmed` in the last levers
+  line: a non-randomized comparison (the units that kept the assignment are self-selected), never the headline. **Refusal rate** per factor: above 20% the add-on is broken and the factor's effect is not to be trusted. **Sensitivity** repeats the
+  effect over the requests of the root's first billing class (a model switch moves cost between classes); **context
+  overflows** count failed turns per arm. A secondary column shows the requests in the other currency (an arm that moves
+  work to another kind of provider looks cheaper in the objective alone). An ineligible session (`eligible: false`, with
+  a reason: no matching stratum, mode off, a lever that cannot be set for its model) is no unit and in no refusal rate.
   An effect counts only when its CI excludes 0 *and* each level has several units.
 - **Router**: share of tasks and $ in child sessions, Qwen share (of the
   planned tiers; the report states no target: the router's targets are the owner's), escalations,
@@ -92,19 +119,22 @@ without the user's explicit approval.
 
 - **Quota is account-wide and in 1% steps**: `q5h`/`q7d` include every other client on the
   account; short sessions move it by 0–1 step, and which parallel root gets a step is
-  decided by cost within the interval (noisy per root, fair over many). Prefer $ figures for
-  comparisons.
+  decided by cost within the interval (noisy per root, fair over many). Compare with API-eq $ or local cost,
+  not with quota points.
 - **Small samples**: the unit is a root session. With few units per arm, CIs are wide or
   degenerate (a CI of width 0 from one unit means "unknown", not "certain").
 - **Task-mix variance**: sessions differ in what was asked; an arm can look cheap because it
   got easy sessions. Effects need balanced, repeated sessions.
-- $ are pi's API-price estimates, not the subscription bill.
+- API-eq $ are pi's API-price estimates, not the subscription bill.
+- **Quota waits are not measured yet**: the quota waiter (its own extension) and the meter's reading of its events ship after
+  0.3.0; until then a wait shows only as `429` error lines and a gap, and the Budget says "not observable" where a wait
+  would show.
 - **The $/accepted headline was redefined** (Cost section, same function as the *all* row of the tier table): every routed task's
   $ over the accepted tasks, an unjudged task counting as zero yield, as a range excl. – incl. the unresolved cards' $. It is not
   comparable with reports written before: the old figure was about the judged-only one (author's log: old 4.13, judged-only 4.21, new
   6.87 – 11.72). Compare two reports only if both are of the new kind; for a judged-only figure use the *By profile and tier* cells.
-- Resumed child sessions lose their arm (known gap in LOGS.md); such lines are unattributed.
-
+- A resumed child session of a run before the v2 engine lacks its arm (known gap in LOGS.md); such lines are
+  unattributed. Newer child runtimes derive their root's arm.
 ## Decision menu (propose; apply only after the user approves)
 
 - **Disable arms** the kill switch lists: `pi-analyse --apply` writes them to
@@ -112,9 +142,10 @@ without the user's explicit approval.
 - **Change a default in Nix** when a factor's effect is clear (CI excludes 0, enough units):
   the factor's setting in the repo's Home Manager config, then a rebuild by the user.
 - **Explore → exploit**: switch `experiments` `mode` to `exploit` once the posterior separates
-  arms; keep `minExplore` > 0.
-- **Routing**: adjust the task-router's t0 limits / runaway limits when the Qwen share or
-  acceptance per tier misses the owner's targets, or runaways recur.
+  arms; only strata whose objective is `apiUsd` have a posterior, the others keep drawing from blocks; keep
+  `minExplore` > 0.
+- **Router**: the router is its own repository's; propose changes to its settings (t0 limits, runaway limits) when
+  acceptance per tier misses the owner's targets or runaways recur, and leave the edit to the user.
 - **Fix the logging** when the contract check reports missing fields (a writer bug).
 
 Never edit settings, state files or Nix code, and never run `--apply`, without an explicit

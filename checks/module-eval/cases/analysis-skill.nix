@@ -73,4 +73,41 @@ in {
   analysis-skill-sections =
     lib.concatMap (s: holds "the skill explains ${s}" (builtins.replaceStrings [s] [""] source != source))
     ["- **Budget**" "- **Fleet**" "**Cache** (" "- **Levers**" "- **Experiments**" "- **Router**" "- **Guards**" "- **Data quality**" "(ttl, fold, model, prefix, other)"];
+
+  # (redesign M11) The skill reads the report as the redesign shapes it: budget first, one unit per number and no sum across
+  # currencies, "not measurable" never read as 0, the experiments per stratum with the intention-to-treat table as the
+  # randomized comparison and per-protocol as a self-selected one, a refusal rate to distrust, and where the quota waiter's
+  # waits are (not yet).
+  analysis-skill-redesign = let
+    has = s: builtins.replaceStrings [s] [""] source != source;
+  in
+    lib.concatMap (s: holds "the skill carries ${s}" (has s))
+    [
+      "## Units"
+      "Read the **Budget** first"
+      "API-eq $"
+      "cash $"
+      "est. points"
+      "quota %"
+      "never add"
+      "not measurable"
+      "not observable"
+      "never 0"
+      "machine hours"
+      "queue share"
+      "per **stratum**"
+      "never pooled"
+      "Intention-to-treat"
+      "Per-protocol"
+      "self-selected"
+      "Refusal rate"
+      "Sensitivity"
+      "quota waiter"
+    ]
+    ++ lib.concatMap (s: holds "the skill no longer says ${s}" (!has s))
+    [
+      "lose their arm"
+      "v4 = 3 factors"
+      "Prefer $ figures"
+    ];
 }
