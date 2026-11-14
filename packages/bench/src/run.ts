@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadArms } from "./config.ts";
 import { printArgs } from "./driver-print.ts";
 import { runRpc } from "./driver-rpc.ts";
 import { needsDevenvShim, runEnv } from "./env.ts";
+import { hasProcessLevers } from "./levers.ts";
 import { materializeAgentDir } from "./orch.ts";
 import { buildPrompt } from "./prompt.ts";
 import { runLimited } from "./proc.ts";
@@ -27,6 +28,9 @@ export async function runOne(o: RunOptions): Promise<RunResult> {
 	const arms = loadArms(o.paths.data);
 	const arm = arms[o.arm];
 	if (!arm) throw new Error(`unknown arm: ${o.arm}`);
+	// A process-lever arm loads the experiments engine (src/levers.ts): fail before anything is written, not inside pi.
+	if (hasProcessLevers(arm) && !existsSync(join(o.paths.extDir, "experiments")))
+		throw new Error(`arm ${o.arm} has a pi.<lever> factor, so it loads experiments, but ${join(o.paths.extDir, "experiments")} does not exist: link it in the extension registry (programs.piEconomics.experiments.enable) or in PI_BENCH_EXT_DIR`);
 	const name = `${o.id}.${o.arm}.${o.rep}`;
 	const R = join(o.paths.data, "runs", name);
 	const W = join(o.paths.work, "runs", name);

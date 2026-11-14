@@ -3,7 +3,7 @@
 // infinite-context unless it adds it, and the report reads the meter's compaction, overflow and levers lines.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolvePaths } from "../src/config.ts";
 import { armExtensions } from "../src/extensions.ts";
@@ -139,8 +139,25 @@ test("T9.6 the report rows carry the meter's figures and a process-lever section
 	assert.equal(plain.includes("## Process levers"), false, "a bench without meter figures reports as before");
 });
 
+/** An extension directory that links experiments (the registry of a host with experiments.enable). */
+const extWithExperiments = () => {
+	const dir = tmp();
+	writeFileSync(join(dir, "experiments"), "");
+	return dir;
+};
+
+test("review m6 a process arm whose extension directory lacks the experiments link fails before the run, naming it; other arms are not asked", async () => {
+	const p = paths({ PI_BENCH_EXT_DIR: tmp() });
+	writeFileSync(join(p.data, "arms.json"), JSON.stringify({ "orch-compact": compaction() }));
+	const repo = sourceRepo();
+	const task = { kind: "small", gitdir: repo.gitdir, sub: "proj", base: repo.base, prompt: "p", check: "true" };
+	const o = { id: "T", task, rep: 1, paths: p, piBin: "/nonexistent/pi", env: { PATH: process.env.PATH! }, timeoutSec: 20, killGraceSec: 1, quietMs: 200 };
+	await assert.rejects(runOne({ ...o, arm: "orch-compact" }), /experiments.*programs\.piEconomics\.experiments\.enable|experiments.*link/);
+	assert.equal(existsSync(join(p.data, "runs/T.orch-compact.1/agent")), false, "nothing was written before the check");
+});
+
 test("T9.2 runOne writes the assignment under the arm's name and the factor arm's extension list ends in experiments", async () => {
-	const p = paths();
+	const p = paths({ PI_BENCH_EXT_DIR: extWithExperiments() });
 	writeFileSync(join(p.data, "arms.json"), JSON.stringify({ "orch-compact": compaction() }));
 	const repo = sourceRepo();
 	const task = { kind: "small", gitdir: repo.gitdir, sub: "proj", base: repo.base, prompt: "p", check: "true" };
@@ -149,7 +166,7 @@ test("T9.2 runOne writes the assignment under the arm's name and the factor arm'
 	const R = join(p.data, "runs/T.orch-compact.1");
 	assert.equal(json(join(R, "agent/experiments/assignment.json")).arm, "orch-compact");
 	const args = readFileSync(join(R, "probe.json.args"), "utf8").split("\n");
-	assert.ok(args.includes("/ext/experiments") && !args.includes("/ext/infinite-context"));
+	assert.ok(args.includes(`${p.extDir}/experiments`) && !args.includes(`${p.extDir}/infinite-context`));
 });
 
 test("review m4 / m3 one experiment, one design id: the union of the factors and levels over every arm (the baseline included), however the arm is named", () => {
@@ -170,7 +187,7 @@ test("review m4 / m3 one experiment, one design id: the union of the factors and
 });
 
 test("m3 runOne gives the arm's file the design of the whole arm set (arms.json)", async () => {
-	const p = paths();
+	const p = paths({ PI_BENCH_EXT_DIR: extWithExperiments() });
 	writeFileSync(join(p.data, "arms.json"), JSON.stringify({ "orch-compact": compaction(), "orch-compact2": compaction({ factors: { ...base.factors, "pi.compaction.reserveTokens": "4000" } }) }));
 	const repo = sourceRepo();
 	const task = { kind: "small", gitdir: repo.gitdir, sub: "proj", base: repo.base, prompt: "p", check: "true" };
