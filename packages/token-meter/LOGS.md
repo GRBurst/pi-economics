@@ -246,6 +246,10 @@ read back at `before_agent_start`, also in a child, seeded with its root's level
 to the session branch before an extension that adopts recorded values reads it, and reads back the latest entry of that type:
 the seed when the target adopted it, the target's own record (`refused`, source `ext`) when it drew another value. The read-back
 sees what the target records: a target that is not loaded, or that ignores the seed without recording, reads `confirmed`.
+When the branch already holds another record of the type at the seed (a target that runs before pi-economics recorded its own
+value; extension order is the consumer's), the seed is appended all the same but the state stays `unverified` until a later
+entry, the target's, shows what it used; the engine does not append the seed again when the latest record already holds
+the level (a reload).
 A level name may start with a digit (`5m`, `1h`) and holds lowercase letters, digits, `_` and `-` (at most 32 characters). A read-back that changes
 a state writes a new levers line. A child runtime's experiments never draws: it derives its root's assignment (the
 session file's directory `subagents/<root>/`, or for an in-memory child the actor's agent list) and serves it on the

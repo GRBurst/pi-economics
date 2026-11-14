@@ -238,7 +238,9 @@ without the repository naming it: `session-entry(<customType>,<field>)` (seed ti
 that type at `before_agent_start`: the seed itself when the target adopted it, the target's own record (source `ext`,
 `refused`) when it drew another value. The target is not named, so a target that is not loaded, or that ignores the seed
 without recording anything, reads back as `confirmed`: the read-back sees what the target records, never that it
-adopted. Children are seeded with their root's level. The module refuses a factor whose `lever` is neither an id of
+adopted. A record of the type that predates the seed and differs (a target that loads before pi-economics drew its own
+value) keeps the state `unverified` until a later entry shows the target's; a latest record that already holds the level is
+not seeded again (reload). Children are seeded with their root's level. The module refuses a factor whose `lever` is neither an id of
 `packages/experiments/addons/catalogue.json` nor one of the two kinds (`pi-economics: experiments factor <f> in stratum
 <s> has an unknown lever <lever>`: it would randomize nothing) and a level that is not a level name (`a-z`, `0-9`, `_`,
 `-`, at most 32 characters), a number or a boolean (`... has a level that is not a level name, a number or a boolean`);

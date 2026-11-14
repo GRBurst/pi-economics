@@ -30,7 +30,7 @@ function rig() {
   const registry = createRegistry([], [sessionEntryKind(pi)]);
   const at = { sessionId: "s1", branch: () => branch };
   const session = (assigned: Level, levels: readonly Level[] = [100, 200], id = ID, env = { child: false }) =>
-    sessionLevers(registry, { sessionId: "s1", factors: { f: { lever: id, assigned } } }, env, () => levels);
+    sessionLevers(registry, { sessionId: "s1", factors: { f: { lever: id, assigned } } }, env, () => levels, () => at);
   return { branch, appended, registry, at, session };
 }
 
@@ -132,18 +132,19 @@ test("T7c property: ∀ assigned level, ∀ later entry the state keeps every §
 });
 
 // The engine: the branch reaches the add-on through the shell's ctx, at session_start (the seed) and before_agent_start.
-function engine(factors: unknown[]) {
+function engine(factors: unknown[], preload: Entry[] = []) {
   const agentDir = mkdtempSync(join(tmpdir(), "experiments-seed-"));
   const f = fakePi();
+  f.entries.push(...preload); // the branch a reloaded or resumed runtime finds
   const heard: Levers[] = [];
   onAssigned(f.events, (l) => void heard.push(l));
   const settings = { ...defaults(), strata: { all: { match: {}, objective: "apiUsd", factors } } };
   install(f.pi, { agentDir, settings, rng: () => 0.5, api: () => undefined });
-  const ctx = (sid: string, file = join(agentDir, "sessions", `x_${sid}.jsonl`)) => ({
+  const ctx = (sid: string, file = join(agentDir, "sessions", `x_${sid}.jsonl`), branch: () => unknown[] = () => f.entries) => ({
     model: { provider: "openai", id: "gpt-5" },
-    sessionManager: { getSessionId: () => sid, getSessionDir: () => join(agentDir, "sessions"), getSessionFile: () => file, getBranch: () => f.entries },
+    sessionManager: { getSessionId: () => sid, getSessionDir: () => join(agentDir, "sessions"), getSessionFile: () => file, getBranch: branch },
   });
-  const start = (sid: string, file?: string) => f.fire("session_start", { type: "session_start", reason: "startup" }, ctx(sid, file));
+  const start = (sid: string, file?: string, branch?: () => unknown[]) => f.fire("session_start", { type: "session_start", reason: "startup" }, ctx(sid, file, branch));
   const prompt = (sid: string) => f.fire("before_agent_start", { type: "before_agent_start", prompt: "x" }, ctx(sid));
   return { ...f, heard, start, prompt, agentDir };
 }
@@ -171,6 +172,62 @@ test("T7c.2 the engine: a child runs its root's arm, so its own branch is seeded
   const e = engine([{ name: "nudge", lever: ID, levels: [100, 200] }]);
   e.start("s1");
   const root = seeds(e)[0].data;
-  e.start("kid", join(e.agentDir, "sessions", "subagents", "s1", "kid.jsonl"));
+  e.start("kid", join(e.agentDir, "sessions", "subagents", "s1", "kid.jsonl"), () => []); // a child's branch is its own: empty
   assert.deepEqual(seeds(e).map((x) => x.data), [root, root]);
+});
+
+// Review F1 (a): the engine's own seed is no evidence of anything. A target that ran BEFORE the engine recorded its own
+// draw first and the seed lands after it: the latest entry is then our seed although the target ran with another value.
+test("F1a the branch already holds another value of the type when the engine seeds (the target ran first): the seed is appended, but the read-back is unverified until a later entry exists", () => {
+  const r = rig();
+  r.branch.push(custom("entry-ext:settings", { nudge: 150 })); // the target's own draw, earlier
+  const s = r.session(100);
+  s.refresh();
+  assert.deepEqual(r.appended, [["entry-ext:settings", { nudge: 100 }]], "seeded anyway: a target that has not read yet adopts it");
+  assert.equal(s.observe("before_agent_start", r.at), false);
+  assert.deepEqual(s.states()[ID], { v: 100, s: "pe", a: 100, rb: "unverified", tier: "seed" }, "the latest entry is our own seed: no claim");
+  r.branch.push(custom("entry-ext:settings", { nudge: 175 })); // a later entry is the target's
+  assert.equal(s.observe("before_agent_start", r.at), true);
+  assert.deepEqual(s.states()[ID], { v: 175, s: "ext", a: 100, rb: "refused", tier: "seed" });
+  r.branch.push(custom("entry-ext:settings", { nudge: 100 }));
+  s.observe("before_agent_start", r.at);
+  assert.equal(s.states()[ID].rb, "confirmed", "a later entry that the target wrote and that holds the level");
+});
+
+test("F1a an earlier entry of the type that lacks the field is another record of the target: same guard", () => {
+  const r = rig();
+  r.branch.push(custom("entry-ext:settings", { other: 1 }));
+  const s = r.session(100);
+  s.refresh();
+  s.observe("before_agent_start", r.at);
+  assert.equal(s.states()[ID].rb, "unverified");
+});
+
+test("F1a (also F6) the latest entry of the type already holds the level (a reload, or the target ran first and used it): nothing is appended", () => {
+  const r = rig();
+  r.branch.push(custom("other:settings", { nudge: 1 }), custom("entry-ext:settings", { nudge: 100 }));
+  const s = r.session(100);
+  s.refresh();
+  assert.deepEqual(r.appended, [], "no duplicate seed");
+  s.observe("before_agent_start", r.at);
+  assert.deepEqual(s.states()[ID], { v: 100, s: "pe", a: 100, rb: "confirmed", tier: "seed" });
+  const again = rig();
+  again.branch.push(custom("entry-ext:settings", { nudge: 150 }), custom("entry-ext:settings", { nudge: 100 }));
+  again.session(100).refresh();
+  assert.deepEqual(again.appended, [], "only the LATEST entry counts");
+});
+
+test("F1a the engine: a reload (a new runtime on the same branch) does not seed again; a target that ran first reads unverified (its draw, then the seed)", () => {
+  const factors = [{ name: "nudge", lever: ID, levels: [100, 200] }];
+  const first = engine(factors);
+  first.start("s1");
+  assert.equal(seeds(first).length, 1);
+  const second = engine(factors, [...first.entries]);
+  second.start("s1");
+  assert.equal(seeds(second).length, 1, "no second seed");
+  const other = engine(factors, [custom("entry-ext:settings", { nudge: 150 })]); // the target ran first
+  other.start("s1");
+  other.prompt("s1");
+  assert.equal(other.heard.at(-1)!.levers[ID].rb, "unverified");
+  assert.deepEqual(seeds(other).map((x) => x.data), [{ nudge: 150 }, { nudge: other.heard[0].factors!.nudge.assigned }]);
 });

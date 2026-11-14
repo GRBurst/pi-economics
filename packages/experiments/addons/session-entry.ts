@@ -7,7 +7,7 @@
 // without recording anything, leaves the seed latest: the read-back cannot tell that from an adoption (seed-tier
 // limit; the target is not named, no consumer code is loaded). Children inherit: the child's branch is seeded with
 // its root's level, and a target loaded there adopts or redraws as in a main.
-import type { Kind, Lever, Observed } from "./types.ts";
+import type { Kind, Lever, Observed, SessionCtx } from "./types.ts";
 import type { Level } from "../core/design.ts";
 
 /** What the add-on uses of pi's ExtensionAPI. */
@@ -26,21 +26,41 @@ export function parseSessionEntry(id: string): { customType: string; field: stri
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
 const isLevel = (v: unknown): v is Level => typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v));
 
+/** The index and data of the latest entry of `customType` on a branch (oldest first), or undefined. */
+function latest(branch: readonly unknown[], customType: string): { at: number; data: unknown } | undefined {
+  for (let i = branch.length - 1; i >= 0; i--) {
+    const e = branch[i];
+    if (isRecord(e) && e.type === "custom" && e.customType === customType) return { at: i, data: e.data };
+  }
+  return undefined;
+}
+const entries = (ctx: SessionCtx): readonly unknown[] | undefined => {
+  try { return ctx.branch?.(); } catch { return undefined; }
+};
+
 function sessionEntry(pi: Appender, customType: string, field: string): Lever {
+  // Per session: where the engine's seed sits on the branch, when the type already had a record before it (review F1: a
+  // target that ran before the engine drew and recorded its own value, so the seed that follows is no evidence of anything).
+  const seeded = new Map<string, { at: number; recordBefore: boolean }>();
   return {
     id: `session-entry(${customType},${field})`, target: "pi", scope: "session", tier: "seed", readBackAt: "before_agent_start",
     feasible: (_env, levels) => levels,
-    apply: (_ctx, level) => pi.appendEntry(customType, { [field]: level }),
+    apply(ctx, level) {
+      const branch = entries(ctx);
+      const prior = branch === undefined ? undefined : latest(branch, customType);
+      if (prior !== undefined && isRecord(prior.data) && prior.data[field] === level) return; // already the latest record (a reload; or the target ran first and used it)
+      const at = branch?.length ?? -1; // where the seed will sit
+      pi.appendEntry(customType, { [field]: level });
+      seeded.set(ctx.sessionId, { at, recordBefore: prior !== undefined });
+    },
     observe(ctx): Observed {
-      let branch: readonly unknown[];
-      try { branch = ctx.branch?.() ?? []; } catch { return undefined; }
-      for (let i = branch.length - 1; i >= 0; i--) {
-        const e = branch[i];
-        if (!isRecord(e) || e.type !== "custom" || e.customType !== customType) continue;
-        const v = isRecord(e.data) ? e.data[field] : undefined;
-        return isLevel(v) ? { v, s: "ext" } : undefined; // the latest entry of the type decides, whatever it holds
-      }
-      return undefined;
+      const branch = entries(ctx);
+      const l = branch === undefined ? undefined : latest(branch, customType);
+      if (l === undefined) return undefined;
+      const seed = seeded.get(ctx.sessionId);
+      if (seed?.recordBefore && l.at <= seed.at) return undefined; // the latest record is our own seed, over another one: nothing from the target yet
+      const v = isRecord(l.data) ? l.data[field] : undefined;
+      return isLevel(v) ? { v, s: "ext" } : undefined; // the latest entry of the type decides, whatever it holds
     },
   };
 }

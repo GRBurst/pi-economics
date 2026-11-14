@@ -42,10 +42,10 @@ export function fakeControl(o: { level?: string; active?: string[]; all?: string
 }
 
 /** A fake ExtensionAPI: `entries` collects pi.appendEntry calls (the session's custom entries); `control` is the session control's state. */
-export function fakePi(controlOptions?: Parameters<typeof fakeControl>[0]) {
+export function fakePi(controlOptions?: Parameters<typeof fakeControl>[0], initialEntries: Entry[] = []) {
   const handlers = new Map<string, Array<(e: any, ctx: any) => unknown>>();
   const commands: string[] = [];
-  const entries: Entry[] = [];
+  const entries: Entry[] = [...initialEntries]; // the branch a resumed or reloaded runtime finds
   const events = bus();
   const { control: api, state: control } = fakeControl(controlOptions);
   const pi = {
