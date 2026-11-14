@@ -820,3 +820,38 @@ test("T8.7 timings: the last stream event's llama.cpp `timings` become promptMs,
   f.fire("message_end", assistant(), ctx);
   assert.equal("promptMs" in lines()[2], false);
 });
+
+// Task B: with no pi-economics factor on infinite-context's limit, the meter records the value the extension itself holds (the
+// latest settings record on the branch) as an ext lever: a range means the extension drew it, a plain number is configuration.
+const NUDGE = "infinite-context.nudgeAtTokens";
+const icRecord = (data: unknown) => ({ type: "custom", customType: "infinite-context:settings", data });
+
+test("levers: infinite-context's own draw is an ext lever {v, s: ext} (a rule with a range), a fixed number {v, s: fixed}; the latest record wins", () => {
+  const { f, clock, lines } = setup({ env: {} });
+  const entries: unknown[] = [icRecord({ nudgeAtTokens: 142_000, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" })];
+  const ctx = fakeCtx("s1", { entries });
+  agentStart(f, ctx);
+  entries.push(icRecord({ nudgeAtTokens: 400_000, nudgeAtPercent: 75, rule: "anthropic/opus" })); // a model switch to a fixed rule
+  clock.t += 1000; agentStart(f, ctx);
+  entries.push(icRecord({ nudgeAtTokens: "x" }), icRecord(null), { type: "custom", customType: "other:settings", data: { nudgeAtTokens: 1 } }); // malformed or foreign: skipped
+  clock.t += 1000; agentStart(f, ctx);
+  const [first, second, ...more] = leversOf(lines());
+  assert.deepEqual(first.levers[NUDGE], { v: 142_000, s: "ext" });
+  assert.deepEqual(second.levers[NUDGE], { v: 400_000, s: "fixed" });
+  assert.equal(more.length, 0, "pi-economics: malformed and foreign records change nothing, so no third line");
+});
+
+test("levers: no infinite-context record, no nudge lever (negative case); a record without a number gives none", () => {
+  const { f, lines } = setup({ env: {} });
+  agentStart(f, fakeCtx("s1"));
+  agentStart(f, fakeCtx("s2", { entries: [icRecord({})] }));
+  for (const l of leversOf(lines())) assert.equal(NUDGE in l.levers, false, "pi-economics: " + l.sessionId);
+});
+
+test("levers: a pi-economics factor on the nudge keeps the engine's state: the meter's own read of the record adds nothing to it", () => {
+  const claim = { v: 150_000, s: "pe", a: 150_000, rb: "unverified", tier: "seed" };
+  const { f, lines } = setup({ env: {} }, () => ({ eligible: true, arm: "1", levers: { [NUDGE]: claim } }));
+  // The extension's record holds another value than the claim: the engine's read-back (refused or confirmed) is its own, not the meter's join.
+  agentStart(f, fakeCtx("s1", { entries: [icRecord({ nudgeAtTokens: 175_000, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_000] })] }));
+  assert.deepEqual(leversOf(lines())[0].levers[NUDGE], claim);
+});

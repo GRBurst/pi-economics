@@ -158,7 +158,7 @@ test("ineligible (P12): a fixed-number rule draws nothing and ignores records; t
   const [row] = s.rows();
   assert.deepEqual([row.eligible, row.arm, row.factors, row.reason], [false, undefined, undefined, "infinite-context.nudgeAtTokens: no level can be set for the session's model"]);
   await s.prompt();
-  assert.equal(s.lineState(), undefined, "no lever state: nothing to refuse");
+  assert.deepEqual(s.lineState(), { v: 400_000, s: "fixed" }, "the extension's own (configured) limit, recorded by the meter without an assignment: nothing to refuse");
 });
 
 test("default local stratum (P12): a range rule is eligible, seeded, adopted and confirmed; a fixed rule is ineligible; without the extension too", async () => {
@@ -177,6 +177,15 @@ test("default local stratum (P12): a range rule is eligible, seeded, adopted and
   const f = session({ icDir: fixed, peDir: fixed, defaultStrata: true });
   await f.start(local);
   assert.deepEqual([f.rows()[0].eligible, f.rows()[0].arm], [false, undefined]);
+  await f.prompt();
+  assert.deepEqual(f.lineState(), { v: 350_000, s: "fixed" });
+  // A range rule with no factor on the lever (the session is in another stratum's design): the extension's own draw, ext.
+  const own = dirOf();
+  writeIc(own, { overrides: { anthropic: { nudgeAtTokens: [100_000, 200_001] } } });
+  const e = session({ icDir: own, peDir: own, draw: 0.5, defaultStrata: true });
+  await e.start(haiku); // anthropic bills as api: the v4 factors, none on the nudge
+  await e.prompt();
+  assert.deepEqual(e.lineState(), { v: e.records().at(-1)!.nudgeAtTokens, s: "ext" });
 });
 
 test("planted refusal: the extension does not adopt a seed whose range is not its rule's — it draws its own, and the meter's line says refused", async () => {

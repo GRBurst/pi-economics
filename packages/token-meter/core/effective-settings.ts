@@ -173,6 +173,14 @@ const IC_SETTINGS = "infinite-context:settings";
  * recorded but are inert, and the analyser does not read them.
  */
 export function extensionLevers(branch: readonly unknown[]): Record<LeverId, LeverState> {
-  const ic = branch.some((e) => isObj(e) && e.type === "custom" && e.customType === IC_SETTINGS);
-  return ic ? { "pi.compaction.enabled": { v: false, s: "ext" } } : {};
+  const records = branch.filter((e): e is Record<string, unknown> => isObj(e) && e.type === "custom" && e.customType === IC_SETTINGS);
+  if (records.length === 0) return {};
+  const out: Record<LeverId, LeverState> = { "pi.compaction.enabled": { v: false, s: "ext" } };
+  // The limit the extension holds (its latest well-formed record): drawn by it from a rule's range (ext), else a number the
+  // configuration fixed (fixed). Only where no pi-economics factor is on the lever: the engine's own state replaces this one.
+  const own = records.map((r) => r.data).reverse().find((d): d is Record<string, unknown> => isObj(d) && typeof d.nudgeAtTokens === "number" && Number.isFinite(d.nudgeAtTokens));
+  if (own !== undefined) out[IC_NUDGE] = { v: own.nudgeAtTokens as number, s: own.nudgeAtTokensRange === undefined ? "fixed" : "ext" };
+  return out;
 }
+/** The lever of infinite-context's limit (the engine's add-on has the same id). */
+export const IC_NUDGE = "infinite-context.nudgeAtTokens";

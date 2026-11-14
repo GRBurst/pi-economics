@@ -85,7 +85,7 @@ const passes = (meter: any[]) => {
 // M5b.2: the levers of the experiments engine's add-ons (packages/experiments/addons/cache-lifecycle.ts).
 const ADDON_IDS = ["cache-lifecycle.warmPolicy", "cache-lifecycle.mainCacheTtl", "cache-lifecycle.maskOnCold"];
 // M7b: a data-only kind that sets pi itself (control tier); a child's line omits it, like mainCacheTtl (review F4).
-const PI_CONTROL_IDS = ["pi.thinkingLevel"];
+const PI_CONTROL_IDS = ["pi.thinkingLevel", "infinite-context.nudgeAtTokens"];
 
 test("LOGS.md: levers line examples, each one the builder writes byte for byte, passing the contract", () => {
   const heading = "### Levers lines";
@@ -102,6 +102,7 @@ test("LOGS.md: levers line examples, each one the builder writes byte for byte, 
   for (const rb of ["confirmed", "refused", "unverified"]) assert.ok(states.some((x) => x.rb === rb), `no lever read back ${rb}`);
   assert.ok(lines.some((l) => typeof l.parentSessionId === "string" && l.eligible === false), "no child line");
   assert.ok(lines.some((l) => l.levers["pi.compaction.enabled"]?.s === "ext"), "no infinite-context line");
+  assert.ok(lines.some((l) => l.levers["infinite-context.nudgeAtTokens"]?.s === "ext" && !("rb" in l.levers["infinite-context.nudgeAtTokens"])), "no line with infinite-context's own draw (ext, no read-back)");
   for (const id of ADDON_IDS) assert.ok(lines.some((l) => l.levers[id]?.tier === "replace"), `no line with the engine's ${id}`);
   assert.ok(states.some((x) => typeof x.v === "string" && /^[0-9]/.test(x.v)), "no level name starting with a digit");
   assert.ok(lines.some((l) => l.levers["pi.thinkingLevel"]?.tier === "control" && l.levers["pi.thinkingLevel"].rb === "refused"), "no main line with pi.thinkingLevel clamped (refused, control tier)");

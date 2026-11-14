@@ -1,7 +1,7 @@
 // All extension logic, free of pi imports so it runs under node's test runner with test/fake-pi.ts.
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { effectiveSettings, extensionLevers } from "./effective-settings.ts";
+import { IC_NUDGE, effectiveSettings, extensionLevers } from "./effective-settings.ts";
 import { LEVERS, LEVERS_QUERY, type Bus, type Levers, type LeversQuery } from "./channel.ts";
 import { leverViolations, leversLine, serializeLevers, type LeverId, type LeverState } from "./levers.ts";
 import { systemHash } from "./system-hash.ts";
@@ -209,7 +209,8 @@ export function install(pi: PiLike, deps: Deps): void {
     const out: Record<LeverId, LeverState> = { ...observed };
     for (const [id, e] of Object.entries(engine)) {
       const o = observed[id];
-      if (o === undefined || o.v === e.v) out[id] = e;
+      // The engine reads infinite-context's record itself (its read-back is stricter than the meter's): its state on the nudge stands.
+      if (o === undefined || o.v === e.v || id === IC_NUDGE) out[id] = e;
       else if (e.a === undefined) out[id] = o;
       else out[id] = { ...(o.v === e.a ? { v: o.v, s: "pe" as const, a: e.a, rb: "confirmed" as const } : { v: o.v, s: o.s, a: e.a, rb: "refused" as const }), ...(e.tier === undefined ? {} : { tier: e.tier }) };
     }
