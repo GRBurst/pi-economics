@@ -299,3 +299,24 @@ test("review m3 a host whose pi has no getAllTools, or whose getAllTools throws 
     assert.deepEqual(r.entries.map((e) => e.customType), [ENTRY], String(getAllTools));
   }
 });
+
+// Review m4: the extension reads its settings file once, when its factory runs; the engine reads the rules once per runtime too.
+// A file a home-manager switch rewrites mid-session is the next session's, and must not turn the next model switch into a
+// refusal (the extension still runs the rules it read, the engine would seed a range it does not have).
+test("review m4 the rules are read once per runtime: a file rewritten mid-session changes no seed", () => {
+  const r = runtime();
+  r.start("s1", haiku);
+  const q = r.level("s1");
+  r.agentStart("s1", haiku);
+  writeFileSync(join(r.agentDir, "infinite-context", "settings.json"), JSON.stringify({ overrides: { example: { nudgeAtTokens: [500_000, 600_000] }, anthropic: { nudgeAtTokens: 90_000 } } }));
+  r.select("s1", local, haiku);
+  const a = at([300_000, 400_000], q);
+  assert.deepEqual(records(r.entries).at(-2), { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000], rule: "example" }, "the rule the extension runs, not the new file's");
+  r.agentStart("s1", local);
+  assert.deepEqual(r.state("s1"), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
+  // Back to the first model: the rewritten file's fixed 90000 for anthropic is not seen either.
+  r.select("s1", haiku, local);
+  r.agentStart("s1", haiku);
+  assert.equal(r.state("s1")?.rb, "confirmed");
+  assert.equal(r.state("s1")?.a, at([100_000, 200_000], q));
+});

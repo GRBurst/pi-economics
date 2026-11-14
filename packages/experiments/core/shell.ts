@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { designState, draw, eligibleFor, parseBlocks, stratumOf, type AssignmentV2, type BlockState } from "./assign.ts";
 import { CACHE_LIFECYCLE } from "../addons/cache-lifecycle.ts";
 import { piProcessLevers } from "../addons/pi-process.ts";
-import { IC_TARGET, IC_TOOL, infiniteContext, parseIcRules } from "../addons/infinite-context.ts";
+import { IC_TARGET, IC_TOOL, infiniteContext, parseIcRules, type IcRules } from "../addons/infinite-context.ts";
 import { createRegistry, sessionLevers } from "../addons/registry.ts";
 import type { Lever, ModelRef, SessionCtx } from "../addons/types.ts";
 import { publish, serve, type Assigned, type Bus, type Levers } from "./channel.ts";
@@ -114,7 +114,11 @@ export function install(pi: PiLike, deps: Deps): void {
   const lookup = (sid: string): Assigned | undefined => known.get(sid);
   // The add-ons (§7.4): a session's levers start when their target first asks the channel; their read-back states ride
   // on every publication and answer.
+  // infinite-context reads its settings file once, when it loads; the engine reads the rules once too (at the first use, the
+  // session's start), so a file rewritten mid-session is the next session's and never makes a switch a refusal.
   const icFile = join(deps.agentDir, "infinite-context", "settings.json");
+  let icRules: IcRules | undefined;
+  const readIcRules = (): IcRules => (icRules ??= parseIcRules(safe(() => readFileSync(icFile, "utf8"))));
   // pi's process levers read back from the settings files (the project's under the checkout the session runs in).
   // What pi merges (the project's settings only when the project is trusted, as pi and token-meter do) and the model whose
   // per-model compaction tokens apply: noted from the session's context at session_start and before each read-back.
@@ -127,7 +131,7 @@ export function install(pi: PiLike, deps: Deps): void {
     const m = safe(() => ctx.model as { provider?: unknown; id?: unknown } | undefined);
     model = typeof m?.provider === "string" && typeof m?.id === "string" ? `${m.provider}/${m.id}` : undefined;
   };
-  const registry = createRegistry([...CACHE_LIFECYCLE, ...infiniteContext(() => parseIcRules(safe(() => readFileSync(icFile, "utf8")))), ...piProcessLevers(() => ({
+  const registry = createRegistry([...CACHE_LIFECYCLE, ...infiniteContext(readIcRules), ...piProcessLevers(() => ({
     global: readJson(join(deps.agentDir, "settings.json")),
     project: trusted ? readJson(join(cwd, ".pi", "settings.json")) : undefined,
     model,

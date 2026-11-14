@@ -246,7 +246,9 @@ value it drew). The extension completes its record with `nudgeAtPercent`, the se
 none: while the latest record lacks it the extension has not adopted anything, and the
 state stays `unverified` (a tool of that name from another extension, a misordered load). A rule that is a fixed number draws nothing and ignores records: the
 level is refused up front (`refused`, source `fixed`, `a` = the level, as there are no
-tokens to assign). The lever is live when pi lists infinite-context's `context_fold`
+tokens to assign). The engine reads the rules from the
+extension's settings file once per runtime, as the extension does: a file rewritten
+mid-session is the next session's. The lever is live when pi lists infinite-context's `context_fold`
 tool (the extension never asks the channel); a child seeds its own branch with its
 root's level in its own model's range. The check `ic-seed-contract` runs the real
 patched extension against the add-on.
