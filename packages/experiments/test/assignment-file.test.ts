@@ -158,3 +158,53 @@ test("T9.4 the other compaction levers and enabled=false; an unknown pi lever ha
   assert.equal(l["pi.compaction.enabled"].rb, "confirmed");
   assert.equal(l["pi.compaction.keepRecentTokens"].rb, "confirmed");
 });
+
+test("review m3 the file is adopted in every mode (off, explore, exploit), and nothing is drawn or blocked", () => {
+  for (const mode of ["off", "explore", "exploit"] as const) {
+    const w = world({ file: FILE, mode });
+    w.start("s1");
+    const [r] = w.rows();
+    assert.deepEqual([r.mode, r.eligible, r.arm, r.stratum], [mode, true, "orch-+", "bench"], mode);
+    assert.equal(existsSync(join(w.agentDir, "experiments", "blocks.json")), false, mode);
+  }
+});
+
+test("review m3 a resumed session keeps its branch entry or its row: the file is only for a new unit", () => {
+  const entry = { type: "custom", customType: ENTRY, data: { sessionId: "s1", eligible: true, arm: "old", design: "ffffffffffff", stratum: "api", factors: {} } };
+  const w = world({ file: FILE });
+  w.fire("session_start", { type: "session_start", reason: "resume" }, { hasUI: true, ui: { notify: () => {} }, model: { provider: "anthropic", id: "m" }, sessionManager: { getSessionId: () => "s1", getSessionDir: () => "/x", getSessionFile: () => "/x/x_s1.jsonl", getBranch: () => [entry] } });
+  assert.equal(query(w.events, "s1")?.arm, "old");
+  assert.deepEqual([w.rows(), w.entries], [[], []]);
+  const v = world({ file: FILE });
+  writeFileSync(join(v.agentDir, "experiments", "assignments.jsonl"), JSON.stringify({ v: 2, ts: "t", sessionId: "s1", design: "eeeeeeeeeeee", mode: "off", eligible: true, stratum: "api", arm: "rowarm", factors: {} }) + "\n");
+  v.start("s1");
+  assert.equal(query(v.events, "s1")?.arm, "rowarm");
+  assert.equal(v.rows().length, 1, "no second row");
+});
+
+test("review m3 without experiments/settings.json (the opt-in) the engine stays inert even with the file", () => {
+  const agentDir = mkdtempSync(join(tmpdir(), "experiments-file-optin-"));
+  mkdirSync(join(agentDir, "experiments"), { recursive: true });
+  writeFileSync(join(agentDir, "experiments", "assignment.json"), JSON.stringify(FILE));
+  const f = fakePi();
+  install(f.pi, { agentDir, rng: () => 0.5, api: () => undefined });
+  f.fire("session_start", { type: "session_start", reason: "startup" }, { hasUI: true, ui: { notify: () => {} }, model: { provider: "anthropic", id: "m" }, sessionManager: { getSessionId: () => "s1", getSessionDir: () => join(agentDir, "sessions"), getSessionFile: () => join(agentDir, "sessions", "x_s1.jsonl"), getBranch: () => [] } });
+  assert.equal(existsSync(join(agentDir, "experiments", "assignments.jsonl")), false);
+  assert.deepEqual(f.entries, []);
+  assert.equal(query(f.events, "s1"), undefined);
+});
+
+test("review m3 a child under a file-adopted root runs the root's bench arm: no draw, no row of its own", () => {
+  const w = world({ file: FILE });
+  w.start("main-1");
+  assert.equal(w.rows().length, 1);
+  const child = fakePi();
+  const heard: Levers[] = [];
+  onAssigned(child.events, (l) => void heard.push(l));
+  install(child.pi, { agentDir: w.agentDir, settings: defaults(), rng: () => { throw new Error("drew"); }, api: () => undefined });
+  child.fire("session_start", { type: "session_start", reason: "startup" }, { hasUI: false, model: { provider: "anthropic", id: "m" }, sessionManager: { getSessionId: () => "c1", getSessionDir: () => join(w.agentDir, "sessions"), getSessionFile: () => join(w.agentDir, "sessions", "subagents", "main-1", "x_c1.jsonl"), getBranch: () => [] } });
+  const a = query(child.events, "c1")!;
+  assert.deepEqual([a.arm, a.design, a.stratum, a.parentSessionId, a.eligible], ["orch-+", FILE.design, "bench", "main-1", true]);
+  assert.equal(w.rows().length, 1, "the engine writes no child row");
+  assert.deepEqual(child.entries, []);
+});
