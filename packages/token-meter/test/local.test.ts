@@ -16,11 +16,11 @@ const req = (endMin: number, minutes: number, extra: Record<string, unknown> = {
 // A: [T-30, T] B: [T+15-30, T+15] (overlaps A for 15 min) · C: [T+120-30, T+120] on the other model
 const lines = (): Record<string, unknown>[] => [req(0, 30), req(15, 30), req(120, 30, { model: "q4", output: 1800 })];
 
-test("T8.1 localCost: Σ durationMs / 3.6e6 × the provider's rate in its currency; not billed local, warming and failed lines add nothing", () => {
-  const r = localCost([...lines(), req(130, 30, { billing: "api" }), req(131, 30, { kind: "warming" }), req(132, 30, { status: "error" }), { ...req(133, 0), durationMs: undefined }], plans).llama;
+test("T8.1 localCost: the machine-busy time (union of the serving intervals) × the provider's rate in its currency; other billing, warming and untimed lines add nothing", () => {
+  const r = localCost([...lines(), req(130, 30, { billing: "api" }), req(131, 30, { kind: "warming" }), { ...req(133, 0), durationMs: undefined }], plans).llama;
   assert.ok(r && !("notMeasurable" in r));
   if ("notMeasurable" in r) return;
-  close(r.sumH, 1.5, "sumH"); close(r.cost, 3, "cost"); assert.equal(r.currency, "EUR"); assert.equal(r.rate, 2);
+  close(r.sumH, 1.5, "sumH"); close(r.cost, 1.25 * 2, "cost = unionH × rate: overlapping requests queue on one slot, the machine is busy once"); assert.equal(r.currency, "EUR"); assert.equal(r.rate, 2);
 });
 
 test("T8.1 localCost: a provider without a rate is not measurable, its wall time (Σ request time) shown instead; no rate is never a cost of 0", () => {
@@ -92,4 +92,24 @@ test("convert: key FROM/TO (1 FROM = rate TO), the inverse of TO/FROM when only 
   assert.equal(convert(5, "USD", "EUR", {}), undefined);
   for (const x of [0, 1, 123.456]) close(convert(convert(x, "USD", "EUR", rates)!, "EUR", "USD", rates)!, x, "round trip");
   assert.equal(convert(5, "USD", "EUR", { "USD/EUR": 0 }), undefined, "a zero rate is no rate");
+});
+
+// review M8 item 1/6: no silent zero; a failed request occupies the machine too
+test("review M8 #1: a rated provider none of whose requests is timed has no cost (not 0): not measurable, the untimed count shown", () => {
+  const untimed = [{ ...req(0, 0), durationMs: undefined }, { ...req(10, 0), durationMs: undefined }];
+  assert.deepEqual(localCost(untimed, plans).llama, { notMeasurable: "no timed requests", wallH: 0 });
+  const [row] = localRows(untimed, plans);
+  assert.equal(row.cost, undefined); assert.deepEqual([row.requests, row.timed, row.untimed], [2, 0, 2]);
+  assert.equal(row.queueShare, 0, "pi-economics: sumH 0 gives queue share 0, never NaN");
+  assert.equal(row.models[0].costPerMOut, undefined);
+});
+
+test("review M8 #6: an error line with durationMs occupies the machine: it adds to request and machine hours, not to the request count", () => {
+  const [row] = localRows([req(0, 30), req(60, 30, { status: "error" })], plans);
+  assert.equal(row.requests, 1); assert.equal(row.failed, 1); close(row.sumH, 1); close(row.unionH, 1); close(row.cost!, 2);
+});
+
+test("review M8 #4e: prefix reuse from timings needs both cacheN and promptN on a line", () => {
+  const u = localRows([req(0, 30, { cacheN: 900, input: 100, cacheRead: 100 })], plans)[0];
+  assert.deepEqual(u.prefix, { share: 0.5, basis: "usage", requests: 1 });
 });

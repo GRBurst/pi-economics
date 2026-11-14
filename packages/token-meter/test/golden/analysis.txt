@@ -38,7 +38,7 @@ API-eq $ = the tokens at the provider's list price (what a pay-per-token account
 
 ### Local cost
 
-Σ request time (`durationMs`, summed over requests: concurrent requests add up) × the provider's hourly rate in its currency. A request without `durationMs` adds no time: untimed requests make the cost an undercount. A provider without a rate has no cost: its wall time (the summed request time) is shown instead. Machine hours = the union of the requests' serving intervals; the queue share = 1 − machine hours ÷ request hours: the server has one slot, so above 0 local requests overlapped and queued (their `durationMs` include the wait).
+Cost = machine hours × the provider's hourly rate in its currency. Machine hours = the union of the requests' serving intervals [end − `durationMs`, end] (failed requests included: they occupy the machine); request hours = Σ `durationMs`, which an experiment charges its units (concurrent requests add up). The queue share = 1 − machine hours ÷ request hours: with one server slot, above 0 local requests overlapped and queued (their `durationMs` include the wait), so an experiment's per-unit cost is above its share of machine time. A request without `durationMs` adds no time: untimed requests make the cost an undercount, and a provider none of whose requests is timed has no cost. A provider without a rate has no cost either: its wall time (the summed request time) is shown instead.
 
 | provider | requests (timed / untimed) | request hours | machine hours | queue share | rate | cost |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -64,7 +64,7 @@ Cash $ of the api class and the local cost of each rate's currency; currencies a
 | --- | --- | --- |
 | USD | 145.20 | 145.20 |
 
-Total: 145.20 USD
+Total: 145.20 USD (an upper bound: some requests' billing class was guessed as api)
 
 ## Fleet
 

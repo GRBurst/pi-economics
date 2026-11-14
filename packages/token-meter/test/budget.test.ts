@@ -121,13 +121,13 @@ test("budget: spend by billing class — API-eq $ for every class, cash $ only f
   assert.equal(b.plansAbsent, false);
 });
 
-test("budget: local cost = Σ durationMs × the plan's hourly rate, in the rate's currency, with the requests that had no duration counted apart", () => {
+test("budget: local cost = the union of the serving intervals × the plan's hourly rate, in the rate's currency, with the requests that had no duration counted apart", () => {
   const [l] = budget(spendLines(), plansOf).local;
   assert.equal(l.provider, "llama");
   assert.deepEqual([l.requests, l.timed, l.untimed], [3, 2, 1]);
-  close(l.hours, 1.5);
+  close(l.sumH, 1.5); close(l.unionH, 61 / 60, "the 10:03 request (0.5 h) starts inside the 10:02 one (1 h): 61 min of machine time");
   assert.deepEqual(l.rate, { amount: 0.25, currency: "EUR", per: "hour" });
-  close(l.cost!, 1.5 * 0.25);
+  close(l.cost!, (61 / 60) * 0.25);
   assert.deepEqual(budget(spendLines(), parsePlans({ llama: { billing: "local" } })).local.map((x) => x.cost), [undefined], "a local plan without a rate has no cost, never 0");
 });
 
@@ -217,24 +217,45 @@ test("a stale lower reading of a parallel session does not undo a capped limit (
 });
 
 // M8 T8.3/T8.6/T8.8: the Budget's local rows come from core/analyse/local.ts; costs are per currency, summed only with a configured conversion
-test("M8 budget: a local row carries the union of the serving intervals, the queue share, per-model rows and prefix reuse; `hours` is the summed request time", () => {
+test("M8 budget: a local row carries the union of the serving intervals, the queue share, per-model rows and prefix reuse; cost = unionH × rate", () => {
   const T = Date.parse("2026-11-02T10:00:00Z"), at = (m: number) => new Date(T + m * 60_000).toISOString();
   const ll = (m: number, minutes: number, model: string, extra = {}) => ({ v: 2, ts: at(m), sessionId: "s", provider: "llama", model, kind: "turn", billing: "local", status: 200, input: 10, output: 100, costUsd: 0, durationMs: minutes * 60_000, ...extra });
   const [l] = budget([ll(0, 30, "q5"), ll(15, 30, "q5"), ll(120, 30, "q4", { cacheN: 50, promptN: 50 })], parsePlans({ llama: { billing: "local", windows: [], rate: { amount: 2, currency: "EUR", per: "hour" } } })).local;
-  close(l.hours, 1.5); close(l.unionH, 1.25); close(l.queueShare, 1 / 6);
+  close(l.sumH, 1.5); close(l.unionH, 1.25); close(l.queueShare, 1 / 6);
   assert.deepEqual(l.models.map((m) => m.model), ["q4", "q5"]);
   assert.deepEqual(l.prefix, { share: 0.5, basis: "timings", requests: 1 });
-  close(l.cost!, 3);
+  close(l.cost!, 1.25 * 2);
 });
 
 test("M8 budget: costs per currency (API-eq cash $ of the api class in USD, local cost in the rate's currency); a total only when every currency converts with `currency.rates`", () => {
   const plans = parsePlans({ llama: { billing: "local", windows: [], rate: { amount: 2, currency: "EUR", per: "hour" } } });
   const none = budget(spendLines(), plansOf);
-  assert.deepEqual(none.costs.map((c) => [c.currency, c.amount, c.converted]), [["EUR", 1.5 * 0.25, undefined], ["USD", 0.55, 0.55]]);
+  assert.deepEqual(none.costs.map((c) => [c.currency, c.amount, c.converted]), [["EUR", (61 / 60) * 0.25, undefined], ["USD", 0.55, 0.55]]);
   assert.equal(none.total, undefined, "pi-economics: no total without a rate between EUR and USD");
   const some = budget(spendLines(), plansOf, { "USD/EUR": 0.5 });
   assert.equal(some.total?.currency, "USD");
-  close(some.total!.amount, 0.55 + (1.5 * 0.25) / 0.5);
+  close(some.total!.amount, 0.55 + ((61 / 60) * 0.25) / 0.5);
   assert.deepEqual(budget(spendLines().filter((l) => l.provider !== "llama"), plans, {}).costs.map((c) => c.currency), ["USD"], "one currency: nothing to convert, its own total");
   assert.deepEqual(budget(spendLines(), plansOf, { "EUR/GBP": 1 }).total, undefined);
+});
+
+test("review M8 #1: a rated local provider whose requests are all untimed adds no currency row and no total (never a 0 EUR)", () => {
+  const untimed = spendLines().filter((l) => l.provider === "llama").map((l) => ({ ...l, durationMs: undefined }));
+  const b = budget(untimed, plansOf);
+  assert.deepEqual(b.costs, [], "pi-economics: no EUR row from zero timed requests");
+  assert.equal(b.total, undefined);
+  assert.equal(b.local[0].cost, undefined);
+});
+
+test("review M8 #5: a single currency needs no conversion: its own total (a local-only user without USD/EUR still gets an EUR total)", () => {
+  const b = budget(spendLines().filter((l) => l.provider === "llama"), plansOf);
+  assert.deepEqual(b.costs.map((c) => c.currency), ["EUR"]);
+  assert.equal(b.total?.currency, "EUR"); close(b.total!.amount, (61 / 60) * 0.25);
+  assert.equal(budget(spendLines(), plansOf).total, undefined, "two currencies without a rate stay apart");
+});
+
+test("review M8 #5: the total is marked when its USD part is cash $ of requests whose billing class was guessed (an upper bound)", () => {
+  const guessed = budget([{ v: 1, ts: at("10:05"), sessionId: "p", provider: "other", model: "m", kind: "turn", status: 200, input: 1, output: 1, costUsd: 0.5 }], undefined);
+  assert.equal(guessed.total?.guessed, true);
+  assert.equal(budget(spendLines().filter((l) => l.provider === "openrouter"), plansOf).total?.guessed, false);
 });

@@ -1,0 +1,41 @@
+The quota is the budget, not an experiment's comparison metric: it arrives in whole percent (about 460–560 requests per 1% step in 2026-11) and is shared by every session, subagent and other client of the account, so no session or arm is charged quota points. A window is one provider's `q5h` or `q7d` reset period; its peak is the highest reading, its lockout the time from the cap (a reading of 100, or a rate-limit error after a reading of 99) to the reset, its time to cap the time from the window's start to the cap. Complete = the window is over and the log reaches back to its start. Retry wait is the sum of the `retryWaitMs` of the window's lines (pi-retry's totals on v1 lines, pi's native retries on v2 lines), whatever failed.
+
+### Quota windows
+
+_no quota readings (`q5h`/`q7d`) in the period_
+
+### Quota calibration
+
+Per complete window, peak quota ≈ Σ β_c × API-eq $ of component c (a non-negative least-squares fit; no intercept: a window starts at 0). β = quota points per API-eq $ of the component: 1 would mean the quota weighs a token as its list price does. A flag says the quota now weighs tokens differently from the API prices — the signal to revisit the objective, never an automatic change.
+
+### Spend by billing class
+
+API-eq $ = the tokens at the provider's list price (what a pay-per-token account would be charged); cash $ = what is actually charged: the API-eq $ of billing class api, 0 for subscription, free and local.
+
+| billing class | requests | API-eq $ | cash $ |
+| --- | --- | --- | --- |
+| local | 3 | 0.00 | 0.00 |
+
+### Local cost
+
+Cost = machine hours × the provider's hourly rate in its currency. Machine hours = the union of the requests' serving intervals [end − `durationMs`, end] (failed requests included: they occupy the machine); request hours = Σ `durationMs`, which an experiment charges its units (concurrent requests add up). The queue share = 1 − machine hours ÷ request hours: with one server slot, above 0 local requests overlapped and queued (their `durationMs` include the wait), so an experiment's per-unit cost is above its share of machine time. A request without `durationMs` adds no time: untimed requests make the cost an undercount, and a provider none of whose requests is timed has no cost. A provider without a rate has no cost either: its wall time (the summed request time) is shown instead.
+
+| provider | requests (timed / untimed) | request hours | machine hours | queue share | rate | cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| llama | 3 (0 / 3) | 0.00 | 0.00 | 0% | EUR (local, 0.25/h) | not measurable (no request with `durationMs`: 3 untimed) |
+
+#### Models
+
+One rate per provider (its models run on one machine). Tokens per second = output tokens ÷ the generation time `genMs` of the requests that carry llama.cpp timings, else ÷ the request time `durationMs`; cost per 1M output tokens = the provider's rate × the model's request hours ÷ the output tokens of all its timed requests.
+
+| provider | model | requests | request hours | output tokens (throughput basis) | tokens/s (basis) | cost per 1M output tokens |
+| --- | --- | --- | --- | --- | --- | --- |
+| llama | qwen3.8 | 3 | 0.00 | 0 | – | – |
+
+#### Prefix reuse
+
+No cached or re-used prompt tokens in the period.
+
+### Costs by currency
+
+_no cost in the period_

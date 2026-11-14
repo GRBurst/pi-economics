@@ -112,13 +112,13 @@ export function windowsOf(lines: readonly any[], plans: Plans): Window[] {
 
 export type SpendRow = { billing: Billing; /** Some line of the class had none of its own and no plan for its provider: its class was guessed (api), so cash $ is an upper bound. */ guessed: boolean; requests: number; /** API-eq $: the list price of the tokens, whoever pays. */ apiUsd: number; /** What is actually charged: the API-eq $ for `api`, 0 for the other classes. */ cashUsd: number };
 /** A local provider's row (core/analyse/local.ts): `hours` = Σ request time, `unionH` the machine's serving time, queue share, per-model rows, prefix reuse. */
-export type LocalRow = LocalProvider & { /** The summed request time (the same as `sumH`), in hours. */ hours: number };
+export type LocalRow = LocalProvider;
 /** What was charged or costed in one currency; `converted`: its amount in the report currency, by a configured rate (absent without one). */
 export type CurrencyRow = { currency: string; amount: number; converted?: number };
 export type BudgetSection = { /** The last line's ts: the calibration's "now" (reproducible: the clock is not read). */ now?: string; plansAbsent: boolean;
   groups: Array<{ provider: string; kind: "5h" | "7d"; windows: Window[]; fit: Fit }>; spend: SpendRow[]; local: LocalRow[];
   /** Cash $ of the api class (USD) and the local cost of each rate's currency: one row per currency, never summed across them. */ costs: CurrencyRow[];
-  /** The costs in USD, only when every currency converts with `currency.rates` (a single currency needs none). */ total?: { currency: "USD"; amount: number } };
+  /** The costs in one currency: the only currency there is, else USD when every currency converts with `currency.rates`. `guessed`: the USD part is cash $ of requests whose billing class was guessed (an upper bound). */ total?: { currency: string; amount: number; guessed: boolean } };
 const REPORT_CURRENCY = "USD" as const;
 
 const BILLINGS: readonly Billing[] = ["subscription", "api", "free", "local"];
@@ -146,12 +146,13 @@ export function budget(meter: readonly any[], plans: Plans | undefined, rates: R
     if (l.kind === "warming" || isError(l)) continue;
     row.requests += 1;
   }
-  const local = localRows(meter, known).map((r): LocalRow => ({ ...r, hours: r.sumH }));
+  const local = localRows(meter, known);
   const amounts = new Map<string, number>(), cash = spend.get("api")?.cashUsd;
   if (cash !== undefined) amounts.set(REPORT_CURRENCY, cash);
   for (const r of local) if (r.rate && r.cost !== undefined) amounts.set(r.rate.currency, (amounts.get(r.rate.currency) ?? 0) + r.cost);
   const costs = [...amounts].sort(([a], [b]) => (a < b ? -1 : 1)).map(([currency, amount]): CurrencyRow => { const converted = convert(amount, currency, REPORT_CURRENCY, rates); return { currency, amount, ...(converted === undefined ? {} : { converted }) }; });
-  const total = costs.length && costs.every((c) => c.converted !== undefined) ? { currency: REPORT_CURRENCY, amount: costs.reduce((x, c) => x + c.converted!, 0) } : undefined;
+  const guessed = spend.get("api")?.guessed ?? false;
+  const total = costs.length === 1 ? { currency: costs[0].currency, amount: costs[0].amount, guessed } : costs.length && costs.every((c) => c.converted !== undefined) ? { currency: REPORT_CURRENCY, amount: costs.reduce((x, c) => x + c.converted!, 0), guessed } : undefined;
   return { ...(now ? { now } : {}), plansAbsent: plansAbsent(plans),
     groups: [...groups.values()].map((ws) => ({ provider: ws[0].provider, kind: ws[0].kind, windows: ws, fit: calibrate(ws, now ?? ws[0].reset) })),
     spend: BILLINGS.flatMap((b) => spend.get(b) ?? []), local, costs, ...(total ? { total } : {}) };

@@ -247,3 +247,12 @@ test("M4: a component under 1 % of the windows' $ is shown as not identifiable, 
   const text = renderBudget(b);
   assert.ok(text.includes("| input | not identifiable (fit 550.00, under 1% of the $) | 0% |"), text.slice(text.indexOf("#### anthropic 5h"), 1200 + text.indexOf("#### anthropic 5h")));
 });
+
+/** Review M8 #1: a rated local provider whose lines are all meter v1 (no `durationMs`): the Budget says not measurable, never 0.00 EUR or a total. */
+test("golden budget-untimed: untimed v1 local lines have no cost, no currency row and no total", () => {
+  const meter = [0, 1, 2].map((k) => ({ v: 1, ts: iso(Date.parse("2026-11-12T10:00:00Z") + k * 60_000), sessionId: "ll", provider: "llama", model: "qwen3.8", kind: "turn", status: 200, input: 5000, output: 500, costUsd: 0, retries: 0, retryWaitMs: 0 }));
+  const plans = { llama: { billing: "local" as const, windows: [], rate: { amount: 0.25, currency: "EUR", per: "hour" as const } } };
+  const actual = renderBudget(analyse({ meter, outcomes: [], assignments: [], guards: [], plans }).budget);
+  const expected = readFileSync(new URL("./golden/budget-untimed.txt", import.meta.url), "utf8");
+  if (actual !== expected) assert.fail(`golden budget-untimed differs\nGOLDEN-ACTUAL budget-untimed ${JSON.stringify(actual)}`);
+});
