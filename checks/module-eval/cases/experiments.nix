@@ -268,7 +268,7 @@ in {
       withActor;
     unknown = lever: failed prefix (one lever);
     kinds = ["pi.activeTool(codemode)" "pi.activeTool(mcp__srv.tool-1)" "session-entry(entry-ext:settings,nudge)" "session-entry(a,b)"];
-    bad = ["t.lever" "" "pi.thinkingLevl" "pi.thinkingLevel " "Pi.thinkingLevel" "cache-lifecycle.nope" "pi.activeTool()" "pi.activeTool(a b)" "pi.activeTool(a,b)" "pi.activeTool(a(b))" "pi.activeTool(a)x" "session-entry(a)" "session-entry()" "session-entry(a,)" "session-entry(,b)" "session-entry(a,b,c)" "session-entry(a, b)" "session-entry(a,b)x" "session-entry(a,(b))" "infinite-context.nudgeAtTokens.x"];
+    bad = ["t.lever" "" "pi.thinkingLevl" "pi.thinkingLevel " "Pi.thinkingLevel" "cache-lifecycle.nope" "pi.activeTool()" "pi.activeTool(a b)" "pi.activeTool(a,b)" "pi.activeTool(a(b))" "pi.activeTool(a)x" "session-entry(a)" "session-entry()" "session-entry(a,)" "session-entry(,b)" "session-entry(a,b,c)" "session-entry(a, b)" "session-entry(a,b)x" "session-entry(a,(b))" "infinite-context.nudgeAtTokens.x" "pi.compaction.enabled" "pi.compaction.reserveTokens" "pi.compaction.keepRecentTokens"]; # the bench's process levers: registered in the engine, no online levers (Q6)
   in
     lib.concatMap (id: eq "catalogue lever ${id}" (unknown id) []) catalogue.levers
     ++ lib.concatMap (id: eq "kind ${id}" (unknown id) []) kinds
