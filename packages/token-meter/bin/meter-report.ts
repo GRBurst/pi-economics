@@ -14,6 +14,9 @@ import { isRequestLine } from "../core/analyse/logs.ts";
 import { readState } from "../core/state-file.ts";
 import { rowsBySession } from "../core/analyse/designs.ts";
 import { experiment } from "../core/analyse/experiment.ts";
+import { budget } from "../core/analyse/budget.ts";
+import { fitsOf } from "../core/analyse/index.ts";
+import { loadSettings } from "../core/settings.ts";
 import { guards } from "../core/analyse/guards.ts";
 
 const args = process.argv.slice(2);
@@ -58,7 +61,8 @@ if (args.includes("--arms") || args.includes("--posterior")) {
   const sig = signals(readLines(join(agentDir, "guards")));
   const baseline = settings?.baseline ?? stats.find((s) => /^-+$/.test(s.arm))?.arm ?? "";
   const reasons = killSwitch(stats, acc, limits, baseline, sig);
-  const v2 = guards(experiment(all, rows, settings), outcomes, readLines(join(agentDir, "guards")), settings, rowsBySession(rows)).perStratum;
+  const { plans, currency } = loadSettings(join(agentDir, "token-meter", "settings.json")); // the same plans, calibrations and rates as pi-analyse: a points objective is not "no calibration" here
+  const v2 = guards(experiment(all, rows, settings, plans, undefined, fitsOf(all, plans, budget(all, plans, currency.rates)), currency.rates), outcomes, readLines(join(agentDir, "guards")), settings, rowsBySession(rows)).perStratum;
   if (args.includes("--arms")) {
     process.stdout.write(renderArms(stats, acc, reasons, sig, taskCosts(meter, outcomes), !v2.length));
     for (const x of v2) process.stdout.write(`\n### design ${x.design} stratum ${x.stratum} (baseline \`${x.baseline}\`)\n\n${renderArms(x.arms, x.acc, x.kill, x.sig, {}, false)}`);

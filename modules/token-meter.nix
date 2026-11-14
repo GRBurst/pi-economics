@@ -93,21 +93,23 @@ in {
         `plans` key in `settings`).
       '';
     };
-  };
 
-  options.programs.piEconomics.tokenMeter.currencyRates = lib.mkOption {
-    type = lib.types.attrsOf lib.types.numbers.positive;
-    default = {};
-    example = {"USD/EUR" = 0.92;};
-    description = ''
-      Conversion rates between the currencies of the analysis (design §9.3):
-      the key `"FROM/TO"` (three capitals each) says how many TO one FROM
-      is; the inverse is used when only the opposite key is given. The
-      Budget section sums costs across currencies (the API-eq cash dollars,
-      each local rate's currency) only with a rate between them, and
-      otherwise keeps separate columns. Written to `currency.rates` of
-      `<agentDir>/token-meter/settings.json`.
-    '';
+    currencyRates = lib.mkOption {
+      type = lib.types.attrsOf lib.types.numbers.positive;
+      default = {};
+      example = {"USD/EUR" = 0.92;};
+      description = ''
+        Conversion rates between the currencies of the analysis (design §9.3):
+        the key `"FROM/TO"` (three capitals each) says how many TO one FROM
+        is; the inverse is used when only the opposite key is given (when both
+        are, the direct one, and a pair that disagrees by more than 1 % is
+        warned about once). The
+        Budget section sums costs across currencies (the API-eq cash dollars,
+        each local rate's currency) only with a rate between them, and
+        otherwise keeps separate columns. Written to `currency.rates` of
+        `<agentDir>/token-meter/settings.json`.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {

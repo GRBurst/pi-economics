@@ -86,6 +86,15 @@ export function localCost(lines: readonly any[], plans: Plans): Record<string, {
     : { notMeasurable: (r.rate ? "no timed requests" : "no rate") as "no rate" | "no timed requests", wallH: r.sumH }]));
 }
 
+const warned = new Set<string>();
+/** The two keys of a pair disagree by more than 1 %: the direct one is used; said once on stderr per pair. */
+function warnInconsistent(from: string, to: string, direct: number, back: number): void {
+  const key = [from, to].sort().join("|");
+  if (Math.abs(direct * back - 1) <= 0.01 || warned.has(key)) return;
+  warned.add(key);
+  console.error(`token-meter: currency.rates ${from}/${to} = ${direct} and ${to}/${from} = ${back} disagree (product ${(direct * back).toFixed(4)}, not 1): using ${from}/${to} where it applies`);
+}
+
 /**
  * `amount` of `from` in `to`: `rates["FROM/TO"]` (1 FROM = rate TO), else the inverse of `rates["TO/FROM"]`, else undefined (never chained
  * through a third currency; the report then keeps separate columns). A rate must be positive.
@@ -93,6 +102,7 @@ export function localCost(lines: readonly any[], plans: Plans): Record<string, {
 export function convert(amount: number, from: string, to: string, rates: Readonly<Record<string, number>>): number | undefined {
   if (from === to) return amount;
   const direct = Object.hasOwn(rates, `${from}/${to}`) ? rates[`${from}/${to}`] : undefined, back = Object.hasOwn(rates, `${to}/${from}`) ? rates[`${to}/${from}`] : undefined;
+  if (typeof direct === "number" && direct > 0 && typeof back === "number" && back > 0) warnInconsistent(from, to, direct, back);
   if (typeof direct === "number" && direct > 0) return amount * direct;
   if (typeof back === "number" && back > 0) return amount / back;
   return undefined;

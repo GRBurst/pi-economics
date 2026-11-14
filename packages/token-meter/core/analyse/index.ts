@@ -12,6 +12,7 @@ import { guards, type GuardsSection } from "./guards.ts";
 import { quality, type QualitySection } from "./quality.ts";
 import { leverStates, levers, type LeversSection } from "./levers.ts";
 import { budget, type BudgetSection } from "./budget.ts";
+import { type Plans } from "../plans.ts";
 
 export { LOGS, inPeriod, versionOf, type FileInfo, type LogName, type Logs, type Period } from "./logs.ts";
 export { DESIGNS, designOf } from "./designs.ts";
@@ -28,11 +29,16 @@ export { renderAnalysis, renderBudget, renderCache, renderCost, renderDelegation
 
 export type Analysis = { period: Period; budget: BudgetSection; cost: CostSection; levers: LeversSection; experiment: { designs: DesignResult[] }; delegation: DelegationSection; guards: GuardsSection; quality: QualitySection };
 
+/** The quota calibrations of the Budget by provider and window kind: the points objectives of the experiment table read them. */
+export function fitsOf(meter: readonly any[], plans: Plans | undefined, bud: BudgetSection = budget(meter, plans)): Fits {
+  return new Map(bud.groups.map((g) => [fitKey(g.provider, g.kind), g.fit]));
+}
+
 export function analyse(all: Logs, period: Period = {}): Analysis {
   const logs = inPeriod(all, period);
   const meter = logs.meter.filter(isRequestLine); // levers lines record settings, no request (quality counts them as log lines)
   const bud = budget(meter, all.plans, all.currencyRates);
-  const fits: Fits = new Map(bud.groups.map((g) => [fitKey(g.provider, g.kind), g.fit]));
+  const fits = fitsOf(meter, all.plans, bud);
   const designs = experiment(meter, all.assignments, all.expSettings, all.plans, leverStates(all.meter, period), fits, all.currencyRates);
   const flags = Object.fromEntries([...armInfo([...new Set(meter.filter((l) => typeof l?.arm === "string").map((l) => l.arm))], all.assignments)].map(([a, i]) => [a, i.flags]));
   return {

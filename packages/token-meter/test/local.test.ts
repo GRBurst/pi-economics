@@ -113,3 +113,16 @@ test("review M8 #4e: prefix reuse from timings needs both cacheN and promptN on 
   const u = localRows([req(0, 30, { cacheN: 900, input: 100, cacheRead: 100 })], plans)[0];
   assert.deepEqual(u.prefix, { share: 0.5, basis: "usage", requests: 1 });
 });
+
+test("review M8 #11: both FROM/TO and TO/FROM set: the direct key is used; a pair that disagrees by more than 1 % warns once (stderr), a consistent pair never", () => {
+  const seen: string[] = [], orig = console.error;
+  console.error = (...a: unknown[]) => void seen.push(a.join(" "));
+  try {
+    close(convert(10, "USD", "EUR", { "USD/EUR": 0.9, "EUR/USD": 1.2 })!, 9, "the direct rate decides");
+    convert(10, "EUR", "USD", { "USD/EUR": 0.9, "EUR/USD": 1.2 });
+    convert(10, "USD", "SEK", { "USD/SEK": 10, "SEK/USD": 0.1 });
+    convert(10, "USD", "CHF", { "USD/CHF": 0.9, "CHF/USD": 1.1111 });
+  } finally { console.error = orig; }
+  assert.equal(seen.length, 1, seen.join("\n"));
+  assert.ok(seen[0].includes("USD/EUR") && seen[0].includes("EUR/USD"), seen[0]);
+});

@@ -259,3 +259,10 @@ test("review M8 #5: the total is marked when its USD part is cash $ of requests 
   assert.equal(guessed.total?.guessed, true);
   assert.equal(budget(spendLines().filter((l) => l.provider === "openrouter"), plansOf).total?.guessed, false);
 });
+
+import { fitsOf } from "../core/analyse/index.ts";
+test("review M8 #10: fitsOf keys the Budget's calibrations by provider and window kind (what the experiment table's points objectives and meter-report --arms read)", () => {
+  const f = fitsOf(meter(), parsePlans({ anthropic: { billing: "subscription", windows: ["5h", "7d"] } }));
+  assert.deepEqual([...f.keys()].sort(), ["anthropic\u00005h", "anthropic\u00007d"]);
+  assert.ok("notEnough" in f.get("anthropic\u00005h")!, "three complete windows: not enough");
+});
