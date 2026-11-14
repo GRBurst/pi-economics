@@ -177,7 +177,9 @@ the experiment's timed objectives (`wallMs`, `localCost`) leave them out.
 The value of each lever (a pi setting, an extension's or pi-economics' own control) a session ran with, who decided it
 and whether it was read back (design §5.3). One line per session at its first `before_agent_start`, then a new line only
 when a lever changed (the line without `ts` differs): a session's levers at any moment are those of its last levers line
-before it. Every request reader skips these lines (`pi-analyse`, `meter-report`, the request rules of `--check`).
+before it. The last line decides: a lever read back `confirmed` at one prompt and changed by an
+extension at a later one is `refused` from that line on, and an analysis that reads a session's last line (per-protocol) leaves
+it out whatever the earlier prompts showed. Every request reader skips these lines (`pi-analyse`, `meter-report`, the request rules of `--check`).
 
 | field | type | required | meaning |
 | --- | --- | --- | --- |
