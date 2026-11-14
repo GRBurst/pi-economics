@@ -1,6 +1,6 @@
 {
   "name": "pi-experiments",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "One fractional-factorial arm per pi main session (explore/exploit assignment); children run their root's arm; pi-economics' add-ons read and read back its levers on the internal channel.",
   "type": "module",
   "keywords": ["pi-package"],
