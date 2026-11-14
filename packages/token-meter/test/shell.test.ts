@@ -855,3 +855,17 @@ test("levers: a pi-economics factor on the nudge keeps the engine's state: the m
   agentStart(f, fakeCtx("s1", { entries: [icRecord({ nudgeAtTokens: 175_000, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_000] })] }));
   assert.deepEqual(leversOf(lines())[0].levers[NUDGE], claim);
 });
+
+// Review F2: the engine's seed record has no nudgeAtPercent, the extension's always has: a seed nobody adopted is no draw of the extension's.
+test("review F2 levers: a branch holding only the engine's seed (no nudgeAtPercent) gives no nudge lever; the extension's completed record does", () => {
+  const { f, clock, lines } = setup({ env: {} });
+  const seed = { nudgeAtTokens: 150_000, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" };
+  const entries: unknown[] = [icRecord(seed)];
+  const ctx = fakeCtx("s1", { entries });
+  agentStart(f, ctx);
+  entries.push(icRecord({ ...seed, nudgeAtPercent: 75 }));
+  clock.t += 1000; agentStart(f, ctx);
+  const [before, after] = leversOf(lines());
+  assert.equal(NUDGE in before.levers, false, "pi-economics: the seed alone is not the extension's limit");
+  assert.deepEqual(after.levers[NUDGE], { v: 150_000, s: "ext" });
+});

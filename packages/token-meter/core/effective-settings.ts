@@ -178,7 +178,7 @@ export function extensionLevers(branch: readonly unknown[]): Record<LeverId, Lev
   const out: Record<LeverId, LeverState> = { "pi.compaction.enabled": { v: false, s: "ext" } };
   // The limit the extension holds (its latest well-formed record): drawn by it from a rule's range (ext), else a number the
   // configuration fixed (fixed). Only where no pi-economics factor is on the lever: the engine's own state replaces this one.
-  const own = records.map((r) => r.data).reverse().find((d): d is Record<string, unknown> => isObj(d) && typeof d.nudgeAtTokens === "number" && Number.isFinite(d.nudgeAtTokens));
+  const own = records.map((r) => r.data).reverse().find((d): d is Record<string, unknown> => isObj(d) && typeof d.nudgeAtTokens === "number" && Number.isFinite(d.nudgeAtTokens) && typeof d.nudgeAtPercent === "number" && Number.isFinite(d.nudgeAtPercent));
   if (own !== undefined) out[IC_NUDGE] = { v: own.nudgeAtTokens as number, s: own.nudgeAtTokensRange === undefined ? "fixed" : "ext" };
   return out;
 }
