@@ -31,8 +31,7 @@
     };
     # Checks only (router-extraction design §7.3, §8.4, §8.5): the task router
     # whose outcome log token-meter reads (`log-contract`) and whose claim
-    # channel the runtime guards share (`runtime-guard-copies`). Not locked until it is
-    # published: evaluate with `--override-input pi-task-router <checkout>`.
+    # channel the runtime guards share (`runtime-guard-copies`).
     pi-task-router = {
       url = "github:GRBurst/pi-task-router";
       inputs.nixpkgs.follows = "nixpkgs";

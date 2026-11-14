@@ -21,12 +21,11 @@ The flake is read through git, so Nix sees only files in the index:
 
 The inputs `pi-setup` (its patched actor-subagents) and `pi-task-router` (the
 router this repository observes) serve the checks only: neither is a component
-of this repository (`docs/scope.md`). `pi-task-router` is not locked until it
-is published, and the locked `pi-setup` has no actor yet: until then add
-`--override-input pi-task-router git+file://<a checkout of it>` and
-`--override-input pi-setup git+file://<a checkout of one that has it>`
-and `--no-write-lock-file` to `o` below, and keep any local node out of
-`flake.lock`. A change there (a router's test harness, a registry key) surfaces
+of this repository (`docs/scope.md`); both are locked to their published
+revisions. To test against an unpublished checkout, add
+`--override-input pi-task-router git+file://<a checkout of it>` (or the same for
+`pi-setup`) and `--no-write-lock-file` to `o` below, and keep any local node out
+of `flake.lock`. A change there (a router's test harness, a registry key) surfaces
 here when the input moves: `log-contract` imports the router's `test/harness.ts`
 and `test/fake-git.ts`.
 

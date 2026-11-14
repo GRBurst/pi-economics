@@ -97,10 +97,10 @@ about pi. It lives in a standalone repository, `~/projects/gemini-research-clean
 
 ## Current state (2026-11-14)
 
-0.3.0 is prepared: it contains neither the router nor the actor nor the retry component, and
-the redesign is implemented (units, strata, levers, add-ons, load order). The router is not
-tagged or published yet, so the checks read it, and pi-setup's branch that forwards the agent
-directory, through input overrides (AGENTS.md, "Commands"); the release relocks both inputs.
+0.3.0 is released: it contains neither the router nor the actor nor the retry component, and
+the redesign is implemented (units, strata, levers, add-ons, load order). 0.3.1 locks the
+published inputs the checks read: pi-task-router v0.2.0 and pi-setup with the actor and the
+bridge that forwards the agent directory.
 The quota waiter and its metering come after 0.3.0. Local mode is disabled in the author's setup. The raw
 research exports of batch 4 (review economics, two local-harness reports, a
 note) were cleaned with `gdr-clean` in pi-task-router; a later batch is
