@@ -217,7 +217,12 @@ without infinite-context still reads `{ false, ext }`.
 
 `pe`, `a`, `rb` and `tier` come from the experiments engine (redesign M5b.2): on the extensions' internal channel
 `pi-economics:levers:v1` (each runtime's own `pi.events`) it publishes a session's assignment with the states of its
-add-ons' levers, and the meter adds them to the line. The add-ons today are cache-lifecycle's
+add-ons' levers, and the meter adds them to the line. Where the meter observed the same lever differently (a pi setting, an
+extension's evidence), the observation wins: its value and source, the engine's assignment kept as `a` with `rb: "refused"`
+(`confirmed` pe when the observation equals `a`). The add-ons today are the bench-only `pi.compaction.enabled`,
+`pi.compaction.reserveTokens` and `pi.compaction.keepRecentTokens` (tier `seed`, read back from pi's effective settings:
+the trusted project's over the global file, `compaction.modelOverrides` of the session's model, pi's default when unset; a
+level the settings did not carry reads back `refused`; they are not in the catalogue of online levers) and cache-lifecycle's
 `cache-lifecycle.warmPolicy`, `cache-lifecycle.mainCacheTtl` and `cache-lifecycle.maskOnCold` (tier `replace`:
 cache-lifecycle applies the assigned level itself; a lever starts only once cache-lifecycle asked the channel in that
 runtime). `mainCacheTtl` is read back from each assistant `message_end`'s usage (`cacheWrite1h` > 0: `1h`, other cache

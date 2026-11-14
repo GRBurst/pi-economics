@@ -58,8 +58,8 @@ in {
         leave out some it does. Exported as a directory of links
         (`PI_BENCH_EXT_DIR`). Defined by default, one `mkDefault` each, for the
         extensions the bench loads by name: this flake's `infinite-context`
-        and `token-meter`, and `actor-subagents` and `task-router`
-        at the path of their entry in `programs.piEconomics.extensions` when
+        and `token-meter`, and `actor-subagents`, `task-router` and
+        `experiments` (an arm with a `pi.<lever>` factor loads it) at the path of their entry in `programs.piEconomics.extensions` when
         it has one. A definition adds names or replaces one; `lib.mkForce {}`
         exports nothing, and the bench then looks the names up in the
         registry's links, `<agentDir>/pi-economics/extensions`.

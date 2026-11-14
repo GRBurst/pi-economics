@@ -93,19 +93,21 @@ at its empty default exports nothing, and the bench keeps its own default.
 | `dataDir` | `<home>/<agentDir>/bench` | `PI_BENCH_DATA` |
 | (agent source) | `<home>/<agentDir>`, not an option | `PI_BENCH_AGENT_SRC` |
 | `workDir` | `null` (the bench: `$XDG_RUNTIME_DIR/pi/tmp/bench`) | `PI_BENCH_WORK` |
-| `extensions` | the extensions the bench loads by name, one `mkDefault` each: the flake's `infinite-context`, `token-meter`, and `actor-subagents`, `task-router` at their `extensions.<name>.path` while the registry has them (see below) | `PI_BENCH_EXT_DIR`, a `linkFarm` of name → path |
+| `extensions` | the extensions the bench loads by name, one `mkDefault` each: the flake's `infinite-context`, `token-meter`, and `actor-subagents`, `task-router`, `experiments` at their `extensions.<name>.path` while the registry has them (see below) | `PI_BENCH_EXT_DIR`, a `linkFarm` of name → path |
 | `baseExtensions` | `[]` | `PI_BENCH_BASE_EXTENSIONS`, the names comma-separated: every run loads them (see below) |
 | `orchExtensions` | `[]` | `PI_BENCH_ORCH_EXTENSIONS`, the names comma-separated: the orchestrator factor arms and their children load them (see below) |
 | `router` | `{}` (the bench: the run-time base alone, see below) | `PI_BENCH_ROUTER`, a JSON file merged over the run-time base; an orch arm merges its `routing`, `delegation`, `t0Limits` over both as `lib.recursiveUpdate` does |
 | `agentsBaseline` | `null` (the bench: `<agent source>/notes/…`) | `PI_BENCH_AGENTS_OFF` |
 
 The bench's `extensions` default covers the flake's own packages and the
-registry's `actor-subagents` and `task-router` (whoever installs them). A
+registry's `actor-subagents`, `task-router` and `experiments` (whoever installs them). A
 definition adds names (extensions of your own, not shipped here) or replaces one
 by name; `lib.mkForce {}` exports nothing, and the bench then looks the names
 up in the registry's links, `<agentDir>/pi-economics/extensions`.
-`cache-lifecycle` and `experiments` are not
-loaded by the bench arms and are not in the default.
+`cache-lifecycle` is not loaded by the bench arms and is not in the default. `experiments` is loaded only by an
+arm with a `pi.<lever>` factor (a process-scope lever such as `pi.compaction.reserveTokens`; such an arm also loads no
+`infinite-context`, which cancels native compaction): the bench fails that arm before the run when the link is missing.
+The bench writes the run's assignment as `experiments/assignment.json` (`packages/token-meter/LOGS.md`, "Bench assignment").
 
 The orchestrator factor arms start their router settings from a base the bench
 reads at run time from `<agent source>/task-router/settings.json`, the router's

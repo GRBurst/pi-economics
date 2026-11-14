@@ -77,8 +77,9 @@ routing,delegation,t0Widened` reads the factor levels from the arm.
 A factor named `pi.<lever>` in an arm's `factors` (`arms.json`) is a pi setting of the run, written into its `settings.json`:
 `pi.compaction.enabled` (`"true"`/`"false"`), `pi.compaction.reserveTokens`, `pi.compaction.keepRecentTokens` (whole numbers, as
 strings like every factor level); another `pi.` name or a level of the wrong kind is an error. Such an arm loads **no
-infinite-context**, main or children, unless it sets `"ic": true` (infinite-context cancels every native compaction, so
-the lever would do nothing), and loads `experiments` (the registry must link it: `programs.piEconomics.experiments.enable`).
+infinite-context**, main or children, whichever list names it (the arm's, `PI_BENCH_BASE_EXTENSIONS`,
+`PI_BENCH_ORCH_EXTENSIONS`; infinite-context cancels every native compaction, so the lever would do nothing; `"ic": true`
+next to a compaction lever is an error), and loads `experiments` (the registry must link it: `programs.piEconomics.experiments.enable`).
 
 Every factor arm's agent dir also gets `experiments/settings.json` (`{"mode":"off"}`, the opt-in: nothing is drawn) and
 `experiments/assignment.json` (`{v: 1, design, stratum: "bench", arm, factors}`, `assignmentOf`, `src/orch.ts`; documented
@@ -87,6 +88,11 @@ in `packages/token-meter/LOGS.md`, "Bench assignment"). The experiments engine a
 `levers` lines with `s: "pe"` and `rb: "confirmed"` for the process levers once the effective settings (the checkout's
 `.pi/settings.json` over the run's) show the level. `bench-report` adds per-run compactions, context overflows, active
 minutes, meter cost and levers confirmed / refused from `agent/meter/*.jsonl`, and a "Process levers" table per arm.
+Give every arm of a compaction experiment an explicit level (`"16384"` is pi's default for `reserveTokens`): the design id is
+the content id of every lever and level over all arms in `arms.json` (the baseline included), so adding an arm or a level
+changes the id of later runs. Levels sort as text in the report's OLS baseline (`"16384"` before `"8000"`). The read-back is pi's
+effective value (trusted project's settings over the run's, `compaction.modelOverrides`, pi's default when unset), so a level
+the settings did not carry shows as `refused`. A missing `experiments` link fails the arm before the run.
 Local cost (active time × rate) is not computed by the bench; it comes with the analyser's local cost (M11).
 
 Caveat: a login extension that keeps its refresh lock in the agent dir does not see the lock of a run with another

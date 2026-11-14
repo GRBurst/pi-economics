@@ -17,7 +17,8 @@ export const FACTORS: Factor[] = [
 export const T0_LIMITS = { off: { files: 3, tokens: 100000 }, on: { files: 10, tokens: 150000 } };
 
 /**
- * Main session: the flake's extensions a full setup loads (cache-lifecycle/experiments are not part of the bench).
+ * Main session: the flake's extensions a full setup loads (cache-lifecycle is not part of the bench; an arm with a `pi.<lever>`
+ * factor also loads experiments and no infinite-context, src/levers.ts).
  * The probe is added by the driver; the base extensions come first and the orchestrator's extras (PI_BENCH_ORCH_EXTENSIONS) last.
  */
 export const ORCH_EXTENSIONS = ["actor-subagents", "infinite-context", "token-meter", "task-router"];
