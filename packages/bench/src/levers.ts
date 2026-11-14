@@ -1,8 +1,9 @@
 /**
  * Process-scope levers of a bench arm (redesign §10, M9). A factor named `pi.<lever>` (see PROCESS_SETTINGS) is a pi
  * setting the run's settings.json carries; its level is a number or a boolean. Such an arm also loads the experiments
- * engine, which reads the run's assignment file, and a compaction arm loads no infinite-context unless it adds it
- * (`ic: true`): infinite-context cancels every native compaction (D18), so the lever would do nothing.
+ * engine, which reads the run's assignment file. A compaction arm loads no infinite-context, whichever list names it
+ * (the arm's, the base and orchestrator lists, the children's): infinite-context cancels every native compaction (D18),
+ * so the lever would do nothing. An arm that sets `ic: true` next to a compaction lever is refused.
  */
 import { PROCESS_SETTINGS } from "../../experiments/core/process-levers.ts";
 import type { Level } from "../../experiments/core/design.ts";
@@ -26,6 +27,14 @@ export function processLevers(arm: Arm): { id: string; path: readonly string[]; 
 
 export const hasProcessLevers = (arm: Arm): boolean => Object.keys(arm.factors ?? {}).some(isPiFactor);
 
-/** The arm's list of names the main loads, before the base and the extras: a process-lever arm drops infinite-context (unless `ic`) and adds experiments. */
-export const withProcess = (names: readonly string[], arm: Arm): string[] =>
-	hasProcessLevers(arm) ? [...names.filter((n) => arm.ic === true || n !== "infinite-context"), "experiments"] : [...names];
+export const hasCompactionLevers = (arm: Arm): boolean => Object.keys(arm.factors ?? {}).some((n) => n.startsWith("pi.compaction."));
+
+/**
+ * The final list of names a process arm loads (apply it after the base and orchestrator lists are combined): no
+ * infinite-context, experiments last. Other arms keep their list. `ic: true` with a compaction lever throws.
+ */
+export function finalExtensions(names: readonly string[], arm: Arm): string[] {
+	if (!hasProcessLevers(arm)) return [...names];
+	if (arm.ic === true && hasCompactionLevers(arm)) throw new Error("an arm with a pi.compaction.* factor cannot load infinite-context (ic: true): it cancels every native compaction, so the lever would do nothing");
+	return [...new Set([...names.filter((n) => n !== "infinite-context"), "experiments"])];
+}

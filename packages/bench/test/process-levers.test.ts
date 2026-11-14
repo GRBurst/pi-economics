@@ -71,20 +71,29 @@ test("T9.2 the same factors give the same design id in every arm (the arm name i
 	assert.notEqual(x.arm, y.arm);
 });
 
-test("T9.5 a compaction arm loads no infinite-context, in the main or the children, unless the arm adds it; experiments joins it", () => {
+test("T9.5 a compaction arm loads no infinite-context in the main or the children, whichever list names it; experiments joins last", () => {
 	const p = paths();
-	const mainOf = (arm: Arm) => armExtensions(arm, p);
+	const mainOf = (arm: Arm, q = p) => armExtensions(arm, q);
 	assert.deepEqual(mainOf(compaction()), ["actor-subagents", "token-meter", "task-router", "experiments"]);
 	assert.ok(mainOf(base).includes("infinite-context") && !mainOf(base).includes("experiments"), "other orch arms are unchanged");
-	assert.ok(mainOf(compaction({ ic: true })).includes("infinite-context"));
-	const children = (arm: Arm) => {
+	const children = (arm: Arm, q = p) => {
 		const dir = join(tmp(), "agent");
-		materializeAgentDir({ dir, arm, paths: p, name: "c" });
+		materializeAgentDir({ dir, arm, paths: q, name: "c" });
 		return json(join(dir, "actor-subagents/settings.json")).childExtensions as string[];
 	};
 	assert.deepEqual(children(compaction()), ["/ext/token-meter", "/ext/experiments"]);
-	assert.deepEqual(children(compaction({ ic: true })), ["/ext/infinite-context", "/ext/token-meter", "/ext/experiments"]);
 	assert.deepEqual(children(base), ["/ext/infinite-context", "/ext/token-meter"]);
+	// Review m1: the consumer's lists (PI_BENCH_BASE_EXTENSIONS, PI_BENCH_ORCH_EXTENSIONS) may name it too.
+	const q = paths({ PI_BENCH_BASE_EXTENSIONS: "infinite-context,auth-ext", PI_BENCH_ORCH_EXTENSIONS: "infinite-context,search-ext" });
+	assert.deepEqual(mainOf(compaction(), q), ["auth-ext", "actor-subagents", "token-meter", "task-router", "search-ext", "experiments"]);
+	assert.deepEqual(children(compaction(), q), ["/ext/auth-ext", "/ext/token-meter", "/ext/search-ext", "/ext/experiments"]);
+	assert.ok(mainOf(base, q).includes("infinite-context"), "an arm without a process lever keeps what the lists name");
+});
+
+test("review m1 an arm that asks for infinite-context with a compaction lever is refused with an error naming both (IC cancels compaction)", () => {
+	const bad = compaction({ ic: true });
+	assert.throws(() => armExtensions(bad, paths()), /infinite-context.*compaction|compaction.*infinite-context/);
+	assert.throws(() => run(bad), /infinite-context/);
 });
 
 test("T9.4 a run's meter lines: compactions, context overflows, active time and the pe levers read back", () => {

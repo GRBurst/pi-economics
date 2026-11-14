@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync,
 import { join } from "node:path";
 import { designId, halfFraction } from "../../experiments/core/design.ts";
 import { extensionsOf } from "./extensions.ts";
-import { isPiFactor, processLevel, processLevers, withProcess } from "./levers.ts";
+import { finalExtensions, isPiFactor, processLevel, processLevers } from "./levers.ts";
 import type { Factor, FactorSpec, Level } from "../../experiments/core/design.ts";
 import type { Arm, Paths } from "./types.ts";
 
@@ -143,7 +143,7 @@ export function materializeAgentDir(o: { dir: string; arm: Arm; paths: Paths; na
 		delegation: { nudge: on(f.delegation) ? "on" : "off" },
 		t0Limits: T0_LIMITS[on(f.t0Widened) ? "on" : "off"],
 	}), null, 2) + "\n");
-	put("actor-subagents/settings.json", JSON.stringify({ childExtensions: extensionsOf(withProcess(CHILD_EXTENSIONS, arm), paths.baseExtensions, paths.orchExtensions).map((n) => `${paths.extDir}/${n}`) }, null, 2) + "\n");
+	put("actor-subagents/settings.json", JSON.stringify({ childExtensions: finalExtensions(extensionsOf(CHILD_EXTENSIONS, paths.baseExtensions, paths.orchExtensions), arm).map((n) => `${paths.extDir}/${n}`) }, null, 2) + "\n");
 	copyFileSync(agents, join(dir, "AGENTS.md"));
 	const ic = join(paths.agentSrc, "infinite-context/settings.json");
 	if (existsSync(ic)) {
