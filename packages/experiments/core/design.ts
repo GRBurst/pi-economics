@@ -81,8 +81,8 @@ export function canonical(x: unknown): string {
   return JSON.stringify(x);
 }
 
-/** The design id: the first 12 hex of sha256 over the canonical JSON of the levers, their levels and the generators (factor names are labels). */
-export function designId(factors: readonly FactorSpec[], generators: readonly string[]): string {
+/** The design id: the first 12 hex of sha256 over the canonical JSON of the levers, their levels and the generators (factor names are labels; a bench's factor may have any number of levels). */
+export function designId(factors: readonly { lever: LeverId; levels: readonly Level[] }[], generators: readonly string[]): string {
   const content = { factors: factors.map(({ lever, levels }) => ({ lever, levels })), generators };
   return createHash("sha256").update(canonical(content)).digest("hex").slice(0, 12);
 }

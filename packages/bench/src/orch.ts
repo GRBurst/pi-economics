@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { designId, halfFraction } from "../../experiments/core/design.ts";
 import { extensionsOf } from "./extensions.ts";
 import { finalExtensions, isPiFactor, processLevel, processLevers } from "./levers.ts";
-import type { Factor, FactorSpec, Level } from "../../experiments/core/design.ts";
+import type { Factor, Level } from "../../experiments/core/design.ts";
 import type { Arm, Paths } from "./types.ts";
 
 /** The factors (README.md, "Orchestrator factor arms"): routing, delegation (handoff + nudge), t0Widened (pilot-derived limits). */
@@ -55,19 +55,21 @@ const leverOf = (factor: string): string => (isPiFactor(factor) ? factor : `task
 const levelOf = (factor: string, level: string): Level => (isPiFactor(factor) ? processLevel(factor, level) : level);
 
 /**
- * The run's assignment (the engine reads it instead of drawing, §10): v 1, the design id over the factors' levers and
- * the levels of every arm that has the factor (the router factors' own two levels too), stratum "bench", the arm's name.
+ * The run's assignment (the engine reads it instead of drawing, §10): v 1, stratum "bench", the arm's name and its own
+ * factors. The design id is the experiment's, the same for every arm of `arms` (the baseline included): the content id
+ * of every lever any arm sets with the sorted union of its levels (the router factors' own two levels too).
  */
 export function assignmentOf(name: string, arm: Arm, arms: Record<string, Arm> = {}): Record<string, unknown> {
 	const f = arm.factors ?? {};
+	const every = [...Object.values(arms), arm];
+	const names = [...new Set(every.flatMap((a) => Object.keys(a.factors ?? {})))].sort();
 	const levels = (factor: string): Level[] => {
-		const seen = new Set<string>([f[factor], ...(FACTORS.find((x) => x.name === factor)?.values ?? []), ...Object.values(arms).flatMap((a) => (a.factors?.[factor] === undefined ? [] : [a.factors[factor]]))]);
+		const seen = new Set<string>([...(FACTORS.find((x) => x.name === factor)?.values ?? []), ...every.flatMap((a) => (a.factors?.[factor] === undefined ? [] : [a.factors[factor]]))]);
 		return [...seen].sort().map((l) => levelOf(factor, l));
 	};
-	const specs = Object.keys(f).sort().map((n) => ({ name: n, lever: leverOf(n), levels: levels(n) }));
 	return {
 		v: 1,
-		design: designId(specs as unknown as FactorSpec[], []),
+		design: designId(names.map((n) => ({ lever: leverOf(n), levels: levels(n) })), []),
 		stratum: "bench",
 		arm: name,
 		factors: Object.fromEntries(Object.entries(f).map(([n, l]) => [n, { lever: leverOf(n), assigned: levelOf(n, l) }])),

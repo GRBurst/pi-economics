@@ -24,7 +24,8 @@ const now = () => Math.floor(Date.now() / 1000);
  * Results live in `<data>/runs/<id>.<arm>.<rep>`, the checkout in `<work>/runs/<id>.<arm>.<rep>`.
  */
 export async function runOne(o: RunOptions): Promise<RunResult> {
-	const arm = loadArms(o.paths.data)[o.arm];
+	const arms = loadArms(o.paths.data);
+	const arm = arms[o.arm];
 	if (!arm) throw new Error(`unknown arm: ${o.arm}`);
 	const name = `${o.id}.${o.arm}.${o.rep}`;
 	const R = join(o.paths.data, "runs", name);
@@ -38,7 +39,7 @@ export async function runOne(o: RunOptions): Promise<RunResult> {
 	const env = runEnv(o.env, o.paths, needsDevenvShim(o.task), tmpDir);
 	if (arm.factors) { // orchestrator factor arm: own agent dir, so settings, AGENTS.md and meter/outcome logs are per run
 		const agentDir = join(R, "agent");
-		materializeAgentDir({ dir: agentDir, arm, paths: o.paths, name: o.arm, arms: loadArms(o.paths.data) });
+		materializeAgentDir({ dir: agentDir, arm, paths: o.paths, name: o.arm, arms });
 		env.PI_CODING_AGENT_DIR = agentDir;
 	}
 	const prompt = buildPrompt(o.task.kind, o.task.prompt);

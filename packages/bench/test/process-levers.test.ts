@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolvePaths } from "../src/config.ts";
 import { armExtensions } from "../src/extensions.ts";
-import { materializeAgentDir, orchArms } from "../src/orch.ts";
+import { assignmentOf, materializeAgentDir, orchArms } from "../src/orch.ts";
 import { meterMetrics } from "../src/metrics.ts";
 import { buildReport, loadRows, renderReport } from "../src/report.ts";
 import { runOne } from "../src/run.ts";
@@ -150,4 +150,35 @@ test("T9.2 runOne writes the assignment under the arm's name and the factor arm'
 	assert.equal(json(join(R, "agent/experiments/assignment.json")).arm, "orch-compact");
 	const args = readFileSync(join(R, "probe.json.args"), "utf8").split("\n");
 	assert.ok(args.includes("/ext/experiments") && !args.includes("/ext/infinite-context"));
+});
+
+test("review m4 / m3 one experiment, one design id: the union of the factors and levels over every arm (the baseline included), however the arm is named", () => {
+	const lo = compaction({ factors: { ...base.factors, "pi.compaction.reserveTokens": "4000" } });
+	const hi = compaction();
+	const plain = orchArms()["orch----"];
+	const arms = { "orch----": plain, lo, hi };
+	const id = (name: string, arm: Arm, all: Record<string, Arm> = arms) => (assignmentOf(name, arm, all) as { design: string }).design;
+	assert.equal(id("orch----", plain), id("lo", lo));
+	assert.equal(id("lo", lo), id("hi", hi));
+	assert.notEqual(id("hi", hi), id("hi", hi, { hi }), "another arm set, another design (one level of the lever only)");
+	assert.notEqual(id("hi", hi), id("hi", hi, { hi, lo: { ...lo, factors: { ...lo.factors, "pi.compaction.reserveTokens": "2000" } } }), "the levels are part of it");
+	// the baseline's own file names only its own factors
+	assert.deepEqual(Object.keys((assignmentOf("orch----", plain, arms) as { factors: object }).factors), ["routing", "delegation", "t0Widened"]);
+	// three levels of a lever are fine (the id hashes lever ids and the sorted levels)
+	const three = { ...arms, mid: compaction({ factors: { ...base.factors, "pi.compaction.reserveTokens": "6000" } }) };
+	assert.match(id("mid", three.mid, three), /^[0-9a-f]{12}$/);
+});
+
+test("m3 runOne gives the arm's file the design of the whole arm set (arms.json)", async () => {
+	const p = paths();
+	writeFileSync(join(p.data, "arms.json"), JSON.stringify({ "orch-compact": compaction(), "orch-compact2": compaction({ factors: { ...base.factors, "pi.compaction.reserveTokens": "4000" } }) }));
+	const repo = sourceRepo();
+	const task = { kind: "small", gitdir: repo.gitdir, sub: "proj", base: repo.base, prompt: "p", check: "true" };
+	const pi = fakeRpcPi(`emit({ type: "agent_start" }); probe(0); say("done"); emit({ type: "agent_settled" });`);
+	const ids: string[] = [];
+	for (const arm of ["orch-compact", "orch-compact2", "orch----"]) {
+		await runOne({ id: "T", task, arm, rep: 1, paths: p, piBin: pi, env: { PATH: process.env.PATH! }, timeoutSec: 20, killGraceSec: 1, quietMs: 200 });
+		ids.push(json(join(p.data, `runs/T.${arm}.1/agent/experiments/assignment.json`)).design);
+	}
+	assert.equal(new Set(ids).size, 1);
 });
