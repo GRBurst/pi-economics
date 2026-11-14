@@ -28,19 +28,20 @@ function world(o: { file?: unknown; settings?: unknown; project?: unknown; mode?
   if (o.file !== undefined) writeFileSync(join(agentDir, "experiments", "assignment.json"), typeof o.file === "string" ? o.file : JSON.stringify(o.file));
   if (o.settings !== undefined) writeFileSync(join(agentDir, "settings.json"), JSON.stringify(o.settings));
   if (o.project !== undefined) { mkdirSync(join(cwd, ".pi")); writeFileSync(join(cwd, ".pi", "settings.json"), JSON.stringify(o.project)); }
+  const notes: string[] = [];
   const f = fakePi();
   const heard: Levers[] = [];
   onAssigned(f.events, (l) => void heard.push(l));
   install(f.pi, { agentDir, settings: { ...defaults(), mode: o.mode ?? "off" }, rng: () => { throw new Error("drew"); }, api: () => undefined });
   const ctx = (sid: string) => ({
-    cwd, hasUI: true, ui: { notify: () => {} },
+    cwd, hasUI: true, ui: { notify: (m: string) => void notes.push(m) },
     model: { provider: "anthropic", id: "claude-opus-5-5" },
     sessionManager: { getSessionId: () => sid, getSessionDir: () => join(agentDir, "sessions"), getSessionFile: () => join(agentDir, "sessions", `x_${sid}.jsonl`), getBranch: () => [] },
   });
   const start = (sid: string) => f.fire("session_start", { type: "session_start", reason: "startup" }, ctx(sid));
   const before = (sid: string) => f.fire("before_agent_start", {}, ctx(sid));
   const rows = () => (existsSync(join(agentDir, "experiments", "assignments.jsonl")) ? readFileSync(join(agentDir, "experiments", "assignments.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
-  return { ...f, agentDir, heard, start, before, rows };
+  return { ...f, agentDir, heard, start, before, rows, notes };
 }
 
 test("T9.3 the engine adopts the file's arm instead of drawing: one v2 row, the entry and the channel carry it (mode off draws nothing)", () => {
@@ -55,12 +56,20 @@ test("T9.3 the engine adopts the file's arm instead of drawing: one v2 row, the 
   assert.equal(existsSync(join(w.agentDir, "experiments", "blocks.json")), false, "no draw, no blocks");
 });
 
-test("T9.3 a file that is not a v1 assignment is ignored with a warning and the session is drawn as before (mode off: ineligible)", () => {
-  for (const bad of ["{not json", { ...FILE, v: 2 }, { ...FILE, arm: 3 }, { ...FILE, factors: { x: { lever: "a.b" } } }, { ...FILE, stratum: undefined }]) {
+test("T9.3 / review M1 a file that is not a v1 assignment (unparseable included) is ignored with exactly one notification and the session is drawn as before (mode off: ineligible); an absent file is silent", () => {
+  for (const bad of ["{not json", "", "null", { ...FILE, v: 2 }, { ...FILE, arm: 3 }, { ...FILE, factors: { x: { lever: "a.b" } } }, { ...FILE, stratum: undefined }]) {
+    delete (globalThis as { __piEconomicsWarned_v1?: unknown }).__piEconomicsWarned_v1;
     const w = world({ file: bad });
     w.start("s1");
     assert.deepEqual(w.rows().map((r) => [r.eligible, r.arm]), [[false, undefined]], JSON.stringify(bad));
+    const mine = () => w.notes.filter((n) => n.includes("assignment.json")); // the actor-missing notice is another
+    assert.equal(mine().length, 1, `one notification for ${JSON.stringify(bad)}`);
+    w.start("s2");
+    assert.equal(mine().length, 1, "once per process");
   }
+  const none = world();
+  none.start("s1");
+  assert.deepEqual(none.notes.filter((n) => n.includes("assignment.json")), []);
 });
 
 test("T9.4 a process lever the bench wrote into settings.json reads back confirmed: s pe, rb confirmed, tier seed", () => {
