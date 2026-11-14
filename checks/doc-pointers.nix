@@ -30,17 +30,24 @@
   scope = lines "/docs/scope.md";
   agents = lines "/AGENTS.md";
   economics = lines "/docs/pi-economics.md";
-  # Every document that could still point at the specification that moved.
-  documents = lib.concatMap (f:
-    lib.optional (builtins.pathExists (root + f)) {
+  # Every document that could still point at the specification that moved: README, AGENTS and every Markdown file of docs/
+  # (derived, so a new one is checked too).
+  docFiles = ["/README.md" "/AGENTS.md"] ++ map (n: "/docs/${n}") (lib.sort lib.lessThan (lib.filter (lib.hasSuffix ".md") (builtins.attrNames (builtins.readDir (root + "/docs")))));
+  documents =
+    map (f: {
       inherit f;
       ls = lines f;
-    }) ["/README.md" "/AGENTS.md" "/docs/scope.md" "/docs/pi-economics.md" "/docs/pi-token-economics.md" "/docs/context-folding.md"];
+    })
+    docFiles;
   spec = "research-cleanup-tool";
   # The scope record's lines above the "What left" heading: what stays.
   stays = lib.take (lib.lists.findFirstIndex (l: l == "## What left") (lib.length scope) scope) scope;
 
   # (redesign M11) Pointers. A document is a file name below the root; its lines are numbered from 1.
+  # The leading lines that satisfy p, and the others.
+  prefixLength = p: ls: lib.lists.findFirstIndex (l: !p l) (lib.length ls) ls;
+  takeWhile = p: ls: lib.take (prefixLength p ls) ls;
+  dropWhile = p: ls: lib.drop (prefixLength p ls) ls;
   numbered = ls: lib.imap1 (n: l: {inherit n l;}) ls;
   # The code spans of a line: the odd parts of its split at the backtick.
   spansOf = l: lib.concatLists (lib.imap0 (i: s: lib.optional (lib.mod i 2 == 1) s) (lib.splitString "`" l));
@@ -54,16 +61,25 @@
   linksOf = l:
     lib.filter (t: t != "" && !(lib.hasPrefix "http" t) && !(lib.hasPrefix "#" t) && !(lib.hasPrefix "mailto:" t))
     (map (p: builtins.head (lib.splitString "#" (builtins.head (lib.splitString ")" p)))) (lib.tail (lib.splitString "](" l)));
-  pointerDocs = ["/README.md" "/AGENTS.md" "/docs/scope.md" "/docs/pi-economics.md" "/docs/pi-token-economics.md" "/docs/context-folding.md" "/docs/meter-analysis-2026-11-12.md" "/packages/token-meter/LOGS.md" "/skills/pi-token-economics-analysis/SKILL.md" "/packages/bench/README.md"];
-  # The scope record's "What left" section and what follows name paths that are gone from here, by design.
+  pointerDocs = docFiles ++ ["/packages/token-meter/LOGS.md" "/skills/pi-token-economics-analysis/SKILL.md" "/packages/bench/README.md"];
+  # The scope record's "What left" section (up to the next `## ` heading) names paths that are gone from here, by design:
+  # the line numbers it spans, [from, to).
   gone = f: ls:
     if f == "/docs/scope.md"
-    then lib.drop (lib.lists.findFirstIndex (l: l == "## What left") (lib.length ls) ls) ls
-    else [];
+    then let
+      from = 1 + lib.lists.findFirstIndex (l: l == "## What left") (lib.length ls) ls;
+    in {
+      inherit from;
+      to = from + 1 + lib.length (takeWhile (l: !lib.hasPrefix "## " l) (lib.drop from ls));
+    }
+    else {
+      from = 0;
+      to = 0;
+    };
   dangling = f: let
     ls = lines f;
     skip = gone f ls;
-    live = lib.filter (x: !(lib.elem x.l skip)) (numbered ls);
+    live = lib.filter (x: x.n < skip.from || x.n >= skip.to) (numbered ls);
   in
     lib.concatMap (x:
       lib.concatMap (s: lib.optional (isPath s && !there (basesOf x.l) s) "${lib.removePrefix "/" f}:${toString x.n} points at `${s}`, which does not exist")
@@ -90,13 +106,15 @@
       f = "docs/scope.md";
       ls = scope;
       headings = [];
-      terms = ["quota waiter" "0.3.0"];
+      terms = ["quota waiter"];
     }
     {
       f = "README.md";
       ls = lines "/README.md";
       headings = [];
-      terms = ["quota waiter" "0.3.0"];
+      # The upgrade notes of the current release (the heading names its version).
+      headingPrefixes = ["## Upgrading to "];
+      terms = ["quota waiter"];
     }
     {
       f = "packages/token-meter/LOGS.md";
@@ -131,19 +149,26 @@
       f = "docs/scope.md";
       t = "nothing here implements it";
     }
+    # The removed component is named only as removed (a migration sentence the upgrader searches for).
     {
       f = "docs/pi-token-economics.md";
       t = "pi-retry";
+      unless = ["removed" "former" "left" "gone"];
     }
     {
       f = "README.md";
       t = "pi-retry";
+      unless = ["removed" "former" "left" "gone"];
     }
     {
       f = "docs/pi-economics.md";
       t = "pi-retry";
+      unless = ["removed" "former" "left" "gone"];
     }
   ];
+  # The Checks table of docs/pi-economics.md: its lines, and a row's first cell.
+  checksTable = takeWhile (l: !lib.hasPrefix "## " l) (lib.tail (dropWhile (l: l != "## Checks") economics));
+  firstCell = l: builtins.head (lib.splitString " | " l);
 
   failures =
     lib.optional (!builtins.pathExists "${router}/docs/outcome-log.md") "the pi-task-router input has no docs/outcome-log.md"
@@ -167,12 +192,13 @@
     ++ lib.concatMap (c: lib.optional (!lib.any (lib.hasPrefix "| `${c}` |") economics) "docs/pi-economics.md has no check row for ${c}") ["internal-channel" "dependency-direction" "state-contract"]
     # (redesign M11) Pointers point, every check has its row, the redesign's prose is there, what it replaced is gone.
     ++ lib.concatMap dangling pointerDocs
-    ++ lib.concatMap (c: lib.optional (!anyLine "`${c}`" economics) "docs/pi-economics.md has no row for the check ${c}") checkNames
+    ++ lib.concatMap (c: lib.optional (!lib.any (l: lib.hasPrefix "| " l && has "`${c}`" (firstCell l)) checksTable) "docs/pi-economics.md has no row for the check ${c} in its Checks table") checkNames
     ++ lib.concatMap (d:
-      map (h: "${d.f} has no heading \"${h}\"") (lib.filter (h: !lib.elem h d.ls) d.headings)
+      map (h: "${d.f} has no heading \"${h}\"") (lib.filter (h: !lib.elem h d.ls) (d.headings or []))
+      ++ map (p: "${d.f} has no heading that starts \"${p}\"") (lib.filter (p: !lib.any (lib.hasPrefix p) d.ls) (d.headingPrefixes or []))
       ++ map (t: "${d.f} does not carry the term ${t}") (lib.filter (t: !anyLine t d.ls) d.terms))
     required
-    ++ lib.concatMap (r: lib.optional (anyLine r.t (lines "/${r.f}")) "${r.f} still says \"${r.t}\"") replaced
+    ++ lib.concatMap (r: lib.optional (lib.any (l: has r.t l && !lib.any (u: has u l) (r.unless or [])) (lines "/${r.f}")) "${r.f} still says \"${r.t}\"") replaced
     # (redesign M5b.2, review m3) Children no longer inherit through spawn events: a child runtime derives its root's arm.
     ++ lib.concatMap (t: lib.concatMap (d: lib.optional (anyLine t d.ls) "${lib.removePrefix "/" d.f} still says children ${t}") documents) ["inherit only on the spawn event" "do not inherit an arm" "spawn inheritance"];
 in
