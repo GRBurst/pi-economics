@@ -61,6 +61,23 @@
         "type": "github"
       }
     },
+    "pi-actor-subagents": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793073635,
+        "narHash": "sha256-/NgrQvswfMIZRIl+FnWXmaEzt6Ipsyv5tjdiwFWZSbo=",
+        "owner": "fdietze",
+        "repo": "pi-actor-subagents",
+        "rev": "e92099a7272e64105d5ab429d7856dc0f473b4e3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "fdietze",
+        "repo": "pi-actor-subagents",
+        "rev": "e92099a7272e64105d5ab429d7856dc0f473b4e3",
+        "type": "github"
+      }
+    },
     "pi-claude-auth": {
       "flake": false,
       "locked": {
@@ -137,16 +154,17 @@
         "nixpkgs": [
           "nixpkgs"
         ],
+        "pi-actor-subagents": "pi-actor-subagents",
         "pi-claude-auth": "pi-claude-auth",
         "pi-question": "pi-question",
         "pi-session-name": "pi-session-name"
       },
       "locked": {
-        "lastModified": 1794493391,
-        "narHash": "sha256-Crpld2rqxKaIHPwJ74wht4uB3MopkCb1HhksM55lydg=",
+        "lastModified": 1794656170,
+        "narHash": "sha256-sXmhqEARSLXBtL91PTL8gJWbqoZIJ49q+hzkc3Fl/t8=",
         "owner": "GRBurst",
         "repo": "pi-setup",
-        "rev": "07b806471c63e0e2dcb02f8f5b588089460bce41",
+        "rev": "502f1e5fa72e7b84830abb965315cef8162bab27",
         "type": "github"
       },
       "original": {
@@ -155,12 +173,39 @@
         "type": "github"
       }
     },
+    "pi-task-router": {
+      "inputs": {
+        "home-manager": [
+          "home-manager"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "pi-setup": [
+          "pi-setup"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794699936,
+        "narHash": "sha256-z8qCabSlYyl0An//X/EPrU4ecsp/6vEQd4nPUKwYw+E=",
+        "owner": "GRBurst",
+        "repo": "pi-task-router",
+        "rev": "4a9d9d0d16b85e5c6c2ccd92fee806047e27fdfa",
+        "type": "github"
+      },
+      "original": {
+        "owner": "GRBurst",
+        "repo": "pi-task-router",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "home-manager": "home-manager",
         "nixpkgs": "nixpkgs",
         "pi-infinite-context": "pi-infinite-context",
-        "pi-setup": "pi-setup"
+        "pi-setup": "pi-setup",
+        "pi-task-router": "pi-task-router"
       }
     }
   },
