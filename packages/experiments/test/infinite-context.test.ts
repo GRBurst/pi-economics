@@ -118,13 +118,28 @@ test("T7a.2 observe: the latest settings record on the branch — a range means 
   const seen = (branch: unknown[]) => lever.observe!({ sessionId: "s1", branch: () => branch });
   assert.equal(seen([]), undefined);
   assert.equal(lever.observe!({ sessionId: "s1" }), undefined, "no branch");
-  assert.deepEqual(seen([rec({ nudgeAtTokens: 125_000, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" })]), { v: 125_000, s: "ext" });
+  assert.deepEqual(seen([rec({ nudgeAtTokens: 125_000, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" })]), { v: 125_000, s: "ext" });
   assert.deepEqual(seen([rec({ nudgeAtTokens: 400_000, nudgeAtPercent: 75, rule: "anthropic/claude-opus-5-5" })]), { v: 400_000, s: "fixed" });
   // The latest wins; entries of other types and malformed data are skipped.
   assert.deepEqual(
-    seen([rec({ nudgeAtTokens: 1, nudgeAtTokensRange: [1, 2] }), { type: "custom", customType: "other", data: { nudgeAtTokens: 5 } }, { type: "message" }, rec({ nudgeAtTokens: 400_000 })]),
+    seen([rec({ nudgeAtTokens: 1, nudgeAtPercent: 75, nudgeAtTokensRange: [1, 2] }), { type: "custom", customType: "other", data: { nudgeAtTokens: 5 } }, { type: "message" }, rec({ nudgeAtTokens: 400_000, nudgeAtPercent: 50 })]),
     { v: 400_000, s: "fixed" },
   );
-  assert.deepEqual(seen([rec({ nudgeAtTokens: 125_000, nudgeAtTokensRange: [100_000, 200_000] }), rec("x"), rec({ nudgeAtTokens: "many" }), rec(null)]), { v: 125_000, s: "ext" });
-  assert.equal(seen([rec({ nudgeAtTokens: Number.NaN })]), undefined);
+  assert.deepEqual(seen([rec({ nudgeAtTokens: 125_000, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_000] }), rec("x"), rec({ nudgeAtTokens: "many" }), rec(null)]), { v: 125_000, s: "ext" });
+  assert.equal(seen([rec({ nudgeAtTokens: Number.NaN, nudgeAtPercent: 75 })]), undefined);
+});
+
+// Review m1: the extension's record always carries nudgeAtPercent and the seed never does, so a latest record without it is
+// the engine's own write that the extension has not adopted: nothing observed, never a read-back of the engine by itself.
+test("review m1 observe: the latest record without a numeric nudgeAtPercent (the engine's own seed) is not an observation", () => {
+  const [lever] = infiniteContext(() => rules(FILE));
+  const rec = (data: unknown) => ({ type: "custom", customType: IC_ENTRY, data });
+  const seen = (branch: unknown[]) => lever.observe!({ sessionId: "s1", branch: () => branch });
+  const seed = { nudgeAtTokens: 125_000, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" };
+  assert.equal(seen([rec(seed)]), undefined);
+  assert.equal(seen([rec({ ...seed, nudgeAtPercent: "75" })]), undefined, "a percentage that is no number");
+  assert.equal(seen([rec({ ...seed, nudgeAtPercent: Number.NaN })]), undefined);
+  // An earlier completed record does not stand in for the latest one: that is what the extension will read.
+  assert.equal(seen([rec({ ...seed, nudgeAtTokens: 150_000, nudgeAtPercent: 75 }), rec(seed)]), undefined);
+  assert.deepEqual(seen([rec(seed), rec({ ...seed, nudgeAtPercent: 75 })]), { v: 125_000, s: "ext" });
 });

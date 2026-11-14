@@ -242,7 +242,9 @@ for a rule with another range, the engine appends infinite-context's settings re
 (`{ nudgeAtTokens, nudgeAtTokensRange, rule }`, the rule being the override's key) so
 that the extension keeps it; the record on the branch after the extension's handlers is
 the read-back (`confirmed`; an extension that redrew it: `refused`, source `ext`, the
-value it drew). A rule that is a fixed number draws nothing and ignores records: the
+value it drew). The extension completes its record with `nudgeAtPercent`, the seed has
+none: while the latest record lacks it the extension has not adopted anything, and the
+state stays `unverified` (a tool of that name from another extension, a misordered load). A rule that is a fixed number draws nothing and ignores records: the
 level is refused up front (`refused`, source `fixed`, `a` = the level, as there are no
 tokens to assign). The lever is live when pi lists infinite-context's `context_fold`
 tool (the extension never asks the channel); a child seeds its own branch with its

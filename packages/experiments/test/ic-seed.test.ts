@@ -54,7 +54,7 @@ const records = (entries: Entry[]) => entries.filter((e) => e.customType === "in
  * infinite-context, which registers its tool and follows the model at session_start and model_select like the patch.
  * `table`: the rules the stand-in resolves (default: RULES, the file's); `ignoresSeed`: it draws whatever it finds.
  */
-function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string, Rule>; ignoresSeed?: boolean; entries?: Entry[]; draw?: number; rng?: number } = {}) {
+function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string, Rule>; ignoresSeed?: boolean; entries?: Entry[]; draw?: number; rng?: number; silent?: boolean } = {}) {
   const agentDir = o.agentDir ?? mkdtempSync(join(tmpdir(), "experiments-ic-"));
   mkdirSync(join(agentDir, "infinite-context"), { recursive: true });
   writeFileSync(join(agentDir, "infinite-context", "settings.json"), JSON.stringify(FILE));
@@ -81,7 +81,7 @@ function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string
     }
     if (JSON.stringify(latest) !== JSON.stringify(next)) f.pi.appendEntry("infinite-context:settings", next);
   };
-  if (o.loaded !== false) {
+  if (o.loaded !== false && o.silent !== true) {
     f.pi.on("session_start", (_e: unknown, ctx: { model: Model }) => follow(ctx.model));
     f.pi.on("model_select", (e: { model: Model }) => follow(e.model));
   }
@@ -260,4 +260,19 @@ test("T7a.3 a child runs its root's level in its own model's range, in its own b
   assert.equal(child.entries.some((e) => e.customType === ENTRY), false, "a child writes no assignment entry");
   child.agentStart("child", local);
   assert.deepEqual(child.state("child"), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
+});
+
+// Review m1 (PROBE-A): a target that is listed as loaded but never runs (a tool of that name from another extension, a
+// misordered load, a host where its handlers do not run) leaves the engine's own seed as the branch's latest record; reading
+// that back is no evidence, so the state stays unverified.
+test("review m1 a loaded but silent target: the seed is the latest record and stays unverified, never confirmed", () => {
+  const r = runtime({ silent: true });
+  r.start("s1", haiku);
+  const a = at([100_000, 200_000], r.level("s1"));
+  assert.deepEqual(records(r.entries), [{ nudgeAtTokens: a, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" }]);
+  r.agentStart("s1", haiku);
+  assert.deepEqual(r.state("s1"), { v: a, s: "pe", a, rb: "unverified", tier: "seed" });
+  r.select("s1", local, haiku);
+  r.agentStart("s1", local);
+  assert.equal(r.state("s1")?.rb, "unverified", "after a switch too");
 });

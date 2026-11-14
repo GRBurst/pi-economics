@@ -13,8 +13,12 @@ import type { Lever, ModelRef, Observed, SessionCtx } from "./types.ts";
 export type Nudge = number | readonly [number, number];
 /** The settings file's nudgeAtTokens: the top level and the rules keyed by `<provider>` or `<provider>/<id>`. */
 export type IcRules = { top?: Nudge; overrides: Readonly<Record<string, { nudgeAtTokens?: Nudge }>> };
-/** The record the extension keeps its branch's settings in; the engine seeds its fields nudgeAtTokens, nudgeAtTokensRange and rule. */
-export type IcRecord = { nudgeAtTokens: number; nudgeAtTokensRange?: readonly [number, number]; rule?: string };
+/**
+ * The record the extension keeps its branch's settings in. The engine seeds its fields nudgeAtTokens, nudgeAtTokensRange and
+ * rule; the extension completes the record with nudgeAtPercent, which the seed never has (what tells the extension's record
+ * from the engine's own).
+ */
+export type IcRecord = { nudgeAtTokens: number; nudgeAtPercent?: number; nudgeAtTokensRange?: readonly [number, number]; rule?: string };
 
 export const IC_ENTRY = "infinite-context:settings";
 /** The tool the extension registers; the engine takes it as the sign that the extension is loaded. */
@@ -106,8 +110,11 @@ export function infiniteContext(rules: () => IcRules): readonly Lever[] {
     },
     observe(ctx: SessionCtx): Observed {
       const d = latestRecord(ctx.branch?.() ?? []);
+      // The extension's record has nudgeAtPercent, the engine's seed has not: a latest record without it is the engine's own
+      // write, not yet adopted (a target that is listed but never ran, a misordered load): nothing to read back.
+      if (d === undefined || typeof d.nudgeAtPercent !== "number" || !Number.isFinite(d.nudgeAtPercent)) return undefined;
       // A range: the extension drew it (its own experiment); none: a number the configuration fixed.
-      return d === undefined ? undefined : { v: d.nudgeAtTokens, s: d.nudgeAtTokensRange === undefined ? "fixed" : "ext" };
+      return { v: d.nudgeAtTokens, s: d.nudgeAtTokensRange === undefined ? "fixed" : "ext" };
     },
   };
   return [nudge];
