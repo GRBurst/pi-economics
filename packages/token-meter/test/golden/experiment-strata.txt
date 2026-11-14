@@ -53,7 +53,14 @@ Balance (units with ≥ 0.05 active h; shorter ones are excluded from the estima
 | `+--` | 2 | 1.00 | 0 | 0 | 8 / 0 |
 | `---` | 2 | 1.00 | 0 | 0 | 8 / 0 |
 
-A line without `durationMs` (a compaction or nested request, a v1 line) adds no time to the objective: untimed lines make a unit's objective an undercount. The objective counts local-provider requests only; the unit's requests to other providers (cloud children) are left out (secondary column: M8).
+A line without `durationMs` (a compaction or nested request, a v1 line) adds no time to the objective: untimed lines make a unit's objective an undercount. The objective counts local-provider requests only; the unit's requests to other providers (cloud children) are not in it: they are the secondary column below.
+
+Requests in another currency than the objective's, per active hour (a secondary outcome: an arm that moves work to another kind of provider looks cheaper in the objective alone; converted only with a configured `currency.rates`):
+
+| arm | currency | per active h | in the objective's currency |
+| --- | --- | --- | --- |
+| `+--` | USD | 3.00 | 2.70 EUR |
+| `---` | USD | 1.00 | 0.90 EUR |
 
 Power: at the current n the smallest detectable effect (α .05 two-sided, power .8) is ±41% (warmPolicy), the largest ±41% (warmPolicy); a smaller true effect is not distinguishable from noise.
 
@@ -62,5 +69,5 @@ Per arm (pooled over the design's strata: the arm statistics and posterior feed 
 
 | arm | units | active h | $/h | 95% CI | posterior reward | sd | P(best) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `+--` | 6 | 5.00 | 9.10 | 3.85 – 13.36 | -9.10 | 2.48 | 7% |
-| `---` | 6 | 5.00 | 4.76 | 2.00 – 7.00 | -4.76 | 1.31 | 93% |
+| `+--` | 6 | 5.00 | 9.70 | 5.35 – 13.42 | -9.70 | 2.18 | 3% |
+| `---` | 6 | 5.00 | 4.96 | 2.60 – 7.00 | -4.96 | 1.21 | 97% |

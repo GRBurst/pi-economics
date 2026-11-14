@@ -139,9 +139,11 @@ function strataLogs(): Logs {
   meter.push(...root("s7", "---", 500, { costUsd: 50 }, 2, 0.6));
   meter.push(...root("a1", "---", 600, { provider: "openrouter", model: "glm", costUsd: 0.3 }), ...root("a2", "+--", 700, { provider: "openrouter", model: "glm", costUsd: 0.6 }));
   const loc: Array<[string, string, number]> = [["l1", "---", 800_000], ["l2", "---", 1_000_000], ["l3", "+--", 1_500_000], ["l4", "+--", 1_300_000]];
-  loc.forEach(([id, arm, ms], i) => meter.push(...root(id, arm, 800 + 40 * i, { v: 2, provider: "llama", model: "qwen", costUsd: 0, durationMs: ms }, 4)));
+  loc.forEach(([id, arm, ms], i) => meter.push(...root(id, arm, 800 + 40 * i, { v: 2, provider: "llama", model: "qwen", costUsd: 0, durationMs: ms }, 4),
+    // M8: a cloud child of the local main (a secondary-currency column: API-eq USD per active hour of the arm, in EUR with USD/EUR)
+    ...root(`${id}-c`, arm, 805 + 40 * i, { parentSessionId: id, costUsd: arm === "---" ? 0.5 : 1.5 }, 1)));
   const plans = { anthropic: { billing: "subscription" as const, windows: ["5h" as const] }, llama: { billing: "local" as const, windows: [], rate: { amount: 2, currency: "EUR", per: "hour" as const } } };
-  return { meter, outcomes: [], guards: [], plans, assignments: [...new Set(meter.map((l) => String(l.sessionId)))].map((id) => assignment(id, String(meter.find((l) => l.sessionId === id)!.arm), at(0))) };
+  return { meter, outcomes: [], guards: [], plans, currencyRates: { "USD/EUR": 0.9 }, assignments: [...new Set(meter.filter((l) => l.parentSessionId === undefined).map((l) => String(l.sessionId)))].map((id) => assignment(id, String(meter.find((l) => l.sessionId === id)!.arm), at(0))) };
 }
 
 /**

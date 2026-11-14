@@ -33,7 +33,7 @@ export function analyse(all: Logs, period: Period = {}): Analysis {
   const meter = logs.meter.filter(isRequestLine); // levers lines record settings, no request (quality counts them as log lines)
   const bud = budget(meter, all.plans, all.currencyRates);
   const fits: Fits = new Map(bud.groups.map((g) => [fitKey(g.provider, g.kind), g.fit]));
-  const designs = experiment(meter, all.assignments, all.expSettings, all.plans, leverStates(all.meter, period), fits);
+  const designs = experiment(meter, all.assignments, all.expSettings, all.plans, leverStates(all.meter, period), fits, all.currencyRates);
   const flags = Object.fromEntries([...armInfo([...new Set(meter.filter((l) => typeof l?.arm === "string").map((l) => l.arm))], all.assignments)].map(([a, i]) => [a, i.flags]));
   return {
     period,

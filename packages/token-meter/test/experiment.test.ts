@@ -212,3 +212,32 @@ test("m4: a local stratum's report says its objective leaves out the unit's requ
 test("m1: the report says the effects are marginal per factor (no interaction model)", () => {
   assert.ok(renderExperiment([design(logs([cloud("a", "---", 10), cloud("b", "+--", 20)]))]).includes("marginal per factor"));
 });
+
+// M8 T8.6b: requests of a unit in another currency than its objective form a secondary column, per active hour by arm, converted only with `currency.rates`
+const child = (parent: string, arm: string, extra: Record<string, unknown>) => turn(`${parent}-c`, T0 + 5 * MIN, { parentSessionId: parent, arm, ...extra });
+const withRates = (l: Logs, rates?: Record<string, number>): Logs => ({ ...l, ...(rates ? { currencyRates: rates } : {}) });
+const otherOf = (l: Logs, s: string) => Object.fromEntries(stratum(l, s).balance.map((b) => [b.arm, b.other]));
+
+test("T8.6b local stratum (localCost, EUR): a unit's cloud children are an API-eq USD column per active hour, in EUR only with USD/EUR; none without cloud children", () => {
+  const units = [[...localV2("l1", "---", 900_000), child("l1", "---", { costUsd: 3 })], [...localV2("l2", "+--", 900_000), child("l2", "+--", { costUsd: 6 })]];
+  const l = logs(units, PLANS);
+  assert.deepEqual(otherOf(l, "local"), { "---": [{ currency: "USD", perHour: 6 }], "+--": [{ currency: "USD", perHour: 12 }] });
+  const o = otherOf(withRates(l, { "USD/EUR": 0.5 }), "local");
+  assert.deepEqual(o["---"], [{ currency: "USD", perHour: 6, converted: 3, convertedTo: "EUR" }]);
+  assert.deepEqual(otherOf(logs([localV2("l1", "---", 900_000), localV2("l2", "+--", 900_000)], PLANS), "local"), { "---": [], "+--": [] });
+});
+
+test("T8.6b cloud stratum (apiUsd): a unit's local children are the local cost in the rate's currency per active hour, in USD only with a rate", () => {
+  const units = [[...cloud("a", "---", 10), child("a", "---", { v: 2, provider: "llama", model: "qwen", costUsd: 0, durationMs: 1_800_000 })], cloud("b", "+--", 20)];
+  const l = logs(units, PLANS);
+  assert.deepEqual(otherOf(l, "api"), { "---": [{ currency: "EUR", perHour: 1 }], "+--": [] });
+  assert.deepEqual(otherOf(withRates(l, { "USD/EUR": 0.5 }), "api")["---"], [{ currency: "EUR", perHour: 1, converted: 2, convertedTo: "USD" }]);
+  assert.equal(effect(l, "api") && "notMeasurable" in effect(l, "api"), false, "the objective itself is unchanged by the column");
+});
+
+test("T8.6b the rendered experiment table shows the column and no longer promises it", () => {
+  const units = [[...localV2("l1", "---", 900_000), child("l1", "---", { costUsd: 3 })], [...localV2("l2", "+--", 900_000), child("l2", "+--", { costUsd: 6 })]];
+  const text = renderExperiment(analyse(withRates(logs(units, PLANS), { "USD/EUR": 0.5 })).experiment.designs);
+  assert.ok(text.includes("Requests in another currency"), text);
+  assert.ok(!text.includes("secondary column: M8") && !text.includes("left out"), "pi-economics: no stale promise");
+});
