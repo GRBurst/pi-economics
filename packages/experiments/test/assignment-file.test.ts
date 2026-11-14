@@ -21,7 +21,7 @@ const FILE = {
   },
 };
 
-function world(o: { file?: unknown; settings?: unknown; project?: unknown; mode?: "off" | "explore"; trusted?: boolean } = {}) {
+function world(o: { file?: unknown; settings?: unknown; project?: unknown; mode?: "off" | "explore" | "exploit"; trusted?: boolean } = {}) {
   const agentDir = mkdtempSync(join(tmpdir(), "experiments-file-"));
   const cwd = mkdtempSync(join(tmpdir(), "experiments-file-cwd-"));
   mkdirSync(join(agentDir, "experiments"), { recursive: true });
