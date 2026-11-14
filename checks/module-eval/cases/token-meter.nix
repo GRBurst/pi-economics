@@ -102,7 +102,7 @@ in {
       p-local = {
         billing = "local";
         rate = {
-          amount = 0.13;
+          amount = 0.25;
           currency = "EUR";
         };
       };
@@ -125,7 +125,7 @@ in {
           billing = "local";
           windows = [];
           rate = {
-            amount = 0.13;
+            amount = 0.25;
             currency = "EUR";
             per = "hour";
           };

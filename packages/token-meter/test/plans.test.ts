@@ -4,7 +4,7 @@ import { billingOf, parsePlans } from "../core/plans.ts";
 
 const plans = parsePlans({
   "p-sub": { billing: "subscription", windows: ["5h", "7d"] },
-  "p-local": { billing: "local", windows: [], rate: { amount: 0.13, currency: "EUR", per: "hour" } },
+  "p-local": { billing: "local", windows: [], rate: { amount: 0.25, currency: "EUR", per: "hour" } },
 });
 
 test("billingOf: the plan's class; an unknown provider counts as api", () => {
@@ -18,7 +18,7 @@ test("billingOf: the plan's class; an unknown provider counts as api", () => {
 test("parsePlans: well-formed plans as written (the Nix module's rendering)", () => {
   assert.deepEqual(plans, {
     "p-sub": { billing: "subscription", windows: ["5h", "7d"] },
-    "p-local": { billing: "local", windows: [], rate: { amount: 0.13, currency: "EUR", per: "hour" } },
+    "p-local": { billing: "local", windows: [], rate: { amount: 0.25, currency: "EUR", per: "hour" } },
   });
 });
 

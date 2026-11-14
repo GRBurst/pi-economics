@@ -100,7 +100,7 @@ test("V4_FACTORS: the stratum design has v4's 8 arms (the same level sets) over 
 // (redesign M5a T5a.4) The strata setting (§7.2, §7.3) and its defaults (plan P12).
 const PLANS: Plans = {
   claude: { billing: "subscription", windows: ["5h", "7d"] },
-  llama: { billing: "local", windows: [], rate: { amount: 0.13, currency: "EUR", per: "hour" } },
+  llama: { billing: "local", windows: [], rate: { amount: 0.25, currency: "EUR", per: "hour" } },
   zen: { billing: "free", windows: [] },
 };
 const cloud = (billing: Billing): StratumSpec => ({ match: { billing: [billing] }, objective: "apiUsd", factors: [...V4_FACTORS] });

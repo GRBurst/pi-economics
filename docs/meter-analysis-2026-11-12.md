@@ -1,5 +1,9 @@
 # Meter analysis — 2026-11-12
 
+A historical snapshot, written before the 0.3.0 analyser: its figures use the old definitions (the
+$/accepted headline, the cache-miss share, the quota share, pooled experiment effects, designs v2–v4)
+and are not comparable with a report from the current `pi-analyse` (`packages/token-meter/LOGS.md`).
+
 Snapshot of the fleet's token economics from a `pi-analyse` run over the meter logs
 (`~/.pi/agent/meter/2026-10.jsonl`, `2026-11.jsonl`; 102,400 lines: 2,420 v0 format, 99,980 v1).
 Generated report: `~/.pi/agent/reports/2026-11-12-1257-analysis.{md,json}`.

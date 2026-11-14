@@ -81,7 +81,7 @@ in {
         llama = {
           billing = "local";
           rate = {
-            amount = 0.13;
+            amount = 0.25;
             currency = "EUR";
           };
         };
