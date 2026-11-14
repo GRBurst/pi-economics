@@ -760,3 +760,34 @@ test("levers: a levers line that cannot be written warns once on its own; a late
   turnSend(f, ctx); f.fire("message_end", assistant(), ctx);
   assert.deepEqual(errors.mock.calls.map((c) => String(c.arguments[0])), ["token-meter: cannot write levers line:", "token-meter: cannot write meter line:"]);
 });
+
+// Review M2 (M9): where the meter's own observation of a lever contradicts the engine's claim, the observation wins and
+// the claim stays visible as `a` with `rb: "refused"`: a pe/confirmed never hides what the meter saw.
+const CLAIM = (id: string, v: number | boolean, rb: string) => ({ [id]: { v, s: "pe", a: v, rb, tier: "seed" } });
+test("review M2 the meter's observed value beats the engine's contradicting claim (refused, source of the observation)", () => {
+  const claim = { ...CLAIM("pi.compaction.reserveTokens", 8000, "confirmed"), ...CLAIM("pi.compaction.keepRecentTokens", 5000, "unverified") };
+  const { f, lines } = setup({ env: {} }, () => ({ eligible: true, arm: "x", levers: claim }));
+  agentStart(f, fakeCtx("s1"));
+  const l = leversOf(lines())[0].levers;
+  assert.deepEqual(l["pi.compaction.reserveTokens"], { v: 16384, s: "fixed", a: 8000, rb: "refused", tier: "seed" });
+  assert.deepEqual(l["pi.compaction.keepRecentTokens"], { v: 20000, s: "fixed", a: 5000, rb: "refused", tier: "seed" });
+});
+
+test("review M2 an observation that agrees with the claim leaves the engine's state; one that matches `a` turns a refusal into confirmed", () => {
+  const { f, agentDir, lines } = setup({ env: {} }, () => ({
+    eligible: true, arm: "x",
+    levers: { ...CLAIM("pi.compaction.reserveTokens", 8000, "confirmed"), "pi.compaction.keepRecentTokens": { v: 1, s: "fixed", a: 5000, rb: "refused", tier: "seed" } },
+  }));
+  putJson(join(agentDir, "settings.json"), { compaction: { reserveTokens: 8000, keepRecentTokens: 5000 } });
+  agentStart(f, fakeCtx("s1"));
+  const l = leversOf(lines())[0].levers;
+  assert.deepEqual(l["pi.compaction.reserveTokens"], { v: 8000, s: "pe", a: 8000, rb: "confirmed", tier: "seed" });
+  assert.deepEqual(l["pi.compaction.keepRecentTokens"], { v: 5000, s: "pe", a: 5000, rb: "confirmed", tier: "seed" });
+});
+
+test("review M2 infinite-context in the session: its cancelled compaction (ext, false) beats an engine claim of enabled", () => {
+  const entries = [{ type: "custom", customType: "infinite-context:settings", data: {} }];
+  const { f, lines } = setup({ env: {} }, () => ({ eligible: true, arm: "x", levers: CLAIM("pi.compaction.enabled", true, "confirmed") }));
+  agentStart(f, fakeCtx("s1", { entries }));
+  assert.deepEqual(leversOf(lines())[0].levers["pi.compaction.enabled"], { v: false, s: "ext", a: true, rb: "refused", tier: "seed" });
+});

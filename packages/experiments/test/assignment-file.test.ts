@@ -21,7 +21,7 @@ const FILE = {
   },
 };
 
-function world(o: { file?: unknown; settings?: unknown; project?: unknown; mode?: "off" | "explore" } = {}) {
+function world(o: { file?: unknown; settings?: unknown; project?: unknown; mode?: "off" | "explore"; trusted?: boolean } = {}) {
   const agentDir = mkdtempSync(join(tmpdir(), "experiments-file-"));
   const cwd = mkdtempSync(join(tmpdir(), "experiments-file-cwd-"));
   mkdirSync(join(agentDir, "experiments"), { recursive: true });
@@ -34,7 +34,7 @@ function world(o: { file?: unknown; settings?: unknown; project?: unknown; mode?
   onAssigned(f.events, (l) => void heard.push(l));
   install(f.pi, { agentDir, settings: { ...defaults(), mode: o.mode ?? "off" }, rng: () => { throw new Error("drew"); }, api: () => undefined });
   const ctx = (sid: string) => ({
-    cwd, hasUI: true, ui: { notify: (m: string) => void notes.push(m) },
+    cwd, isProjectTrusted: () => o.trusted ?? true, hasUI: true, ui: { notify: (m: string) => void notes.push(m) },
     model: { provider: "anthropic", id: "claude-opus-5-5" },
     sessionManager: { getSessionId: () => sid, getSessionDir: () => join(agentDir, "sessions"), getSessionFile: () => join(agentDir, "sessions", `x_${sid}.jsonl`), getBranch: () => [] },
   });
@@ -89,11 +89,59 @@ test("T9.4 the project's settings override the global ones: a different effectiv
   assert.deepEqual(query(w.events, "s1")!.levers["pi.compaction.reserveTokens"], { v: 4000, s: "fixed", a: 8000, rb: "refused", tier: "seed" });
 });
 
-test("T9.4 no settings value to observe: unverified (v = a assumed)", () => {
+test("review M2 no settings value: pi runs its default, which is what is recorded: refused (settings not honoured), or confirmed when the assignment is the default", () => {
   const w = world({ file: FILE });
   w.start("s1");
   w.before("s1");
-  assert.deepEqual(query(w.events, "s1")!.levers["pi.compaction.reserveTokens"], { v: 8000, s: "pe", a: 8000, rb: "unverified", tier: "seed" });
+  assert.deepEqual(query(w.events, "s1")!.levers["pi.compaction.reserveTokens"], { v: 16384, s: "fixed", a: 8000, rb: "refused", tier: "seed" });
+  const d = world({ file: { ...FILE, factors: { r: { lever: "pi.compaction.reserveTokens", assigned: 16384 }, k: { lever: "pi.compaction.keepRecentTokens", assigned: 20000 }, e: { lever: "pi.compaction.enabled", assigned: true } } } });
+  d.start("s1");
+  d.before("s1");
+  const l = query(d.events, "s1")!.levers;
+  assert.deepEqual(Object.values(l).map((x) => [x.v, x.rb]), [[16384, "confirmed"], [20000, "confirmed"], [true, "confirmed"]]);
+});
+
+test("review M2 an untrusted project's settings are not read (pi skips them); a trusted one's are", () => {
+  const settings = { compaction: { reserveTokens: 8000 } };
+  const project = { compaction: { reserveTokens: 4000 } };
+  const u = world({ file: FILE, settings, project, trusted: false });
+  u.start("s1");
+  u.before("s1");
+  assert.equal(query(u.events, "s1")!.levers["pi.compaction.reserveTokens"].rb, "confirmed");
+  const t = world({ file: FILE, settings, project, trusted: true });
+  t.start("s1");
+  t.before("s1");
+  assert.equal(query(t.events, "s1")!.levers["pi.compaction.reserveTokens"].v, 4000);
+});
+
+test("review M2 compaction.modelOverrides of the session's model win over the ordinary setting (pi's order: override, setting, default)", () => {
+  const overrides = (m: string, r: number) => ({ compaction: { reserveTokens: 8000, modelOverrides: { [m]: { reserveTokens: r } } } });
+  const hit = world({ file: FILE, settings: overrides("anthropic/claude-opus-5-5", 2000) });
+  hit.start("s1");
+  hit.before("s1");
+  assert.deepEqual(query(hit.events, "s1")!.levers["pi.compaction.reserveTokens"], { v: 2000, s: "fixed", a: 8000, rb: "refused", tier: "seed" });
+  const same = world({ file: FILE, settings: overrides("anthropic/claude-opus-5-5", 8000) });
+  same.start("s1");
+  same.before("s1");
+  assert.equal(query(same.events, "s1")!.levers["pi.compaction.reserveTokens"].rb, "confirmed");
+  const other = world({ file: FILE, settings: overrides("openai/gpt-5", 2000) });
+  other.start("s1");
+  other.before("s1");
+  assert.equal(query(other.events, "s1")!.levers["pi.compaction.reserveTokens"].rb, "confirmed", "another model's override does not apply");
+});
+
+test("review M2 / n2 a value pi rejects (negative, fractional, unsafe, wrong type) is not an observation: unverified", () => {
+  for (const bad of [-1, 1.5, 2 ** 60, "8000", null]) {
+    const w = world({ file: FILE, settings: { compaction: { reserveTokens: bad } } });
+    w.start("s1");
+    w.before("s1");
+    assert.equal(query(w.events, "s1")!.levers["pi.compaction.reserveTokens"].rb, "unverified", String(bad));
+  }
+  const f = { ...FILE, factors: { r: { lever: "pi.compaction.reserveTokens", assigned: 2 ** 60 }, n: { lever: "pi.compaction.keepRecentTokens", assigned: 1.5 } } };
+  const w = world({ file: f });
+  w.start("s1");
+  w.before("s1");
+  assert.deepEqual(Object.values(query(w.events, "s1")!.levers).map((x) => [x.rb, x.s]), [["refused", "fixed"], ["refused", "fixed"]], "an infeasible level (not a safe count) is refused up front: pi's own value stands");
 });
 
 test("T9.4 the other compaction levers and enabled=false; an unknown pi lever has no add-on", () => {

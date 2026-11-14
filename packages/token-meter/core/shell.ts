@@ -198,6 +198,21 @@ export function install(pi: PiLike, deps: Deps): void {
     }
     return out;
   };
+  /**
+   * The engine's states over the meter's own observations (pi's settings, an extension's evidence): a state the meter
+   * observed differently is what ran, so the observation wins; the engine's assignment stays visible as `a`, `refused`
+   * (or `confirmed` pe when the observation equals `a`). A state of an id the meter did not observe stands as the engine gave it.
+   */
+  const joinStates = (observed: Record<LeverId, LeverState>, engine: Record<string, LeverState>): Record<LeverId, LeverState> => {
+    const out: Record<LeverId, LeverState> = { ...observed };
+    for (const [id, e] of Object.entries(engine)) {
+      const o = observed[id];
+      if (o === undefined || o.v === e.v) out[id] = e;
+      else if (e.a === undefined) out[id] = o;
+      else out[id] = { ...(o.v === e.a ? { v: o.v, s: "pe" as const, a: e.a, rb: "confirmed" as const } : { v: o.v, s: o.s, a: e.a, rb: "refused" as const }), ...(e.tier === undefined ? {} : { tier: e.tier }) };
+    }
+    return out;
+  };
   const writeLevers = (sid: string, a: Levers | undefined): void => {
     const base = leversBase.get(sid)!;
     const exp = experiment(a);
@@ -208,7 +223,7 @@ export function install(pi: PiLike, deps: Deps): void {
       ...(exp === undefined ? {} : { arm: exp.arm }), ...(exp?.design === undefined ? {} : { design: exp.design }),
       eligible: a?.eligible === true && parentSessionId === undefined,
       ...(exp?.stratum === undefined ? {} : { stratum: exp.stratum }),
-      levers: { ...base.levers, ...engineStates(a?.levers) },
+      levers: joinStates(base.levers, engineStates(a?.levers)),
     });
     const key = JSON.stringify({ ...line, ts: undefined });
     if (leversSeen.get(sid) === key) return;

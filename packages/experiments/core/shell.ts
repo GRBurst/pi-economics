@@ -114,8 +114,22 @@ export function install(pi: PiLike, deps: Deps): void {
   // The add-ons (§7.4): a session's levers start when their target first asks the channel; their read-back states ride
   // on every publication and answer.
   // pi's process levers read back from the settings files (the project's under the checkout the session runs in).
+  // What pi merges (the project's settings only when the project is trusted, as pi and token-meter do) and the model whose
+  // per-model compaction tokens apply: noted from the session's context at session_start and before each read-back.
   let cwd = process.cwd();
-  const registry = createRegistry([...CACHE_LIFECYCLE, ...piProcessLevers(() => ({ global: readJson(join(deps.agentDir, "settings.json")), project: readJson(join(cwd, ".pi", "settings.json")) }))]);
+  let trusted = false;
+  let model: string | undefined;
+  const noteEnv = (ctx: any): void => {
+    cwd = safe(() => ctx.cwd as string | undefined) ?? cwd;
+    trusted = safe(() => ctx.isProjectTrusted() as unknown) === true;
+    const m = safe(() => ctx.model as { provider?: unknown; id?: unknown } | undefined);
+    model = typeof m?.provider === "string" && typeof m?.id === "string" ? `${m.provider}/${m.id}` : undefined;
+  };
+  const registry = createRegistry([...CACHE_LIFECYCLE, ...piProcessLevers(() => ({
+    global: readJson(join(deps.agentDir, "settings.json")),
+    project: trusted ? readJson(join(cwd, ".pi", "settings.json")) : undefined,
+    model,
+  }))]);
   const tracked = new Map<string, ReturnType<typeof sessionLevers>>();
   /** A factor's levels in the design the session was assigned (another design under the same stratum: just its own). */
   const levelsOf = (a: Assigned) => (name: string): readonly Level[] => {
@@ -159,6 +173,7 @@ export function install(pi: PiLike, deps: Deps): void {
     return leversOf(sid);
   });
   const observeAt = (at: Lever["readBackAt"], e: unknown, ctx: any): void => {
+    noteEnv(ctx);
     const sid = safe(() => ctx.sessionManager.getSessionId() as string);
     const t = sid === undefined ? undefined : tracked.get(sid);
     if (t?.observe(at, { sessionId: sid!, event: e })) announce(sid!);
@@ -292,7 +307,7 @@ export function install(pi: PiLike, deps: Deps): void {
     for (const w of warnings) warnOnce(ctx, `experiments:${w}`, w); // a dropped stratum (parseStrata says why)
     if (settings.legacy?.length) warnOnce(ctx, "experiments:legacy", `experiments: ignores the settings ${settings.legacy.join(", ")} (the v1 engine's): its factors come from strata (default: one stratum per billing class); baseline only labels the analyses of v1–v4 designs`);
     const main = ctx.sessionManager.getSessionId() as string;
-    cwd = safe(() => ctx.cwd as string | undefined) ?? cwd;
+    noteEnv(ctx);
     // A child's runtime (experiments among the actor's childExtensions): never drawn, no row; its arm is its root's.
     const file = safe(() => ctx.sessionManager.getSessionFile() as string | undefined);
     const root = rootOf(main, file, safe(() => ctx.hasUI));
