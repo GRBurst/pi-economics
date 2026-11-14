@@ -114,13 +114,27 @@ test("T7b.2 pi.activeTool(<name>): true adds the tool to the active set, false r
   assert.deepEqual(same.state.calls, [], "already in the assigned state: pi is not called");
 });
 
-test("T7b.2 pi.activeTool(<name>) of an unknown tool: feasible = [] → never applied; the tool's own state is recorded (a = false) or refused (a = true)", () => {
+test("T7b.2 pi.activeTool(<name>) of an unknown tool: feasible = [] → never applied; the tool's own state is recorded (a = false) or refused (a = true), source fixed (nobody registered it: no extension chose that)", () => {
   const r = rig({ all: ["read", "bash"] });
   const t = r.session(tool("nope"), true, [false, true]);
   t.refresh();
   assert.deepEqual(r.state.calls, []);
   t.observe("before_agent_start", r.at);
-  assert.deepEqual(t.states()[tool("nope")], { v: false, s: "ext", a: true, rb: "refused", tier: "control" });
+  assert.deepEqual(t.states()[tool("nope")], { v: false, s: "fixed", a: true, rb: "refused", tier: "control" });
+  const off = rig({ all: ["read", "bash"] }).session(tool("nope"), false, [true, false]);
+  off.refresh();
+  off.observe("before_agent_start", { sessionId: "s1" });
+  assert.deepEqual(off.states()[tool("nope")], { v: false, s: "fixed" }, "a = false: just its own state");
+});
+
+test("T7b.3 pi.activeTool(<name>) of a registered tool pi will not activate (ignored by setActiveTools) → refused, source fixed; the other tools untouched", () => {
+  const r = rig({ active: ["read"], all: ["read", "codemode"], ignore: ["codemode"] });
+  const s = r.session(tool("codemode"), true, [false, true]);
+  s.refresh();
+  assert.deepEqual(r.state.calls, ["tools:read,codemode"], "it was asked");
+  s.observe("before_agent_start", r.at);
+  assert.deepEqual(s.states()[tool("codemode")], { v: false, s: "fixed", a: true, rb: "refused", tier: "control" });
+  assert.deepEqual(r.control.getActiveTools(), ["read"]);
 });
 
 test("T7b.3 another party changes the level after the engine set it → refused with the observed level, source ext", () => {
@@ -242,7 +256,7 @@ test("T7b.2 the engine: an unknown tool is refused up front (never set), the res
   const a = e.heard.at(-1)!;
   assert.equal(e.control.calls.some((c) => c.startsWith("tools:")), false);
   const g = a.factors!.ghost.assigned; // observed: not active (there is no such tool)
-  assert.deepEqual(a.levers[tool("ghost")], g === true ? { v: false, s: "ext", a: true, rb: "refused", tier: "control" } : { v: false, s: "ext" });
+  assert.deepEqual(a.levers[tool("ghost")], g === true ? { v: false, s: "fixed", a: true, rb: "refused", tier: "control" } : { v: false, s: "fixed" });
   assert.equal(a.levers[THINK].rb, "confirmed");
 });
 

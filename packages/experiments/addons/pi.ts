@@ -4,8 +4,8 @@
 // token-meter's `pi.defaultThinkingLevel` is the configured default for a new session, not what this one ran with).
 // Both are a main session's levers (`mainOnly`): a child's level and tools are the actor's (an orchestrator's explicit
 // choice), infeasible there and omitted from the child's levers line, like mainCacheTtl (review F4). Source of an observation that is not the assigned level: `fixed` when it is what
-// pi reported right after the engine set it (pi's own clamp: the model cannot take the level; an ignored tool name),
-// else `ext` (changed after: another extension, /thinking, pi's reset at a model switch; the source cannot tell them
+// pi reported right after the engine set it (pi's own clamp: the model cannot take the level; a tool pi will not activate;
+// a tool nobody registered is `fixed` too, never set), else `ext` (changed after: another extension, /thinking, pi's reset at a model switch; the source cannot tell them
 // apart). Order hazard (§7.4): a later extension's before_agent_start handler runs after the engine's read-back, so
 // its change shows at the next prompt.
 import type { Kind, Lever, Observed } from "./types.ts";
@@ -61,7 +61,10 @@ function activeTool(pi: PiControl, tool: string): Lever<boolean> {
     },
     observe(ctx) {
       const v = safe(isActive);
-      return v === undefined ? undefined : seenAs(v, settled.get(ctx.sessionId));
+      if (v === undefined) return undefined;
+      // A tool nobody registered is not active whatever anyone chose: pi's own state (`fixed`), not an extension's (review F7).
+      const registered = safe(() => pi.getAllTools().some((t) => t.name === tool));
+      return registered === false ? { v, s: "fixed" } : seenAs(v, settled.get(ctx.sessionId));
     },
   };
 }

@@ -238,9 +238,9 @@ Two data-only kinds set pi itself (redesign M7b; tier `control`, read back at `b
 child's levers line omits both, its level and tools are the actor's): `pi.thinkingLevel` (levels `off`, `minimal`, `low`, `medium`,
 `high`, `xhigh`; set with `setThinkingLevel` when the engine's session starts and read back with `getThinkingLevel`: the level the
 session runs with, where `pi.defaultThinkingLevel` is the configured default) and `pi.activeTool(<name>)` (levels `false`, `true`:
-whether `getActiveTools` lists the tool; a tool pi does not register is infeasible). A value other than the assigned one is
-`refused`, with source `fixed` when it is what pi reported right after the engine set it (pi clamped the level to the model's, or
-ignored the tool) and `ext` otherwise (another extension, `/thinking` or pi's reset at a model switch changed it afterwards: the
+whether `getActiveTools` lists the tool; a tool pi does not register is infeasible and reads back `fixed`: nobody chose that). A
+value other than the assigned one is `refused`, with source `fixed` when it is what pi reported right after the engine set it
+(pi clamped the level to the model's, or would not activate the tool) and `ext` otherwise (another extension, `/thinking` or pi's reset at a model switch changed it afterwards: the
 source does not tell them apart). The data-only seed kind `session-entry(<customType>,<field>)` (redesign M7c; tier `seed`,
 read back at `before_agent_start`, also in a child, seeded with its root's level) appends the custom entry `{ <field>: <level> }`
 to the session branch before an extension that adopts recorded values reads it, and reads back the latest entry of that type:

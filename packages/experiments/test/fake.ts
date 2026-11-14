@@ -19,10 +19,10 @@ export type Entry = { type: "custom"; customType: string; data?: unknown };
 
 /**
  * A fake of pi's session control: the thinking level and the active tools. As in pi 1.4 a name that is no registered tool
- * is ignored by setActiveTools, and `clamp` stands for a model that cannot take the level asked for. `calls` records
- * every setter call.
+ * is ignored by setActiveTools (so is a name in `ignore`: a registered tool pi will not activate), and `clamp` stands for
+ * a model that cannot take the level asked for. `calls` records every setter call.
  */
-export function fakeControl(o: { level?: string; active?: string[]; all?: string[]; clamp?: (level: string) => string } = {}) {
+export function fakeControl(o: { level?: string; active?: string[]; all?: string[]; clamp?: (level: string) => string; ignore?: string[] } = {}) {
   const all = o.all ?? ["read", "bash", "edit", "codemode"];
   const state = { level: o.level ?? "medium", active: o.active ?? ["read", "bash"], calls: [] as string[] };
   const control = {
@@ -34,7 +34,7 @@ export function fakeControl(o: { level?: string; active?: string[]; all?: string
     getActiveTools: () => [...state.active],
     setActiveTools: (names: string[]) => {
       state.calls.push(`tools:${names.join(",")}`);
-      state.active = names.filter((n) => all.includes(n));
+      state.active = names.filter((n) => all.includes(n) && !o.ignore?.includes(n)); // `ignore`: registered tools pi will not activate
     },
     getAllTools: () => all.map((name) => ({ name })),
     getCommands: () => [] as Array<{ name: string }>,
