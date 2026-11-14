@@ -22,7 +22,7 @@ message text, strings clipped to 256 characters. Timestamps are ISO-8601 UTC.
 
 | file | writer | one line per | rotation |
 | --- | --- | --- | --- |
-| `meter/YYYY-MM.jsonl` | token-meter extension (every session, children too) | provider request | UTC month |
+| `meter/YYYY-MM.jsonl` | token-meter extension (every session, children too) | provider request; also a `levers` line per session (on change) and a `compaction` line per pi compaction | UTC month |
 | `task-router/outcomes/YYYY-MM.jsonl` | the pi-task-router extension (main session) | routing event of a delegated task | UTC month |
 | `experiments/assignments.jsonl` | experiments extension (main session) | root session's assignment (v2: eligible or not) | none |
 | `experiments/blocks.json` | experiments extension | — (one JSON object: the explore queues) | rewritten atomically |
