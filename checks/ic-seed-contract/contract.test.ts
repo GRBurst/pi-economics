@@ -156,7 +156,7 @@ test("ineligible (P12): a fixed-number rule draws nothing and ignores records; t
   await s.start(opus);
   assert.deepEqual(s.records(), [{ nudgeAtTokens: 400_000, nudgeAtPercent: 75, rule: "anthropic/claude-opus-5-5" }], "only the extension's record");
   const [row] = s.rows();
-  assert.deepEqual([row.eligible, row.arm, row.factors, row.reason], [false, undefined, undefined, "infinite-context.nudgeAtTokens: no level can be set for the session's model"]);
+  assert.deepEqual([row.eligible, row.arm, row.factors, row.reason], [false, undefined, undefined, "infinite-context.nudgeAtTokens: no level can be set for the session's model (the matched rule has no range)"]);
   await s.prompt();
   assert.deepEqual(s.lineState(), { v: 400_000, s: "fixed" }, "the extension's own (configured) limit, recorded by the meter without an assignment: nothing to refuse");
 });
