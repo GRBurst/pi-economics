@@ -230,7 +230,8 @@ itself, in the control tier (read back at `before_agent_start`; main sessions on
 omits `cache-lifecycle.mainCacheTtl`): `pi.thinkingLevel` (levels from
 `off`, `minimal`, `low`, `medium`, `high`, `xhigh`; read back is the session's effective level) and
 `pi.activeTool(<name>)` (levels `false` and `true`: the tool in or out of the active set; a tool pi does not
-register is refused up front). The module refuses levels pi does not accept
+register is refused up front). A resumed or reloaded session keeps the level pi restored: the engine only reads it
+back there (`refused` when it is not the assigned level). The module refuses levels pi does not accept
 (`pi-economics: experiments factor <f> in stratum <s> has a level that <lever> does not accept`); the first level is the
 baseline, so `[false, true]` for a tool that is off by default.
 A third kind seeds any extension that adopts a value recorded on the session branch the way infinite-context does,

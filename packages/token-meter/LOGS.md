@@ -241,7 +241,9 @@ session runs with, where `pi.defaultThinkingLevel` is the configured default) an
 whether `getActiveTools` lists the tool; a tool pi does not register is infeasible and reads back `fixed`: nobody chose that). A
 value other than the assigned one is `refused`, with source `fixed` when it is what pi reported right after the engine set it
 (pi clamped the level to the model's, or would not activate the tool) and `ext` otherwise (another extension, `/thinking` or pi's reset at a model switch changed it afterwards: the
-source does not tell them apart). The data-only seed kind `session-entry(<customType>,<field>)` (redesign M7c; tier `seed`,
+source does not tell them apart). In a resumed or reloaded session pi restores the level before the engine starts, so
+the engine does not set `pi.thinkingLevel` there (the active tools are still set): it reads back what the session runs with,
+`refused` and `fixed` when that is not the assigned level (a change after the start: `ext`). The data-only seed kind `session-entry(<customType>,<field>)` (redesign M7c; tier `seed`,
 read back at `before_agent_start`, also in a child, seeded with its root's level) appends the custom entry `{ <field>: <level> }`
 to the session branch before an extension that adopts recorded values reads it, and reads back the latest entry of that type:
 the seed when the target adopted it, the target's own record (`refused`, source `ext`) when it drew another value. A record whose field holds no level a levers line can carry (an object, `null`, a string that is no level

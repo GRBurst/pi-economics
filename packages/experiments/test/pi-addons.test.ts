@@ -209,8 +209,8 @@ test("T7b.1 an add-on whose apply throws (pi's control before it is active) is w
 });
 
 // The engine: pi's control reaches the add-ons through the shell's pi, at session_start and before_agent_start.
-function engine(factors: unknown[], controlOptions?: Parameters<typeof fakeControl>[0]) {
-  const agentDir = mkdtempSync(join(tmpdir(), "experiments-pi-"));
+function engine(factors: unknown[], controlOptions?: Parameters<typeof fakeControl>[0], resume?: { agentDir: string; branch: unknown[] }) {
+  const agentDir = resume?.agentDir ?? mkdtempSync(join(tmpdir(), "experiments-pi-"));
   const f = fakePi(controlOptions);
   const heard: Levers[] = [];
   onAssigned(f.events, (l) => void heard.push(l));
@@ -218,11 +218,11 @@ function engine(factors: unknown[], controlOptions?: Parameters<typeof fakeContr
   install(f.pi, { agentDir, settings, rng: () => 0.5, api: () => undefined });
   const ctx = (sid: string) => ({
     model: { provider: "openai", id: "gpt-5" },
-    sessionManager: { getSessionId: () => sid, getSessionDir: () => join(agentDir, "sessions"), getSessionFile: () => join(agentDir, "sessions", `x_${sid}.jsonl`), getBranch: () => [] },
+    sessionManager: { getSessionId: () => sid, getSessionDir: () => join(agentDir, "sessions"), getSessionFile: () => join(agentDir, "sessions", `x_${sid}.jsonl`), getBranch: () => resume?.branch ?? [] },
   });
-  const start = (sid: string) => f.fire("session_start", { type: "session_start", reason: "startup" }, ctx(sid));
+  const start = (sid: string) => f.fire("session_start", { type: "session_start", reason: resume === undefined ? "startup" : "resume" }, ctx(sid));
   const prompt = (sid: string) => f.fire("before_agent_start", { type: "before_agent_start", prompt: "x" }, ctx(sid));
-  return { ...f, heard, start, prompt };
+  return { ...f, heard, start, prompt, agentDir };
 }
 
 test("T7b.3 the engine: the level is set at session_start (no target to wait for), read back at the first prompt, a later change is published as refused", () => {
@@ -258,6 +258,34 @@ test("T7b.2 the engine: an unknown tool is refused up front (never set), the res
   const g = a.factors!.ghost.assigned; // observed: not active (there is no such tool)
   assert.deepEqual(a.levers[tool("ghost")], g === true ? { v: false, s: "fixed", a: true, rb: "refused", tier: "control" } : { v: false, s: "fixed" });
   assert.equal(a.levers[THINK].rb, "confirmed");
+});
+
+// Review F2 (probed on pi 1.4: a resumed session restores its thinking level BEFORE session_start): the engine does not set
+// the level again over what pi restored (the session's own, maybe changed since); it only reads it back.
+test("F2 the engine: a resumed or reloaded session's thinking level is observed, never set again (tools are still applied)", () => {
+  const factors = [{ name: "think", lever: THINK, levels: ["medium", "high"] }, { name: "codemode", lever: tool("codemode"), levels: [false, true] }];
+  const first = engine(factors);
+  first.start("s1");
+  assert.deepEqual(first.control.calls.filter((c) => c.startsWith("thinking:")).length, 1, "a new session: the level is set");
+  const entry = first.entries[0];
+  const a = (entry.data as { factors: Record<string, { assigned: unknown }> }).factors;
+
+  const second = engine(factors, { level: "low", active: ["read"], all: ["read", "codemode"] }, { agentDir: first.agentDir, branch: [entry] });
+  second.start("s1");
+  assert.deepEqual(second.control.calls.filter((c) => c.startsWith("thinking:")), [], "pi restored the level: not overridden");
+  assert.equal(second.control.level, "low");
+  assert.equal(second.control.calls.some((c) => c.startsWith("tools:")), a.codemode.assigned === true, "the tools are applied as in a new session");
+  second.prompt("s1");
+  assert.deepEqual(second.heard.at(-1)!.levers[THINK], { v: "low", s: "fixed", a: a.think.assigned, rb: "refused", tier: "control" }, "what runs is what pi restored");
+  second.pi.setThinkingLevel("minimal");
+  second.prompt("s1");
+  assert.equal(second.heard.at(-1)!.levers[THINK].s, "ext", "a change after the start is an extension's or the user's");
+
+  const same = engine(factors, { level: String(a.think.assigned), all: ["read", "codemode"] }, { agentDir: first.agentDir, branch: [entry] });
+  same.start("s1");
+  same.prompt("s1");
+  assert.deepEqual(same.control.calls.filter((c) => c.startsWith("thinking:")), []);
+  assert.equal(same.heard.at(-1)!.levers[THINK].rb, "confirmed", "the restored level is the assigned one");
 });
 
 test("T7b.1 the engine: a child runs its root's arm but never takes pi's controls (its level and tools stay the actor's)", () => {

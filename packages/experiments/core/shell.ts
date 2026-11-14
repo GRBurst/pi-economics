@@ -146,9 +146,11 @@ export function install(pi: PiLike, deps: Deps): void {
   /** What a session offers its add-ons now: its current model, its branch and its entry writer (seed tier, §7.4). */
   const live = new Map<string, { model?: ModelRef; branch: () => readonly unknown[] }>();
   const modelOf = (m: unknown): ModelRef | undefined => (isRecord(m) ? { ...(typeof m.provider === "string" ? { provider: m.provider } : {}), ...(typeof m.id === "string" ? { id: m.id } : {}) } : undefined);
+  /** The sessions whose assignment this runtime adopted instead of drawing (a resumed or reloaded branch, a row): pi restored their state. */
+  const kept = new Set<string>();
   const sessionOf = (sid: string, event?: unknown): SessionCtx => {
     const l = live.get(sid);
-    return { sessionId: sid, ...(event === undefined ? {} : { event }), ...(l?.model === undefined ? {} : { model: l.model }), ...(l === undefined ? {} : { branch: l.branch }), appendEntry: (t, d) => pi.appendEntry(t, d) };
+    return { sessionId: sid, ...(event === undefined ? {} : { event }), ...(l?.model === undefined ? {} : { model: l.model }), ...(l === undefined ? {} : { branch: l.branch }), ...(kept.has(sid) ? { resumed: true as const } : {}), appendEntry: (t, d) => pi.appendEntry(t, d) };
   };
   const watch = (sid: string, ctx: any): void => {
     const sm = safe(() => ctx.sessionManager);
@@ -237,6 +239,10 @@ export function install(pi: PiLike, deps: Deps): void {
     } catch { return []; }
   };
   /** A session's row: v2 → its Assigned; a v1 engine's row → its arm, design and flags (as factors). */
+  const keep = (a: Assigned): void => {
+    kept.add(a.sessionId);
+    adopt(a);
+  };
   const fromRow = (r: Row): Assigned | undefined => {
     if (r.v === 2) return typeof r.eligible === "boolean" ? assignedOf(r as Row & { eligible: boolean }) : undefined;
     if (typeof r.arm !== "string" || !isRecord(r.flags)) return undefined;
@@ -369,10 +375,10 @@ export function install(pi: PiLike, deps: Deps): void {
     // Resumed or reloaded: the branch's own entry (a fork's names the session it was forked from: a new unit), else the
     // session's row (a v1 engine's included).
     const entry = fromBranch(safe(() => ctx.sessionManager.getBranch()), main);
-    if (entry !== undefined) return adopt(entry);
+    if (entry !== undefined) return keep(entry);
     const prior = rows().find((r) => r.sessionId === main);
     const resumed = prior && fromRow(prior);
-    if (resumed) return adopt(resumed);
+    if (resumed) return keep(resumed);
     const row = assignNew(main, safe(() => ctx.model), ctx);
     const a = assignedOf(row);
     try {

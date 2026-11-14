@@ -36,7 +36,9 @@ function thinkingLevel(pi: PiControl): Lever<string> {
     id: "pi.thinkingLevel", target: "pi", scope: "session", tier: "control", readBackAt: "before_agent_start", mainOnly: true,
     feasible: (env, levels) => (env.child ? [] : levels.filter((l) => (THINKING_LEVELS as readonly string[]).includes(l))),
     apply(ctx, level) {
-      pi.setThinkingLevel(level);
+      // A resumed or reloaded session: pi restored its thinking level before the engine started (the session's own, perhaps
+      // changed since), so the engine does not set it over that; the read-back reports what runs (review F2, probed on pi 1.4).
+      if (ctx.resumed !== true) pi.setThinkingLevel(level);
       const now = safe(() => pi.getThinkingLevel());
       if (typeof now === "string") settled.set(ctx.sessionId, now);
     },

@@ -22,6 +22,8 @@ export type TargetEnv = { child: boolean; model?: ModelRef };
  * The session an add-on acts in; `event` is the hook's event at read-back (message_end: `{ message }`). `model` is the
  * session's current model; `branch` reads the session's branch (custom entries included) and `appendEntry` adds a custom
  * entry to it, for the seed tier, which writes the target's own durable input (§7.4). Absent where the host has none.
+ * `resumed`: the engine adopted the session's assignment instead of drawing it (a resumed or reloaded branch), so pi had
+ * restored the session's own state (its thinking level) before the engine started; a control lever then only observes.
  */
 export type SessionCtx = {
   sessionId: string;
@@ -29,6 +31,7 @@ export type SessionCtx = {
   model?: ModelRef;
   branch?(): readonly unknown[];
   appendEntry?(customType: string, data: unknown): void;
+  resumed?: true;
 };
 
 /** What a factor says about its lever beyond the id: `target`, the extension whose tool or command shows it is loaded (seed kinds, review F1b). */
