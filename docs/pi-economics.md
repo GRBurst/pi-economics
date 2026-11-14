@@ -237,7 +237,8 @@ A third kind seeds any extension that adopts a value recorded on the session bra
 without the repository naming it: `session-entry(<customType>,<field>)` (seed tier). The engine appends the custom entry
 `{ <field>: <level> }` at its own session start, before the target reads the branch (it does not append again when the
 latest record already holds the level, a reload), and reads back the latest entry of that type at `before_agent_start`: the
-target's own record (source `ext`, `refused`) when it drew another value. The seed is no evidence of anything, so the factor
+target's own record (source `ext`, `refused`) when it drew another value. A record whose field holds no level a levers line can carry (an object, `null`, a string
+that is no level name) is another value, recorded as `invalid`. The seed is no evidence of anything, so the factor
 names its `target` (`{ name, lever, levels, target }`: a name pi lists as a tool or a command, e.g. the extension's
 command): `confirmed` needs the target listed at read-back and the latest record to hold the level, else the state stays
 `unverified` (no target, target not listed, or a record of the type that predates the seed and differs: a target that

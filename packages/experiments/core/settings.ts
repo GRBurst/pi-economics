@@ -124,6 +124,8 @@ export type Strata = { strata: Record<string, StratumSpec>; warnings: string[] }
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
 /** A level name (`medium`, `5m`, `1h`): the levers line records no other text (token-meter core/levers.ts holds the same literal; the module-eval case experiments-level-names keeps the two lines equal). */
 const LEVEL = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+/** A value the levers line can carry (token-meter's rule: its writer drops a line with any other): a level name, a finite number or a boolean. */
+export const isRecordable = (v: unknown): v is Level => typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && LEVEL.test(v));
 const isLevel = (v: unknown): v is Level => typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v));
 const nonEmptyListOf = <T>(v: unknown, is: (x: unknown) => x is T): v is T[] => Array.isArray(v) && v.length > 0 && v.every(is);
 /** The first key of `o` not in `known` (a misspelt key would otherwise widen the stratum or drop its factors). */

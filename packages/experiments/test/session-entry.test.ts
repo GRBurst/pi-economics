@@ -90,11 +90,11 @@ test("T7c.2 the target redraws and records its own value (an out-of-range seed, 
   assert.deepEqual(s.states()[ID], { v: 175, s: "ext", a: 100, rb: "refused", tier: "seed" });
 });
 
-test("T7c.2 only the customType's entries count, the latest wins, an entry without the field or with a non-level value shows nothing", () => {
+test("T7c.2 only the customType's entries count, the latest wins, an entry without the field shows nothing", () => {
   const r = rig();
   const s = r.session(100);
   s.refresh();
-  r.branch.push(custom("other:settings", { nudge: 999 }), { type: "message" } as unknown as Entry, custom("entry-ext:settings", { other: 1 }), custom("entry-ext:settings"), custom("entry-ext:settings", { nudge: { x: 1 } }), custom("entry-ext:settings", { nudge: Number.NaN }), custom("entry-ext:settings", { nudge: null }));
+  r.branch.push(custom("other:settings", { nudge: 999 }), { type: "message" } as unknown as Entry, custom("entry-ext:settings", { other: 1 }), custom("entry-ext:settings"), custom("entry-ext:settings", { nudge: undefined }));
   s.observe("before_agent_start", r.at);
   assert.equal(s.states()[ID].rb, "unverified", "nothing seen: no claim");
   r.branch.push(custom("entry-ext:settings", { nudge: 200 }));
@@ -103,6 +103,28 @@ test("T7c.2 only the customType's entries count, the latest wins, an entry witho
   r.branch.push(custom("entry-ext:settings", { nudge: 100 }));
   s.observe("before_agent_start", r.at);
   assert.equal(s.states()[ID].rb, "confirmed", "the latest entry wins");
+});
+
+test("F3 a record whose field holds no level (an object, null, NaN, a string that is no level name) is the target's own value: refused, with a value a levers line can carry, source ext", () => {
+  const bad: unknown[] = [{ x: 1 }, [1], null, Number.NaN, Number.POSITIVE_INFINITY, "Not A Level", "", "x".repeat(33), "-lead", "a b"];
+  for (const v of bad) {
+    const r = rig();
+    const s = r.session(100);
+    s.refresh();
+    r.branch.push(custom("entry-ext:settings", { nudge: v }));
+    assert.equal(s.observe("before_agent_start", r.at), true, JSON.stringify(v));
+    assert.deepEqual(s.states()[ID], { v: "invalid", s: "ext", a: 100, rb: "refused", tier: "seed" }, String(v));
+    assert.deepEqual(violations(s.states()[ID]), [], "token-meter would keep the line");
+  }
+  // The recorded value is never the assigned level (that would read back as confirmed).
+  const r = rig();
+  const s = r.session("invalid", ["invalid", "valid"]);
+  s.refresh();
+  r.branch.push(custom("entry-ext:settings", { nudge: { x: 1 } }));
+  s.observe("before_agent_start", r.at);
+  assert.equal(s.states()[ID].rb, "refused");
+  assert.notEqual(s.states()[ID].v, "invalid");
+  assert.deepEqual(violations(s.states()[ID]), []);
 });
 
 test("T7c.2 a read-back without a branch (a host that does not give one) or with a throwing getter shows nothing", () => {
@@ -124,7 +146,7 @@ test("T7c property: ∀ assigned level, ∀ later entry the state keeps every §
   const levels: Level[] = ["a", "b", 1, 2, true, false];
   let seen = 0;
   for (const a of levels) {
-    for (const later of [undefined, ...levels]) {
+    for (const later of [undefined, ...levels, "Not A Level", null, Number.NaN, { x: 1 }]) {
       const r = rig();
       const s = r.session(a, levels);
       s.refresh();

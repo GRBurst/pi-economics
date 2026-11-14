@@ -9,6 +9,7 @@
 // its root's level, and a target loaded there adopts or redraws as in a main.
 import type { Kind, Lever, Observed, SessionCtx } from "./types.ts";
 import type { Level } from "../core/design.ts";
+import { isRecordable } from "../core/settings.ts";
 
 /** What the add-on uses of pi's ExtensionAPI: the entry writer, and the listings that show a target is loaded (tools, commands). */
 export type Appender = {
@@ -28,7 +29,8 @@ export function parseSessionEntry(id: string): { customType: string; field: stri
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
-const isLevel = (v: unknown): v is Level => typeof v === "string" || typeof v === "boolean" || (typeof v === "number" && Number.isFinite(v));
+/** What the read-back shows for a record whose field holds no usable level: a value a levers line can carry (token-meter drops a line with any other) that is never the assigned level (that would read back as confirmed). */
+const unusable = (assigned: Level | undefined): Level => (assigned === "invalid" ? "invalid-value" : "invalid");
 
 /** The index and data of the latest entry of `customType` on a branch (oldest first), or undefined. */
 function latest(branch: readonly unknown[], customType: string): { at: number; data: unknown } | undefined {
@@ -73,7 +75,9 @@ function sessionEntry(pi: Appender, customType: string, field: string, target: s
       const seed = seeded.get(ctx.sessionId);
       if (seed?.recordBefore && l.at <= seed.at) return undefined; // the latest record is our own seed, over another one: nothing from the target yet
       const v = isRecord(l.data) ? l.data[field] : undefined;
-      if (!isLevel(v) || (v === seed?.level && !listed())) return undefined; // what would confirm needs the target listed; a contradiction refuses either way
+      if (v === undefined) return undefined; // the latest record has no value of the field: nothing to show
+      if (!isRecordable(v)) return { v: unusable(seed?.level), s: "ext" }; // review F3: the target's own record holds no level the line can carry
+      if (v === seed?.level && !listed()) return undefined; // what would confirm needs the target listed; a contradiction refuses either way
       return { v, s: "ext" }; // the latest entry of the type decides, whatever it holds
     },
   };

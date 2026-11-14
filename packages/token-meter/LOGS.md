@@ -244,7 +244,8 @@ ignored the tool) and `ext` otherwise (another extension, `/thinking` or pi's re
 source does not tell them apart). The data-only seed kind `session-entry(<customType>,<field>)` (redesign M7c; tier `seed`,
 read back at `before_agent_start`, also in a child, seeded with its root's level) appends the custom entry `{ <field>: <level> }`
 to the session branch before an extension that adopts recorded values reads it, and reads back the latest entry of that type:
-the seed when the target adopted it, the target's own record (`refused`, source `ext`) when it drew another value. The factor declares a `target` (a name pi
+the seed when the target adopted it, the target's own record (`refused`, source `ext`) when it drew another value. A record whose field holds no level a levers line can carry (an object, `null`, a string that is no level
+name) counts as another value, recorded as `invalid` (never the assigned level). The factor declares a `target` (a name pi
 lists as a tool or a command): the seed is no evidence, a target pi lists is, so `confirmed` needs the target listed at the
 read-back and the latest record to hold the level; without a `target`, or with the target not listed, the state stays
 `unverified`. A record the target wrote that differs from the level is `refused` whether or not the target is listed. A
