@@ -119,7 +119,7 @@ export type BudgetSection = { /** The last line's ts: the calibration's "now" (r
   groups: Array<{ provider: string; kind: "5h" | "7d"; windows: Window[]; fit: Fit }>; spend: SpendRow[]; local: LocalRow[];
   /** Cash $ of the api class (USD) and the local cost of each rate's currency: one row per currency, never summed across them. */ costs: CurrencyRow[];
   /** The costs in USD, only when every currency converts with `currency.rates` (a single currency needs none). */ total?: { currency: "USD"; amount: number } };
-const REPORT_CURRENCY = "USD";
+const REPORT_CURRENCY = "USD" as const;
 
 const BILLINGS: readonly Billing[] = ["subscription", "api", "free", "local"];
 export { billingOfLine, billingTold };

@@ -281,5 +281,5 @@ test("T8.5 points5h: no fit or fewer than 8 complete windows (notEnough) is not 
 test("T8.5 a points stratum writes no posterior (the engine falls back to blocks): { } for the stratum", () => {
   const w = pointsWorld("points5h"), l = { ...logs(w.meter, w.rows), expSettings: w.expSettings };
   const state = applyKill({}, analyse(l));
-  assert.deepEqual(state.designs[D].api.posterior, {}, "pi-economics: points objective, no posterior");
+  assert.deepEqual((state.designs as any)[D].api.posterior, {}, "pi-economics: points objective, no posterior");
 });
