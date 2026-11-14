@@ -43,10 +43,12 @@ function writeIc(dir: string, file: unknown) {
  * One session. The extension reads its file in `icDir` (as pi's getAgentDir says when it is created); the engine and the
  * meter work in `peDir` (their agentDir) and read the rules from there. Equal directories are the normal case.
  */
-function session(o: { icDir: string; peDir: string; draw?: number; rng?: number }) {
+function session(o: { icDir: string; peDir: string; draw?: number; rng?: number; sid?: string; carried?: Entry[] }) {
   process.env.PI_CODING_AGENT_DIR = o.icDir;
   const handlers = new Map<string, Array<(e: unknown, ctx: unknown) => unknown>>();
-  const entries: Entry[] = [{ type: "message", id: "u1", parentId: null, message: { role: "user", content: "one", timestamp: 1 } }];
+  // `carried`: the entries of an earlier session's branch (a resumed session, a fork), after the first message.
+  const entries: Entry[] = [{ type: "message", id: "u1", parentId: null, message: { role: "user", content: "one", timestamp: 1 } }, ...(o.carried ?? [])];
+  const sid = o.sid ?? "s1";
   const tools: string[] = [];
   const emitter = new EventEmitter();
   const events = {
@@ -73,8 +75,8 @@ function session(o: { icDir: string; peDir: string; draw?: number; rng?: number 
     isProjectTrusted: () => false,
     get model() { return state.model; },
     sessionManager: {
-      getSessionId: () => "s1",
-      getSessionFile: () => "/sessions/s1.jsonl",
+      getSessionId: () => sid,
+      getSessionFile: () => `/sessions/${sid}.jsonl`,
       getSessionDir: () => "/sessions",
       getBranch: () => entries.map((e, i) => ({ ...e, parentId: i === 0 ? null : entries[i - 1].id })),
       buildSessionProjection: () => ({ entries: entries.filter((e) => e.type === "message").map((e) => ({ sourceEntry: e, messages: [e.message] })) }),
@@ -107,10 +109,12 @@ function session(o: { icDir: string; peDir: string; draw?: number; rng?: number 
   const lineState = () => lines().at(-1)?.levers?.[LEVER];
   /** The level the engine assigned. */
   const level = (): number => {
-    const e = entries.find((x) => x.customType === ENTRY);
+    const e = entries.findLast((x) => x.customType === ENTRY && (x.data as { sessionId?: string }).sessionId === sid);
     return (e?.data as { factors: { nudge: { assigned: number } } }).factors.nudge.assigned;
   };
-  return { entries, tools, state, start, select, prompt, records, lines, lineState, level };
+  /** The entries after the first message, as a later session carries them. */
+  const branch = () => entries.slice(1).map((e) => ({ ...e }));
+  return { entries, tools, state, start, select, prompt, records, lines, lineState, level, branch };
 }
 
 const dirOf = () => mkdtempSync(path.join(tmpdir(), "ic-seed-contract-"));
@@ -187,6 +191,64 @@ test("re-seeded: a switch to a rule with another range is seeded in that range b
   assert.equal(s.records().at(-2)!.nudgeAtTokens, b);
   await s.prompt();
   assert.deepEqual(s.lineState(), { v: b, s: "pe", a: b, rb: "confirmed", tier: "seed" });
+});
+
+test("a top-level range names no rule: the seed has no rule, the real extension keeps it, the levers line says confirmed", async () => {
+  const levels = new Set<number>();
+  for (const rng of [0, 0.4, 0.99]) {
+    const dir = dirOf();
+    writeIc(dir, { nudgeAtTokens: [100_000, 200_001] });
+    const s = session({ icDir: dir, peDir: dir, rng });
+    await s.start(haiku);
+    levels.add(s.level());
+    const a = at([100_000, 200_001], s.level());
+    assert.deepEqual(s.records(), [{ nudgeAtTokens: a, nudgeAtTokensRange: [100_000, 200_001] }, { nudgeAtTokens: a, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_001] }]);
+    await s.prompt();
+    assert.deepEqual(s.lineState(), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
+  }
+  assert.deepEqual([...levels].sort(), [0.25, 0.75]);
+});
+
+test("resume: the same session on its carried branch keeps its level, seeds nothing and the extension appends nothing", async () => {
+  const dir = dirOf();
+  writeIc(dir, FILE);
+  const first = session({ icDir: dir, peDir: dir, rng: 0.1 });
+  await first.start(haiku);
+  await first.prompt();
+  const q = first.level();
+  const a = at([100_000, 200_001], q);
+  // Another engine draw: a fresh assignment would differ; a resumed one is the branch's.
+  const resumed = session({ icDir: dir, peDir: dir, rng: 0.9, carried: first.branch() });
+  const before = resumed.entries.length;
+  await resumed.start(haiku);
+  assert.equal(resumed.entries.length, before, "no assignment entry, no seed, no record of the extension's");
+  assert.equal(resumed.level(), q);
+  await resumed.prompt();
+  assert.deepEqual(resumed.lineState(), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
+});
+
+test("fork: a new session id on a carried branch is a new unit — its own draw, its own seed where the level's tokens differ, confirmed", async () => {
+  const dir = dirOf();
+  writeIc(dir, FILE);
+  const first = session({ icDir: dir, peDir: dir, rng: 0.1 });
+  await first.start(haiku);
+  await first.prompt();
+  const q1 = first.level();
+  // An engine draw that gives the fork the other level (both levels are reachable: see "adopted").
+  let fork: ReturnType<typeof session> | undefined;
+  for (const rng of [0, 0.2, 0.4, 0.6, 0.8, 0.99]) {
+    const candidate = session({ icDir: dir, peDir: dir, rng, sid: "s2", carried: first.branch() });
+    await candidate.start(haiku);
+    if (candidate.level() !== q1) { fork = candidate; break; }
+  }
+  assert.ok(fork, "a fork whose level differs");
+  const q2 = fork!.level();
+  const b = at([100_000, 200_001], q2);
+  assert.equal(fork!.entries.filter((e) => e.customType === ENTRY).length, 2, "the carried assignment (named s1) and the fork's own");
+  assert.deepEqual(fork!.records().slice(-2), [{ nudgeAtTokens: b, nudgeAtTokensRange: [100_000, 200_001], rule: "anthropic" }, { nudgeAtTokens: b, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_001], rule: "anthropic" }]);
+  await fork!.prompt();
+  assert.equal(fork!.lines().at(-1).sessionId, "s2");
+  assert.deepEqual(fork!.lineState(), { v: b, s: "pe", a: b, rb: "confirmed", tier: "seed" });
 });
 
 test("equivalence: matchRule is the extension's rule resolution for nudgeAtTokens, over a generated table of files and models", () => {
