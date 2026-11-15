@@ -95,12 +95,14 @@ about pi. It lives in a standalone repository, `~/projects/gemini-research-clean
   too, and `docs/research/cleanup.md` there names the tool and its version for
   each batch.
 
-## Current state (2026-11-14)
+## Current state (2026-11-15)
 
 0.3.0 is released: it contains neither the router nor the actor nor the retry component, and
 the redesign is implemented (units, strata, levers, add-ons, load order). 0.3.1 locks the
 published inputs the checks read: pi-task-router v0.2.0 and pi-setup with the actor and the
 bridge that forwards the agent directory.
+0.3.2 builds pi-infinite-context from upstream unpatched (0c7f021, at least 9c08a04: limits
+per exact model in `modelOverrides`), and `infiniteContext.reminders` takes upstream's names.
 The quota waiter and its metering come after 0.3.0. Local mode is disabled in the author's setup. The raw
 research exports of batch 4 (review economics, two local-harness reports, a
 note) were cleaned with `gdr-clean` in pi-task-router; a later batch is

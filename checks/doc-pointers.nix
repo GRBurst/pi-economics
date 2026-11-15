@@ -211,6 +211,25 @@
         t = "reminders patch";
         unless = ["0.3.1" "dropped" "gone"];
       }
+      # (0.3.2) The tools of upstream 0c7f021: `to` is required (9f74dda), the
+      # map has one line per tool unit with bare ids (f7d598d), no unfold tool.
+      {
+        f = "docs/context-folding.md";
+        t = "`{from, to?, summary}`";
+      }
+      {
+        f = "docs/context-folding.md";
+        t = "defaults to `from`";
+        unless = ["used to"];
+      }
+      {
+        f = "docs/context-folding.md";
+        t = "`[#id] <role>";
+      }
+      {
+        f = "modules/infinite-context.nix";
+        t = "context_unfold";
+      }
     ]
     ++ lib.concatMap (f: [
       {

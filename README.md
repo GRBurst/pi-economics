@@ -46,8 +46,9 @@ What is logged and measured, and how to run the reports and the bench:
 Add the flake as an input and let it follow your `nixpkgs` and `home-manager`
 (its one upstream extension, pi-infinite-context, is a `flake = false` input,
 built unpatched since 0.3.2: the options follow the settings file of the
-revision in this flake's `flake.lock`; the inputs `pi-setup` and
-`pi-task-router` serve its checks only):
+revision in this flake's `flake.lock`, and a revision of yours must be
+upstream 9c08a04 or later, which an assertion checks; the inputs `pi-setup`
+and `pi-task-router` serve its checks only):
 
 ```nix
 inputs = {
@@ -113,8 +114,9 @@ fold-reminder limits per model itself (its `modelOverrides`, keyed like pi's
   the former key.
 - The branch's settings record (`infinite-context:settings`) no longer
   names the rule that set the limit. A branch keeps its drawn limit per
-  range: a switch to a model with the same range records nothing, a switch
-  back to an earlier range takes that range's earlier draw again.
+  range: a switch to a model with the same limits (range and percentage)
+  records nothing, a switch back to an earlier range takes that range's
+  earlier draw again.
 
 ```nix
 programs.piEconomics.infiniteContext.reminders = {

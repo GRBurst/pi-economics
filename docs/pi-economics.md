@@ -320,8 +320,13 @@ with a session file still run their root's arm).
 
 pi-infinite-context (upstream input `pi-infinite-context`), built unpatched
 since 0.3.2 (up to 0.3.1 a local patch added provider-wide rules; upstream
-now reads limits per model itself). It folds ranges of the agent's own
-conversation by message id and unfolds them on demand, and reminds the agent
+now reads limits per model itself). The input must be upstream 9c08a04 or
+later, the revision that brought `modelOverrides` and the re-resolution at
+`model_select` (the locked one is 0c7f021): an assertion fails when
+`<src>/extensions/infinite-context/settings.ts` does not mention
+`modelOverrides`, as an older extension would drop the overrides silently. It folds ranges of the agent's own
+conversation by message id and reads the folded originals back on demand
+(`context_peek`, `context_search`; there is no unfold), and reminds the agent
 to fold. Main sessions and children load it (`forChildren = true`).
 
 | Option | Default | Effect |
@@ -343,14 +348,16 @@ level and each override for its model. A range assigns each branch one limit,
 recorded as `infinite-context:settings` (`nudgeAtTokens`, `nudgeAtPercent`,
 `nudgeAtTokensRange`; no field names the override): the branch keeps the latest
 record of the same range whose value lies in it, so a model switch to a model
-with the same range records nothing, and a switch back to an earlier range takes
+with the same limits (range and `nudgeAtPercent`) records nothing (one with
+another `nudgeAtPercent` records the kept draw with it), and a switch back to an earlier range takes
 that range's earlier draw again; a range without such a record draws. A
 `model_select` re-resolves the limits once the extension has loaded (pi
 1.4 emits it for every change of a session's model). A record that an earlier
 handler appended is kept when it fits (that is how `experiments` seeds the
 limit of an experiment's arm, without the extension knowing it; the check
-`ic-seed-contract` holds that contract). Changes apply to sessions and
-subagents started after the switch.
+`ic-seed-contract` holds that contract). The extension reads the file once
+per load: a changed file (a Home Manager switch) applies to sessions and
+subagents started afterwards, or after `/reload`.
 
 Soft dependency, which does not warn: `cacheLifecycle`'s `context_peek` guard
 reads infinite-context's tools.

@@ -93,6 +93,9 @@ The Nix derivation names (`pi-<c>-<version>`) follow the manifests; module-eval 
   the module reads the input through its internal `src` option. Each
   `patches/<input>/` holds the upstream's `LICENSE` (the `license` check);
   the patch lists in the package files are explicit, so it is not a patch.
+  Since 0.3.2 pi-infinite-context is built unpatched (upstream 9c08a04 or
+  later, an assertion probes its `settings.ts`): `patches/pi-infinite-context/`
+  holds only its `LICENSE`.
 - `flake.lock` changes only when a task needs it.
 - The root `package.json` (the pi package manifest) is written only by
   `nix run .#render` and compared by `render-package`; never edit it by hand.

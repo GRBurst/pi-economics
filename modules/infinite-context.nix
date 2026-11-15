@@ -1,5 +1,6 @@
 # pi-infinite-context (spec §2, §4, §5.2): folds ranges of the agent's own
-# conversation and unfolds them on demand. The upstream extension, unpatched
+# conversation and reads the folded originals back on demand. The upstream
+# extension, unpatched
 # since 0.3.2 (packages/infinite-context/package.nix), linked through the
 # registry for sessions and children, and its settings file, always written.
 {
@@ -132,9 +133,10 @@ in {
             the top level (`nudgeAtTokens`, `nudgeAtPercent`), then the
             extension's 150000 tokens / 75%. The step between reminders is
             upstream's (15000 tokens, less when little room is left). A model
-            switch re-resolves the session's limits; the file is read once per
-            extension instance, so a change applies to sessions and subagents
-            started after the switch.
+            switch re-resolves the session's limits. The extension reads the
+            file once per load, so a changed file (a Home Manager switch)
+            applies to sessions and subagents started afterwards, or after
+            `/reload`.
           '';
         };
       }
@@ -207,7 +209,7 @@ in {
         checkPath = "${cfg.src}/extensions/infinite-context/index.ts";
         input = "pi-infinite-context";
         forChildren = true;
-        description = "context_map, context_fold, context_unfold, context_peek and context_search: folds ranges of the agent's own conversation by message id and unfolds them on demand, without rewriting live messages. Also reminds the agent to fold: by default from 150k tokens or 75% of the model window, whichever comes first, then every 15k tokens; the limits (a token limit may be a range, drawn per branch) come from infiniteContext.reminders, for all models and per exact model.";
+        description = "context_map, context_fold, context_peek and context_search: folds ranges of the agent's own conversation by message id and reads the folded originals back on demand, without rewriting live messages. Also reminds the agent to fold: by default from 150k tokens or 75% of the model window, whichever comes first, then every 15k tokens; the limits (a token limit may be a range, drawn per branch) come from infiniteContext.reminders, for all models and per exact model.";
       };
 
       # Always written, even with every option at its default: the path stays
