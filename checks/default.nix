@@ -183,11 +183,12 @@ in {
     experiments = ../packages/experiments;
     tokenMeter = ../packages/token-meter;
   };
-  # (0.3.3) cache-lifecycle's masks after infinite-context's folds: both context handlers chained in the module's load order.
+  # (0.3.3) cache-lifecycle's masks after infinite-context's folds, in the Nix route's and the package route's load order.
   context-chain = import ./context-chain {
-    inherit pkgs hm;
+    inherit lib pkgs hm;
     ic = infiniteContext;
     cacheLifecycle = ../packages/cache-lifecycle;
+    tokenMeter = ../packages/token-meter;
   };
   # (T2.1) The components' runtime check of __subagentsApi_v1 (core/runtime-guard.ts,
   # identical in each package: runtime-guard-copies; token-meter's is the reference).

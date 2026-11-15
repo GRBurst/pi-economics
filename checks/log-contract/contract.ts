@@ -161,7 +161,7 @@ async function mainSession(sid: string, child: string, usd: number): Promise<voi
   expFire("input", { text: "No, that's wrong, revert it", source: "interactive" }, sid);
   const ctx = cacheCtx(sid);
   cache.fire("session_start", { reason: "startup" }, ctx);
-  cache.call("context", { messages: coldMessages() }, ctx);
+  cache.call("context_with_system", { messages: coldMessages() }, ctx);
   tick(1);
   cache.fire("tool_call", { toolName: "context_peek", toolCallId: "p1", input: { id: "x" } }, ctx);
   for (let i = 0; i < 4; i++) turn(sid, undefined, undefined, usd);

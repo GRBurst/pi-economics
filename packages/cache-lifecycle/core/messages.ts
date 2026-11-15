@@ -1,5 +1,5 @@
 // Maps pi's context messages to masking entries and applies a mask set.
-// Message shapes: pi's docs/message-types.md. The `context` event carries no entry
+// Message shapes: pi's docs/message-types.md. The `context_with_system` event carries no entry
 // ids, so ids come from the messages themselves and survive across requests:
 //   tool result      tool:<toolCallId>
 //   thinking block   think:<responseId>:<blockIndex>   (signed: dropped whole, never edited)

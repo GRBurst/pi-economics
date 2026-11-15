@@ -69,12 +69,12 @@ test("maskOnCold from the channel: on → tools+thinking when the own setting is
   const run = (own: "off" | "tools", flag: string) => {
     const f = setup({ maskOnCold: own });
     engine(f, { maskOnCold: flag });
-    return f.call("context", { messages: [...msgs(), user("x"), asst("r4", [{ type: "text", text: big(500) }])] }, fakeCtx("s1"));
+    return f.call("context_with_system", { messages: [...msgs(), user("x"), asst("r4", [{ type: "text", text: big(500) }])] }, fakeCtx("s1"));
   };
   assert.match((run("off", "on") as any).messages[2].content[0].text, /^\[elided after cache expiry/);
   assert.match((run("tools", "on") as any).messages[2].content[0].text, /^\[elided/);
   assert.equal(run("tools", "off"), undefined);
-  assert.equal(setup({ maskOnCold: "off" }).call("context", { messages: msgs() }, fakeCtx("s1")), undefined);
+  assert.equal(setup({ maskOnCold: "off" }).call("context_with_system", { messages: msgs() }, fakeCtx("s1")), undefined);
 });
 
 test("T5b2.4 cache-lifecycle asks as the lever target: at session_start, and when it hears an assignment (an engine started after it)", () => {

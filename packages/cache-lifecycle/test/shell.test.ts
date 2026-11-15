@@ -27,7 +27,7 @@ const respond = (f: ReturnType<typeof fakePi>, c = ctx) => f.fire("after_provide
 
 test("cold first request: older tool results are stubbed and the masks are appended as a session entry", () => {
   const { f, clock } = setup();
-  const out = ctxOf(f.call("context", { messages: base() }, ctx))!;
+  const out = ctxOf(f.call("context_with_system", { messages: base() }, ctx))!;
   assert.match(out[2].content[0].text, /^\[elided after cache expiry: 3000 tok; tool bash call c1;/);
   assert.equal(out[4].content[0].text.length, 12000, "inside the protected tail: untouched");
   assert.deepEqual(f.appended, [{ type: "cache-lifecycle/masks", data: { ids: ["tool:c1"], at: clock.now } }]);
@@ -35,22 +35,22 @@ test("cold first request: older tool results are stubbed and the masks are appen
 
 test("warm follow-up request repeats the masked prefix byte for byte and appends nothing", () => {
   const { f, clock } = setup();
-  const first = ctxOf(f.call("context", { messages: base() }, ctx))!;
+  const first = ctxOf(f.call("context_with_system", { messages: base() }, ctx))!;
   respond(f);
   clock.now += 1 * MIN;
   const longer = [...base(), user("more"), asst("r4", [{ type: "text", text: big(4000) }])]; // a cold plan would now mask c2
-  const second = ctxOf(f.call("context", { messages: longer }, ctx))!;
+  const second = ctxOf(f.call("context_with_system", { messages: longer }, ctx))!;
   assert.equal(JSON.stringify(second.slice(0, first.length)), JSON.stringify(first));
   assert.equal(f.appended.length, 1);
 });
 
 test("a later cold request extends the masks with only the new ids", () => {
   const { f, clock } = setup();
-  f.call("context", { messages: base() }, ctx);
+  f.call("context_with_system", { messages: base() }, ctx);
   respond(f);
   clock.now += 6 * MIN;
   const longer = [...base(), user("more"), asst("r4", [{ type: "text", text: big(4000) }])];
-  const out = ctxOf(f.call("context", { messages: longer }, ctx))!;
+  const out = ctxOf(f.call("context_with_system", { messages: longer }, ctx))!;
   assert.deepEqual(f.appended.map((e) => (e.data as any).ids), [["tool:c1"], ["tool:c2"]]);
   assert.match(out[4].content[0].text, /^\[elided/);
 });
@@ -61,7 +61,7 @@ test("session_start rebuilds the masks from the branch: a resumed warm session s
   const resumed = fakeCtx("s2", { entries });
   f.fire("session_start", { reason: "resume" }, resumed);
   respond(f, resumed);
-  const out = ctxOf(f.call("context", { messages: base() }, resumed))!;
+  const out = ctxOf(f.call("context_with_system", { messages: base() }, resumed))!;
   assert.match(out[2].content[0].text, /^\[elided/);
   assert.equal(out[4].content[0].text.length, 12000);
   assert.deepEqual(f.appended, []);
@@ -69,24 +69,46 @@ test("session_start rebuilds the masks from the branch: a resumed warm session s
 
 test("masks belong to their session", () => {
   const { f } = setup();
-  f.call("context", { messages: base() }, ctx);
+  f.call("context_with_system", { messages: base() }, ctx);
   const other = fakeCtx("s3");
   respond(f, other);
-  assert.equal(f.call("context", { messages: base() }, other), undefined, "s3: warm and nothing masked there");
+  assert.equal(f.call("context_with_system", { messages: base() }, other), undefined, "s3: warm and nothing masked there");
 });
 
-test("maskOnCold off: context handler leaves messages alone", () => {
+test("maskOnCold off: the handler leaves messages alone", () => {
   const { f } = setup({ maskOnCold: "off" });
-  assert.equal(f.call("context", { messages: base() }, ctx), undefined);
+  assert.equal(f.call("context_with_system", { messages: base() }, ctx), undefined);
   assert.deepEqual(f.appended, []);
 });
 
 test("tools+thinking also drops old thinking blocks", () => {
   const { f } = setup({ maskOnCold: "tools+thinking" });
   const m = [user("go"), asst("r1", [{ type: "thinking", thinking: big(500) }, { type: "text", text: "a" }]), user("x"), asst("r2", [{ type: "text", text: big(4000) }])];
-  const out = ctxOf(f.call("context", { messages: m }, ctx))!;
+  const out = ctxOf(f.call("context_with_system", { messages: m }, ctx))!;
   assert.deepEqual(out[1].content, [{ type: "text", text: "a" }]);
   assert.deepEqual((f.appended[0].data as any).ids, ["think:r1:0"]);
+});
+
+// (0.3.3) pi runs context_with_system after every `context` handler, whatever the load order: the masks apply to what
+// they left (infinite-context's folded request), and no `context` handler meets a masked message.
+test("masking is a context_with_system handler: the context event is left alone", () => {
+  const { f } = setup();
+  assert.ok(!f.handlerNames().includes("context"), "no context handler");
+  assert.equal(f.call("context", { messages: base() }, ctx), undefined);
+  assert.deepEqual(f.appended, []);
+  assert.ok(ctxOf(f.call("context_with_system", { messages: base() }, ctx)));
+});
+
+test("system messages pass as the same objects: the leading one stays at index 0", () => {
+  const { f } = setup({ maskOnCold: "tools+thinking" });
+  const head = { role: "system", content: "prompt", sections: { a: "b" }, timestamp: 1 };
+  const later = { role: "system", content: "", toolsAdded: [{ name: "t" }], timestamp: 1 };
+  const m = [head, ...base().slice(0, 3), later, ...base().slice(3)];
+  const out = ctxOf(f.call("context_with_system", { messages: m }, ctx))!;
+  assert.match(out[3].content[0].text, /^\[elided/, "masked");
+  assert.equal(out[0], head);
+  assert.equal(out[4], later);
+  assert.equal(out.length, m.length);
 });
 
 // --- 1 h TTL for the main session ---
@@ -125,9 +147,9 @@ test("cache expiry follows the TTL in force: with 1h, six minutes after a reques
   const c = fakeCtx("main");
   f.fire("after_provider_response", { status: 200, headers: {} }, c);
   clock.now += 6 * MIN;
-  assert.equal(f.call("context", { messages: base() }, c), undefined);
+  assert.equal(f.call("context_with_system", { messages: base() }, c), undefined);
   clock.now += 55 * MIN;
-  assert.ok(f.call("context", { messages: base() }, c));
+  assert.ok(f.call("context_with_system", { messages: base() }, c));
 });
 
 // --- warming decision ---

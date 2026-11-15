@@ -124,7 +124,11 @@ export function install(pi: PiLike, deps: Deps) {
     return action && { action };
   });
 
-  pi.on("context", (e, ctx) => {
+  // (0.3.3) context_with_system, which pi runs after every `context` handler, whatever the load order: the masks apply
+  // to what those left (infinite-context's folded request), and none of them meets a masked message (infinite-context's
+  // overlay refuses a request whose projected messages an earlier handler changed). applyMasks returns a system message
+  // as the same object, so the leading one stays at index 0.
+  pi.on("context_with_system", (e, ctx) => {
     const sid = ctx.sessionManager.getSessionId();
     const include = levels[flag("maskOnCold", sid) as Settings["maskOnCold"]] ?? [];
     if (!include.length) return undefined;

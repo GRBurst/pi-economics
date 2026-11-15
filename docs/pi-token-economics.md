@@ -256,7 +256,9 @@ and `piSettings` puts the links at the front of `settings.json`'s `extensions` (
 entries by name; the children get the same order. pi chains `context` handlers in load order, and
 infinite-context's fold overlay refuses a request whose messages an earlier handler changed: so
 cache-lifecycle masks the request after it was folded (the check `context-chain`; 0.3.0 to 0.3.2
-loaded cache-lifecycle first, and a session with folds stopped at its first cold request). pi decides where a trusted project's extensions and
+loaded cache-lifecycle first, and a session with folds stopped at its first cold request). Since
+0.3.3 the masks are a `context_with_system` handler, which pi runs after every `context` handler, so
+the package route, where infinite-context starts after pi-economics, masks after the folds too. pi decides where a trusted project's extensions and
 `pi -e` ones go (the check does not cover them). With `piSettings.enable = false` nothing lists them: put
 `programs.piEconomics.loadOrder` at the front of `extensions` yourself (a warning says so). The
 package route (`pi install`) cannot reorder: move its entry first in `packages`. The check `load-order`

@@ -35,7 +35,7 @@ test("a context_peek call after a masking event on its session is logged (no arg
   f.fire("session_start", { reason: "startup" }, ctx);
   f.fire("tool_call", peek, ctx); // nothing masked yet
   assert.deepEqual(rows(), []);
-  f.call("context", { messages: msgs() }, ctx); // cold → masks c1
+  f.call("context_with_system", { messages: msgs() }, ctx); // cold → masks c1
   clock.now += MIN;
   f.fire("tool_call", peek, ctx);
   f.fire("tool_call", { ...peek, toolName: "context_map" }, ctx);
@@ -47,7 +47,7 @@ test("the line carries the session's experiment arm and design from the internal
   const { f, rows } = setup();
   f.pi.events.on("pi-economics:levers-query:v1", (q: any) => q.sessionId === "s1" && q.reply({ sessionId: "s1", eligible: true, arm: "+-+--", design: "0123456789ab", levers: {} }));
   const ctx = fakeCtx("s1");
-  f.call("context", { messages: msgs() }, ctx);
+  f.call("context_with_system", { messages: msgs() }, ctx);
   f.fire("tool_call", peek, ctx);
   assert.equal(rows()[0].arm, "+-+--");
   assert.equal(rows()[0].design, "0123456789ab");

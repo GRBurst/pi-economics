@@ -242,6 +242,8 @@
   # handlers in load order: (0.3.3) infinite-context's overlay refuses a
   # request whose projected messages another handler changed, so
   # cache-lifecycle masks after it, the folded request (checks/context-chain).
+  # Its masks are a context_with_system handler, after every `context` one,
+  # so the order is not their only guard (the package route loads IC last).
   firstNames = ["experiments" "token-meter" "infinite-context" "cache-lifecycle"];
   orderedNames = let
     names = lib.attrNames cfg.extensions;
