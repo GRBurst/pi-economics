@@ -102,6 +102,21 @@ in {
       };
     }) [];
 
+  # The module renders upstream's settings shape since 9c08a04 (modelOverrides,
+  # re-resolved at model_select). A consumer's input of an older upstream would
+  # ignore modelOverrides silently (fail-open), so the module probes the
+  # source (a path of the input, read at evaluation: no IFD).
+  infinite-context-upstream = let
+    old = "pi-economics: infiniteContext.src (the input pi-infinite-context) is older than upstream 9c08a04: its extensions/infinite-context/settings.ts reads no modelOverrides, so the extension would ignore reminders.modelOverrides; let the input follow 9c08a04 or later";
+  in
+    eq "an input before 9c08a04" (icFailed {src = ../fixtures/ic-before-9c08a04;}) [old]
+    ++ eq "an input before 9c08a04, overrides set" (icFailed {
+      src = ../fixtures/ic-before-9c08a04;
+      reminders.modelOverrides."a/b".nudgeAtTokens = 1;
+    }) [old]
+    ++ eq "a source without settings.ts" (icFailed {src = ../fixtures/ext-a;}) [old]
+    ++ eq "the locked input (control)" (icFailed {}) [];
+
   # (M6.8) Off by default: no registry entry, no file.
   infinite-context-off = let
     c = eval ".pi/agent" null;

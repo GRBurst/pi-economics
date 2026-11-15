@@ -72,6 +72,19 @@
   in
     lib.length parts >= 2 && lib.head parts != "" && lib.concatStringsSep "/" (lib.tail parts) != "";
 
+  # The settings shape the module renders is upstream's since 9c08a04 (its
+  # settings.ts unchanged up to 0c7f021, the locked revision). An older input
+  # would drop modelOverrides silently (fail-open), so the source is probed: a
+  # path of the input, read at evaluation (no IFD); a short file, searched
+  # without a regex.
+  settingsTs = "${cfg.src}/extensions/infinite-context/settings.ts";
+  readsModelOverrides =
+    builtins.pathExists settingsTs
+    && (let
+      t = builtins.readFile settingsTs;
+    in
+      builtins.replaceStrings ["modelOverrides"] [""] t != t);
+
   # 0.3.2: the options before upstream's names, hidden stubs. Defined, each
   # fails one assertion naming its replacement (modules/removed.nix's pattern).
   renamed = {
@@ -178,6 +191,12 @@ in {
           }
         ])
         namedRules
+        ++ [
+          {
+            assertion = readsModelOverrides;
+            message = "pi-economics: infiniteContext.src (the input pi-infinite-context) is older than upstream 9c08a04: its extensions/infinite-context/settings.ts reads no modelOverrides, so the extension would ignore reminders.modelOverrides; let the input follow 9c08a04 or later";
+          }
+        ]
         ++ map (key: {
           assertion = exactKey key;
           message = "pi-economics: infiniteContext.reminders.modelOverrides key ${builtins.toJSON key} is no exact \"provider/modelId\": the extension matches an override by the exact model only, so this one would apply to none";
