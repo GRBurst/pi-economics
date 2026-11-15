@@ -238,7 +238,7 @@ writes: `5m`, no cache write: nothing seen); `warmPolicy` and `maskOnCold` have 
 is a main session's lever: cache-lifecycle writes 5 m in a child whatever the arm says, so a child's levers line carries
 no entry for it.
 The seed tier adds `infinite-context.nudgeAtTokens` (redesign M7a) in a session whose factor is on it: `v` and `a` are
-tokens (the level is a fraction of the matched rule's range), `rb` is read from infinite-context's settings record on the branch
+tokens (the level is a fraction of the range the session's model resolves to: its `modelOverrides` key, else the top level), `rb` is read from infinite-context's settings record on the branch
 (`confirmed`; an extension that redrew: `refused`, `s: "ext"`, `v` = its draw), and a rule that is a fixed number gives `refused`,
 `s: "fixed"`, `a` = the level (a fraction: there are no tokens to assign).
 Two data-only kinds set pi itself (redesign M7b; tier `control`, read back at `before_agent_start`, a main session's levers: a

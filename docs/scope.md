@@ -18,7 +18,7 @@ drive work. Everything below stays:
 | `experiments` | one randomized arm per main session and setup (stratum), levers assigned through add-ons and read back |
 | `bench` | `pi-bench`, blind judges, bootstrap reports, process-scope pi levers |
 | `cacheLifecycle` | stale-result elision, cache warming (a cost mechanism) |
-| `infiniteContext` | context folding: reminders, their limits per provider or model |
+| `infiniteContext` | context folding: reminders, their limits for all models and per exact model |
 | `piSettings` | the settings.json migration |
 
 pi-economics keeps **observing** the router after the split: the meter reads

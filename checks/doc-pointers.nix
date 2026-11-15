@@ -124,77 +124,110 @@
     }
   ];
   # What the redesign replaced, said nowhere as present: (document, phrase) pairs.
-  replaced = [
-    {
-      f = "packages/token-meter/LOGS.md";
-      t = "does not inherit its arm again";
-    }
-    {
-      f = "docs/pi-token-economics.md";
-      t = "task-router and experiments are main";
-    }
-    {
-      f = "docs/pi-token-economics.md";
-      t = "`maxArms: 16`";
-    }
-    {
-      f = "README.md";
-      t = "two patched upstreams";
-    }
-    {
-      f = "README.md";
-      t = "Three components build patched copies";
-    }
-    {
-      f = "docs/scope.md";
-      t = "nothing here implements it";
-    }
-    # The removed component is named only as removed (a migration sentence the upgrader searches for).
-    {
-      f = "docs/pi-token-economics.md";
-      t = "pi-retry";
-      unless = ["removed" "former" "left" "gone"];
-    }
-    {
-      f = "README.md";
-      t = "pi-retry";
-      unless = ["removed" "former" "left" "gone"];
-    }
-    {
-      f = "docs/pi-economics.md";
-      t = "pi-retry";
-      unless = ["removed" "former" "left" "gone"];
-    }
-    # (redesign M11, review) What the review found overclaimed or stale.
-    {
-      f = "docs/pi-token-economics.md";
-      t = "listed as not observable with the reason";
-    }
-    {
-      f = "docs/pi-token-economics.md";
-      t = "ineligible session's row says why";
-    }
-    {
-      f = "skills/pi-token-economics-analysis/SKILL.md";
-      t = "a reason: no matching stratum, mode off";
-    }
-    {
-      f = "packages/token-meter/LOGS.md";
-      t = "of a run before 2026-11";
-    }
-    {
-      f = "modules/experiments.nix";
-      t = "fractional-factorial arm per";
-    }
-    {
-      f = "packages/experiments/package.json";
-      t = "ractional-factorial arm per";
-    }
-    {
-      f = "README.md";
-      t = "still start first";
-    }
-  ];
+  replaced =
+    [
+      {
+        f = "packages/token-meter/LOGS.md";
+        t = "does not inherit its arm again";
+      }
+      {
+        f = "docs/pi-token-economics.md";
+        t = "task-router and experiments are main";
+      }
+      {
+        f = "docs/pi-token-economics.md";
+        t = "`maxArms: 16`";
+      }
+      {
+        f = "README.md";
+        t = "two patched upstreams";
+      }
+      {
+        f = "README.md";
+        t = "Three components build patched copies";
+      }
+      {
+        f = "docs/scope.md";
+        t = "nothing here implements it";
+      }
+      # The removed component is named only as removed (a migration sentence the upgrader searches for).
+      {
+        f = "docs/pi-token-economics.md";
+        t = "pi-retry";
+        unless = ["removed" "former" "left" "gone"];
+      }
+      {
+        f = "README.md";
+        t = "pi-retry";
+        unless = ["removed" "former" "left" "gone"];
+      }
+      {
+        f = "docs/pi-economics.md";
+        t = "pi-retry";
+        unless = ["removed" "former" "left" "gone"];
+      }
+      # (redesign M11, review) What the review found overclaimed or stale.
+      {
+        f = "docs/pi-token-economics.md";
+        t = "listed as not observable with the reason";
+      }
+      {
+        f = "docs/pi-token-economics.md";
+        t = "ineligible session's row says why";
+      }
+      {
+        f = "skills/pi-token-economics-analysis/SKILL.md";
+        t = "a reason: no matching stratum, mode off";
+      }
+      {
+        f = "packages/token-meter/LOGS.md";
+        t = "of a run before 2026-11";
+      }
+      {
+        f = "modules/experiments.nix";
+        t = "fractional-factorial arm per";
+      }
+      {
+        f = "packages/experiments/package.json";
+        t = "ractional-factorial arm per";
+      }
+      {
+        f = "README.md";
+        t = "still start first";
+      }
+      # (0.3.2) pi-infinite-context is upstream's, unpatched: overrides per exact
+      # model only, no provider rules, no reminders patch; the old option names
+      # only as renamed or removed.
+      {
+        f = "README.md";
+        t = "pi-infinite-context with one patch";
+      }
+      {
+        f = "docs/pi-token-economics.md";
+        t = "1 patch in `patches/pi-infinite-context/`";
+      }
+      {
+        f = "docs/pi-economics.md";
+        t = "reminders patch";
+        unless = ["0.3.1" "dropped" "gone"];
+      }
+    ]
+    ++ lib.concatMap (f: [
+      {
+        inherit f;
+        t = "per provider or model";
+      }
+      {
+        inherit f;
+        t = "reminders.overrides";
+        unless = ["renamed"];
+      }
+      {
+        inherit f;
+        t = "reminders.default";
+        unless = ["removed"];
+      }
+    ]) ["README.md" "docs/pi-economics.md" "docs/pi-token-economics.md" "docs/scope.md" "packages/token-meter/LOGS.md"];
   # The Checks table of docs/pi-economics.md: its lines, and a row's first cell.
   checksTable = takeWhile (l: !lib.hasPrefix "## " l) (lib.tail (dropWhile (l: l != "## Checks") economics));
   firstCell = l: builtins.head (lib.splitString " | " l);

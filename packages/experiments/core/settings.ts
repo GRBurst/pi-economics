@@ -30,7 +30,7 @@ export const V4_FACTORS: readonly FactorSpec[] = [
   { name: "maskOnCold", lever: "cache-lifecycle.maskOnCold", levels: ["off", "on"] },
 ];
 
-/** The default local stratum's factor (P12/OQ3): infinite-context's fold-reminder limit, at the quarter and three quarters of the matched rule's range (§7.4). */
+/** The default local stratum's factor (P12/OQ3): infinite-context's fold-reminder limit, at the quarter and three quarters of the range the session's model resolves to (§7.4). */
 export const IC_FACTORS: readonly FactorSpec[] = [{ name: "nudge", lever: "infinite-context.nudgeAtTokens", levels: [0.25, 0.75] }];
 
 export function defaults(): Settings {

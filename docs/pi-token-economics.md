@@ -19,7 +19,7 @@ Paths are relative to this repository's root, unless noted.
 | `packages/token-meter/` (`pi-token-meter`) | One JSONL line per provider request (tokens, cost, billing class, timing, quota headers, retries; pi's compaction summaries included) and a `levers` line per session (every lever's value, source and read-back, on change) into `<agentDir>/meter/YYYY-MM.jsonl`; no prompt/response text. Also the `meter-report` and `pi-analyse` binaries and the log manual `LOGS.md` (linked to `~/.pi/agent/LOGS.md`). | main + children |
 | `packages/cache-lifecycle/` (`pi-cache-lifecycle`) | Warming decision (main with running children, child awaiting a reply → warm; capped), elision of stale tool results/thinking after cache expiry, optional 1 h cache TTL for main, the pi-1.0.0 message-identity shim that keeps cache warming alive past custom messages, `peek-after-mask` guard log. Its three settings are levers the experiments engine can assign. | main + children |
 | `packages/experiments/` (`pi-experiments`) | The online experiment: one arm per main session, drawn per stratum from that stratum's design (explore/exploit/off); a child runtime never draws, it serves its root's arm; the engine pushes each session's levers to the extensions that ask on the internal channel `pi-economics:levers:v1` (the former global `__piExperimentsApi_v1` is removed); lever add-ons (`addons/`) apply a level and read it back; correction guard log and `/rate 1-5`. | main + children |
-| `packages/infinite-context/package.nix` + 1 patch in `patches/pi-infinite-context/` | Pinned input `inputs.pi-infinite-context` (rev `494df9d`) with `reminders`: upstream's `settings.json` gains `overrides`, rules keyed by provider or exact `provider/modelId` with upstream's `nudgeAtTokens` (a number or a range `[min, max]`) and `nudgeAtPercent`; each field resolves exact model, then provider, then the top level, then upstream's 150k / 75 %. The session follows its current model; a switch to a rule with another range draws and records a new limit. Upstream's step (15k, less near the window) and fail-open parsing stay. The former `cache` patch (cost-aware fold hint, `fold_timing`, re-sync, handoff) was dropped: upstream re-syncs a snapshot and stops once when folds cannot be applied, and declined the fold hint. The former `foreign-messages` patch was dropped: upstream aligns the projection as an ordered subsequence. | main + children |
+| `packages/infinite-context/package.nix`, unpatched since 0.3.2 | Pinned input `inputs.pi-infinite-context` (rev `0c7f021`), upstream as it is: its `settings.json` has `nudgeAtTokens` (a number or a range `[min, max]`) and `nudgeAtPercent` at the top level and per exact `provider/modelId` in `modelOverrides`; each field resolves the model's override, then the top level, then upstream's 150k / 75 %. A `model_select` re-resolves; a branch keeps its latest draw per range (a switch back to a range takes its earlier draw again) and records a range's new draw. The former `reminders` patch (provider-wide rules, a `rule` field in the record, a model follow at `turn_end`) was dropped in 0.3.2: upstream takes limits per model, and pi 1.4 announces every change of a session's model with `model_select`. Upstream's step (15k, less near the window) and fail-open parsing stay. The former `cache` patch (cost-aware fold hint, `fold_timing`, re-sync, handoff) was dropped: upstream re-syncs a snapshot and stops once when folds cannot be applied, and declined the fold hint. The former `foreign-messages` patch was dropped: upstream aligns the projection as an ordered subsequence. | main + children |
 | `modules/common.nix` (`piSettings`) | Idempotent migration of the mutable `~/.pi/agent/settings.json`: puts the registry's links first in `extensions` (`loadOrder`, op `ensurePrefix`) and sets `cacheWarming: "idle"` when `programs.piEconomics.cacheLifecycle` is enabled. | — |
 | `packages/bench/` | Bench harness: replay of the user's own past tasks, single-agent and orchestrator (RPC) drivers, blind A/B and per-run judging, factor-effect report, process-scope pi levers. Data and runs live in `<agentDir>/bench`, not in the repo. | tool |
 
@@ -124,9 +124,11 @@ Code defaults (a settings file only overrides; unknown keys are ignored):
   an existing `settings.json` when cache-lifecycle is enabled —
   pi's default `"streaming"` never fires `cache_warming_decision`.
 - **infinite-context** — `programs.piEconomics.infiniteContext.reminders`:
-  `default` and `overrides` (per provider or model) with `nudgeAtTokens` (a
-  number or a range) and `nudgeAtPercent`, e.g. 400k for the two 1M-window
-  anthropic models; a range is what lets the experiment draw the limit.
+  `nudgeAtTokens` (a number or a range) and `nudgeAtPercent` at the top level
+  for every model, and the same per exact `provider/modelId` in
+  `modelOverrides`, e.g. 400k at the top level for 1M-window cloud models and
+  a range for a local model; a range is what lets the experiment draw the
+  limit.
 
 ## Strata, designs and objectives
 
@@ -158,7 +160,7 @@ is not measurable.
 
 **Eligibility.** A main is eligible when its model matches a stratum, `mode` is not `off`, an arm is
 left enabled and every **gating** lever of the stratum's design (the fold-reminder limit) is
-loaded and settable for the session's model (its matched rule has a range). The gate is
+loaded and settable for the session's model (its override, else the top level, is a range). The gate is
 all-or-nothing per session: a design with a partly settable lever would break the factorial. A
 session that matched a stratum but fails the gate has a row that says why (`eligible: false`, `reason`: the
 lever's target is not loaded, or no level can be set for its model); a main that matches no stratum, or runs

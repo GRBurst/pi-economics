@@ -90,6 +90,14 @@ where the component went (a definition under `lib.mkIf false` is none, so a guar
 | `taskRouter` | the [pi-task-router](https://github.com/GRBurst/pi-task-router) flake, `programs.piTaskRouter` |
 | `actorSubagents` | pi-setup, `programs.pi.actorSubagents` |
 
+Two options of `infiniteContext` changed names in 0.3.2, when its reminders patch was dropped and the options took
+upstream's settings names; they are hidden stubs in `modules/infinite-context.nix` of the same kind, enabled or not:
+
+| Option | Where it went |
+|---|---|
+| `infiniteContext.reminders.default` (removed) | `reminders.nudgeAtTokens` and `reminders.nudgeAtPercent`, the file's top level |
+| `infiniteContext.reminders.overrides` (renamed) | `reminders.modelOverrides`, keyed by exact `provider/modelId` only: upstream has no provider-wide rules |
+
 Each option's section below quotes the assertion's message and says what still refers to it here. The registry names `task-router` and
 `actor-subagents` stay: they are how the components learn that those extensions are loaded.
 
@@ -280,22 +288,23 @@ A stratum can put `infiniteContext`'s fold-reminder limit under test (the add-on
   "factors": [{ "name": "nudge", "lever": "infinite-context.nudgeAtTokens", "levels": [0.25, 0.75] }] } } }
 ```
 
-A level is a fraction `q` of the range of the rule that matches the session's model
-(`infiniteContext.reminders`): the limit is `round(min + q·(max − min))` tokens. At
-`session_start`, before infinite-context's own handler, and again at `model_select`
-for a rule with another range, the engine appends infinite-context's settings record
-(`{ nudgeAtTokens, nudgeAtTokensRange, rule }`, the rule being the override's key) so
-that the extension keeps it; the record on the branch after the extension's handlers is
-the read-back (`confirmed`; an extension that redrew it: `refused`, source `ext`, the
+A level is a fraction `q` of the range that the session's model resolves to
+(`infiniteContext.reminders`: its exact `modelOverrides` key, else the top level): the
+limit is `round(min + q·(max − min))` tokens. At `session_start`, before
+infinite-context's own handler, and again at `model_select`, the engine appends
+infinite-context's settings record (`{ nudgeAtTokens, nudgeAtTokensRange }`) unless the
+branch's latest record already holds that value and range (a resumed session, a switch
+within one range), so that the extension keeps it; the record on the branch after the
+extension's handlers is the read-back (`confirmed`; an extension that redrew it: `refused`, source `ext`, the
 value it drew). The extension completes its record with `nudgeAtPercent`, the seed has
 none: while the latest record lacks it the extension has not adopted anything, and the
-state stays `unverified` (a tool of that name from another extension, a misordered load). A rule that is a fixed number draws nothing and ignores records. The lever gates the draw (P12): a main whose matched rule at `session_start` has no range, or while infinite-context is not loaded, is ineligible, not refused (the gate is all-or-nothing per session: every gating lever of the stratum's design must be loaded and settable, and one failing makes the session ineligible whatever its other factors, as a partial design would break the factorial): its `assignments.jsonl` row has `eligible: false`, a `reason`, no arm, no seed, and no block is consumed (the analyser's refusal rate never sees it). A drawn session that later switches to a fixed-number rule is refused up front (`refused`, source `fixed`, `a` = the level, as there are no
-tokens to assign; the state shows once the extension's record is read back, at the first prompt). The owner's per-model ranges (`infiniteContext.reminders.overrides`) decide which local models are eligible. The engine reads the rules from the
+state stays `unverified` (a tool of that name from another extension, a misordered load). A fixed number draws nothing and ignores records. The lever gates the draw (P12): a main whose model resolves at `session_start` to no range, or while infinite-context is not loaded, is ineligible, not refused (the gate is all-or-nothing per session: every gating lever of the stratum's design must be loaded and settable, and one failing makes the session ineligible whatever its other factors, as a partial design would break the factorial): its `assignments.jsonl` row has `eligible: false`, a `reason`, no arm, no seed, and no block is consumed (the analyser's refusal rate never sees it). A drawn session that later switches to a model with a fixed number is refused up front (`refused`, source `fixed`, `a` = the level, as there are no
+tokens to assign; the state shows once the extension's record is read back, at the first prompt). The owner's ranges (a range at the top level, or per model in `infiniteContext.reminders.modelOverrides`) decide which models are eligible. The engine reads the settings from the
 extension's settings file once per runtime, as the extension does: a file rewritten
 mid-session is the next session's. The lever is live when pi lists infinite-context's `context_fold`
 tool (the extension never asks the channel); a child seeds its own branch with its
 root's level in its own model's range. The check `ic-seed-contract` runs the real
-patched extension against the add-on.
+extension against the add-on.
 
 | Option | Default | Effect |
 |---|---|---|
@@ -309,32 +318,39 @@ with a session file still run their root's arm).
 
 ### `infiniteContext` (`modules/infinite-context.nix`)
 
-pi-infinite-context (upstream input `pi-infinite-context`) with one patch
-from `patches/pi-infinite-context`, reminders: the settings file gains
-`overrides`, fold-reminder rules per provider or model. It folds ranges of the
-agent's own conversation by message id and unfolds them on demand. Main
-sessions and children load it (`forChildren = true`).
+pi-infinite-context (upstream input `pi-infinite-context`), built unpatched
+since 0.3.2 (up to 0.3.1 a local patch added provider-wide rules; upstream
+now reads limits per model itself). It folds ranges of the agent's own
+conversation by message id and unfolds them on demand, and reminds the agent
+to fold. Main sessions and children load it (`forChildren = true`).
 
 | Option | Default | Effect |
 |---|---|---|
 | `enable` | `false` | registry entry `infinite-context` (link `<agentDir>/pi-economics/extensions/infinite-context` → the package's `extensions/infinite-context`) and the settings file |
-| `package` | the flake's `packages/infinite-context` | the patched source |
-| `reminders.default`, `reminders.overrides` | `{}` | `{ nudgeAtTokens; nudgeAtPercent; }` (each `null` = inherit): `nudgeAtTokens` a positive integer or a range `[min, max]` with min < max, `nudgeAtPercent` a share of the model window in (0, 100]. `default` is the file's top level, `overrides` keyed by pi provider or exact `provider/modelId`. Each field resolves on its own: exact model, then provider, then `default`, then the extension's 150000 tokens / 75 %. Nulls and empty rules are left out of the file |
-| `settings` | `{}` | merged into the file with `lib.recursiveUpdate`, on the right of what `reminders` renders (`nudgeAtTokens`, `nudgeAtPercent`, `overrides`) |
+| `package` | the flake's `packages/infinite-context` | a copy of the unpatched source |
+| `reminders.nudgeAtTokens`, `reminders.nudgeAtPercent` | `null` | the file's top level, for every model without an override (each `null` = the extension's 150000 tokens / 75 %): `nudgeAtTokens` a positive integer or a range `[min, max]` with min < max, `nudgeAtPercent` a share of the model window in (0, 100] |
+| `reminders.modelOverrides` | `{}` | the same two fields per exact `provider/modelId` (pi's `compaction.modelOverrides` convention; a key without a provider and a model id fails an assertion, as it would match no model). Each field resolves on its own: the model's override, then the top level, then the extension's default. Nulls and empty overrides are left out of the file |
+| `settings` | `{}` | merged into the file with `lib.recursiveUpdate`, on the right of what `reminders` renders (`nudgeAtTokens`, `nudgeAtPercent`, `modelOverrides`) |
 | `src` (internal) | set by `homeModules.default` from the input | the unpatched source the existence assertion probes |
 
 The file `<agentDir>/infinite-context/settings.json` is always written, as
 literal text; with every option at its default it is `{}`. The extension's
-parser is fail-open like upstream's: it ignores an unknown key and drops an
-invalid value, so the module asserts what its types let through (a range
-whose min is not below its max, a share of 0) and the `home-files` check runs
-the package's own parser on the rendered file. The session follows its
-current model: a switch to a model whose rule has another range draws a new
-limit and records it (`infinite-context:settings` with the rule's key in
-`rule`, the rule that set `nudgeAtTokens` only). A record that an earlier
-`model_select` handler appended is kept when it fits (that is how `experiments`
-seeds the limit of an experiment's arm, without the extension knowing it; the check
-`ic-seed-contract` holds that contract). Changes apply to sessions and subagents started after the switch.
+parser is fail-open: it ignores an unknown key and drops an invalid value, so
+the module asserts what its types let through (a range whose min is not below
+its max, a share of 0, a key that is no exact model) and the `home-files`
+check reads the rendered file back through the package's own parser, the top
+level and each override for its model. A range assigns each branch one limit,
+recorded as `infinite-context:settings` (`nudgeAtTokens`, `nudgeAtPercent`,
+`nudgeAtTokensRange`; no field names the override): the branch keeps the latest
+record of the same range whose value lies in it, so a model switch to a model
+with the same range records nothing, and a switch back to an earlier range takes
+that range's earlier draw again; a range without such a record draws. A
+`model_select` re-resolves the limits once the extension has loaded (pi
+1.4 emits it for every change of a session's model). A record that an earlier
+handler appended is kept when it fits (that is how `experiments` seeds the
+limit of an experiment's arm, without the extension knowing it; the check
+`ic-seed-contract` holds that contract). Changes apply to sessions and
+subagents started after the switch.
 
 Soft dependency, which does not warn: `cacheLifecycle`'s `context_peek` guard
 reads infinite-context's tools.
@@ -392,8 +408,8 @@ the two CLIs (`bin`). A user without Nix installs it with `pi install git:github
 
 **Render rule.** Only `nix run .#render` writes `package.json`. `render/default.nix` evaluates the module for one
 fixture (every component on but `bench`), maps the registry's own names to `./packages/<n>/index.ts` (a name without a
-package directory is a render error; the patched upstream `infinite-context` is skipped, the user
-installs them; the actor, pi-setup's, is never in the fixture's registry) and adds `bin` when `tokenMeter` is on. `render-package` compares the committed file with it;
+package directory is a render error; the upstream `infinite-context` is skipped, the user
+installs it; the actor, pi-setup's, is never in the fixture's registry) and adds `bin` when `tokenMeter` is on. `render-package` compares the committed file with it;
 `pi-package-manifest` states the manifest's laws one by one (private, keyword, semver, peers = pi's five host
 packages, imported-is-peer, no dependencies, paths, bin shebang and mode, skill fallback paths). The version is the
 constant in `render/default.nix`; the tag is `v` + version. `render-package` also requires every `packages/<c>/package.json` to carry it (see AGENTS.md, "Versions").
@@ -439,6 +455,8 @@ input. Its patches live in `patches/<input>/` under the file names of the author
 the derivation is that configuration's, bar two one-line differences (see "Resync"); `homeModules.default` hands the input to the
 component as its internal option `src`, and the registry entry's `checkPath`
 points into `src`.
+Since 0.3.2 pi-infinite-context is built unpatched (`packages/infinite-context/package.nix` copies the input):
+`patches/pi-infinite-context/` holds only the upstream's `LICENSE`, which `NOTICE` names.
 
 ## Checks
 
@@ -459,16 +477,16 @@ points into `src`.
 | `typecheck-cache-lifecycle`, `typecheck-experiments` | `tsc --strict` over each package |
 | `iface-subagents-cache-lifecycle`, `iface-subagents-experiments` | their copies of `__subagentsApi_v1` are satisfied by the provider's `SubagentsApiV1` |
 | `internal-channel` | the internal channel `pi-economics:levers:v1`: the experiments engine's payload (`Levers`), query and lever states against the copies token-meter (`core/channel.ts`) and cache-lifecycle (`core/api.ts`) keep, both ways (every key a copy reads is one the engine sends), and the event names |
-| `infinite-context` | the patched pi-infinite-context's tests: upstream's suite without its three `fast-check` tests, with the patch's additions to `settings.test.ts` and `index.test.ts`, on the shared lock; `overlay-foreign.test.ts` and `integration.test.ts` (`index.ts` driven through its event handlers with stand-ins for pi's packages, reading the settings the module renders); the greps on `index.ts` (no fold hint, no `__piExperimentsApi_v1`) |
-| `ic-seed-contract` | the seed contract of infinite-context's limit on the real code of the patched extension, the experiments engine with its add-on and token-meter's shell: the seed's record shape, adopted (confirmed in the levers line), a fixed-number rule (refused up front), a range the extension does not adopt (planted refusal: refused, source `ext`, in the levers line), a model switch (re-seeded in the new range), and the add-on's rule matcher equal to the extension's own over a generated table |
+| `infinite-context` | pi-infinite-context's tests, unpatched: upstream's suite without its `fast-check` test files, on the shared lock; `overlay-foreign.test.ts` and `integration.test.ts` (`index.ts` driven through its event handlers with stand-ins for pi's packages, reading the settings the module renders: a top level and an exact `modelOverrides` key, a key without `/` matching no model, a seeded record held); the greps on `index.ts` (no fold hint, no `__piExperimentsApi_v1`) |
+| `ic-seed-contract` | the seed contract of infinite-context's limit on the real code of the extension (unpatched), the experiments engine with its add-on and token-meter's shell: the seed's record shape, adopted (confirmed in the levers line), a fixed number (refused up front), a range the extension does not adopt (planted refusal: refused, source `ext`, in the levers line), a model switch (re-seeded in the new range; a switch within one range seeds nothing), and the add-on's resolution (exact `modelOverrides` key, else the top level, else 150000) equal to the extension's `parseSettings` over a generated table |
 | `iface-infinite-context-seed` | the extension's `Settings` is assignable to the engine's copy of the seed record (`IcRecord`): a type-shape check only (an optional field dropped or renamed upstream is `ic-seed-contract`'s to see) |
-| `typecheck-infinite-context` | `tsc --strict` over the patched `extensions/` without upstream's three `fast-check` tests (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
+| `typecheck-infinite-context` | `tsc --strict` over the unpatched `extensions/` without upstream's `fast-check` test files (the shared lock does not hold `fast-check`) and without its `tsconfig.json` |
 | `session-entry-contract` | the engine's real code and a fixture extension that adopts a recorded session entry the way infinite-context does (`checks/session-entry-contract/entry-ext`, a neutral stand-in) in one fake runtime: a level the target can adopt reads back `confirmed`, one it redraws `refused` with its own value; with no target the seed stands (the seed-tier limit) |
-| `dependency-direction` | no file of `patches/`, the built patched infinite-context or the patched actor mentions a `pi-economics:` channel or the removed `__piExperimentsApi_v1`: extensions never depend on pi-economics (the router stays out: it shares the claim channel and still holds its dead read) |
+| `dependency-direction` | no file of `patches/`, the built infinite-context or the patched actor mentions a `pi-economics:` channel or the removed `__piExperimentsApi_v1`: extensions never depend on pi-economics (the router stays out: it shares the claim channel and still holds its dead read) |
 | `state-contract` | `experiments/state.json` between the analyser and the engine: token-meter's writer (`nextState`) writes each v2 design's `disabled` and `posterior` under `designs.<id>.<stratum>`, and experiments' `designState` reads them back from that place (another stratum or design reads nothing; the flat keys are never read for a v2 design). Both sources side by side: packages import no other. |
 | `log-contract` | every log writer through `pi-analyse --check` and a full report; the router's writer and vocabularies are the `pi-task-router` input's |
 | `leak`, `leak-selftest` | no e-mail addresses, named home paths (`/home/<name>`), `git+ssh` URLs, private (RFC 1918) or Tailscale addresses, LAN host URLs (`http://<one-label host>`, not `localhost`) or names under `.local`, `.lan`, `.home.arpa`, `.ts.net` in tracked files (a worktree's `.git` file is skipped) |
-| `license` | `LICENSE` is MIT, every package declares MIT, `NOTICE` has a section per patched upstream and none for another, and each licence text it names (`Licence text: <path>`, `checks/npm/LICENSE` among them) carries the MIT permission notice |
+| `license` | `LICENSE` is MIT, every package declares MIT, `NOTICE` has a section per upstream in `patches/` (its `LICENSE` at least) and none for another, and each licence text it names (`Licence text: <path>`, `checks/npm/LICENSE` among them) carries the MIT permission notice |
 | `boundary`, `boundary-selftest` | no file's content (binary files too), file name or directory name names an extension this repository does not ship, in the spellings `x-y`, `x_y`, `xy` and `xY` (case ignored); `NOTICE`, `LICENSE`, the root `flake.lock` and `patches/<input>/LICENSE` are skipped, the patches themselves are scanned; the selftest has a hit and a near miss for each kind of place |
 | `render-package` | the committed `package.json` is the render of the module (AC2) |
 | `pi-package-manifest` | the manifest's laws, each reported under its own name (AC3) |
@@ -503,4 +521,4 @@ subsequence; `overlay-foreign.test.ts` pins that) and the retry component's
 component itself has left since, see `retry` above). Where its patch could not be taken byte for byte,
 the difference is one line: the fake `SessionLike` in the spawn-policy
 patch's test carries a double cast (`tsc --strict` rejects it otherwise), and
-the reminders patch's comment names no private path.
+the reminders patch's comment named no private path (that patch is gone since 0.3.2).

@@ -2,8 +2,8 @@
 # the install line carries the manifest's version as the tag, the subset block
 # is the checked fixture line by line, the prerequisites table has one row per
 # upstream and no other, each with the pinned wording (the actor: patched
-# build, upstream support pending; infinite-context: what the upstream does as
-# it is, and what only the patched build adds), the experiments opt-in block, the skill collision note
+# build, upstream support pending; infinite-context: the upstream as it is,
+# limits per model included, no patched build since 0.3.2), the experiments opt-in block, the skill collision note
 # and the duplicate guard's version note are there, and (M6) the load order note: list the package first
 # in `packages`. Lines are compared whole or searched with
 # `replaceStrings` (no regex over the README).
@@ -32,10 +32,12 @@
   partial = {
     pi-infinite-context = "the upstream's fold reminders work as they are";
   };
-  onlyPatched = "only with the patched build via the pi-economics Nix modules (upstream support pending for that part)";
+  # 0.3.2: upstream takes the limits per model itself (modelOverrides).
+  perModel = "limits per model included";
   claimsMissing = {
     pi-infinite-context = "no fold reminders";
   };
+  claimsPatched = "patched";
   upstreams = ["pi-actor-subagents" "pi-infinite-context"];
   row = u: lib.filter (l: lib.hasPrefix "| ${u} |" l) readme;
   # The prerequisites table: the first table after its heading, without the
@@ -62,7 +64,8 @@ in {
             then expect.holds "the ${u} row says: ${pinned}" (has pinned r)
             else
               expect.holds "the ${u} row says: ${partial.${u}}" (has partial.${u} r)
-              ++ expect.holds "the ${u} row says: ${onlyPatched}" (has onlyPatched r)
+              ++ expect.holds "the ${u} row says: ${perModel}" (has perModel r)
+              ++ expect.holds "the ${u} row does not say \"${claimsPatched}\"" (!(has claimsPatched r))
               ++ expect.holds "the ${u} row does not say \"${claimsMissing.${u}}\"" (!(has claimsMissing.${u} r))
         ) (row u)
     )

@@ -32,7 +32,7 @@ see Requirements).
 | `analysisSkill` | an agent skill that runs `pi-analyse` and proposes decisions from the logs |
 | `cacheLifecycle` | elides stale tool results and thinking after the prompt cache expired; cache warming |
 | `experiments` | one randomized arm per main session, per setup (stratum) with its own objective; assigns levers through add-ons and reads each back (confirmed, refused or unverified) |
-| `infiniteContext` | pi-infinite-context with one patch: fold-reminder limits (a number or a range) per provider or model |
+| `infiniteContext` | pi-infinite-context, upstream and unpatched: folds of the agent's own conversation; fold-reminder limits (a number or a range) for all models and per exact model |
 | `bench` | `pi-bench` and `bench-report`: arms, blind judges, bootstrap reports, process-scope pi levers |
 | `piSettings` | idempotent edits of pi's mutable `settings.json` that the components contribute, among them the load order (the components start first) |
 
@@ -44,10 +44,10 @@ What is logged and measured, and how to run the reports and the bench:
 ## Use
 
 Add the flake as an input and let it follow your `nixpkgs` and `home-manager`
-(its one patched upstream, pi-infinite-context, is a `flake = false` input; the
-patch applies to the revision in this flake's `flake.lock`, so let it follow
-another revision of yours only if the patch still applies; the inputs
-`pi-setup` and `pi-task-router` serve its checks only):
+(its one upstream extension, pi-infinite-context, is a `flake = false` input,
+built unpatched since 0.3.2: the options follow the settings file of the
+revision in this flake's `flake.lock`; the inputs `pi-setup` and
+`pi-task-router` serve its checks only):
 
 ```nix
 inputs = {
@@ -93,6 +93,36 @@ pi-setup that does not forward a moved `agentDir` leaves the components out of
 it). The components see the actor when `programs.piEconomics.extensions` has an entry
 `actor-subagents`; without one, `cacheLifecycle` and `experiments` warn.
 
+## Upgrading to 0.3.2
+
+pi-infinite-context is upstream's again, unpatched: upstream now takes the
+fold-reminder limits per model itself (its `modelOverrides`, keyed like pi's
+`compaction.modelOverrides`), so the reminders patch is gone and
+`infiniteContext.reminders` takes upstream's names:
+
+- `reminders.default` was removed: its `nudgeAtTokens` and `nudgeAtPercent`
+  are now `reminders.nudgeAtTokens` and `reminders.nudgeAtPercent`, the
+  file's top level, for every model without an override of its own.
+- `reminders.overrides` was renamed to `reminders.modelOverrides`, keyed by
+  the exact `provider/modelId` only. A provider-wide key (`anthropic`) has
+  no equivalent: set its values at the top level, or one override per
+  model; a key without a provider and a model id fails an assertion.
+- A leftover definition of either old option fails an assertion that names
+  its replacement, whether `infiniteContext` is enabled or not. In
+  `infiniteContext.settings`, write `modelOverrides`: the extension ignores
+  the former key.
+- The branch's settings record (`infinite-context:settings`) no longer
+  names the rule that set the limit. A branch keeps its drawn limit per
+  range: a switch to a model with the same range records nothing, a switch
+  back to an earlier range takes that range's earlier draw again.
+
+```nix
+programs.piEconomics.infiniteContext.reminders = {
+  nudgeAtTokens = 400000; # every model without an override
+  modelOverrides."local/model-a".nudgeAtTokens = [100000 200000];
+};
+```
+
 ## Upgrading to 0.3.0
 
 0.3.0 redesigns the measurement core; what a consumer of 0.2.0 meets:
@@ -111,7 +141,7 @@ it). The components see the actor when `programs.piEconomics.extensions` has an 
   `__piExperimentsApi_v1` is removed (extensions get their levers on an internal
   channel), and `experiments` loads in children too.
 - **`infiniteContext.reminders`** takes `nudgeAtTokens` (a number or a range)
-  and `nudgeAtPercent` per provider or model; `startTokens`, `everyTokens`,
+  and `nudgeAtPercent` (in upstream's names since 0.3.2, above); `startTokens`, `everyTokens`,
   `prices`, `cacheTtlMinutes` and `foldHint` of the earlier patch are gone (a
   definition is an unknown option).
 - **`programs.piEconomics.retry` (the former pi-retry component) is removed** (a definition fails: pi's native
@@ -135,7 +165,7 @@ pi install git:github.com/GRBurst/pi-economics@v0.3.1
 ```
 
 Nix only: `bench`, the `piSettings` migration, the Home Manager options and
-the patched upstreams (below).
+pi-setup's patched actor (below).
 
 ### Prerequisites
 
@@ -147,7 +177,7 @@ it misses the API and switches off only what needs it.
 | Package | Used by | Without it |
 |---|---|---|
 | pi-actor-subagents | used by `cache-lifecycle`, `experiments` | cache lifecycle does not keep sessions waiting on children warm; experiments does not recognise in-memory children (children with a session file still run their root's arm). Patched build via pi-setup's Nix module (programs.pi.actorSubagents); upstream support pending. |
-| pi-infinite-context | optional | the upstream's fold reminders work as they are; the reminder limits per provider or model come only with the patched build via the pi-economics Nix modules (upstream support pending for that part). |
+| pi-infinite-context | optional | the upstream's fold reminders work as they are, limits per model included: its own `<agentDir>/infinite-context/settings.json` (`nudgeAtTokens`, `nudgeAtPercent`, `modelOverrides`), which the Nix module renders from `infiniteContext.reminders`. |
 
 ### Experiments are opt-in
 
@@ -266,5 +296,5 @@ contract is `docs/pi-economics.md`.
 
 ## Licence
 
-MIT, see [`LICENSE`](LICENSE). One component builds a patched copy of an upstream extension; its author and
-licence are in [`NOTICE`](NOTICE).
+MIT, see [`LICENSE`](LICENSE). One component builds a copy of an upstream extension (unpatched since 0.3.2); its
+author and licence are in [`NOTICE`](NOTICE).
