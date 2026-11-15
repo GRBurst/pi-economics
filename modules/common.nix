@@ -238,8 +238,11 @@
   };
 
   # (M6) The registry in load order (redesign §7.6): the components first,
-  # in a fixed order, then the other entries by name.
-  firstNames = ["experiments" "token-meter" "cache-lifecycle" "infinite-context"];
+  # in a fixed order, then the other entries by name. pi chains `context`
+  # handlers in load order: (0.3.3) infinite-context's overlay refuses a
+  # request whose projected messages another handler changed, so
+  # cache-lifecycle masks after it, the folded request (checks/context-chain).
+  firstNames = ["experiments" "token-meter" "infinite-context" "cache-lifecycle"];
   orderedNames = let
     names = lib.attrNames cfg.extensions;
   in
@@ -301,8 +304,8 @@ in {
       readOnly = true;
       description = ''
         The registry's links relative to the agent directory, as settings.json
-        lists them, in load order: experiments, token-meter, cache-lifecycle
-        and infinite-context, then the other entries by name. piSettings puts
+        lists them, in load order: experiments, token-meter, infinite-context
+        and cache-lifecycle, then the other entries by name. piSettings puts
         them at the front of settings.json's `extensions` (op `ensurePrefix`,
         contributor `loadOrder`, order 2000).
       '';

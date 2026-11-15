@@ -269,7 +269,7 @@ into `<agentDir>/pi-economics/extensions`, a directory pi does not discover,
 and the `piSettings` entry puts the links at the front of `<agentDir>/settings.json`'s
 `extensions`: pi starts pi-economics' components before every other extension
 of the user scope that is not built in (`experiments`, `token-meter`,
-`cache-lifecycle`, `infinite-context`, then the registry's other entries by
+`infinite-context`, `cache-lifecycle`, then the registry's other entries by
 name; pi decides where a trusted project's extensions and `pi -e` ones go), and the
 actor's children get them in the same order.
 

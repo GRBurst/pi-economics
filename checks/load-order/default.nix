@@ -1,5 +1,7 @@
 # Load order (redesign §7.6, G6) under real pi 1.4, offline: pi-economics'
-# components start before every other extension that is not built in. The
+# components start before every other extension that is not built in, and
+# (0.3.3) infinite-context before cache-lifecycle, whose masks apply to the
+# folded request (checks/context-chain). The
 # agent directory Home Manager renders with every component on, pi-setup's
 # actor and a probe (./probe) as registry entries, each home.file under it
 # linked as Home Manager links it; besides, the probe as an extension
@@ -39,7 +41,7 @@
   actorEntry,
 }: let
   dir = ".pi/agent";
-  components = ["experiments" "token-meter" "cache-lifecycle" "infinite-context"];
+  components = ["experiments" "token-meter" "infinite-context" "cache-lifecycle"];
   c = hm.eval {
     programs.piEconomics = {
       agentDir = dir;

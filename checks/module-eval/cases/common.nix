@@ -155,7 +155,7 @@ in {
     };
     kids = (pe c).childExtensions;
     targets = map (f: f.target) (lib.attrValues c.home.file);
-    names = ["token-meter" "cache-lifecycle" "infinite-context" "alpha" "zeta"];
+    names = ["token-meter" "infinite-context" "cache-lifecycle" "alpha" "zeta"];
   in
     eq "childExtensions (${dir})" kids (map (n: "/home/u/${dir}/pi-economics/extensions/${n}") names)
     ++ holds "every child is a link the registry renders (${dir})"
@@ -164,8 +164,9 @@ in {
   [".pi/agent" "custom/agent"];
 
   # (M6) settings.json's `extensions` lists the registry first, in load order:
-  # experiments, token-meter, cache-lifecycle, infinite-context, then the
-  # others by name (redesign §7.6), relative to the agent directory as pi
+  # experiments, token-meter, infinite-context, cache-lifecycle, then the
+  # others by name (redesign §7.6; 0.3.3: cache-lifecycle masks the request
+  # infinite-context folded, checks/context-chain), relative to the agent directory as pi
   # resolves them. The op runs after the default-order ones; without a
   # registry entry there is none.
   load-order = let
@@ -175,7 +176,7 @@ in {
     some = hm.eval {programs.piEconomics.extensions = reg ["zeta" "token-meter" "alpha"];};
     none = hm.eval {};
   in
-    eq "loadOrder" (pe c).loadOrder (map rel ["experiments" "token-meter" "cache-lifecycle" "infinite-context" "alpha" "zeta"])
+    eq "loadOrder" (pe c).loadOrder (map rel ["experiments" "token-meter" "infinite-context" "cache-lifecycle" "alpha" "zeta"])
     ++ eq "loadOrder, one of the four" (pe some).loadOrder (map rel ["token-meter" "alpha" "zeta"])
     ++ eq "ops.loadOrder" (pe c).piSettings.ops.loadOrder [
       {

@@ -252,8 +252,11 @@ pi-economics' components must start before every other extension that is not bui
 session and in a child: the experiments engine seeds levers before their targets read them. The Nix
 route links each component outside pi's auto-discovered directory (`<agentDir>/pi-economics/extensions`)
 and `piSettings` puts the links at the front of `settings.json`'s `extensions` (op `ensurePrefix`):
-`experiments`, `token-meter`, `cache-lifecycle`, `infinite-context`, then the registry's other
-entries by name; the children get the same order. pi decides where a trusted project's extensions and
+`experiments`, `token-meter`, `infinite-context`, `cache-lifecycle`, then the registry's other
+entries by name; the children get the same order. pi chains `context` handlers in load order, and
+infinite-context's fold overlay refuses a request whose messages an earlier handler changed: so
+cache-lifecycle masks the request after it was folded (the check `context-chain`; 0.3.0 to 0.3.2
+loaded cache-lifecycle first, and a session with folds stopped at its first cold request). pi decides where a trusted project's extensions and
 `pi -e` ones go (the check does not cover them). With `piSettings.enable = false` nothing lists them: put
 `programs.piEconomics.loadOrder` at the front of `extensions` yourself (a warning says so). The
 package route (`pi install`) cannot reorder: move its entry first in `packages`. The check `load-order`

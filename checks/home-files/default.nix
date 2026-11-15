@@ -74,7 +74,7 @@
     # in their order.
     printf '{"theme":"dark","extensions":["-builtin:mcp","pi-economics/extensions/token-meter","/x/own"]}\n' >"$TMPDIR/settings.json"
     ${lib.getExe pe.piSettings.package} "$TMPDIR/settings.json" 2>/dev/null
-    jq -e '. == {theme: "dark", cacheWarming: "idle", extensions: (["experiments", "token-meter", "cache-lifecycle", "infinite-context", "actor-subagents"] | map("pi-economics/extensions/" + .)) + ["-builtin:mcp", "/x/own"]}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the ops: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }
+    jq -e '. == {theme: "dark", cacheWarming: "idle", extensions: (["experiments", "token-meter", "infinite-context", "cache-lifecycle", "actor-subagents"] | map("pi-economics/extensions/" + .)) + ["-builtin:mcp", "/x/own"]}' "$TMPDIR/settings.json" >/dev/null || { echo "FAIL ${dir}: settings.json after the ops: $(cat "$TMPDIR/settings.json")" >&2; exit 1; }
     # (M6) The links: none in the auto-discovered extensions/ (pi would load
     # them in directory order, redesign §7.6), and each entry settings.json
     # lists resolves from the agent directory, as pi resolves it, to an
