@@ -1,5 +1,5 @@
 {
-  "source": "git:github.com/GRBurst/pi-economics@v0.3.1",
+  "source": "git:github.com/GRBurst/pi-economics@v0.3.2",
   "extensions": [
     "packages/token-meter/index.ts",
     "packages/cache-lifecycle/index.ts"
