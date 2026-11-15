@@ -384,6 +384,13 @@ The v1 engine's last assignments carried `design: "v4"`; resumed v1–v4 session
 and flags (the v2 engine never counts them in its blocks). A row without
 `design` whose arm has 3 characters counts as v4.
 
+A v4 caveat (0.3.0 to 0.3.2, fixed in 0.3.3): with `maskOnCold` on, a session with
+infinite-context folds had its first request on a cold cache stopped (infinite-context's
+`ProjectionMismatchError`; cache-lifecycle masked before the fold overlay). Continued, it sent
+its requests without its folds, at their full size, until pi restarted or reloaded it. The arms
+with `maskOnCold` on hold such sessions, ended early or continued unfolded: their cost in that
+data is biased upward.
+
 ### Assignments v2
 
 The experiments engine v2 (redesign M5b.1, §5.4, §7.3) writes one `v: 2` row per main

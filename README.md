@@ -94,6 +94,24 @@ pi-setup that does not forward a moved `agentDir` leaves the components out of
 it). The components see the actor when `programs.piEconomics.extensions` has an entry
 `actor-subagents`; without one, `cacheLifecycle` and `experiments` warn.
 
+## Upgrading to 0.3.3
+
+A fix, nothing to change. With `cacheLifecycle`'s `maskOnCold` on (an
+experiment arm turns it on too) and `infiniteContext` enabled, 0.3.0 to 0.3.2
+stopped the first request on a cold cache of a session with folds (a resumed
+one at once): infinite-context's overlay found a message that
+cache-lifecycle had masked before it ("another context handler removed or
+changed it"). A session continued after that sent its requests without its
+folds, at their full size, until pi restarted or reloaded it.
+cache-lifecycle now masks the folded request, on both routes: its masks run
+after every `context` handler, and the Nix route also starts
+`infinite-context` before `cache-lifecycle` (the next activation reorders
+`settings.json`'s `extensions`). A session that stopped resumes with its folds
+and the masks it wrote. In the experiment, the arms with `maskOnCold` on
+carry these sessions in their 0.3.0 to 0.3.2 data: ended early or continued
+unfolded, so those arms' cost is biased upward (`packages/token-meter/LOGS.md`,
+design v4).
+
 ## Upgrading to 0.3.2
 
 pi-infinite-context is upstream's again, unpatched: upstream now takes the
@@ -163,7 +181,7 @@ The task router is a package of its own,
 [pi-task-router](https://github.com/GRBurst/pi-task-router).
 
 ```sh
-pi install git:github.com/GRBurst/pi-economics@v0.3.2
+pi install git:github.com/GRBurst/pi-economics@v0.3.3
 ```
 
 Nix only: `bench`, the `piSettings` migration, the Home Manager options and
@@ -200,7 +218,7 @@ Use pi's object form of a `packages` entry in `~/.pi/agent/settings.json`, or
 <!-- checked: checks/pi-package/subset.json -->
 ```json
 {
-  "source": "git:github.com/GRBurst/pi-economics@v0.3.2",
+  "source": "git:github.com/GRBurst/pi-economics@v0.3.3",
   "extensions": [
     "packages/token-meter/index.ts",
     "packages/cache-lifecycle/index.ts"
