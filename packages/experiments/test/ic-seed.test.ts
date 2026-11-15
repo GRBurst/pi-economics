@@ -1,8 +1,9 @@
 // The engine seeds infinite-context's fold-reminder limit (redesign §7.4, M7a): before the extension's own session_start
-// (and again at model_select) it appends the extension's settings record with the level's tokens in the matched rule's
-// range; the extension adopts it, and the record after its handlers is the read-back. A stand-in for the extension
-// keeps the contract's rule (a record that holds the rule's range and a value in it is kept, anything else drawn anew);
-// the real code runs in the check ic-seed-contract.
+// (and again at model_select) it appends the extension's settings record with the level's tokens in the model's range
+// (its exact `modelOverrides` key, else the top level); the extension adopts it, and the record after its handlers is the
+// read-back. A stand-in for the extension keeps upstream's rule (the latest record that holds the model's range and a value
+// in it is kept, else a new draw; a record is appended when the latest differs); the real code runs in the check
+// ic-seed-contract.
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -24,25 +25,24 @@ const local = { provider: "example", id: "model-a" };
 const localFixed = { provider: "example", id: "fixed" };
 type Model = { provider: string; id: string };
 type Nudge = number | readonly [number, number];
-type Rule = { rule?: string; nudge: Nudge };
 
 /** The settings file as the module renders it, and the same table the stand-in extension resolves by hand. */
 const FILE = {
   nudgeAtTokens: 120_000,
-  overrides: {
-    anthropic: { nudgeAtTokens: [100_000, 200_000] },
-    openai: { nudgeAtTokens: [100_000, 200_000] },
-    example: { nudgeAtTokens: [300_000, 400_000] },
+  modelOverrides: {
+    "anthropic/claude-haiku-5-5": { nudgeAtTokens: [100_000, 200_000] },
+    "openai/gpt-5": { nudgeAtTokens: [100_000, 200_000] },
+    "example/model-a": { nudgeAtTokens: [300_000, 400_000] },
     "anthropic/claude-opus-5-5": { nudgeAtTokens: 400_000 },
     "example/fixed": { nudgeAtTokens: 250_000 },
   },
 };
-const RULES: Record<string, Rule> = {
-  "anthropic/claude-haiku-5-5": { rule: "anthropic", nudge: [100_000, 200_000] },
-  "anthropic/claude-opus-5-5": { rule: "anthropic/claude-opus-5-5", nudge: 400_000 },
-  "openai/gpt-5": { rule: "openai", nudge: [100_000, 200_000] },
-  "example/model-a": { rule: "example", nudge: [300_000, 400_000] },
-  "example/fixed": { rule: "example/fixed", nudge: 250_000 },
+const RULES: Record<string, Nudge> = {
+  "anthropic/claude-haiku-5-5": [100_000, 200_000],
+  "anthropic/claude-opus-5-5": 400_000,
+  "openai/gpt-5": [100_000, 200_000],
+  "example/model-a": [300_000, 400_000],
+  "example/fixed": 250_000,
 };
 const key = (m: Model) => `${m.provider}/${m.id}`;
 /** What a level q is, in tokens, in [min, max] — written out here, not taken from the add-on under test. */
@@ -54,10 +54,11 @@ const records = (entries: Entry[]) => entries.filter((e) => e.customType === "in
 
 /**
  * One runtime on `agentDir`: experiments (a stratum matching every main, one factor on the lever), then the stand-in for
- * infinite-context, which registers its tool and follows the model at session_start and model_select like the patch.
- * `table`: the rules the stand-in resolves (default: RULES, the file's); `ignoresSeed`: it draws whatever it finds.
+ * infinite-context, which registers its tool and follows the model at session_start and model_select like upstream.
+ * `table`: the limits per model the stand-in resolves (default: RULES, the file's; else the top level); `ignoresSeed`: it
+ * draws whatever it finds.
  */
-function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string, Rule>; ignoresSeed?: boolean; entries?: Entry[]; draw?: number; rng?: number; silent?: boolean; others?: string[]; defaultStrata?: boolean; strata?: Record<string, unknown>; mode?: "off" | "explore" } = {}) {
+function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string, Nudge>; ignoresSeed?: boolean; entries?: Entry[]; draw?: number; rng?: number; silent?: boolean; others?: string[]; defaultStrata?: boolean; strata?: Record<string, unknown>; mode?: "off" | "explore" } = {}) {
   const agentDir = o.agentDir ?? mkdtempSync(join(tmpdir(), "experiments-ic-"));
   mkdirSync(join(agentDir, "infinite-context"), { recursive: true });
   writeFileSync(join(agentDir, "infinite-context", "settings.json"), JSON.stringify(FILE));
@@ -77,16 +78,16 @@ function runtime(o: { agentDir?: string; loaded?: boolean; table?: Record<string
   tools.push(...(o.others ?? []));
   if (o.loaded !== false) tools.push("context_fold");
   const follow = (model: Model) => {
-    const { rule, nudge } = table[key(model)] ?? { nudge: 150_000 };
-    const named = rule === undefined ? {} : { rule };
-    const latest = records(f.entries).at(-1);
+    const nudge = Object.hasOwn(table, key(model)) ? table[key(model)] : FILE.nudgeAtTokens;
+    const all = records(f.entries);
+    const latest = all.at(-1);
     let next: Rec;
-    if (typeof nudge === "number") next = { nudgeAtTokens: nudge, nudgeAtPercent: 75, ...named };
+    if (typeof nudge === "number") next = { nudgeAtTokens: nudge, nudgeAtPercent: 75 };
     else {
-      const kept = latest?.nudgeAtTokens;
-      const keep = !o.ignoresSeed && same(latest?.nudgeAtTokensRange, nudge) && typeof kept === "number" && kept >= nudge[0] && kept <= nudge[1];
-      const drawn = keep ? (kept as number) : nudge[0] + Math.floor((o.draw ?? 0.5) * (nudge[1] - nudge[0] + 1));
-      next = { nudgeAtTokens: drawn, nudgeAtPercent: 75, nudgeAtTokensRange: nudge, ...named };
+      const keeps = (r: Rec) => same(r.nudgeAtTokensRange, nudge) && typeof r.nudgeAtTokens === "number" && r.nudgeAtTokens >= nudge[0] && r.nudgeAtTokens <= nudge[1];
+      const kept = o.ignoresSeed ? undefined : all.filter(keeps).at(-1)?.nudgeAtTokens;
+      const drawn = kept !== undefined ? (kept as number) : nudge[0] + Math.floor((o.draw ?? 0.5) * (nudge[1] - nudge[0] + 1));
+      next = { nudgeAtTokens: drawn, nudgeAtPercent: 75, nudgeAtTokensRange: nudge };
     }
     if (JSON.stringify(latest) !== JSON.stringify(next)) f.pi.appendEntry("infinite-context:settings", next);
   };
@@ -117,9 +118,9 @@ test("T7a.3 adopted: the seed precedes the extension's record, is read back unve
   assert.ok(q === 0.25 || q === 0.75);
   const a = at([100_000, 200_000], q);
   assert.deepEqual(r.entries.map((e) => e.customType), [ENTRY, "infinite-context:settings", "infinite-context:settings"]);
-  // The seed's shape is the extension's record without the percentage: the tokens, the rule's range, the rule's key.
-  assert.deepEqual(records(r.entries)[0], { nudgeAtTokens: a, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" });
-  assert.deepEqual(records(r.entries)[1], { nudgeAtTokens: a, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" }, "the extension adopted it");
+  // The seed's shape is the extension's record without the percentage: the tokens and the model's range.
+  assert.deepEqual(records(r.entries)[0], { nudgeAtTokens: a, nudgeAtTokensRange: [100_000, 200_000] });
+  assert.deepEqual(records(r.entries)[1], { nudgeAtTokens: a, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_000] }, "the extension adopted it");
   assert.deepEqual(r.state("s1"), { v: a, s: "pe", a, rb: "unverified", tier: "seed" });
   const n = r.heard.length;
   r.agentStart("s1", haiku);
@@ -177,8 +178,8 @@ test("T7a.4 model_select to a rule with another range: the same level is seeded 
   r.select("s1", local, haiku);
   const a = at([300_000, 400_000], q);
   assert.deepEqual(r.entries.slice(n).map((e) => e.data), [
-    { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000], rule: "example" },
-    { nudgeAtTokens: a, nudgeAtPercent: 75, nudgeAtTokensRange: [300_000, 400_000], rule: "example" },
+    { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000] },
+    { nudgeAtTokens: a, nudgeAtPercent: 75, nudgeAtTokensRange: [300_000, 400_000] },
   ]);
   // Until the next read-back the state is the assignment's, unverified; then the extension's record confirms it.
   assert.deepEqual(r.state("s1"), { v: a, s: "pe", a, rb: "unverified", tier: "seed" });
@@ -193,14 +194,14 @@ test("T7a.4 model_select to a rule with another range: the same level is seeded 
   assert.equal(r.level("s1"), q, "the assignment never changes (ITT)");
 });
 
-test("T7a.4 model_select to a rule with the same range: nothing to seed (the extension keeps its limit and names the new rule)", () => {
+test("T7a.4 model_select to a model with the same range: nothing to seed, nothing recorded (the extension keeps its limit)", () => {
   const r = runtime();
   r.start("s1", haiku);
   r.agentStart("s1", haiku);
   const a = r.state("s1")!.a;
   const n = r.entries.length;
   r.select("s1", gpt, haiku);
-  assert.deepEqual(r.entries.slice(n).map((e) => e.data), [{ nudgeAtTokens: a, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_000], rule: "openai" }], "only the extension's record");
+  assert.deepEqual(r.entries.slice(n), [], "the latest record already says it: upstream appends none (the former patch named the new rule)");
   r.agentStart("s1", gpt);
   assert.deepEqual(r.state("s1"), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
 });
@@ -221,7 +222,7 @@ test("P12 a session whose matched rule has a fixed number is ineligible, not ref
     assert.equal(typeof x.stratum, "string");
     assert.equal(typeof x.design, "string");
     assert.deepEqual(r.entries.map((e) => e.customType), [ENTRY, "infinite-context:settings"], "the extension's record only; no seed");
-    assert.deepEqual(records(r.entries)[0], { nudgeAtTokens: model === opus ? 400_000 : 250_000, nudgeAtPercent: 75, rule });
+    assert.deepEqual(records(r.entries)[0], { nudgeAtTokens: model === opus ? 400_000 : 250_000, nudgeAtPercent: 75 });
     r.agentStart("s1", model);
     assert.deepEqual(query(r.events, "s1")!.levers, {}, "no lever state, so no refusal");
     assert.equal(query(r.events, "s1")!.eligible, false);
@@ -237,7 +238,7 @@ test("P12 the default local stratum: its factor is the nudge at levels 0.25 / 0.
   assert.equal(x.factors.nudge.lever, LEVER);
   assert.ok([0.25, 0.75].includes(x.factors.nudge.assigned));
   const a = at([300_000, 400_000], x.factors.nudge.assigned);
-  assert.deepEqual(records(r.entries)[0], { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000], rule: "example" }, "seeded");
+  assert.deepEqual(records(r.entries)[0], { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000] }, "seeded");
   r.agentStart("s1", local);
   assert.deepEqual(r.state("s1"), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
   // Both levels are drawn over sessions (permuted blocks of the two arms).
@@ -306,7 +307,7 @@ test("T7a.5 a switch to a fixed-number rule is refused, and back to a range it i
   r.agentStart("s1", haiku);
   const n = r.entries.length;
   r.select("s1", opus, haiku);
-  assert.deepEqual(r.entries.slice(n).map((e) => e.data), [{ nudgeAtTokens: 400_000, nudgeAtPercent: 75, rule: "anthropic/claude-opus-5-5" }]);
+  assert.deepEqual(r.entries.slice(n).map((e) => e.data), [{ nudgeAtTokens: 400_000, nudgeAtPercent: 75 }]);
   assert.equal(r.state("s1"), undefined, "the earlier read-back no longer holds; nothing observed yet");
   r.agentStart("s1", opus);
   assert.deepEqual(r.state("s1"), { v: 400_000, s: "fixed", a: q, rb: "refused", tier: "seed" });
@@ -329,7 +330,7 @@ test("T7a.R planted refusal: an extension that ignores the seed is detected — 
 });
 
 test("T7a.R planted refusal: the extension's rule has another range than the file the engine read — it redraws, refused", () => {
-  const table = { ...RULES, "anthropic/claude-haiku-5-5": { rule: "anthropic", nudge: [150_000, 300_000] as const } };
+  const table = { ...RULES, "anthropic/claude-haiku-5-5": [150_000, 300_000] as const };
   const r = runtime({ table, draw: 0 });
   r.start("s1", haiku);
   const q = r.level("s1");
@@ -347,7 +348,7 @@ test("T7a.3 a child runs its root's level in its own model's range, in its own b
   child.start("child", local, file);
   assert.equal(child.level("child"), q);
   const a = at([300_000, 400_000], q);
-  assert.deepEqual(records(child.entries)[0], { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000], rule: "example" });
+  assert.deepEqual(records(child.entries)[0], { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000] });
   assert.equal(child.entries.some((e) => e.customType === ENTRY), false, "a child writes no assignment entry");
   child.agentStart("child", local);
   assert.deepEqual(child.state("child"), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
@@ -360,7 +361,7 @@ test("review m1 a loaded but silent target: the seed is the latest record and st
   const r = runtime({ silent: true });
   r.start("s1", haiku);
   const a = at([100_000, 200_000], r.level("s1"));
-  assert.deepEqual(records(r.entries), [{ nudgeAtTokens: a, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" }]);
+  assert.deepEqual(records(r.entries), [{ nudgeAtTokens: a, nudgeAtTokensRange: [100_000, 200_000] }]);
   r.agentStart("s1", haiku);
   assert.deepEqual(r.state("s1"), { v: a, s: "pe", a, rb: "unverified", tier: "seed" });
   r.select("s1", local, haiku);
@@ -398,13 +399,13 @@ test("review m4 the rules are read once per runtime: a file rewritten mid-sessio
   r.start("s1", haiku);
   const q = r.level("s1");
   r.agentStart("s1", haiku);
-  writeFileSync(join(r.agentDir, "infinite-context", "settings.json"), JSON.stringify({ overrides: { example: { nudgeAtTokens: [500_000, 600_000] }, anthropic: { nudgeAtTokens: 90_000 } } }));
+  writeFileSync(join(r.agentDir, "infinite-context", "settings.json"), JSON.stringify({ modelOverrides: { "example/model-a": { nudgeAtTokens: [500_000, 600_000] }, "anthropic/claude-haiku-5-5": { nudgeAtTokens: 90_000 } } }));
   r.select("s1", local, haiku);
   const a = at([300_000, 400_000], q);
-  assert.deepEqual(records(r.entries).at(-2), { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000], rule: "example" }, "the rule the extension runs, not the new file's");
+  assert.deepEqual(records(r.entries).at(-2), { nudgeAtTokens: a, nudgeAtTokensRange: [300_000, 400_000] }, "the limit the extension runs, not the new file's");
   r.agentStart("s1", local);
   assert.deepEqual(r.state("s1"), { v: a, s: "pe", a, rb: "confirmed", tier: "seed" });
-  // Back to the first model: the rewritten file's fixed 90000 for anthropic is not seen either.
+  // Back to the first model: the rewritten file's fixed 90000 for it is not seen either.
   r.select("s1", haiku, local);
   r.agentStart("s1", haiku);
   assert.equal(r.state("s1")?.rb, "confirmed");

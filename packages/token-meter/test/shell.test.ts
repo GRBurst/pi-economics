@@ -828,10 +828,10 @@ const icRecord = (data: unknown) => ({ type: "custom", customType: "infinite-con
 
 test("levers: infinite-context's own draw is an ext lever {v, s: ext} (a rule with a range), a fixed number {v, s: fixed}; the latest record wins", () => {
   const { f, clock, lines } = setup({ env: {} });
-  const entries: unknown[] = [icRecord({ nudgeAtTokens: 142_000, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" })];
+  const entries: unknown[] = [icRecord({ nudgeAtTokens: 142_000, nudgeAtPercent: 75, nudgeAtTokensRange: [100_000, 200_000] })];
   const ctx = fakeCtx("s1", { entries });
   agentStart(f, ctx);
-  entries.push(icRecord({ nudgeAtTokens: 400_000, nudgeAtPercent: 75, rule: "anthropic/opus" })); // a model switch to a fixed rule
+  entries.push(icRecord({ nudgeAtTokens: 400_000, nudgeAtPercent: 75 })); // a model switch to a fixed limit
   clock.t += 1000; agentStart(f, ctx);
   entries.push(icRecord({ nudgeAtTokens: "x" }), icRecord(null), { type: "custom", customType: "other:settings", data: { nudgeAtTokens: 1 } }); // malformed or foreign: skipped
   clock.t += 1000; agentStart(f, ctx);
@@ -859,7 +859,7 @@ test("levers: a pi-economics factor on the nudge keeps the engine's state: the m
 // Review F2: the engine's seed record has no nudgeAtPercent, the extension's always has: a seed nobody adopted is no draw of the extension's.
 test("review F2 levers: a branch holding only the engine's seed (no nudgeAtPercent) gives no nudge lever; the extension's completed record does", () => {
   const { f, clock, lines } = setup({ env: {} });
-  const seed = { nudgeAtTokens: 150_000, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" };
+  const seed = { nudgeAtTokens: 150_000, nudgeAtTokensRange: [100_000, 200_000] };
   const entries: unknown[] = [icRecord(seed)];
   const ctx = fakeCtx("s1", { entries });
   agentStart(f, ctx);

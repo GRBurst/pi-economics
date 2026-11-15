@@ -66,7 +66,7 @@
     file = "extensions/actor-subagents/api.ts";
     type = "SubagentsApiV1";
   };
-  # (M6.4) The patched pi-infinite-context.
+  # (M6.4) pi-infinite-context, upstream unpatched (0.3.2).
   infiniteContext = self.packages.${pkgs.stdenv.hostPlatform.system}.infinite-context;
   # (M6.5) The type-check copy: the extension without upstream's tsconfig.json
   # (TS5112, M2.2) and without the three tests that import fast-check, which
@@ -151,7 +151,7 @@ in {
       type = "SubagentsApi";
     };
   };
-  # The patched upstream's suite, with the host's checks (spec §8.1).
+  # The upstream suite, with this repository's checks (spec §8.1).
   infinite-context = pkgs.callPackage ./infinite-context {
     src = infiniteContext;
     inherit (npm) nodeModules;
@@ -202,7 +202,7 @@ in {
   internal-channel = import ./internal-channel {inherit lib pkgs typecheck;};
   state-contract = import ./state-contract {inherit lib pkgs;};
   # (redesign M5b.2, G5) No extension pi-economics patches or targets reads it:
-  # patches/, the built patched infinite-context, the patched actor.
+  # patches/, the built infinite-context, the patched actor.
   dependency-direction = import ./dependency-direction {
     inherit pkgs;
     sources = ["${../patches}" "${infiniteContext}" "${setupActor}/extensions"];

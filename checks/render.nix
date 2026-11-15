@@ -9,8 +9,8 @@
   self,
   render,
 }: let
-  # The components with a package.json of their own (the patched upstreams
-  # have none: their version is upstream's).
+  # The components with a package.json of their own (an upstream
+  # extension has none: its version is upstream's).
   components =
     lib.filter (n: builtins.pathExists (../packages + "/${n}/package.json"))
     (lib.attrNames (builtins.readDir ../packages));

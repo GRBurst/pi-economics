@@ -6,7 +6,7 @@
 #
 # The manifest maps registry names, never store paths (no
 # import-from-derivation): an own component `<n>` is `./packages/<n>/index.ts`,
-# the prerequisites (the patched upstreams, which the user installs) are
+# the prerequisites (the upstream extensions, which the user installs) are
 # skipped, and any other entry is an evaluation error, so no extension is
 # Nix-only by accident.
 {
@@ -20,8 +20,8 @@
   # Spec §7 Q6: one constant; the tag is `v` + version.
   version = "0.3.1";
 
-  # F_P: every component on but bench (Nix-only, spec D10), the patched
-  # upstreams included, so the registry is the whole set the flake knows.
+  # F_P: every component on but bench (Nix-only, spec D10), the upstream
+  # extension included, so the registry is the whole set the flake knows.
   # actor-subagents is pi-setup's (router-extraction design §7.3): never here.
   fp = hm.eval {
     programs.piEconomics = {
@@ -37,7 +37,7 @@
   # `rawModule` skips Home Manager's assertion check: the render does it.
   failed = map (a: a.message) (lib.filter (a: !a.assertion) fp.assertions);
 
-  # Spec D2: installed by the user, never shipped (the patched upstreams).
+  # Spec D2: installed by the user, never shipped (the upstream extensions).
   prereq = ["infinite-context"];
   names = lib.attrNames pe.extensions;
   own = lib.filter (n: !lib.elem n prereq) names;

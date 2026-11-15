@@ -1,19 +1,18 @@
-# Runs the tests of the PATCHED pi-infinite-context (the exact source
-# ~/.pi/agent/pi-economics/extensions/infinite-context links to). A patch that no longer
-# applies fails this build in applyPatches.
+# Runs the tests of pi-infinite-context as the module links it (the exact source
+# ~/.pi/agent/pi-economics/extensions/infinite-context links to: upstream, unpatched).
 #
 # Two runs:
-#  - upstream's suite with the patch's own tests (settings.test.ts: rules per provider or
-#    model, per-rule ranges, the record's `rule`; index.test.ts: a model switch records
-#    the new settings, a seeded record keeps its draw), with pi's packages from the shared
-#    lock (../npm). Every test file that imports fast-check (not in that lock) is left out:
-#    archive-properties, forest and nudge (nudge.ts is upstream's, unpatched).
+#  - upstream's suite (settings.test.ts: modelOverrides per exact model, ranges, the
+#    recorded draw; index.test.ts: a model switch records the new settings and keeps a
+#    range's draw), with pi's packages from the shared lock (../npm). Every test file that
+#    imports fast-check (not in that lock) is left out: archive-properties, forest and nudge.
 #  - this repository's tests, with stand-ins for pi's `getAgentDir`,
 #    `sessionEntryToContextMessages` and typebox (./stubs; they carry no behaviour the
 #    tests are about): overlay-foreign.test.ts (upstream's overlay.ts against what the
 #    question extension does to a request, a foreign toolResult) and integration.test.ts
-#    (index.ts reads the file the Home Manager module writes, and a settings record
-#    pi-economics appends before the session starts holds the branch's draw).
+#    (index.ts reads the file the Home Manager module writes, a modelOverrides key without
+#    '/' matches no model, and a settings record pi-economics appends before the extension
+#    resolves holds the branch's draw).
 {
   pkgs,
   src,

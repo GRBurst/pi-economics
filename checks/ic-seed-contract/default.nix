@@ -1,8 +1,8 @@
 # The seed contract of infinite-context's fold-reminder limit (redesign §7.4, M7a), on the real code of its three
-# sides: the patched extension (`ic`, the package output the module links), the experiments engine with its
+# sides: upstream's extension (`ic`, the package output the module links, unpatched), the experiments engine with its
 # infinite-context add-on and token-meter's shell, all from this repository's sources. Only pi's own packages are
-# stand-ins (../infinite-context/stubs). A new upstream or a patch that changes the record's shape, the keep rule or the
-# rule resolution fails here, and so does an add-on that seeds a record the extension would not adopt.
+# stand-ins (../infinite-context/stubs). A new upstream that changes the record's shape, the keep rule or the
+# resolution per model fails here, and so does an add-on that seeds a record the extension would not adopt.
 {
   pkgs,
   ic,

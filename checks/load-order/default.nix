@@ -29,8 +29,8 @@
 # before the extension's own handler (registered at load): a probe switches the
 # model at its session_start, and the branch's settings records must read
 # seed (no nudgeAtPercent), the extension's completed record, then the seed of
-# the new rule's range and the extension's completed record of that, with the
-# seed's tokens kept.
+# the new model's range and the extension's completed record of that, with
+# the seed's tokens kept (0.3.2: no record names a rule).
 {
   lib,
   pkgs,
@@ -46,8 +46,8 @@
       tokenMeter.enable = true;
       cacheLifecycle.enable = true;
       experiments.enable = true;
-      # The model switch at the end: one stratum with one factor on the extension's limit, a fraction of the range of the
-      # rule that matches the model.
+      # The model switch at the end: one stratum with one factor on the extension's limit, a fraction of the range the
+      # model's exact override sets.
       experiments.settings.strata.any = {
         match = {};
         factors = [
@@ -59,8 +59,8 @@
         ];
       };
       infiniteContext.enable = true;
-      infiniteContext.reminders.overrides = {
-        fake.nudgeAtTokens = [100000 200000];
+      infiniteContext.reminders.modelOverrides = {
+        "fake/m1".nudgeAtTokens = [100000 200000];
         "fake/m2".nudgeAtTokens = [300000 400000];
       };
       extensions.actor-subagents = actorEntry;
@@ -188,8 +188,8 @@ in
       '.[] | select(.sid == $sid) | .levers | .sessionId == $sid and .parentSessionId == $m and ({arm, eligible, design} == $row)' child.jsonl >/dev/null \
       || fail "the child's bus does not answer the main's assignment: $(jq -c --arg sid "$sid" 'select(.sid == $sid)' child.jsonl), row $row"
 
-    # The model switch: two models of the fake provider, the extension's rules (the provider's range, an exact
-    # model's other range) and a stratum with one factor on the extension's limit.
+    # The model switch: two models of the fake provider, the extension's overrides (one range
+    # per exact model) and a stratum with one factor on the extension's limit.
     printf '%s\n' '{"providers":{"fake":{"baseUrl":"http://localhost:9/v1","api":"openai-completions","apiKey":"x","models":[{"id":"m"},{"id":"m1"},{"id":"m2"}]}}}' >"$agent/models.json"
     export PROBE_OUT=$PWD/switch.jsonl SWITCH_MODEL=fake/m2
     unset SPAWN_CHILD
@@ -201,9 +201,10 @@ in
       || fail "the probe did not switch the model"
     jq -se '[.[] | select(.switched != null)][0].records
       | length == 4
-        and (.[0] | has("nudgeAtPercent") | not) and .[0].nudgeAtTokensRange == [100000, 200000] and .[0].rule == "fake"
+        and (.[0] | has("nudgeAtPercent") | not) and .[0].nudgeAtTokensRange == [100000, 200000]
         and (.[1] | has("nudgeAtPercent")) and .[1].nudgeAtTokens == .[0].nudgeAtTokens
-        and (.[2] | has("nudgeAtPercent") | not) and .[2].nudgeAtTokensRange == [300000, 400000] and .[2].rule == "fake/m2"
+        and (.[2] | has("nudgeAtPercent") | not) and .[2].nudgeAtTokensRange == [300000, 400000]
+        and all(.[]; has("rule") | not)
         and (.[3] | has("nudgeAtPercent")) and .[3].nudgeAtTokens == .[2].nudgeAtTokens' switch.jsonl >/dev/null \
       || fail "the model_select handlers did not run in load order (experiments' seed before the extension's record): $(jq -c 'select(.switched != null)' switch.jsonl)"
     touch $out

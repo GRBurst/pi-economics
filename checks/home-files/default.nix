@@ -21,8 +21,8 @@
         infiniteContext = {
           enable = true;
           reminders = {
-            default.nudgeAtTokens = 200000;
-            overrides."example/model-a" = {
+            nudgeAtTokens = 200000;
+            modelOverrides."example/model-a" = {
               nudgeAtTokens = [150000 250000];
               nudgeAtPercent = 50;
             };
@@ -88,7 +88,8 @@
     # (M6.16) infiniteContext: the extension pi loads, and the rendered file
     # read by the extension's own parser without loss: it drops an invalid
     # value silently (fail-open per field), so every rendered key must come
-    # back as written.
+    # back as written: the top level for no model, each override for its
+    # exact "provider/id" (upstream's parseSettings resolves one model).
     ic=${pe.extensions.infinite-context.path}
     for f in index.ts settings.ts; do
       [ -f $ic/$f ] || { echo "FAIL ${dir}: infinite-context lacks $f" >&2; exit 1; }
@@ -99,9 +100,15 @@
       import { parseSettings } from '$ic/settings.ts';
       const text = readFileSync(process.argv[1], 'utf8');
       const raw = JSON.parse(text);
-      const parsed = parseSettings(text);
-      const lost = Object.keys(raw).filter((key) => !isDeepStrictEqual(parsed[key], raw[key]));
-      if (Object.keys(raw).length === 0 || lost.length > 0) { console.error('lost: ' + lost.join(', ')); process.exit(1); }
+      const fields = ['nudgeAtTokens', 'nudgeAtPercent'];
+      const same = (model, rule) => fields.filter((k) => k in rule && !isDeepStrictEqual(parseSettings(text, model)[k], rule[k]));
+      const overrides = Object.entries(raw.modelOverrides ?? {});
+      const lost = [
+        ...Object.keys(raw).filter((k) => !fields.includes(k) && k !== 'modelOverrides'),
+        ...same(undefined, raw),
+        ...overrides.flatMap(([model, rule]) => same(model, rule).map((k) => model + '.' + k)),
+      ];
+      if (!fields.some((k) => k in raw) || overrides.length === 0 || lost.length > 0) { console.error('lost: ' + lost.join(', ')); process.exit(1); }
     " ${c.home.file."${dir}/infinite-context/settings.json".source} || { echo "FAIL ${dir}: infinite-context does not read its settings.json as written" >&2; exit 1; }
     echo "ok ${dir}"
   '';

@@ -98,11 +98,11 @@
     "pi-infinite-context": {
       "flake": false,
       "locked": {
-        "lastModified": 1793794007,
-        "narHash": "sha256-tZPuH5zVXjiFYkIwk1nR2q0Fxpc5obFmIT6EX0SiOYI=",
+        "lastModified": 1794680453,
+        "narHash": "sha256-NhYVS/E9drwYCLRvHwjDF0qWhEkj2z0C5J/ymUTbVes=",
         "owner": "fdietze",
         "repo": "pi-infinite-context",
-        "rev": "494df9d15b5697d2562057e028c0fedc6d3aa58b",
+        "rev": "0c7f021f1673353e1ec36898a54b6bc01445cd6e",
         "type": "github"
       },
       "original": {

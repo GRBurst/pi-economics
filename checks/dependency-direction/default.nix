@@ -1,7 +1,7 @@
 # Dependency direction (redesign G5, M5b.2): pi-economics reads and sets the
 # levers of its targets; an extension never reads pi-economics. No file of the
-# patched upstreams (patches/), of the built patched infinite-context (an
-# add-on target) or of the patched actor names pi-economics' former
+# upstreams under patches/, of the built infinite-context (an add-on
+# target) or of the patched actor names pi-economics' former
 # process-global API or one of its channels and entries (`pi-economics:`);
 # fixed strings, no regex. The task router stays out (review n2): it shares
 # the claim channel `pi-economics:claim:v1` by design (runtime-guard-copies)

@@ -1,7 +1,9 @@
-// Drives the patched index.ts through its event handlers, with pi's packages stubbed (see stubs/).
+// Drives upstream's index.ts through its event handlers, with pi's packages stubbed (see stubs/).
 // What is under test is this repository's side of it: the settings file the Home Manager module
-// writes (rules per provider or model) sets each model's reminders, and a settings record that
-// pi-economics appends before the session starts (the seed) holds the branch's draw.
+// writes (the top level for every model, `modelOverrides` for an exact provider/id) sets each
+// model's reminders, a key without '/' matches no model (why the module rejects one), and a
+// settings record that pi-economics appends before the extension resolves (the seed: no
+// nudgeAtPercent, no other field) holds the branch's draw.
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,12 +17,14 @@ type Handler = (event: any, ctx: any) => Promise<any>;
 const MILLION = 1_000_000;
 const opus = { provider: "anthropic", id: "claude-opus-5-5" };
 const haiku = { provider: "anthropic", id: "claude-haiku-5" };
-const other = { provider: "example", id: "model-a" };
-// As modules/infinite-context.nix renders it: an exact model, a provider with a range.
+const local = { provider: "example", id: "model-a" };
+const other = { provider: "example", id: "model-b" };
+// As modules/infinite-context.nix renders it: a top level for every model, one exact model with a range.
 const owner = {
-  overrides: {
-    "anthropic/claude-opus-5-5": { nudgeAtTokens: 400_000 },
-    anthropic: { nudgeAtTokens: [100_000, 200_000], nudgeAtPercent: 50 },
+  nudgeAtTokens: 400_000,
+  nudgeAtPercent: 50,
+  modelOverrides: {
+    "example/model-a": { nudgeAtTokens: [100_000, 200_000] },
   },
 };
 
@@ -72,13 +76,19 @@ function harness(settings: unknown, initial: Entry[] = [], early: Handler[] = []
     for (const handler of handlers.get(name) ?? []) result = await handler(event, ctx);
     return result;
   };
+  /** pi's model switch: the model changes, then model_select fires. */
+  const select = async (model: unknown) => {
+    const previousModel = state.model;
+    state.model = model;
+    await emit("model_select", { model, previousModel, source: "set" });
+  };
   /** A continuing tool turn at `tokens` of the model's window. */
   const turn = async (tokens: number, window = MILLION) => {
     state.usage = { contextWindow: window, tokens };
     await emit("turn_end", { message: { stopReason: "toolUse" }, toolResults: [{ toolName: "bash" }] });
   };
   const records = () => entries.filter((e) => e.customType === "infinite-context:settings").map((e) => e.data);
-  return { entries, sent, notifications, state, emit, turn, records };
+  return { entries, sent, notifications, state, emit, select, turn, records };
 }
 
 const user = (id: string, text: string): Entry => ({
@@ -88,7 +98,7 @@ const user = (id: string, text: string): Entry => ({
   message: { role: "user", content: text, timestamp: 1 },
 });
 
-test("the module's rules set each model's reminders; the step stays upstream's", async () => {
+test("the module's file sets each model's reminders: the top level, an exact modelOverrides key; the step stays upstream's", async () => {
   const h = harness(owner, [user("u1", "one")]);
   await h.emit("session_start");
   await h.turn(399_999);
@@ -102,29 +112,37 @@ test("the module's rules set each model's reminders; the step stays upstream's",
     ],
   );
   assert.equal(h.sent[0].customType, "infinite-context/nudge");
-  // Each field on its own: the exact model's limit, the provider's percentage.
-  assert.deepEqual(h.records(), [{ nudgeAtTokens: 400_000, nudgeAtPercent: 50, rule: "anthropic/claude-opus-5-5" }]);
+  // The top level, both fields: the record has upstream's shape and nothing else.
+  assert.deepEqual(h.records(), [{ nudgeAtTokens: 400_000, nudgeAtPercent: 50 }]);
 
-  // The provider's rule: its percentage of a 128k window comes before its drawn limit.
-  h.state.model = haiku;
-  await h.emit("model_select", { model: haiku, previousModel: opus, source: "set" });
+  // The exact model's range, the top level's percentage: of a 128k window it comes before the drawn limit.
+  await h.select(local);
   await h.turn(63_999, 128_000);
   await h.turn(64_000, 128_000);
   assert.equal(h.sent.at(-1).details.threshold, 64_000);
   const drawn = h.records().at(-1) as Record<string, unknown>;
-  assert.deepEqual({ ...drawn, nudgeAtTokens: 0 }, {
-    nudgeAtTokens: 0,
-    nudgeAtPercent: 50,
-    nudgeAtTokensRange: [100_000, 200_000],
-    rule: "anthropic",
-  });
+  assert.deepEqual({ ...drawn, nudgeAtTokens: 0 }, { nudgeAtTokens: 0, nudgeAtPercent: 50, nudgeAtTokensRange: [100_000, 200_000] });
   assert.ok((drawn.nudgeAtTokens as number) >= 100_000 && (drawn.nudgeAtTokens as number) <= 200_000);
 
-  // A model without a rule: upstream's defaults, no rule named.
-  h.state.model = other;
-  await h.turn(10_000);
-  assert.deepEqual(h.records().at(-1), { nudgeAtTokens: 150_000, nudgeAtPercent: 75 });
+  // Another model of the same provider has no key of its own: the top level again.
+  await h.select(other);
+  assert.deepEqual(h.records().at(-1), { nudgeAtTokens: 400_000, nudgeAtPercent: 50 });
+  // Back to the model with the range: its earlier draw holds.
+  await h.select(local);
+  assert.deepEqual(h.records().at(-1), drawn);
+  assert.equal(h.records().length, 4);
   assert.deepEqual(h.notifications, []);
+});
+
+test("a modelOverrides key without '/' matches no model: the top level, else upstream's defaults, apply", async () => {
+  const h = harness({ modelOverrides: { anthropic: { nudgeAtTokens: 100_000, nudgeAtPercent: 10 }, example: { nudgeAtTokens: [100_000, 200_000] } } }, [user("u1", "one")]);
+  h.state.model = haiku;
+  await h.emit("session_start");
+  await h.select(local);
+  assert.deepEqual(h.records(), [{ nudgeAtTokens: 150_000, nudgeAtPercent: 75 }]);
+  const top = harness({ nudgeAtTokens: 300_000, modelOverrides: { anthropic: { nudgeAtTokens: 100_000 } } }, [user("u1", "one")]);
+  await top.emit("session_start");
+  assert.deepEqual(top.records(), [{ nudgeAtTokens: 300_000, nudgeAtPercent: 75 }]);
 });
 
 test("without a settings file upstream's defaults apply and the record has upstream's shape", async () => {
@@ -137,78 +155,78 @@ test("without a settings file upstream's defaults apply and the record has upstr
   assert.deepEqual(h.records(), [{ nudgeAtTokens: 150_000, nudgeAtPercent: 75 }]);
 });
 
-test("pi-economics' seed: a record with the rule's range, appended before session_start, holds the draw", async () => {
+test("pi-economics' seed: a record with the model's range, appended before session_start, holds the draw", async () => {
   const seed: Entry = {
     type: "custom",
     id: "seed",
     customType: "infinite-context:settings",
-    data: { nudgeAtTokens: 123_456, nudgeAtTokensRange: [100_000, 200_000], rule: "anthropic" },
+    data: { nudgeAtTokens: 123_456, nudgeAtTokensRange: [100_000, 200_000] },
   };
   const h = harness(owner, [user("u1", "one"), seed]);
-  h.state.model = haiku;
+  h.state.model = local;
   await h.emit("session_start");
   await h.turn(123_455);
   assert.equal(h.sent.length, 0);
   await h.turn(123_456);
   assert.equal(h.sent[0].details.threshold, 123_456);
-  assert.deepEqual(h.records().at(-1), {
-    nudgeAtTokens: 123_456,
-    nudgeAtPercent: 50,
-    nudgeAtTokensRange: [100_000, 200_000],
-    rule: "anthropic",
-  });
+  // The seed lacks nudgeAtPercent: the extension completes it in a record of its own (the engine's read-back).
+  assert.deepEqual(h.records(), [seed.data, { nudgeAtTokens: 123_456, nudgeAtPercent: 50, nudgeAtTokensRange: [100_000, 200_000] }]);
 });
 
-/** The seed pi-economics appends from its own model_select handler, which runs before IC's. */
-function seedAtModelSelect(data: Record<string, unknown>, initial: Entry[]) {
+test("a seed outside the model's range, or for another range, is not kept: the extension draws its own", async () => {
+  for (const data of [{ nudgeAtTokens: 250_000, nudgeAtTokensRange: [100_000, 200_000] }, { nudgeAtTokens: 150_000, nudgeAtTokensRange: [100_000, 300_000] }]) {
+    const h = harness(owner, [user("u1", "one"), { type: "custom", id: "seed", customType: "infinite-context:settings", data }]);
+    h.state.model = local;
+    const random = Math.random;
+    Math.random = () => 0; // the extension's draw: the range's minimum
+    try {
+      await h.emit("session_start");
+    } finally {
+      Math.random = random;
+    }
+    assert.deepEqual(h.records(), [data, { nudgeAtTokens: 100_000, nudgeAtPercent: 50, nudgeAtTokensRange: [100_000, 200_000] }]);
+  }
+});
+
+/** The seed pi-economics appends from its own model_select handler, which runs before the extension's. */
+function seedAtModelSelect(settings: unknown, data: Record<string, unknown>, initial: Entry[]) {
   let h: ReturnType<typeof harness> | undefined;
   const early: Handler[] = [
     async () => {
       h?.entries.push({ type: "custom", id: "model-seed", customType: "infinite-context:settings", data });
     },
   ];
-  h = harness(owner, initial, early);
+  h = harness(settings, initial, early);
   return h;
 }
 
-test("pi-economics' seed appended at model_select, for another range, replaces IC's own draw", async () => {
-  const seed = {
-    nudgeAtTokens: 123_456,
-    nudgeAtPercent: 50,
-    nudgeAtTokensRange: [100_000, 200_000],
-    rule: "anthropic",
-  };
-  const h = seedAtModelSelect(seed, [user("u1", "one")]);
+test("pi-economics' seed appended at model_select, for another range, replaces the extension's own draw", async () => {
+  const seed = { nudgeAtTokens: 123_456, nudgeAtTokensRange: [100_000, 200_000] };
+  const h = seedAtModelSelect(owner, seed, [user("u1", "one")]);
   await h.emit("session_start");
   assert.equal(h.records().length, 1);
-  h.state.model = haiku;
-  await h.emit("model_select", { model: haiku, previousModel: opus, source: "set" });
-  // The seed is the branch's latest record and complete: IC appends nothing after it.
-  assert.deepEqual(h.records(), [{ nudgeAtTokens: 400_000, nudgeAtPercent: 50, rule: "anthropic/claude-opus-5-5" }, seed]);
+  await h.select(local);
+  assert.deepEqual(h.records(), [
+    { nudgeAtTokens: 400_000, nudgeAtPercent: 50 },
+    seed,
+    { ...seed, nudgeAtPercent: 50 },
+  ]);
   await h.turn(123_455);
   assert.equal(h.sent.length, 0);
   await h.turn(123_456);
   assert.equal(h.sent[0].details.threshold, 123_456);
-  assert.equal(h.records().length, 2);
+  assert.equal(h.records().length, 3);
 });
 
-test("pi-economics' seed appended at model_select, for the same range, replaces IC's own limit", async () => {
-  const seed = {
-    nudgeAtTokens: 111_111,
-    nudgeAtPercent: 50,
-    nudgeAtTokensRange: [100_000, 200_000],
-    rule: "anthropic",
-  };
-  const h = seedAtModelSelect(seed, [user("u1", "one")]);
-  h.state.model = haiku;
+test("pi-economics' seed appended at model_select, for the same range, replaces the extension's own limit", async () => {
+  const both = { modelOverrides: { "example/model-a": { nudgeAtTokens: [100_000, 200_000] }, "example/model-b": { nudgeAtTokens: [100_000, 200_000] } } };
+  const seed = { nudgeAtTokens: 111_111, nudgeAtTokensRange: [100_000, 200_000] };
+  const h = seedAtModelSelect(both, seed, [user("u1", "one")]);
+  h.state.model = local;
   await h.emit("session_start");
-  const own = h.records().at(-1) as Record<string, unknown>;
-  assert.equal(own.rule, "anthropic");
-  const sonnet = { provider: "anthropic", id: "claude-sonnet-5" };
-  h.state.model = sonnet;
-  await h.emit("model_select", { model: sonnet, previousModel: haiku, source: "set" });
-  assert.deepEqual(h.records().at(-1), seed);
-  assert.equal(h.records().length, 2);
+  assert.deepEqual((h.records().at(-1) as Record<string, unknown>).nudgeAtTokensRange, [100_000, 200_000]);
+  await h.select(other);
+  assert.deepEqual(h.records().slice(1), [seed, { ...seed, nudgeAtPercent: 75 }]);
   await h.turn(111_110);
   assert.equal(h.sent.length, 0);
   await h.turn(111_111);

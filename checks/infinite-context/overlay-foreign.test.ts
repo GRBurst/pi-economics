@@ -56,7 +56,7 @@ test("a message inserted by an earlier context handler is foreign: it passes thr
 test("a fold keeps the foreign messages of calls outside it", () => {
   const output = overlay(request(), folded(0, 2, "early work"));
   assert.deepEqual(output.map((m) => m.role === "user" && m.content), [
-    "[#fold-1] archived fold summary:\nearly work",
+    "fold-1 archived fold summary:\nearly work",
     false,
     false,
     "Recovered question response: yes",
@@ -70,7 +70,7 @@ test("a foreign toolResult of a folded call is dropped with its assistant", () =
   const output = overlay(request(), folded(1, 3, "asked"));
   assert.deepEqual(output.map((m) => m.content), [
     "task",
-    "[#fold-1] archived fold summary:\nasked",
+    "fold-1 archived fold summary:\nasked",
     "Recovered question response: yes",
     "unpersisted",
   ]);

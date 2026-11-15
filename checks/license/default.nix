@@ -1,9 +1,10 @@
 # The licence (spec §8.3): LICENSE is MIT, every package declares MIT, and
-# NOTICE has a section per patched upstream (patches/<input>) and none for an
-# upstream this flake no longer patches, and each patches/<input>/LICENSE
-# carries the upstream's MIT permission notice. Every `Licence text: <path>`
-# line of NOTICE names a file with that notice, one of them checks/npm/LICENSE:
-# the checks' npm lock is a third party's manifest (NOTICE; redesign P17).
+# NOTICE has a section per upstream under patches/<input> (one this flake
+# builds, patched or not) and none for an upstream that left patches/, and
+# each patches/<input>/LICENSE carries the upstream's MIT permission
+# notice. Every `Licence text: <path>` line of NOTICE names a file with
+# that notice, one of them checks/npm/LICENSE: the checks' npm lock is a
+# third party's manifest (NOTICE; redesign P17).
 {
   lib,
   pkgs,

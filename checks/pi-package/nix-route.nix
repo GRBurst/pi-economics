@@ -36,8 +36,8 @@
       infiniteContext = {
         enable = true;
         reminders = {
-          default.nudgeAtTokens = 200000;
-          overrides."example/model-a" = {
+          nudgeAtTokens = 200000;
+          modelOverrides."example/model-a" = {
             nudgeAtTokens = [150000 250000];
             nudgeAtPercent = 50;
           };

@@ -11,7 +11,7 @@ import { PROCESS_SETTINGS } from "../core/process-levers.ts";
 import { fakePi } from "./fake.ts";
 
 const catalogue = JSON.parse(readFileSync(new URL("../addons/catalogue.json", import.meta.url), "utf8"));
-const deps = { icRules: () => ({ overrides: {} }), settings: () => ({ global: {}, project: undefined }) };
+const deps = { icRules: () => ({ modelOverrides: {} }), settings: () => ({ global: {}, project: undefined }) };
 
 test("T7c.0 the catalogue lists exactly the online levers the engine registers by id, and pi's thinking levels", () => {
   const { levers } = allAddons(fakePi().pi, deps);

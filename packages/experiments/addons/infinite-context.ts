@@ -1,29 +1,29 @@
-// The add-on of infinite-context's fold-reminder limit (redesign §7.4, M7a): tier seed. The patched extension keeps the
-// limit its branch's latest `infinite-context:settings` record holds when the record's range is the one of the rule that
-// matches the session's model and the value lies in it (a draw otherwise, which it appends). The engine writes that
-// record first, in its own session_start (and again at model_select), with the level's value in the rule's range, so
-// the extension adopts it; its record after its own handlers is the read-back. A rule without a range (a fixed number)
-// draws nothing and ignores records: refused up front. The target is loaded when its tools are (the engine asks pi),
-// the extension never asks the channel (it does not know pi-economics, G5). `matchRule` and `parseIcRules` follow the
-// extension's selectRule/parseSettings for nudgeAtTokens; the check ic-seed-contract holds them equal.
+// The add-on of infinite-context's fold-reminder limit (redesign §7.4, M7a): tier seed. The extension (upstream, unpatched
+// since 0.3.2) keeps the limit of its branch's latest `infinite-context:settings` record whose range is the one the session's
+// model resolves to (its exact `modelOverrides` key, else the top level) and whose value lies in it (a draw otherwise, which it
+// appends). The engine writes that record first, in its own session_start (and again at model_select), with the level's value
+// in the range, so the extension adopts it; its record after its own handlers is the read-back. A fixed number draws nothing
+// and ignores records: refused up front. The target is loaded when its tools are (the engine asks pi), the extension never
+// asks the channel (it does not know pi-economics, G5). `parseIcRules`, `modelKey` and `limitFor` follow the extension's
+// parseSettings and its model key for nudgeAtTokens; the check ic-seed-contract holds them equal.
 import type { Level } from "../core/design.ts";
 import type { Lever, ModelRef, Observed, SessionCtx } from "./types.ts";
 
 /** A token limit: a fixed number, or a range [min, max] the extension draws a branch's limit from. */
 export type Nudge = number | readonly [number, number];
-/** The settings file's nudgeAtTokens: the top level and the rules keyed by `<provider>` or `<provider>/<id>`. */
-export type IcRules = { top?: Nudge; overrides: Readonly<Record<string, { nudgeAtTokens?: Nudge }>> };
+/** The settings file's nudgeAtTokens: the top level and the `modelOverrides` keyed by an exact `<provider>/<id>`. */
+export type IcRules = { top?: Nudge; modelOverrides: Readonly<Record<string, { nudgeAtTokens: Nudge }>> };
 /**
- * The record the extension keeps its branch's settings in. The engine seeds its fields nudgeAtTokens, nudgeAtTokensRange and
- * rule; the extension completes the record with nudgeAtPercent, which the seed never has (what tells the extension's record
- * from the engine's own).
+ * The record the extension keeps its branch's settings in. The engine seeds its fields nudgeAtTokens and nudgeAtTokensRange;
+ * the extension completes the record with nudgeAtPercent, which the seed never has (what tells the extension's record from
+ * the engine's own).
  */
-export type IcRecord = { nudgeAtTokens: number; nudgeAtPercent?: number; nudgeAtTokensRange?: readonly [number, number]; rule?: string };
+export type IcRecord = { nudgeAtTokens: number; nudgeAtPercent?: number; nudgeAtTokensRange?: readonly [number, number] };
 
 export const IC_ENTRY = "infinite-context:settings";
 /** The tool the extension registers; the engine takes it as the sign that the extension is loaded. */
 export const IC_TOOL = "context_fold";
-/** The extension's own limit when no rule and no top level sets one (its DEFAULT_SETTINGS; the contract check holds it equal). */
+/** The extension's own limit when neither the model's key nor the top level sets one (its DEFAULT_SETTINGS; the contract check holds it equal). */
 export const IC_DEFAULT_NUDGE = 150_000;
 export const IC_TARGET = "infinite-context";
 
@@ -44,27 +44,22 @@ export function parseIcRules(json: string | undefined): IcRules {
   try { value = json === undefined ? undefined : JSON.parse(json); } catch { /* an unparseable file reads as an empty one */ }
   const file = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
   const top = nudgeOf(file.nudgeAtTokens);
-  const raw = isObject(file.overrides) ? file.overrides : {};
-  const rules = Object.entries(raw).flatMap(([key, rule]): Array<[string, { nudgeAtTokens: Nudge }]> => {
-    const nudge = isObject(rule) ? nudgeOf(rule.nudgeAtTokens) : undefined;
+  const raw = isObject(file.modelOverrides) ? file.modelOverrides : {};
+  const overrides = Object.entries(raw).flatMap(([key, o]): Array<[string, { nudgeAtTokens: Nudge }]> => {
+    const nudge = isObject(o) ? nudgeOf(o.nudgeAtTokens) : undefined;
     return nudge === undefined ? [] : [[key, { nudgeAtTokens: nudge }]];
   });
-  return { ...(top === undefined ? {} : { top }), overrides: Object.fromEntries(rules) };
+  return { ...(top === undefined ? {} : { top }), modelOverrides: Object.fromEntries(overrides) };
 }
 
-/** The limit of a model's rule: the exact `<provider>/<id>` rule, then the provider's, then the top level, then upstream's default. */
-export function matchRule(
-  overrides: Readonly<Record<string, { nudgeAtTokens?: Nudge }>>,
-  top: Nudge | undefined,
-  provider: string | undefined,
-  id: string | undefined,
-): { rule?: string; nudge: Nudge } {
-  const keys = !provider ? [] : id ? [`${provider}/${id}`, provider] : [provider];
-  for (const key of keys) {
-    const nudge = Object.hasOwn(overrides, key) ? overrides[key].nudgeAtTokens : undefined;
-    if (nudge !== undefined) return { rule: key, nudge };
-  }
-  return { nudge: top ?? IC_DEFAULT_NUDGE };
+/** The key a model has in `modelOverrides`, built as the extension builds it ("provider/id"); none without a whole model. */
+export const modelKey = (model: ModelRef | undefined): string | undefined =>
+  typeof model?.provider === "string" && typeof model.id === "string" ? `${model.provider}/${model.id}` : undefined;
+
+/** The limit for a model key: its exact `modelOverrides` entry, then the top level, then upstream's default. */
+export function limitFor(rules: IcRules, key: string | undefined): Nudge {
+  const own = key !== undefined && Object.hasOwn(rules.modelOverrides, key) ? rules.modelOverrides[key].nudgeAtTokens : undefined;
+  return own ?? rules.top ?? IC_DEFAULT_NUDGE;
 }
 
 /** The limit the fraction `q` of a range stands for: whole tokens, `min` at 0 and `max` at 1. */
@@ -73,7 +68,7 @@ export const tokensAt = (range: readonly [number, number], q: number): number =>
 const isFraction = (l: Level): l is number => typeof l === "number" && l >= 0 && l <= 1;
 const isRange = (n: Nudge): n is readonly [number, number] => typeof n !== "number";
 
-/** The extension's latest well-formed settings record on a branch (the one it resolves from, and the read-back). */
+/** The latest well-formed settings record on a branch: the read-back, and what a seed need not repeat. */
 function latestRecord(branch: readonly unknown[]): IcRecord | undefined {
   for (let i = branch.length - 1; i >= 0; i--) {
     const e = branch[i];
@@ -86,22 +81,19 @@ const sameRange = (a: unknown, b: readonly [number, number]): boolean => Array.i
 
 /** The lever of infinite-context's limit; `rules` reads the settings file the extension reads (the module writes it). */
 export function infiniteContext(rules: () => IcRules): readonly Lever[] {
-  const matched = (model: ModelRef | undefined) => {
-    const r = rules();
-    return matchRule(r.overrides, r.top, model?.provider, model?.id);
-  };
+  const matched = (model: ModelRef | undefined): Nudge => limitFor(rules(), modelKey(model));
   const nudge: Lever = {
     id: `${IC_TARGET}.nudgeAtTokens`, target: IC_TARGET, scope: "session", tier: "seed", readBackAt: "before_agent_start", follow: "model", gate: true, gateWhy: "the matched rule has no range",
-    // Levels are fractions q of the matched rule's range, so one level set fits every rule that has one (§7.4).
-    feasible: (env, levels) => (isRange(matched(env.model).nudge) ? levels.filter(isFraction) : []),
+    // Levels are fractions q of the model's range, so one level set fits every range (§7.4).
+    feasible: (env, levels) => (isRange(matched(env.model)) ? levels.filter(isFraction) : []),
     valueFor(ctx: SessionCtx, level: Level): Level {
-      const { nudge: n } = matched(ctx.model);
+      const n = matched(ctx.model);
       return isRange(n) && isFraction(level) ? tokensAt(n, level) : level;
     },
     apply(ctx: SessionCtx, level: Level): void {
-      const { rule, nudge: n } = matched(ctx.model);
+      const n = matched(ctx.model);
       if (!isRange(n) || !isFraction(level)) return;
-      const record: IcRecord = { nudgeAtTokens: tokensAt(n, level), nudgeAtTokensRange: n, ...(rule === undefined ? {} : { rule }) };
+      const record: IcRecord = { nudgeAtTokens: tokensAt(n, level), nudgeAtTokensRange: n };
       // The branch already holds it (a resumed session, a switch within one range): the extension keeps it; no second record.
       const held = latestRecord(ctx.branch?.() ?? []);
       if (held?.nudgeAtTokens === record.nudgeAtTokens && sameRange(held.nudgeAtTokensRange, n)) return;

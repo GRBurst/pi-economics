@@ -12,8 +12,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # The patched upstream (spec §3), locked to the revision the patch was
-    # made against; a consumer makes it follow its own input.
+    # The upstream extension (spec §3), unpatched since 0.3.2, locked to the
+    # revision the checks ran against; a consumer makes it follow its own input.
     pi-infinite-context = {
       url = "github:fdietze/pi-infinite-context";
       flake = false;
@@ -62,7 +62,7 @@
     # common.nix, so every option a cross-component assertion reads exists.
     homeModules.default = {
       imports = [./modules];
-      # The upstream source the patched component builds from (spec §3).
+      # The upstream source the infinite-context component links (spec §3).
       programs.piEconomics.infiniteContext.src = lib.mkDefault pi-infinite-context;
     };
 
