@@ -89,7 +89,7 @@ export function renderCost(c: CostSection): string {
   if (!c.requests && !c.warming) return NO_DATA;
   return [
     table(["metric", "value"], [
-      ["total API-eq $", f2(c.totalUsd)], ["cash $", cash(c.cashUsd, c.cashGuessed)], ["requests (warming)", `${c.requests} (${c.warming})`], ["errors", String(c.errors)], ["root sessions", String(c.units)], ["active hours", f2(c.activeHours)],
+      ["total API-eq $", f2(c.totalUsd)], ["cash $", cash(c.cashUsd, c.cashGuessed)], ["requests (warming)", `${c.requests} (${c.warming})`], ["errors", String(c.errors)], ...(c.aborted ? [["aborted", String(c.aborted)]] : []), ["root sessions", String(c.units)], ["active hours", f2(c.activeHours)],
       ["API-eq $/active hour (95% CI)", `${f2(c.usdPerHour.mean)} (${ci(c.usdPerHour)})`],
       ["API-eq $/accepted task, all routed tasks, excl. – incl. unresolved cards' $ (accepted/tasks)", `${bounds(c.perAccepted)} (${c.perAccepted.accepted}/${c.perAccepted.tasks})`],
     ]),

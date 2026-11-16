@@ -24,7 +24,7 @@ const K_ALLOWED = new Set([
   "input", "cacheRead", "cacheWrite", "output", "reasoning", "costUsd", "status", "retries", "retryWaitMs",
   "q5h", "q5hReset", "q7d", "q7dReset", "overage", "claim", "fallback", "errorClass", "rawRatelimit",
   // v2 (design §5.2)
-  "design", "billing", "cacheWrite1h", "durationMs", "ttftMs", "errorKind",
+  "design", "billing", "cacheWrite1h", "durationMs", "ttftMs", "errorKind", "aborted",
 ]);
 
 const now = new Date("2026-10-02T12:34:56.789Z");
@@ -158,7 +158,7 @@ test("P-size v2: every field at its largest (256-character strings, the largest 
   const l = buildLine({ now, sessionId: s, parentSessionId: s, arm: s, design: s, provider: s, model: s, effort: s,
     kind: "warming", billing: "subscription", status: "error", errorMessage: "400 prompt is too long",
     usage: { input: big, cacheRead: big, cacheWrite: big, cacheWrite1h: big, output: big, reasoning: big, costUsd: Number.MAX_VALUE },
-    retries: big, retryWaitMs: big, durationMs: big, ttftMs: big, snap: { status: 200, at: 1, headers } });
+    retries: big, retryWaitMs: big, durationMs: big, ttftMs: big, aborted: true, snap: { status: 200, at: 1, headers } });
   for (const k of K_ALLOWED) assert.ok(k in l, `${k} missing from the largest line`);
   const out = serialize(l);
   assert.ok(Buffer.byteLength(out) < 4096, `${Buffer.byteLength(out)} bytes`);
@@ -198,3 +198,11 @@ test("M8 buildLine: the llama.cpp timings are written iff given (promptMs, genMs
   for (const k of ["promptMs", "genMs", "cacheN", "promptN"]) assert.equal(k in buildLine(base), false, `pi-economics: no ${k} unless given`);
 });
 function pickKeys(l: Record<string, unknown>, ks: string[]): Record<string, unknown> { return Object.fromEntries(ks.filter((k) => k in l).map((k) => [k, l[k]])); }
+
+test("buildLine: aborted: true is written iff given (and survives the allowlist); an aborted error line is an error line", () => {
+  assert.equal((buildLine({ ...base, aborted: true }) as any).aborted, true);
+  assert.equal("aborted" in buildLine(base), false);
+  const l = buildLine({ ...base, status: "error", aborted: true }) as any;
+  assert.deepEqual([l.aborted, l.errorKind, l.errorClass], [true, "other", "error"]);
+  assert.equal(JSON.parse(serialize(buildLine({ ...base, aborted: true }))).aborted, true);
+});

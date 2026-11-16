@@ -337,3 +337,12 @@ test("systemHash (M3b): optional on request lines, 16 hex digits when present", 
   w.meter.push({ ...t, systemHash: "xyz" }, { ...t, systemHash: 12 });
   assert.deepEqual(check(w).map((p) => [`${p.log}.${p.field}`, p.count]), [["meter.systemHash", 2]]);
 });
+
+test("meter v2: aborted is a boolean when present", () => {
+  const w = world();
+  const v2 = { v: 2, ts: iso(T0), sessionId: "m9", provider: "p", model: "m", kind: "turn", status: "error", errorClass: "error", errorKind: "other", billing: "api" };
+  w.meter.push({ ...v2, aborted: true }, { ...v2, status: 200, aborted: true, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, costUsd: 0 });
+  assert.deepEqual(check(w), [], "well-formed aborted lines");
+  w.meter.push({ ...v2, aborted: "yes" });
+  assert.deepEqual(fields(check(w)), ["meter.aborted"]);
+});

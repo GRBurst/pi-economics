@@ -1,8 +1,8 @@
 // Pure aggregation + markdown rendering for the meter log (bin/meter-report.ts does the I/O).
 import { cacheSection } from "./analyse/cache.ts";
-import { isRequestLine } from "./analyse/logs.ts";
+import { isAborted, isRequestLine } from "./analyse/logs.ts";
 export type Row = { key: string; requests: number; input: number; cacheRead: number; cacheWrite: number;
-  output: number; costUsd: number; errors: number; warming: number; warmingCostUsd: number };
+  output: number; costUsd: number; errors: number; aborted: number; warming: number; warmingCostUsd: number };
 export type Regression =
   | { ok: true; hours: number; read: number; write: number; output: number }
   | { ok: false; hours: number };
@@ -11,7 +11,7 @@ export type Aggregate = { byDay: Row[]; bySession: Row[]; byModel: Row[]; total:
 const MIN_HOURS = 24;
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 const emptyRow = (key: string): Row => ({ key, requests: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0,
-  costUsd: 0, errors: 0, warming: 0, warmingCostUsd: 0 });
+  costUsd: 0, errors: 0, aborted: 0, warming: 0, warmingCostUsd: 0 });
 
 function add(r: Row, l: any): void {
   if (l.kind === "warming") {
@@ -19,7 +19,8 @@ function add(r: Row, l: any): void {
     r.warmingCostUsd += num(l.costUsd);
     return;
   }
-  if (l.status === "error") r.errors += 1; // a failed request is counted apart, not as a request
+  if (isAborted(l)) r.aborted += 1; // an aborted one too: neither a request nor an error
+  else if (l.status === "error") r.errors += 1; // a failed request is counted apart, not as a request
   else r.requests += 1;
   r.input += num(l.input);
   r.cacheRead += num(l.cacheRead);
@@ -100,9 +101,10 @@ export function quotaRegression(all: any[]): Regression {
 const fmt = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(4));
 
 function table(title: string, rows: Row[]): string {
-  const head = `| ${title} | requests | input | cacheRead | cacheWrite | output | costUsd | errors | warming | warmingCostUsd |`;
-  const sep = "|" + " --- |".repeat(10);
-  const body = rows.map((r) => `| ${r.key} | ${[r.requests, r.input, r.cacheRead, r.cacheWrite, r.output, r.costUsd, r.errors, r.warming, r.warmingCostUsd].map(fmt).join(" | ")} |`);
+  const ab = rows.some((r) => r.aborted > 0); // the column only when some line is aborted
+  const head = `| ${title} | requests | input | cacheRead | cacheWrite | output | costUsd | errors |${ab ? " aborted |" : ""} warming | warmingCostUsd |`;
+  const sep = "|" + " --- |".repeat(ab ? 11 : 10);
+  const body = rows.map((r) => `| ${r.key} | ${[r.requests, r.input, r.cacheRead, r.cacheWrite, r.output, r.costUsd, r.errors, ...(ab ? [r.aborted] : []), r.warming, r.warmingCostUsd].map(fmt).join(" | ")} |`);
   return [head, sep, ...body].join("\n");
 }
 

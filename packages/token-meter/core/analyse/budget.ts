@@ -2,7 +2,7 @@
 // to cap, the window's API-eq $ by token component, 429 requests and retry wait. The calibration (calibration.ts) fits them. Pure.
 import { billingOfLine, billingTold, plansAbsent, type Billing, type Plans } from "../plans.ts";
 import { calibrate, type Fit } from "./calibration.ts";
-import { isError, isLine } from "./logs.ts";
+import { isError, isLine, isRequest } from "./logs.ts";
 import { convert, localRows, type LocalProvider } from "./local.ts";
 import { allocate, apiUsd, cacheWrite1hOf } from "./units.ts";
 
@@ -81,7 +81,7 @@ export function windowsOf(lines: readonly any[], plans: Plans): Window[] {
           const l = ls[i];
           const a = allocate(l, cacheWrite1hOf(l, l.parentSessionId === undefined));
           usd.input += a.input; usd.cacheRead += a.cacheRead; usd.cacheWrite += a.cacheWrite5m + a.cacheWrite1h; usd.output += a.output;
-          if (l.kind !== "warming" && !isError(l)) requests += 1;
+          if (isRequest(l)) requests += 1;
           if (isRateLimit(l) && capped[i] & bit) r429 += 1;
           // observable when any line of the window carries the field; summed over the lines of the capped limit
           const own = capped[i] & bit;
@@ -143,7 +143,7 @@ export function budget(meter: readonly any[], plans: Plans | undefined, rates: R
     if (!billingTold(l, known)) row.guessed = true;
     row.apiUsd += usd;
     if (billing === "api") row.cashUsd += usd;
-    if (l.kind === "warming" || isError(l)) continue;
+    if (!isRequest(l)) continue;
     row.requests += 1;
   }
   const local = localRows(meter, known);

@@ -124,6 +124,7 @@ largest (`rawRatelimit` is dropped first).
 | `promptMs`, `genMs`, `cacheN`, `promptN` | int (ms, ms, tokens, tokens) | when the last stream event of the request that carries them has a llama.cpp `timings` object (an openai-completions stream: pi 1.4 passes each SDK chunk to `provider_stream_event` unchanged, and llama-server ends a stream with `timings`) | `timings.prompt_ms`, `timings.predicted_ms`, `timings.cache_n`, `timings.prompt_n`, each rounded and written iff it is a finite number ≥ 0; absent for any other provider (never 0) |
 | `systemHash` | 16 hex digits | turn lines whose send ran pi's `context_with_system` (pi ≥ 1.4) | the first 16 hex digits of a sha256 over the system state the session sent: system prompt, prompt sections, tool list (name, description, parameters), replayed from that event's system messages as pi-ai does; a change between two requests of a branch is the cache-miss cause `prefix` (*Analysis: cache misses*). Neither the prompt nor the tools are written. Limits: it is the state as pi-ai folds the system messages; a model that takes system messages mid-conversation (the current Claude models on the `anthropic` provider) gets a later section or tool change appended after the cached prefix, which loses nothing, yet the hash changes; a prompt set by `forceSystemPrompt` (applied after `context_with_system`) is not seen |
 | `errorKind` | `context_overflow` \| `rate_limit` \| `other` | `status: "error"` | class of the error message: `context_overflow` exactly when pi 1.4 takes it for one (pi-ai's overflow patterns, mirrored; throttling and rate-limit texts never are), then a leading 429, a throttling or a rate-limit text → `rate_limit`; else `other` (an overloaded server too). The message itself is never written |
+| `aborted` | `true` | turn lines whose message pi ended with `stopReason: "aborted"` (the user's Esc, or pi giving up its retries: "Aborted after 3 retry attempts") | the turn was aborted: it is no request and no error (*Aborted turns*). Never written as `false` |
 | `retries`, `retryWaitMs` | int, int (ms) | turn lines | pi's native retry: `retries` = 1 when this request is pi's resend of the session's previous request that failed (an `error` line, not a context overflow, with no other message and no end of the run in between), else 0; `retryWaitMs` = that failure's `message_end` to this request. Absent on warming lines (pi never resends a warm) |
 
 The count is per request: a failed attempt is an `error` line of its own, and each resend
@@ -158,6 +159,21 @@ context overflow and a local child turn:
 {"v":2,"ts":"2026-11-03T11:02:00.800Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"400","errorKind":"context_overflow","durationMs":800}
 {"v":2,"ts":"2026-11-03T11:10:21.000Z","sessionId":"s-child","parentSessionId":"s-main","arm":"-+-","provider":"llama","model":"qwen3.8","kind":"turn","billing":"local","input":2400,"cacheRead":0,"cacheWrite":0,"output":350,"costUsd":0,"status":200,"retries":0,"retryWaitMs":0,"durationMs":21000,"ttftMs":2600}
 ```
+
+### Aborted turns
+
+An aborted assistant message is no successful request. The writer marks its turn line `aborted: true` and, unless
+it has response headers (a snapshot: its `status` and quota are kept) or tokens (partial usage of an abort mid-stream, a local
+generation or an Anthropic stream, is written), sets `status: "error"` with `errorClass: "error"` and `errorKind: "other"`
+(the message text is never copied). An abort sets no `failedAt`: pi does not retry it, so the next request is no retry
+(`retries: 0`, and an earlier failure's pending retry is cleared).
+
+The readers (`pi-analyse`, `meter-report`) do not count an aborted turn as a request, nor as an error (so it is no rate
+limit, no fold, no activity, no local machine time), and show it apart: `aborted` in Cost (a row only when above 0) and as a
+column of `meter-report` (only when some line is aborted). Its tokens and $ still add up. A turn line counts as aborted when it
+has `aborted: true` or, for the logs written before the mark (v0 to v2), when its `status` is a number and its `input`,
+`output`, `cacheRead` and `cacheWrite` are all 0 or missing (a response that was answered always has output: those lines are
+the aborted messages the old writer logged as `status: 200`). A warming, nested or compaction line is never aborted.
 
 ### Compaction lines
 

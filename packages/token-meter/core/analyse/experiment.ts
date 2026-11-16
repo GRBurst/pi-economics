@@ -1,6 +1,6 @@
 // (b) experiment: per design and stratum the factor effects (ratio of sums, bootstrap CI, minimum detectable effect), the balance table,
 // per-arm stats and the posterior (redesign M2c, B8).
-import { armStats, isError, MIN_HOURS, quotaAttribution, rootUnits, type ArmStat, type RootUnit } from "../arms.ts";
+import { armStats, isRequest, MIN_HOURS, quotaAttribution, rootUnits, type ArmStat, type RootUnit } from "../arms.ts";
 import { bootstrapRatio, mulberry32, normal, ratio } from "../stats.ts";
 import { billingOfLine, plansAbsent, type Plans } from "../plans.ts";
 import { byTs, isLine } from "./logs.ts";
@@ -163,7 +163,7 @@ function objectiveOf(o: Objective, u: RootUnit, ls: any[], plans: Plans, fits?: 
 
 /** The stratum of a root: the billing class (the line's own, else plans) of the provider of its main session's first request; "api" without either. */
 function strataOf(ls: any[], plans: Plans): string {
-  const main = ls.find((l) => l.parentSessionId === undefined && l.kind !== "warming" && !isError(l) && typeof l.provider === "string") ?? ls.find((l) => typeof l.provider === "string");
+  const main = ls.find((l) => l.parentSessionId === undefined && isRequest(l) && typeof l.provider === "string") ?? ls.find((l) => typeof l.provider === "string");
   return main ? billingOfLine(main, plans) : "api";
 }
 
@@ -189,7 +189,7 @@ function unitsOf(dl: any[], design: string, info: Map<string, { flags: Record<st
     const factors: Array<{ lever?: string }> = plainObject(row.factors) ? Object.values(row.factors) : [];
     return { ...unit, confirmed: factors.every((f) => typeof f?.lever === "string" && mine?.[f.lever]?.rb === "confirmed"),
       sensitivity: objectiveOf(o, { ...r, cost: same.reduce((s, l) => s + apiUsd(l), 0) }, same.filter((l) => l.kind !== "warming" || o === "apiUsd"), plans, fits).objective,
-      switched: ls.some((l) => l.kind !== "warming" && !isError(l) && billingOfLine(l, plans) !== start),
+      switched: ls.some((l) => isRequest(l) && billingOfLine(l, plans) !== start),
       overflows: ls.filter((l) => l.errorKind === "context_overflow").length };
   });
   return { units, objectives };

@@ -1,6 +1,6 @@
 // (c) delegation & routing: tiers, profiles, randomized routing, spot checks, escalations, reroutes, runaways.
 // The tier of a task is the model it ran on (B6), not the tier the router planned for it.
-import { isError, push } from "../arms.ts";
+import { isRequest, push } from "../arms.ts";
 import { acceptance } from "../guards.ts";
 import { levelsOfLine, type LevelsContext } from "../levels.ts";
 import { taskRecords } from "../tasks.ts";
@@ -75,7 +75,7 @@ const modelName = (l: any): string => (typeof l.provider === "string" && l.provi
  */
 export function executedTier(t: { ranModel?: string }, childLines: readonly any[]): string {
   if (t.ranModel !== undefined) return t.ranModel;
-  const last = childLines.filter((l) => l.kind !== "warming" && !isError(l)).sort(byTs).at(-1);
+  const last = childLines.filter(isRequest).sort(byTs).at(-1);
   return last === undefined ? "(unknown)" : modelName(last);
 }
 
@@ -323,7 +323,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   const tiers = { ...Object.fromEntries(rows.filter((r) => r.cls === "unresolved" && (r.cost ?? 0) > 0).map((r) => [r.executed, 0])), ...countBy(spawns, ranOn) };
   const children = lines.filter((l) => typeof l.parentSessionId === "string");
   const total = sum(lines.map((l) => apiUsd(l)));
-  const requests = (ls: any[]) => ls.filter((l) => l.kind !== "warming" && !isError(l)).length;
+  const requests = (ls: any[]) => ls.filter(isRequest).length;
   const group = <K extends string>(es: any[], keys: K[]) => Object.values(es.reduce((m, e) => {
     const k = keys.map((x) => String(e[x])).join("\u0000");
     m[k] ??= { ...Object.fromEntries(keys.map((x) => [x, String(e[x])])), n: 0 };
@@ -333,7 +333,7 @@ export function delegation(meter: any[], outcomes: any[], routerSettings: any): 
   const models = new Map<string, { requests: number; usd: number }>();
   for (const l of children) {
     const m = models.get(String(l.model)) ?? models.set(String(l.model), { requests: 0, usd: 0 }).get(String(l.model))!;
-    if (l.kind !== "warming" && !isError(l)) m.requests += 1;
+    if (isRequest(l)) m.requests += 1;
     m.usd += apiUsd(l);
   }
   const limits = { requests: routerSettings?.runaway?.requests ?? 150, usd: routerSettings?.runaway?.usd ?? 10 };

@@ -359,7 +359,16 @@ export function install(pi: PiLike, deps: Deps): void {
     const h = sysHash.get(sid);
     sysHash.delete(sid);
     if (h !== undefined) input.systemHash = h;
-    if (m.stopReason === "error") {
+    if (m.stopReason === "aborted") {
+      // Esc, or pi giving up its retries: no request failed, nothing is resent (the next send is no retry). An abort that got no response
+      // headers and used nothing never reached the provider's answer: an error line; one with either keeps the normal path.
+      input.aborted = true;
+      failedAt.delete(sid);
+      const usage = mapUsage(m.usage);
+      if (usage) input.usage = usage;
+      if (taken.snap) { input.snap = taken.snap; input.status = taken.snap.status; }
+      else if (!usage || ![usage.input, usage.output, usage.cacheRead, usage.cacheWrite].some((n) => n !== 0)) input.status = "error";
+    } else if (m.stopReason === "error") {
       input.status = "error";
       if (typeof m.errorMessage === "string") input.errorMessage = m.errorMessage;
       // pi never retries a context overflow (it compacts instead): that resend is no retry.

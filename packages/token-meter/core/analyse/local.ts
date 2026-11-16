@@ -2,7 +2,7 @@
 // the request time (Σ durations: what the experiments attribute), the queue share (one server slot: overlapping requests queue), per-model rows (throughput, cost per 1M output tokens: one
 // rate per provider, its models run on one machine), prefix reuse, and currency conversion. Pure.
 import { billingOfLine, type Plans, type Rate } from "../plans.ts";
-import { isError, isLine } from "./logs.ts";
+import { isAborted, isError, isLine } from "./logs.ts";
 
 const MS_H = 3_600_000;
 const dur = (l: any): number | undefined => (typeof l.durationMs === "number" && Number.isFinite(l.durationMs) && l.durationMs >= 0 ? l.durationMs : undefined);
@@ -63,7 +63,7 @@ function prefixOf(ls: any[]): Prefix | undefined {
 export function localRows(lines: readonly any[], plans: Plans): LocalProvider[] {
   const by = new Map<string, any[]>();
   for (const l of lines) {
-    if (!isLine(l) || typeof l.provider !== "string" || l.kind === "warming" || billingOfLine(l, plans) !== "local") continue;
+    if (!isLine(l) || typeof l.provider !== "string" || l.kind === "warming" || isAborted(l) || billingOfLine(l, plans) !== "local") continue;
     const xs = by.get(l.provider); if (xs) xs.push(l); else by.set(l.provider, [l]);
   }
   return [...by].map(([provider, ls]) => {

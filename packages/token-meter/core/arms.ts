@@ -1,10 +1,10 @@
 // Per-arm analysis of the meter log for the experiments package. Pure; bin/meter-report.ts does the I/O.
 // Unit of analysis = one root session (a main session with all its children), the random effect of the design.
 import { armEvents, newPremium, type FoldPremium } from "./analyse/cache.ts";
-import { FOLD_SHRINK, isError, push } from "./analyse/logs.ts";
+import { FOLD_SHRINK, isAborted, isError, isRequest, push } from "./analyse/logs.ts";
 import { apiUsd } from "./analyse/units.ts";
 
-export { FOLD_SHRINK, isError, push };
+export { FOLD_SHRINK, isAborted, isError, isRequest, push };
 
 export type ArmStat = { arm: string; units: number; costUsd: number; activeHours: number; costPerHour: number;
   ci: [number, number]; sd: number;
@@ -108,7 +108,7 @@ export function rootUnits(all: any[], quota: Record<QuotaKey, QuotaAttribution> 
   return [...groups].map(([root, us]) => {
     const share = (turns: any[], key: QuotaKey): number | undefined =>
       turns.some((l) => typeof l[key] === "number") || quota[key].perRoot.has(root) ? quota[key].perRoot.get(root) ?? 0 : undefined;
-    const turns = us.filter((l) => l.kind !== "warming" && !isError(l)); // activity = successful requests
+    const turns = us.filter(isRequest); // activity = successful requests
     const hours = turns.reduce((s, l, i) => s + (i && t(l) - t(turns[i - 1]) < IDLE_MS ? t(l) - t(turns[i - 1]) : 0), 0) / (60 * MIN);
     return { root, arm: typeof us[0].arm === "string" ? us[0].arm : "", cost: us.reduce((s, l) => s + apiUsd(l), 0), hours, q5h: share(turns, "q5h"), q7d: share(turns, "q7d") };
   });

@@ -1,5 +1,5 @@
 // (a) cost: $, requests, active hours, splits by model, the cache (cache.ts), warming, folds and cold resumes.
-import { isError, MIN_HOURS, rootUnits } from "../arms.ts";
+import { isAborted, isError, isRequest, MIN_HOURS, rootUnits } from "../arms.ts";
 import { type LedgerSection } from "../ledger.ts";
 import { bootstrapRatioCI, type CI } from "../stats.ts";
 import { byTs, isLine, num, sum } from "./logs.ts";
@@ -11,7 +11,7 @@ import { type Plans } from "../plans.ts";
 import { billingOfLine, billingTold } from "./budget.ts";
 
 export type Split = { name: string; n: number; usd: number; share: number; perHour: number };
-export type CostSection = { totalUsd: number; /** What is actually charged: the API-eq $ of the lines of billing class api (their own billing, else their provider's plan, else api). */ cashUsd: number; /** Some of those lines had their class guessed (no own billing, no plan): cashUsd is an upper bound. */ cashGuessed: boolean; requests: number; errors: number; warming: number; units: number; activeHours: number;
+export type CostSection = { totalUsd: number; /** What is actually charged: the API-eq $ of the lines of billing class api (their own billing, else their provider's plan, else api). */ cashUsd: number; /** Some of those lines had their class guessed (no own billing, no plan): cashUsd is an upper bound. */ cashGuessed: boolean; requests: number; errors: number; /** Aborted turns (isAborted): no request, no error. */ aborted: number; warming: number; units: number; activeHours: number;
   usdPerHour: CI; perAccepted: CostPerAccepted;
   byModel: Array<{ model: string; requests: number; usd: number; share: number; perHour: number }>;
   splits: Split[]; components: Record<Component, number>; cache: CacheSection; folds: LedgerSection };
@@ -29,7 +29,7 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
   const models = new Map<string, { requests: number; usd: number }>();
   for (const l of lines) {
     const m = models.get(String(l.model)) ?? models.set(String(l.model), { requests: 0, usd: 0 }).get(String(l.model))!;
-    if (l.kind !== "warming" && !isError(l)) m.requests += 1;
+    if (isRequest(l)) m.requests += 1;
     m.usd += apiUsd(l);
   }
   const components: Record<Component, number> = { input: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: 0, unallocated: 0 };
@@ -40,7 +40,7 @@ export function cost(meter: any[], outcomes: any[], flags: Record<string, Record
   const warm = lines.filter((l) => l.kind === "warming");
   const split = (name: string, n: number, usd: number): Split => ({ name, n, usd, share: totalUsd ? usd / totalUsd : NaN, perHour: perHour(usd) });
   return {
-    totalUsd, cashUsd: sum(lines.filter((l) => billingOfLine(l, plans) === "api").map((l) => apiUsd(l))), cashGuessed: lines.some((l) => billingOfLine(l, plans) === "api" && !billingTold(l, plans)), requests: lines.filter((l) => l.kind !== "warming" && !isError(l)).length, errors: lines.filter((l) => l.kind !== "warming" && isError(l)).length, warming: warm.length, units: units.length, activeHours, usdPerHour,
+    totalUsd, cashUsd: sum(lines.filter((l) => billingOfLine(l, plans) === "api").map((l) => apiUsd(l))), cashGuessed: lines.some((l) => billingOfLine(l, plans) === "api" && !billingTold(l, plans)), requests: lines.filter(isRequest).length, errors: lines.filter((l) => l.kind !== "warming" && isError(l)).length, aborted: lines.filter(isAborted).length, warming: warm.length, units: units.length, activeHours, usdPerHour,
     perAccepted: costPerAccepted(taskRows(lines, outcomes), "all"), // the tier table's "all" row (B5)
     byModel: [...models].map(([model, m]) => ({ model, ...m, share: totalUsd ? m.usd / totalUsd : NaN, perHour: perHour(m.usd) })).sort((a, b) => b.usd - a.usd),
     splits: [split("warming", warm.length, sum(warm.map((l) => apiUsd(l))))],

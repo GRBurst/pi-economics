@@ -869,3 +869,62 @@ test("review F2 levers: a branch holding only the engine's seed (no nudgeAtPerce
   assert.equal(NUDGE in before.levers, false, "pi-economics: the seed alone is not the extension's limit");
   assert.deepEqual(after.levers[NUDGE], { v: 150_000, s: "ext" });
 });
+
+// An aborted assistant message (pi's stopReason "aborted": the user's Esc, or "Aborted after 3 retry attempts") is no
+// successful request: `aborted: true`; status "error" only when it has neither response headers nor usage.
+const aborted = (extra: object = {}) => assistant({ stopReason: "aborted", errorMessage: "Aborted after 3 retry attempts", ...extra });
+const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { total: 0 } };
+
+test("aborted: no response headers and no usage → an error line (errorKind other) with aborted: true; the message is not copied", () => {
+  const { f, lines } = setup();
+  const ctx = fakeCtx("s1");
+  turnSend(f, ctx);
+  f.fire("message_end", aborted({ usage: undefined }), ctx);
+  turnSend(f, ctx);
+  f.fire("message_end", aborted({ usage: zeroUsage, errorMessage: "429: rate limited SECRET" }), ctx);
+  const ls = lines();
+  assert.deepEqual(ls.map((l) => [l.kind, l.status, l.aborted, l.errorKind]), [["turn", "error", true, "other"], ["turn", "error", true, "other"]]);
+  assert.equal(JSON.stringify(ls).includes("SECRET"), false);
+});
+
+test("aborted: with response headers (a snap) it keeps the normal path: its status, quota and usage, plus aborted: true", () => {
+  const { f, lines } = setup();
+  const ctx = fakeCtx("s1");
+  turnSend(f, ctx);
+  f.fire("after_provider_response", resp, ctx);
+  f.fire("message_end", aborted({ usage: zeroUsage }), ctx);
+  const [l] = lines();
+  assert.deepEqual([l.status, l.aborted, l.q5h, l.input, l.output, "errorKind" in l], [200, true, 9, 0, 0, false]);
+});
+
+test("aborted: with partial usage and no headers it is a 200 line with its usage and aborted: true", () => {
+  const { f, lines } = setup();
+  const ctx = fakeCtx("s1");
+  turnSend(f, ctx);
+  f.fire("message_end", aborted({ usage: { ...usage, input: 7, output: 2, cacheRead: 0, cacheWrite: 0 } }), ctx);
+  const [l] = lines();
+  assert.deepEqual([l.status, l.aborted, l.input, l.output, l.costUsd, "errorKind" in l], [200, true, 7, 2, 0.25, false]);
+});
+
+test("aborted: a line of any other message has no aborted field", () => {
+  const { f, lines } = setup();
+  const ctx = fakeCtx("s1");
+  turnSend(f, ctx);
+  f.fire("message_end", assistant(), ctx);
+  turnSend(f, ctx);
+  f.fire("message_end", failed("500 boom"), ctx);
+  assert.deepEqual(lines().map((l) => "aborted" in l), [false, false]);
+});
+
+test("aborted: never sets failedAt (the next send is no retry) and clears an earlier failure's", () => {
+  const { f, clock, lines } = setup();
+  const ctx = fakeCtx("s1");
+  const send = (at: number) => { clock.t = T0 + at; turnSend(f, ctx); };
+  send(0); f.fire("message_end", aborted({ usage: undefined }), ctx);
+  send(1000); f.fire("message_end", assistant(), ctx);
+  send(2000); f.fire("message_end", failed("529 overloaded"), ctx);
+  send(3000); f.fire("message_end", aborted({ usage: undefined }), ctx); // pi gave up retrying: the user's next prompt is no resend
+  send(9000); f.fire("message_end", assistant(), ctx);
+  assert.deepEqual(lines().map((l) => [l.status, l.retries, l.retryWaitMs]),
+    [["error", 0, 0], [200, 0, 0], ["error", 0, 0], ["error", 1, 1000], [200, 0, 0]]);
+});

@@ -34,8 +34,18 @@ export function inPeriod(logs: Logs, p: Period): Logs {
   return { ...logs, meter: logs.meter.filter(keep), outcomes: logs.outcomes.filter(keep), guards: logs.guards.filter(keep) };
 }
 
-/** A failed request: the log line has no usage and is not a request (it is neither a fold, nor activity). */
-export const isError = (l: any): boolean => l.status === "error";
+/** Tokens of a line, missing or not a number = 0: whether the request got an answer at all. */
+export const hasUsage = (l: any): boolean => ["input", "cacheRead", "cacheWrite", "output"].some((k) => typeof l[k] === "number" && l[k] > 0);
+/**
+ * An aborted request (pi ended the message with stopReason "aborted": Esc, or the retries given up) is no request and no error: the line has
+ * `aborted: true` (meter line v2); history: a turn line of v0 to v2 with a numeric status and no token at all was written for one (a successful
+ * response always has output). A warming, nested or compaction line is never one.
+ */
+export const isAborted = (l: any): boolean => l?.kind === "turn" && (l.aborted === true || (!(l.v > 2) && typeof l.status === "number" && !hasUsage(l)));
+/** A failed request: the log line has no usage and is not a request (it is neither a fold, nor activity). An aborted one is not an error. */
+export const isError = (l: any): boolean => l.status === "error" && !isAborted(l);
+/** A request the readers count: not a warming, not a failed one, not an aborted one. */
+export const isRequest = (l: any): boolean => l.kind !== "warming" && !isError(l) && !isAborted(l);
 /** A warm turn whose context fell below this share of the previous one is a fold. */
 export const FOLD_SHRINK = 0.8;
 /** Append to the list under `k` (linear; never copy the list). */
