@@ -49,8 +49,8 @@ field does not bump it). `pi-analyse` reports the versions per log under *Data q
 | assignments | design v1 rows (5-character arms, no `design`) | `v`, `design` (`"v2"`: 6 factors; `"v3"` since 2026-10-04; `"v4"`: 3 factors) |
 | guards | lines before 2026-10-03 | `v` added (2026-10-03) |
 
-The meter writes `v: 2` since the redesign (0.3.0; *Meter line v2*, *Levers lines*, *Compaction lines*): billing class,
-timing, per-request retries and the `levers` kind. The readers take v0 to v2 alike. A guard line of the v2 engine
+The meter writes `v: 3` (*Meter line versions* below; *Meter line v2*, *Aborted turns*, *Compaction lines*); a levers line keeps
+its own `v: 2`. The readers take v0 to v3 alike. A guard line of the v2 engine
 carries `design` too. The router's outcome log has its own version rule (pi-task-router's `docs/outcome-log.md`).
 assignments **v2** (redesign M5b.1): the experiments engine v2 — a stratum and design id per main session,
 eligible or not; see *experiments/assignments.jsonl*. Readers keep reading v0 and v1 rows.
@@ -89,7 +89,7 @@ eligible or not; see *experiments/assignments.jsonl*. Readers keep reading v0 an
 | `input`, `cacheRead`, `cacheWrite`, `output` | number | when `status` ≠ `error` | tokens |
 | `reasoning` | number | no | reasoning tokens (subset of output) |
 | `costUsd` | number | when `status` ≠ `error` | pi's API-price cost of the request |
-| `status` | int \| `error` | yes | HTTP status, or `error` |
+| `status` | int \| `error` | yes | HTTP status, or `error`. An aborted turn (*Aborted turns*) is `error` without response headers and tokens, else its snapshot status (any code, 429 included) or 200 with its tokens, which may be 0 |
 | `errorClass` | string | on error | leading HTTP code of the error message, else `error` |
 | `retries`, `retryWaitMs` | number | up to v1; v2: turn lines | v1: retries before this request and the time waited, counted by the pi-retry extension; v2: pi's native retry (*Meter line v2*) |
 | `q5h`, `q7d` | number (%) | no | account utilisation of the 5-hour and 7-day windows, as read from the response headers of THIS request (parallel sessions log interleaved, slightly stale readings) |
@@ -108,10 +108,10 @@ the warm gets its own line. A warm aborted before its headers gets no line.
 
 ### Meter line v2
 
-The writer emits `v: 2`: the v1 line plus the optional fields below. `v` was bumped because
+The writer emitted `v: 2` up to the abort mark, and emits `v: 3` since (the v2 line plus `aborted`, below): the v1 line plus the optional fields below. `v` was bumped to 2 because
 `retries` and `retryWaitMs` changed source and meaning and are no longer on every line. A v2
 field is present iff it was measured: **absent = unknown, never 0**. The readers (`pi-analyse`,
-`meter-report`) take v0, v1 and v2 lines alike; a line stays below 4 KiB with every field at its
+`meter-report`) take v0 to v3 lines alike; a line stays below 4 KiB with every field at its
 largest (`rawRatelimit` is dropped first).
 
 | field | type | present | meaning |
@@ -124,7 +124,7 @@ largest (`rawRatelimit` is dropped first).
 | `promptMs`, `genMs`, `cacheN`, `promptN` | int (ms, ms, tokens, tokens) | when the last stream event of the request that carries them has a llama.cpp `timings` object (an openai-completions stream: pi 1.4 passes each SDK chunk to `provider_stream_event` unchanged, and llama-server ends a stream with `timings`) | `timings.prompt_ms`, `timings.predicted_ms`, `timings.cache_n`, `timings.prompt_n`, each rounded and written iff it is a finite number ≥ 0; absent for any other provider (never 0) |
 | `systemHash` | 16 hex digits | turn lines whose send ran pi's `context_with_system` (pi ≥ 1.4) | the first 16 hex digits of a sha256 over the system state the session sent: system prompt, prompt sections, tool list (name, description, parameters), replayed from that event's system messages as pi-ai does; a change between two requests of a branch is the cache-miss cause `prefix` (*Analysis: cache misses*). Neither the prompt nor the tools are written. Limits: it is the state as pi-ai folds the system messages; a model that takes system messages mid-conversation (the current Claude models on the `anthropic` provider) gets a later section or tool change appended after the cached prefix, which loses nothing, yet the hash changes; a prompt set by `forceSystemPrompt` (applied after `context_with_system`) is not seen |
 | `errorKind` | `context_overflow` \| `rate_limit` \| `other` | `status: "error"` | class of the error message: `context_overflow` exactly when pi 1.4 takes it for one (pi-ai's overflow patterns, mirrored; throttling and rate-limit texts never are), then a leading 429, a throttling or a rate-limit text → `rate_limit`; else `other` (an overloaded server too). The message itself is never written |
-| `aborted` | `true` | turn lines whose message pi ended with `stopReason: "aborted"` (the user's Esc, or pi giving up its retries: "Aborted after 3 retry attempts") | the turn was aborted: it is no request and no error (*Aborted turns*). Never written as `false` |
+| `aborted` | `true` | v3: turn lines whose message pi ended with `stopReason: "aborted"` (the user's Esc, or pi giving up its retries: "Aborted after 3 retry attempts") | the turn was aborted: it is no request and no error (*Aborted turns*). Never written as `false` |
 | `retries`, `retryWaitMs` | int, int (ms) | turn lines | pi's native retry: `retries` = 1 when this request is pi's resend of the session's previous request that failed (an `error` line, not a context overflow, with no other message and no end of the run in between), else 0; `retryWaitMs` = that failure's `message_end` to this request. Absent on warming lines (pi never resends a warm) |
 
 The count is per request: a failed attempt is an `error` line of its own, and each resend
@@ -152,13 +152,25 @@ A subscription turn on a 1-hour cache, a rate-limited attempt and its retry, a w
 context overflow and a local child turn:
 
 ```jsonl
-{"v":2,"ts":"2026-11-03T10:00:04.200Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":12,"cacheRead":48000,"cacheWrite":1500,"cacheWrite1h":1500,"output":420,"costUsd":0.06,"status":200,"retries":0,"retryWaitMs":0,"durationMs":4200,"ttftMs":900,"systemHash":"3f9a0c2d71e4b856","q5h":12,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
-{"v":2,"ts":"2026-11-03T10:01:00.300Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"429","errorKind":"rate_limit","durationMs":300}
-{"v":2,"ts":"2026-11-03T10:01:07.400Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":30,"cacheRead":49500,"cacheWrite":800,"cacheWrite1h":800,"output":510,"costUsd":0.05,"status":200,"retries":1,"retryWaitMs":2000,"durationMs":5100,"ttftMs":1100,"systemHash":"3f9a0c2d71e4b856","q5h":13,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
-{"v":2,"ts":"2026-11-03T10:55:37.000Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","kind":"warming","billing":"subscription","input":0,"cacheRead":50300,"cacheWrite":0,"output":1,"costUsd":0.03,"status":200}
-{"v":2,"ts":"2026-11-03T11:02:00.800Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"400","errorKind":"context_overflow","durationMs":800}
-{"v":2,"ts":"2026-11-03T11:10:21.000Z","sessionId":"s-child","parentSessionId":"s-main","arm":"-+-","provider":"llama","model":"qwen3.8","kind":"turn","billing":"local","input":2400,"cacheRead":0,"cacheWrite":0,"output":350,"costUsd":0,"status":200,"retries":0,"retryWaitMs":0,"durationMs":21000,"ttftMs":2600}
+{"v":3,"ts":"2026-11-03T10:00:04.200Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":12,"cacheRead":48000,"cacheWrite":1500,"cacheWrite1h":1500,"output":420,"costUsd":0.06,"status":200,"retries":0,"retryWaitMs":0,"durationMs":4200,"ttftMs":900,"systemHash":"3f9a0c2d71e4b856","q5h":12,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
+{"v":3,"ts":"2026-11-03T10:01:00.300Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"429","errorKind":"rate_limit","durationMs":300}
+{"v":3,"ts":"2026-11-03T10:01:07.400Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":30,"cacheRead":49500,"cacheWrite":800,"cacheWrite1h":800,"output":510,"costUsd":0.05,"status":200,"retries":1,"retryWaitMs":2000,"durationMs":5100,"ttftMs":1100,"systemHash":"3f9a0c2d71e4b856","q5h":13,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
+{"v":3,"ts":"2026-11-03T10:55:37.000Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","kind":"warming","billing":"subscription","input":0,"cacheRead":50300,"cacheWrite":0,"output":1,"costUsd":0.03,"status":200}
+{"v":3,"ts":"2026-11-03T11:02:00.800Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"400","errorKind":"context_overflow","durationMs":800}
+{"v":3,"ts":"2026-11-03T11:10:21.000Z","sessionId":"s-child","parentSessionId":"s-main","arm":"-+-","provider":"llama","model":"qwen3.8","kind":"turn","billing":"local","input":2400,"cacheRead":0,"cacheWrite":0,"output":350,"costUsd":0,"status":200,"retries":0,"retryWaitMs":0,"durationMs":21000,"ttftMs":2600}
 ```
+
+### Meter line versions
+
+| `v` | writer | what it added |
+| --- | --- | --- |
+| 0 (absent) | before 2026-10-03 | early lines have no `arm` |
+| 1 | 2026-10-03 | `v`; `retries`, `retryWaitMs` from the pi-retry extension on every line |
+| 2 | 0.3.0 | *Meter line v2*: billing class, timing, native retries, `errorKind`, `systemHash` … |
+| 3 | the abort mark | `aborted`; the zero-token history rule below ends at v2 |
+
+A `v: 3` line was written by a writer that marks every abort, so a v3 turn line with a numeric status and no tokens is a request
+(a provider that reports no usage, an empty completion), never an abort. Levers lines keep `v: 2` (their own shape).
 
 ### Aborted turns
 
@@ -171,9 +183,14 @@ generation or an Anthropic stream, is written), sets `status: "error"` with `err
 The readers (`pi-analyse`, `meter-report`) do not count an aborted turn as a request, nor as an error (so it is no rate
 limit, no fold, no activity, no local machine time), and show it apart: `aborted` in Cost (a row only when above 0) and as a
 column of `meter-report` (only when some line is aborted). Its tokens and $ still add up. A turn line counts as aborted when it
-has `aborted: true` or, for the logs written before the mark (v0 to v2), when its `status` is a number and its `input`,
+has `aborted: true` or, for the lines written before the mark (**v0 to v2 only**, never a v3 line), when its `status` is a number and its `input`,
 `output`, `cacheRead` and `cacheWrite` are all 0 or missing (a response that was answered always has output: those lines are
-the aborted messages the old writer logged as `status: 200`). A warming, nested or compaction line is never aborted.
+the aborted messages the old writer logged as `status: 200`). A warming, nested or compaction line is never aborted. The history rule may mistake a v0–v2 request of a provider that reports no usage for an
+abort (it would then be left out of the request counts).
+
+One rule in every reader: an aborted line is never a request (Cost, Budget, Cache, Delegation, Experiments, `meter-report`), and a line
+with `aborted: true` adds no machine time (Local, the `wallMs` and `localCost` objectives, the local column of a cloud unit). Its tokens and $
+stay in the token and cost totals. The contract does not require usage on an aborted line (a snapshot without a usage object).
 
 ### Compaction lines
 
@@ -189,7 +206,7 @@ turn and warming lines only, the fold ledger agent turns (and warms as readers o
 the experiment's timed objectives (`wallMs`, `localCost`) leave them out.
 
 ```jsonl
-{"v":2,"ts":"2026-11-03T12:30:10.000Z","sessionId":"s-bench","provider":"anthropic","model":"claude-opus-5-5","kind":"compaction","billing":"subscription","input":152000,"cacheRead":0,"cacheWrite":0,"output":2100,"costUsd":0.81,"status":200}
+{"v":3,"ts":"2026-11-03T12:30:10.000Z","sessionId":"s-bench","provider":"anthropic","model":"claude-opus-5-5","kind":"compaction","billing":"subscription","input":152000,"cacheRead":0,"cacheWrite":0,"output":2100,"costUsd":0.81,"status":200}
 ```
 
 ### Levers lines
@@ -643,9 +660,9 @@ in 2026-11) and is shared by every session, subagent and other client of the acc
 A capped window as lines (the 5-hour window of reset 14:00 reached 97 %, then 100 % at 12:30; a request at 12:40 was rate-limited):
 
 ```jsonl
-{"v":2,"ts":"2026-11-03T12:00:04.200Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":12,"cacheRead":48000,"cacheWrite":1500,"cacheWrite1h":1500,"output":420,"costUsd":0.06,"status":200,"retries":0,"retryWaitMs":0,"durationMs":4200,"ttftMs":900,"q5h":97,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
-{"v":2,"ts":"2026-11-03T12:30:00.000Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":30,"cacheRead":49500,"cacheWrite":800,"cacheWrite1h":800,"output":510,"costUsd":0.05,"status":200,"retries":0,"retryWaitMs":0,"durationMs":5100,"ttftMs":1100,"q5h":100,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
-{"v":2,"ts":"2026-11-03T12:40:00.800Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"429","errorKind":"rate_limit","durationMs":300}
+{"v":3,"ts":"2026-11-03T12:00:04.200Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":12,"cacheRead":48000,"cacheWrite":1500,"cacheWrite1h":1500,"output":420,"costUsd":0.06,"status":200,"retries":0,"retryWaitMs":0,"durationMs":4200,"ttftMs":900,"q5h":97,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
+{"v":3,"ts":"2026-11-03T12:30:00.000Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","input":30,"cacheRead":49500,"cacheWrite":800,"cacheWrite1h":800,"output":510,"costUsd":0.05,"status":200,"retries":0,"retryWaitMs":0,"durationMs":5100,"ttftMs":1100,"q5h":100,"q5hReset":"2026-11-03T14:00:00.000Z","q7d":31,"q7dReset":"2026-11-07T00:00:00.000Z"}
+{"v":3,"ts":"2026-11-03T12:40:00.800Z","sessionId":"s-main","arm":"-+-","provider":"anthropic","model":"claude-opus-5-5","effort":"high","kind":"turn","billing":"subscription","status":"error","retries":0,"retryWaitMs":0,"errorClass":"429","errorKind":"rate_limit","durationMs":300}
 ```
 
 Window start 09:00, cap at 12:30: time to cap 3.5 h, lockout 1.5 h, peak 100, one 429 request, two requests.

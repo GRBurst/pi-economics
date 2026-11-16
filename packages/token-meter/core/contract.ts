@@ -51,7 +51,7 @@ const METER: Rule[] = [
     ...every({ billing: oneOf("subscription", "api", "free", "local") }, "every meter line from v2", (l) => Number.isInteger(l.v) && l.v >= 2),
     ...optional({ retries: int0, retryWaitMs: (v) => numb(v) && v >= 0, design: str, cacheWrite1h: int0, durationMs: int0, ttftMs: int0, promptMs: int0, genMs: int0, cacheN: int0, promptN: int0, errorKind: oneOf("context_overflow", "rate_limit", "other"),
       systemHash: (v) => typeof v === "string" && /^[0-9a-f]{16}$/.test(v), aborted: bool }, "meter line v2"),
-    ...every({ input: numb, cacheRead: numb, cacheWrite: numb, output: numb, costUsd: numb }, "usage of a successful request", (l) => l.status !== "error"),
+    ...every({ input: numb, cacheRead: numb, cacheWrite: numb, output: numb, costUsd: numb }, "usage of a successful request (an aborted line may have none)", (l) => l.status !== "error" && l.aborted !== true),
   ]),
   ...every({ v: (v) => v === 2, ts: time, sessionId: str, eligible: bool, levers: leverStates }, "levers line (design §5.3: v2, every lever state valid)", isLevers),
   ...optional({ parentSessionId: str, arm: str, design: str, stratum: str }, "levers line", isLevers),

@@ -50,7 +50,7 @@ test("LOGS.md: one example line per local-mode event, each passing the contract"
 const V2_HEADING = "### Meter line v2";
 const V2_FIELDS = ["billing", "cacheWrite1h", "durationMs", "ttftMs", "errorKind", "retries", "retryWaitMs", "systemHash"];
 
-test("LOGS.md: meter line v2 examples, each a v2 line the writer could write, passing the contract", () => {
+test("LOGS.md: meter line v2 examples, each a v3 line the writer could write, passing the contract", () => {
   const block = exampleBlock(md, V2_HEADING);
   assert.ok(block, `LOGS.md: no \`\`\`jsonl block under "${V2_HEADING}"`);
   const lines = block.map((l, i) => {
@@ -58,7 +58,7 @@ test("LOGS.md: meter line v2 examples, each a v2 line the writer could write, pa
   });
   const keys = new Set<string>(KEYS);
   for (const [i, l] of lines.entries()) {
-    assert.equal(l.v, 2, `example line ${i + 1}: v`);
+    assert.equal(l.v, 3, `example line ${i + 1}: v`);
     for (const k of Object.keys(l)) assert.ok(keys.has(k), `example line ${i + 1}: ${k} is no meter key`);
   }
   for (const f of V2_FIELDS) assert.ok(lines.some((l) => f in l), `no example line shows ${f}`);
@@ -120,12 +120,12 @@ test("LOGS.md: the Levers lines describe the engine's add-ons, read-back changes
   assert.ok(keys.includes("root assignment") && keys.includes("since M5b.2"), "Join keys: a spawn's arm is joined from its root assignment since M5b.2");
 });
 
-test("LOGS.md: compaction line examples, v2 meter lines of kind compaction without timing or retries, passing the contract", () => {
+test("LOGS.md: compaction line examples, v3 meter lines of kind compaction without timing or retries, passing the contract", () => {
   const lines = parsed("### Compaction lines");
   const keys = new Set<string>(KEYS);
   assert.ok(lines.length > 0);
   for (const [i, l] of lines.entries()) {
-    assert.deepEqual([l.v, l.kind], [2, "compaction"], `example line ${i + 1}`);
+    assert.deepEqual([l.v, l.kind], [3, "compaction"], `example line ${i + 1}`);
     for (const k of Object.keys(l)) assert.ok(keys.has(k), `example line ${i + 1}: ${k} is no meter key`);
     for (const k of ["durationMs", "ttftMs", "retries", "retryWaitMs"]) assert.ok(!(k in l), `example line ${i + 1}: ${k} is never measured for a compaction`);
   }

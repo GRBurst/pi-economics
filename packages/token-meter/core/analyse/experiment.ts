@@ -1,6 +1,6 @@
 // (b) experiment: per design and stratum the factor effects (ratio of sums, bootstrap CI, minimum detectable effect), the balance table,
 // per-arm stats and the posterior (redesign M2c, B8).
-import { armStats, isRequest, MIN_HOURS, quotaAttribution, rootUnits, type ArmStat, type RootUnit } from "../arms.ts";
+import { armStats, isAborted, isRequest, MIN_HOURS, quotaAttribution, rootUnits, type ArmStat, type RootUnit } from "../arms.ts";
 import { bootstrapRatio, mulberry32, normal, ratio } from "../stats.ts";
 import { billingOfLine, plansAbsent, type Plans } from "../plans.ts";
 import { byTs, isLine } from "./logs.ts";
@@ -106,7 +106,7 @@ function objectiveCurrency(o: Objective, plans: Plans): string | undefined {
 function otherOf(o: Objective, ls: any[], plans: Plans): Record<string, number> {
   const out: Record<string, number> = {};
   const add = (c: string, v: number) => { out[c] = (out[c] ?? 0) + v; };
-  if (o === "apiUsd" || o === "cashUsd") for (const l of ls) { const r = plans[String(l.provider)]?.rate; if (l.kind !== "warming" && billingOfLine(l, plans) === "local" && r && dur(l) !== undefined) add(r.currency, (dur(l)! / MS_H) * r.amount); }
+  if (o === "apiUsd" || o === "cashUsd") for (const l of ls) { const r = plans[String(l.provider)]?.rate; if (l.kind !== "warming" && !isAborted(l) && billingOfLine(l, plans) === "local" && r && dur(l) !== undefined) add(r.currency, (dur(l)! / MS_H) * r.amount); }
   else if (o === "localCost") for (const l of ls) if (billingOfLine(l, plans) !== "local") add("USD", apiUsd(l));
   return out;
 }
@@ -156,8 +156,8 @@ function objectiveOf(o: Objective, u: RootUnit, ls: any[], plans: Plans, fits?: 
     case "points5h": return { objective: pointsOf("5h", ls, fits) };
     case "points7d": return { objective: pointsOf("7d", ls, fits) };
     case "cashUsd": return {};
-    case "wallMs": return timed(ls.filter((l) => l.parentSessionId === undefined && l.kind !== "warming"), (l) => dur(l)!);
-    case "localCost": return timed(ls.filter((l) => l.kind !== "warming" && billingOfLine(l, plans) === "local" && plans[String(l.provider)]?.rate), (l) => (dur(l)! / MS_H) * plans[String(l.provider)].rate!.amount);
+    case "wallMs": return timed(ls.filter((l) => l.parentSessionId === undefined && l.kind !== "warming" && !isAborted(l)), (l) => dur(l)!);
+    case "localCost": return timed(ls.filter((l) => l.kind !== "warming" && !isAborted(l) && billingOfLine(l, plans) === "local" && plans[String(l.provider)]?.rate), (l) => (dur(l)! / MS_H) * plans[String(l.provider)].rate!.amount);
   }
 }
 

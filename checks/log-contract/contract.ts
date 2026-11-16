@@ -234,12 +234,14 @@ const logs: Record<string, any[]> = {
   guards: dirLines(join(agentDir, "guards")),
 };
 const failures: string[] = [];
-// The meter writes line v2 (M3a, design §5.2), experiments assignments v2 (M5b.1, §5.4); the other logs are at v1.
+// The meter writes line v3 (M3a, design §5.2; v3: `aborted`), experiments assignments v2 (M5b.1, §5.4); the other logs are at v1.
 const CURRENT: Record<string, number> = { meter: METER_VERSION, outcomes: 1, assignments: 2, guards: 1 };
 for (const [name, lines] of Object.entries(logs)) {
   if (lines.length === 0) failures.push(`${name}: the writer produced no lines`);
-  const old = lines.filter((l) => l.v !== CURRENT[name]);
-  if (old.length) failures.push(`${name}: ${old.length} line(s) without schema version v=${CURRENT[name]}, e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
+  // a levers line is its own shape, at v 2 (LOGS.md "Meter line versions"); every other meter line is at the writer's version
+  const want = (l: any): number => (name === "meter" && l.kind === "levers" ? 2 : CURRENT[name]);
+  const old = lines.filter((l) => l.v !== want(l));
+  if (old.length) failures.push(`${name}: ${old.length} line(s) without the schema version of their kind (v=${CURRENT[name]}), e.g. ${JSON.stringify(old[0]).slice(0, 200)}`);
 }
 for (const e of ["spawn", "check", "verdict", "reroute", "escalate", "force", "hint", "review", "merge", "gatebypass", "plan"]) if (!logs.outcomes.some((l) => l.event === e)) failures.push(`outcomes: no ${e} event`);
 if (!logs.outcomes.some((l) => l.event === "spawn" && l.ticket === "steer")) failures.push("outcomes: no ticket spawn line");

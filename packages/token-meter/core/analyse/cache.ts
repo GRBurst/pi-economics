@@ -1,5 +1,5 @@
 // (a) cache: what a request wrote because the context grew and what it had to rewrite because the cache lost the prefix (redesign M2a, B3).
-import { byTs, FOLD_SHRINK, hasUsage, isAborted, isError, isLine, num, push } from "./logs.ts";
+import { byTs, FOLD_SHRINK, isAborted, isError, isLine, num, push } from "./logs.ts";
 import { cacheWrite1hOf, isClaude, pIn, writeWeight } from "./units.ts";
 import { weightsOf } from "./prices.ts";
 
@@ -81,10 +81,10 @@ const TTL_1H = 60 * 60_000;
 export const ttlMsOf = (flags: Flags = {}) => (l: any): number =>
   num(l.cacheWrite1h) > 0 || (l.parentSessionId === undefined && flags[l.arm]?.mainCacheTtl === "1h") ? TTL_1H : TTL_5M;
 
-/** The session branches of `lines`: per session the turn and warming requests of Claude models in ts order (error lines carry no usage, nested requests are another prompt). */
+/** The session branches of `lines`: per session the turn and warming requests of Claude models in ts order (error and aborted lines are no request, nested requests are another prompt). */
 export function branchesOf(lines: readonly any[]): Map<string, any[]> {
   const branches = new Map<string, any[]>();
-  const usable = lines.filter((l) => isLine(l) && typeof l.sessionId === "string" && (l.kind === "turn" || l.kind === "warming") && !isError(l) && (!isAborted(l) || hasUsage(l)) && isClaude(l));
+  const usable = lines.filter((l) => isLine(l) && typeof l.sessionId === "string" && (l.kind === "turn" || l.kind === "warming") && !isError(l) && !isAborted(l) && isClaude(l));
   for (const l of usable.sort(byTs)) push(branches, l.sessionId, l);
   return branches;
 }

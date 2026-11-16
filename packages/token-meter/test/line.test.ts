@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildLine, monthFile, serialize } from "../core/line.ts";
+import { buildLine, monthFile, SCHEMA_VERSION, serialize } from "../core/line.ts";
 import type { LineInput, MeterLine } from "../core/line.ts";
 import type { Billing } from "../core/plans.ts";
 
@@ -31,9 +31,9 @@ const now = new Date("2026-10-02T12:34:56.789Z");
 const base: LineInput = { now, sessionId: "s1", provider: "anthropic", model: "m", kind: "turn",
   status: 200, retries: 0, retryWaitMs: 0 };
 
-// v: 1 → 2 (M3a): the writer emits meter line v2 (design §5.2).
+// v: 1 → 2 (M3a): meter line v2 (design §5.2); 2 → 3: `aborted` (LOGS.md "Aborted turns"), and the history rule for aborts is bounded to v ≤ 2.
 test("buildLine: minimal input", () => {
-  assert.deepEqual(buildLine(base), { v: 2, ts: now.toISOString(), sessionId: "s1", provider: "anthropic",
+  assert.deepEqual(buildLine(base), { v: 3, ts: now.toISOString(), sessionId: "s1", provider: "anthropic",
     model: "m", kind: "turn", status: 200, retries: 0, retryWaitMs: 0 });
 });
 
@@ -205,4 +205,9 @@ test("buildLine: aborted: true is written iff given (and survives the allowlist)
   const l = buildLine({ ...base, status: "error", aborted: true }) as any;
   assert.deepEqual([l.aborted, l.errorKind, l.errorClass], [true, "other", "error"]);
   assert.equal(JSON.parse(serialize(buildLine({ ...base, aborted: true }))).aborted, true);
+});
+
+test("SCHEMA_VERSION is 3: the line that can carry `aborted`; a levers line keeps its own v 2", () => {
+  assert.equal(SCHEMA_VERSION, 3);
+  assert.equal(buildLine({ ...base, aborted: true }).v, 3);
 });

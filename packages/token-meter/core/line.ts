@@ -31,13 +31,15 @@ type LineBase = { ts: string; sessionId: string; parentSessionId?: string; arm?:
 export type MeterLineV1 = LineBase & { v?: 1; retries: number; retryWaitMs: number };
 /** The line this writer emits (LOGS.md "Meter line v2"); `retries` from pi's native retry, present iff observed. */
 export type MeterLineV2 = LineBase & { v: 2; retries?: number; retryWaitMs?: number; design?: string; billing?: Billing; cacheWrite1h?: number;
-  durationMs?: number; ttftMs?: number; promptMs?: number; genMs?: number; cacheN?: number; promptN?: number; errorKind?: ErrorKind; systemHash?: string; aborted?: true };
-export type MeterLine = MeterLineV1 | MeterLineV2;
+  durationMs?: number; ttftMs?: number; promptMs?: number; genMs?: number; cacheN?: number; promptN?: number; errorKind?: ErrorKind; systemHash?: string };
+/** v3 (LOGS.md "Aborted turns"): v2 plus `aborted`, and no zero-token history rule applies to it. */
+export type MeterLineV3 = Omit<MeterLineV2, "v"> & { v: 3; aborted?: true };
+export type MeterLine = MeterLineV1 | MeterLineV2 | MeterLineV3;
 
 const MAX_STR = 256;
 const MAX_BYTES = 4096;
-/** Schema version of a meter line (LOGS.md); readers treat an absent `v` as 0 (legacy). */
-export const SCHEMA_VERSION = 2;
+/** Schema version of a meter line (LOGS.md); readers treat an absent `v` as 0 (legacy). 3: `aborted`. */
+export const SCHEMA_VERSION = 3;
 export const KEYS = ["v", "ts", "sessionId", "parentSessionId", "arm", "design", "provider", "model", "effort", "kind", "billing",
   "input", "cacheRead", "cacheWrite", "cacheWrite1h", "output", "reasoning", "costUsd", "status", "retries", "retryWaitMs",
   "errorClass", "errorKind", "durationMs", "ttftMs", "promptMs", "genMs", "cacheN", "promptN", "systemHash", "aborted",
@@ -51,7 +53,7 @@ function errorClassOf(message: string | undefined): string {
 }
 
 /** Only allowlisted fields are ever copied; free text (message bodies) never enters a line. */
-export function buildLine(i: LineInput): MeterLineV2 {
+export function buildLine(i: LineInput): MeterLineV3 {
   const l: Record<string, unknown> = {
     v: SCHEMA_VERSION, ts: i.now.toISOString(), sessionId: i.sessionId, provider: i.provider, model: i.model, kind: i.kind,
   };
@@ -75,7 +77,7 @@ export function buildLine(i: LineInput): MeterLineV2 {
     Object.assign(l, quota);
     if (Object.keys(raw).length > 0) l.rawRatelimit = raw;
   }
-  return limitStrings(l, MAX_STR) as MeterLineV2;
+  return limitStrings(l, MAX_STR) as MeterLineV3;
 }
 
 /** Allowlist keys and clip every string value to `max` chars. */

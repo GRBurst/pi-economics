@@ -346,3 +346,12 @@ test("meter v2: aborted is a boolean when present", () => {
   w.meter.push({ ...v2, aborted: "yes" });
   assert.deepEqual(fields(check(w)), ["meter.aborted"]);
 });
+
+test("meter v3: an aborted line needs no usage (a snap but no usage object); any other 200 line does", () => {
+  const w = world();
+  const v3 = { v: 3, ts: iso(T0), sessionId: "m9", provider: "p", model: "m", kind: "turn", status: 200, billing: "api", aborted: true };
+  w.meter.push(v3, { ...v3, status: 429 });
+  assert.deepEqual(check(w), [], "an aborted 200 line without usage fields");
+  w.meter.push((({ aborted, ...r }) => r)(v3));
+  assert.deepEqual(fields(check(w)), ["meter.input", "meter.cacheRead", "meter.cacheWrite", "meter.output", "meter.costUsd"]);
+});

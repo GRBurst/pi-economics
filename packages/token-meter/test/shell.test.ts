@@ -703,7 +703,7 @@ test("compaction: session_compact with usage → one kind compaction line, the s
   f.fire("session_compact", compactEvent(), ctx);
   const [, c, ...rest] = lines();
   assert.equal(rest.length, 0);
-  assert.deepEqual(c, { v: 2, ts: new Date(T0).toISOString(), sessionId: "s1", parentSessionId: "p", arm: "+-+--", provider: "anthropic",
+  assert.deepEqual(c, { v: 3, ts: new Date(T0).toISOString(), sessionId: "s1", parentSessionId: "p", arm: "+-+--", provider: "anthropic",
     model: "opus", kind: "compaction", billing: "subscription", input: 10, cacheRead: 100, cacheWrite: 20, output: 5, reasoning: 3,
     costUsd: 0.25, status: 200 });
 });

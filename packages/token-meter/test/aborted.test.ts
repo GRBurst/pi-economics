@@ -8,7 +8,8 @@ import { cacheSection } from "../core/analyse/cache.ts";
 import { localRows } from "../core/analyse/local.ts";
 import { aggregate, render } from "../core/report.ts";
 import { parsePlans } from "../core/plans.ts";
-import { MIN, T0, turn, turns } from "./world.ts";
+import { assignment, iso, MIN, T0, turn, turns } from "./world.ts";
+import { executedTier } from "../core/analyse/delegation.ts";
 
 const zero = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, costUsd: 0 };
 const none = (meter: any[], extra: Partial<Logs> = {}): Logs => ({ meter, outcomes: [], assignments: [], guards: [], ...extra });
@@ -93,4 +94,99 @@ test("cache: an aborted request without tokens is no step: it neither is a reque
   assert.equal(c.requests, 3);
   assert.equal(c.events.fold.events, 0);
   assert.equal(c.misses.reduce((s, m) => s + m.n, 0), 0);
+});
+
+// ---- v3: the mark exists from schema v3 on; the history rule is for lines written before it ----------------------------------
+
+test("history rule: a v3 line without the mark and without tokens is a request (a provider that reports no usage); v0-v2 ones are aborted", () => {
+  const t = (extra: object) => turn("s", T0, { ...zero, ...extra });
+  assert.equal(isAborted(t({ v: 3 })), false);
+  assert.equal(isAborted(t({ v: 3, aborted: false })), false);
+  assert.equal(isAborted(t({ v: 3, aborted: true })), true);
+  assert.equal(isAborted(t({ v: 4 })), false, "a later schema writes its own mark");
+  assert.equal(isAborted(t({ v: 2 })), true);
+  assert.equal(isAborted(t({ v: 2, aborted: false })), true, "the history rule stays for v2");
+  assert.equal(isAborted(t({ v: 1 })), true);
+  const { v, ...v0 } = t({});
+  assert.equal(isAborted(v0), true);
+  const a = analyse(none([...turns("e", T0, 2, A, 10), turn("e", T0 + 11 * MIN, { ...A, ...zero, v: 3 })]));
+  assert.deepEqual([a.cost.requests, a.cost.aborted], [3, 0]);
+});
+
+// ---- the same rule at every reader ---------------------------------------------------------------------------------------------
+
+test("cache: an aborted request is never a request, with partial tokens too (cache.requests = cost.requests)", () => {
+  const t = (at: number, extra: object) => turn("c", T0 + at * MIN, { ...A, v: 3, input: 0, output: 0, costUsd: 1, ...extra });
+  const lines = [t(0, { cacheRead: 0, cacheWrite: 10_000 }), t(1, { aborted: true, input: 5, output: 2, cacheRead: 10_000, cacheWrite: 0 }), t(2, { cacheRead: 10_000, cacheWrite: 200 })];
+  assert.equal(cacheSection(lines).requests, 2);
+  assert.equal(analyse(none(lines)).cost.requests, 2);
+});
+
+const unitOf = (l: Logs, design: string, stratum: string) => analyse(l).experiment.designs.find((d) => d.design === design)!.strata.find((s) => s.stratum === stratum)!;
+const RATE = { amount: 2, currency: "EUR", per: "hour" } as const;
+const PLANS = { llama: { billing: "local" as const, windows: [] as ("5h" | "7d")[], rate: RATE } };
+const NORATE = { llama: { billing: "local" as const, windows: [] as ("5h" | "7d")[] } };
+/** Two local-main roots of 4 requests (v2, 15 min of request time each) in arms "---" and "+--"; `extra` lines are added to the first. */
+const localRoots = (extra: Record<string, unknown>[] = []) => {
+  const root = (id: string, arm: string) => turns(id, T0, 4, { v: 2, arm, provider: "llama", model: "qwen", costUsd: 0, durationMs: 15 * MIN, input: 1, output: 1 });
+  return [...root("l1", "---"), ...extra, ...root("l2", "+--")];
+};
+const expLogs = (meter: Record<string, unknown>[], plans: Logs["plans"]): Logs =>
+  ({ meter, outcomes: [], guards: [], plans, assignments: ["l1", "l2"].map((id, i) => assignment(id, i ? "+--" : "---", T0)) });
+const hang = (extra: Record<string, unknown> = {}) => turn("l1", T0 + 5 * MIN, { v: 2, arm: "---", provider: "llama", model: "qwen", costUsd: 0, durationMs: 20 * 60 * MIN, ...extra });
+
+test("experiment: an aborted turn adds no time to wallMs nor localCost (an Esc after a long hang), an ordinary slow request does", () => {
+  for (const plans of [PLANS, NORATE]) { // localCost, wallMs
+    const base = unitOf(expLogs(localRoots(), plans), "v4", "local");
+    const withAbort = unitOf(expLogs(localRoots([hang({ ...zero, aborted: true })]), plans), "v4", "local");
+    const slow = unitOf(expLogs(localRoots([hang({ input: 1, output: 1 })]), plans), "v4", "local");
+    assert.deepEqual(withAbort.effects, base.effects);
+    assert.deepEqual(withAbort.balance.map((b) => [b.arm, b.timedLines, b.untimedLines]), base.balance.map((b) => [b.arm, b.timedLines, b.untimedLines]));
+    assert.notDeepEqual(slow.effects, base.effects, "the control moves the objective");
+  }
+});
+
+test("experiment: a local aborted request adds no machine time to a cloud unit's secondary column", () => {
+  const cloud = (id: string, arm: string) => turns(id, T0, 7, { v: 2, arm, costUsd: 1 });
+  const aborted = turn("a-c", T0 + 5 * MIN, { v: 2, parentSessionId: "a", arm: "---", provider: "llama", model: "qwen", ...zero, durationMs: 60 * MIN, aborted: true });
+  const other = (ms: Record<string, unknown>[]) => unitOf({ meter: ms, outcomes: [], guards: [], plans: PLANS, assignments: [assignment("a", "---", T0), assignment("b", "+--", T0)] }, "v4", "api").balance.map((b) => [b.arm, b.other]);
+  assert.deepEqual(other([...cloud("a", "---"), aborted, ...cloud("b", "+--")]), other([...cloud("a", "---"), ...cloud("b", "+--")]));
+});
+
+test("experiment: an aborted first request does not decide a root's stratum, nor does an aborted one count as a model switch", () => {
+  // strataOf: the root's first main request is an aborted one of the local provider; the first real request is a cloud one
+  const cloud = (id: string, arm: string) => turns(id, T0 + MIN, 7, { arm, costUsd: 1 });
+  const abortedFirst = (id: string, arm: string) => turn(id, T0, { arm, provider: "llama", model: "qwen", ...zero }); // history form: v1, status 200, no tokens
+  const l: Logs = { meter: [abortedFirst("a", "---"), ...cloud("a", "---"), abortedFirst("b", "+--"), ...cloud("b", "+--")], outcomes: [], guards: [], plans: PLANS,
+    assignments: [assignment("a", "---", T0), assignment("b", "+--", T0)] };
+  assert.deepEqual(analyse(l).experiment.designs.find((d) => d.design === "v4")!.strata.map((s) => s.stratum), ["api"]);
+});
+
+test("experiment: `switched` ignores an aborted request of another billing class", () => {
+  const D = "a1b2c3d4e5f6";
+  const row = (id: string, arm: string) => ({ v: 2, ts: iso(T0), sessionId: id, design: D, mode: "explore", eligible: true, stratum: "api", arm,
+    factors: { warmPolicy: { lever: "cache-lifecycle.warmPolicy", assigned: ["native", "orchestrator-aware"][Number(arm[0])] } } });
+  const cloud = (id: string, arm: string) => turns(id, T0 + MIN, 7, { v: 2, arm, design: D, costUsd: 1 });
+  const stray = (id: string, arm: string) => turn(id, T0 + 3 * MIN, { v: 2, arm, design: D, provider: "llama", model: "qwen", ...zero, aborted: true });
+  const l = (strayOn: string[]): Logs => ({ outcomes: [], guards: [], plans: NORATE, assignments: ["a", "b", "c", "d"].map((id, i) => row(id, i % 2 ? "1" : "0")),
+    meter: ["a", "b", "c", "d"].flatMap((id, i) => [...cloud(id, i % 2 ? "1" : "0"), ...(strayOn.includes(id) ? [stray(id, i % 2 ? "1" : "0")] : [])]) });
+  assert.equal(unitOf(l(["a", "b"]), D, "api").sensitivity!.switched, 0);
+  const real = l([]); real.meter = real.meter.map((x, i) => (i === 3 ? { ...x, provider: "llama", model: "qwen" } : x));
+  assert.equal(unitOf(real, D, "api").sensitivity!.switched, 1, "control: a real request of another class is a switch");
+});
+
+// ---- delegation --------------------------------------------------------------------------------------------------------------
+
+test("delegation: an aborted child request is no request: not the executed tier, not a runaway request, not in the model rows nor the request share", () => {
+  const child = (at: number, extra: Record<string, unknown> = {}) => turn("c1", T0 + at * MIN, { parentSessionId: "root", provider: "p", model: "m1", ...extra });
+  const real = [child(0), child(1)];
+  const aborts = [child(5, { ...zero, v: 3, aborted: true, model: "m-abort" }), child(6, { ...zero, v: 2, model: "m-hist" }), child(7, { ...zero, v: 3, aborted: true, status: "error" })];
+  assert.equal(executedTier({}, [...real, ...aborts]), "p/m1");
+  const root = turns("root", T0, 2, {}, 1);
+  const d = (meter: Record<string, unknown>[]) => analyse({ meter, outcomes: [], assignments: [], guards: [], routerSettings: { runaway: { requests: 2, usd: 100 } } }).delegation;
+  const a = d([...root, ...real, ...aborts]);
+  assert.deepEqual(a.runaways, [], "2 requests are no runaway at a limit of 2, however many aborted lines");
+  assert.deepEqual(a.childModels.map((m) => [m.model, m.requests]).sort(), [["m-abort", 0], ["m-hist", 0], ["m1", 2]]);
+  assert.equal(a.childRequestShare, 0.5);
+  assert.equal(d([...root, ...real, child(8)]).runaways.length, 1, "control: a third real request is");
 });
