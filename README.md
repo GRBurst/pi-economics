@@ -94,6 +94,18 @@ pi-setup that does not forward a moved `agentDir` leaves the components out of
 it). The components see the actor when `programs.piEconomics.extensions` has an entry
 `actor-subagents`; without one, `cacheLifecycle` and `experiments` warn.
 
+## Upgrading to 0.3.4
+
+A fix, nothing to change. token-meter logged an aborted request (Esc, or pi
+giving up its retries) as a successful one: `status: 200` and no tokens. It
+now writes meter line `v: 3`, marks such a turn `aborted: true` (`status:
+"error"` when it got no response headers and no tokens), and never takes the
+next request for a retry. `pi-analyse` and `meter-report` count an aborted turn
+neither as a request nor as an error and show it apart; its tokens and $ still
+add up. Older lines (v0 to v2) with a numeric status and no token at all are
+read as aborted (`packages/token-meter/LOGS.md`, *Aborted turns*), so request
+counts, active hours and local machine time of past periods drop slightly.
+
 ## Upgrading to 0.3.3
 
 A fix, nothing to change. With `cacheLifecycle`'s `maskOnCold` on (an
@@ -181,7 +193,7 @@ The task router is a package of its own,
 [pi-task-router](https://github.com/GRBurst/pi-task-router).
 
 ```sh
-pi install git:github.com/GRBurst/pi-economics@v0.3.3
+pi install git:github.com/GRBurst/pi-economics@v0.3.4
 ```
 
 Nix only: `bench`, the `piSettings` migration, the Home Manager options and
@@ -218,7 +230,7 @@ Use pi's object form of a `packages` entry in `~/.pi/agent/settings.json`, or
 <!-- checked: checks/pi-package/subset.json -->
 ```json
 {
-  "source": "git:github.com/GRBurst/pi-economics@v0.3.3",
+  "source": "git:github.com/GRBurst/pi-economics@v0.3.4",
   "extensions": [
     "packages/token-meter/index.ts",
     "packages/cache-lifecycle/index.ts"
