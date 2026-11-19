@@ -38,7 +38,7 @@ export function inPeriod(logs: Logs, p: Period): Logs {
 export const hasUsage = (l: any): boolean => ["input", "cacheRead", "cacheWrite", "output"].some((k) => typeof l[k] === "number" && l[k] > 0);
 /**
  * An aborted request (pi ended the message with stopReason "aborted": Esc, or the retries given up) is no request and no error: the line has
- * `aborted: true` (meter line v2); history: a turn line of v0 to v2 with a numeric status and no token at all was written for one (a successful
+ * `aborted: true` (meter line v3); history: a turn line of v0 to v2 with a numeric status and no token at all was written for one (a successful
  * response always has output). A warming, nested or compaction line is never one.
  */
 export const isAborted = (l: any): boolean => l?.kind === "turn" && (l.aborted === true || (!(l.v > 2) && typeof l.status === "number" && !hasUsage(l)));
